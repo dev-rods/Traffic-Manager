@@ -1,7 +1,6 @@
 import json
 import boto3
 import os
-import uuid
 import logging
 from datetime import datetime
 
@@ -9,68 +8,62 @@ from datetime import datetime
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Cliente do Step Functions
+# Cliente Step Functions
 sfn_client = boto3.client('stepfunctions')
+STATE_MACHINE_ARN = os.environ.get('STATE_MACHINE_ARN')
 
 def handler(event, context):
     """
-    Função Lambda que inicia a execução do Step Function para otimização de campanhas
+    Função para iniciar o processo de otimização de campanhas
     
-    Esta função é acionada pelo EventBridge Scheduler e inicia o fluxo de trabalho
-    que otimiza campanhas do Google Ads usando a OpenAI.
+    Esta função é o ponto de entrada do processo, podendo ser acionada
+    manualmente ou por uma regra do EventBridge/CloudWatch Events.
     """
     try:
-        # Gera um ID de trace único para esta execução
-        trace_id = str(uuid.uuid4())
-        logger.info(f"[traceId: {trace_id}] Iniciando processo de otimização de campanha")
+        # Registrar a chamada
+        logger.info(f"Iniciando processo de otimização de campanhas: {json.dumps(event)}")
         
-        # Obter o ARN da Step Function do ambiente
-        state_machine_arn = os.environ.get('STATE_MACHINE_ARN')
+        # Preparar payload para a Step Function
+        payload = {}
         
-        # Parâmetros de entrada para o fluxo
-        input_data = {
-            'traceId': trace_id,
-            'timestamp': datetime.utcnow().isoformat(),
-            'source': 'scheduled-trigger'
-        }
-        
-        # Se o evento contiver um campaignId, incluí-lo na entrada para o Step Function
-        # para que o fluxo saiba que é uma execução de melhoria e não uma primeira execução
-        if event.get('campaignId'):
-            input_data['campaignId'] = event.get('campaignId')
-            input_data['storeId'] = event.get('storeId', 'unknown')
-            logger.info(f"[traceId: {trace_id}] Executando otimização para campanha existente: {input_data['campaignId']}")
-        else:
-            logger.info(f"[traceId: {trace_id}] Executando criação de nova campanha (FIRST_RUN)")
+        # Se recebemos parâmetros, incluí-los no payload
+        if 'campaignId' in event:
+            payload['campaignId'] = event['campaignId']
             
-        # Iniciar execução do Step Function
-        execution = sfn_client.start_execution(
-            stateMachineArn=state_machine_arn,
-            name=f"campaign-optimization-{trace_id}",
-            input=json.dumps(input_data)
+        if 'storeId' in event:
+            payload['storeId'] = event['storeId']
+            
+        if 'templateId' in event:
+            payload['templateId'] = event['templateId']
+            
+        if 'locale' in event:
+            payload['locale'] = event['locale']
+        
+        # Iniciar a execução da Step Function
+        execution_name = f"campaign-optimization-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        response = sfn_client.start_execution(
+            stateMachineArn=STATE_MACHINE_ARN,
+            name=execution_name,
+            input=json.dumps(payload)
         )
         
-        # Registrar o ARN da execução
-        execution_arn = execution['executionArn']
-        logger.info(f"[traceId: {trace_id}] Step Function iniciado com sucesso: {execution_arn}")
-        
+        # Retornar o ARN da execução iniciada
         return {
             'statusCode': 200,
             'body': json.dumps({
-                'message': 'Campaign optimization process initiated successfully',
-                'traceId': trace_id,
-                'executionArn': execution_arn
+                'message': 'Processo de otimização de campanhas iniciado com sucesso',
+                'executionArn': response['executionArn']
             })
         }
         
     except Exception as e:
-        error_msg = str(e)
-        logger.error(f"[traceId: {trace_id if 'trace_id' in locals() else 'unknown'}] Erro ao iniciar o processo: {error_msg}")
+        error_message = str(e)
+        logger.error(f"Erro ao iniciar processo de otimização: {error_message}")
         
         return {
             'statusCode': 500,
             'body': json.dumps({
-                'message': 'Error initiating campaign optimization process',
-                'error': error_msg
+                'message': 'Erro ao iniciar processo de otimização',
+                'error': error_message
             })
         } 

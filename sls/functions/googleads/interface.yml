@@ -1,0 +1,5 @@
+handler: src/functions/googleads/action.handler
+name: ${self:provider.environment.BASE_FUNCTION_NAME}GoogleAdsAPIClient
+description: Executa ações na API do Google Ads para implementar as otimizações
+memorySize: 512
+timeout: 90 

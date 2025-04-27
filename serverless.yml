@@ -3,329 +3,37 @@ service: traffic-manager-infra
 frameworkVersion: '3'
 
 custom:
-  # Estágios de ambiente
   stage: ${opt:stage, self:provider.stage}
-  # Prefixos para recursos
   resourcePrefix: ${self:service}-${self:custom.stage}
-  # Configurações de domínio
-  domains:
-    prod: api.traffic-manager.com
-    staging: staging-api.traffic-manager.com
-    dev: dev-api.traffic-manager.com
-  # Periodicidade do cron de execução
-  cronSchedule: 
-    prod: 'cron(0 3 * * ? *)'
-    staging: 'cron(0 3 * * ? *)'
-    dev: 'cron(0/30 * * * ? *)'  # A cada 30 minutos em dev
+  
 
 provider:
   name: aws
   runtime: python3.9
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-east-1'}
-  memorySize: 256
-  timeout: 30
-  # Log retention em dias
-  logRetentionInDays: 30
   environment:
     STAGE: ${self:custom.stage}
-    # Segredos gerenciados por SSM Parameter Store
     OPENAI_API_KEY: ${ssm:/traffic/openai-key~true}
     GOOGLE_ADS_CLIENT_ID: ${ssm:/traffic/google-ads-client-id~true}
     GOOGLE_ADS_CLIENT_SECRET: ${ssm:/traffic/google-ads-client-secret~true}
     GOOGLE_ADS_REFRESH_TOKEN: ${ssm:/traffic/google-ads-refresh-token~true}
     GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/traffic/google-ads-developer-token~true}
-    # Nomes das tabelas do DynamoDB
     CAMPAIGN_TEMPLATES_TABLE: ${self:resources.Resources.CampaignTemplatesTable.Properties.TableName}
     EXECUTION_HISTORY_TABLE: ${self:resources.Resources.ExecutionHistoryTable.Properties.TableName}
     CAMPAIGN_METADATA_TABLE: ${self:resources.Resources.CampaignMetadataTable.Properties.TableName}
-  iam:
-    role:
-      statements:
-        - Effect: Allow
-          Action:
-            - dynamodb:Query
-            - dynamodb:Scan
-            - dynamodb:GetItem
-            - dynamodb:PutItem
-            - dynamodb:UpdateItem
-            - dynamodb:DeleteItem
-            - dynamodb:BatchGetItem
-            - dynamodb:BatchWriteItem
-          Resource:
-            - !GetAtt CampaignTemplatesTable.Arn
-            - !GetAtt ExecutionHistoryTable.Arn
-            - !GetAtt CampaignMetadataTable.Arn
-        - Effect: Allow
-          Action:
-            - states:StartExecution
-            - states:DescribeExecution
-          Resource: !Ref CampaignOptimizationStateMachine
-        - Effect: Allow
-          Action:
-            - logs:CreateLogGroup
-            - logs:CreateLogStream
-            - logs:PutLogEvents
-          Resource: "arn:aws:logs:*:*:*"
+    BASE_FUNCTION_NAME: ${self:service}-${self:custom.stage}-
+    BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
 
-# Importa definições de funções
 functions:
-  # Lambda para iniciar o Step Function
-  triggerCampaignOptimization:
-    handler: src/functions/campaign/trigger.handler
-    events:
-      - schedule: ${self:custom.cronSchedule.${self:custom.stage}}
-    environment:
-      STATE_MACHINE_ARN: !Ref CampaignOptimizationStateMachine
+  - ${file(sls/functions/campaign/interface.yml)}
+  - ${file(sls/functions/templates/interface.yml)}
+  - ${file(sls/functions/metrics/interface.yml)}
+  - ${file(sls/functions/openai/interface.yml)}
+  - ${file(sls/functions/parser/interface.yml)}
+  - ${file(sls/functions/googleads/interface.yml)}
 
-  # Lambda para buscar templates
-  templateFetch:
-    handler: src/functions/templates/fetch.handler
-    description: Busca template de campanha no DynamoDB
-
-  # Lambda para coletar métricas do Google Ads
-  metricsCollector:
-    handler: src/functions/metrics/collector.handler
-    description: Coleta métricas de campanhas existentes no Google Ads
-    timeout: 60
-
-  # Lambda para interagir com a OpenAI
-  openaiCaller:
-    handler: src/functions/openai/caller.handler
-    description: Chama a API da OpenAI com o prompt adequado para otimização de campanhas
-    timeout: 30
-    memorySize: 512
-
-  # Lambda para processar a resposta da OpenAI
-  responseParser:
-    handler: src/functions/parser/parser.handler
-    description: Processa e valida a resposta da OpenAI
-
-  # Lambda para executar ações no Google Ads
-  googleAdsAction:
-    handler: src/functions/googleads/action.handler
-    description: Executa ações na API do Google Ads para implementar as otimizações
-    timeout: 90
-    memorySize: 512
-
-# Recursos AWS
 resources:
   Resources:
-    # Tabela DynamoDB T1 - CampaignTemplates
-    CampaignTemplatesTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: ${self:custom.resourcePrefix}-campaign-templates
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: templateId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: templateId
-            KeyType: HASH
-
-    # Tabela DynamoDB T2 - ExecutionHistory
-    ExecutionHistoryTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: ${self:custom.resourcePrefix}-execution-history
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: traceId
-            AttributeType: S
-          - AttributeName: stageTm
-            AttributeType: S
-          - AttributeName: stage
-            AttributeType: S
-        KeySchema:
-          - AttributeName: traceId
-            KeyType: HASH
-          - AttributeName: stageTm
-            KeyType: RANGE
-        GlobalSecondaryIndexes:
-          - IndexName: traceId-stage-index
-            KeySchema:
-              - AttributeName: traceId
-                KeyType: HASH
-              - AttributeName: stage
-                KeyType: RANGE
-            Projection:
-              ProjectionType: ALL
-
-    # Tabela DynamoDB T3 - CampaignMetadata
-    CampaignMetadataTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: ${self:custom.resourcePrefix}-campaign-metadata
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: googleCampaignId
-            AttributeType: S
-        KeySchema:
-          - AttributeName: googleCampaignId
-            KeyType: HASH
-
-    # Step Function para orquestração da otimização de campanhas
-    CampaignOptimizationStateMachine:
-      Type: AWS::StepFunctions::StateMachine
-      Properties:
-        StateMachineName: ${self:custom.resourcePrefix}-campaign-optimization
-        RoleArn: !GetAtt StepFunctionsExecutionRole.Arn
-        DefinitionString: |
-          {
-            "Comment": "Campaign Optimization Workflow",
-            "StartAt": "ChooseRunType",
-            "States": {
-              "ChooseRunType": {
-                "Type": "Choice",
-                "Choices": [
-                  {
-                    "Variable": "$.campaignId",
-                    "IsPresent": true,
-                    "Next": "MetricsCollector"
-                  }
-                ],
-                "Default": "TemplateFetch"
-              },
-              "TemplateFetch": {
-                "Type": "Task",
-                "Resource": "${self:functions.templateFetch.arn}",
-                "Next": "OpenAICaller",
-                "Retry": [
-                  {
-                    "ErrorEquals": ["States.TaskFailed"],
-                    "IntervalSeconds": 3,
-                    "MaxAttempts": 2,
-                    "BackoffRate": 2.0
-                  }
-                ],
-                "Catch": [
-                  {
-                    "ErrorEquals": ["States.ALL"],
-                    "ResultPath": "$.error",
-                    "Next": "FailState"
-                  }
-                ]
-              },
-              "MetricsCollector": {
-                "Type": "Task",
-                "Resource": "${self:functions.metricsCollector.arn}",
-                "Next": "OpenAICaller",
-                "Retry": [
-                  {
-                    "ErrorEquals": ["States.TaskFailed"],
-                    "IntervalSeconds": 3,
-                    "MaxAttempts": 2,
-                    "BackoffRate": 2.0
-                  }
-                ],
-                "Catch": [
-                  {
-                    "ErrorEquals": ["States.ALL"],
-                    "ResultPath": "$.error",
-                    "Next": "FailState"
-                  }
-                ]
-              },
-              "OpenAICaller": {
-                "Type": "Task",
-                "Resource": "${self:functions.openaiCaller.arn}",
-                "Next": "ResponseParser",
-                "Retry": [
-                  {
-                    "ErrorEquals": ["States.TaskFailed", "ThrottlingException"],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 3,
-                    "BackoffRate": 2.0
-                  }
-                ],
-                "Catch": [
-                  {
-                    "ErrorEquals": ["States.ALL"],
-                    "ResultPath": "$.error",
-                    "Next": "FailState"
-                  }
-                ]
-              },
-              "ResponseParser": {
-                "Type": "Task",
-                "Resource": "${self:functions.responseParser.arn}",
-                "Next": "GoogleAdsAction",
-                "Retry": [
-                  {
-                    "ErrorEquals": ["States.TaskFailed"],
-                    "IntervalSeconds": 2,
-                    "MaxAttempts": 2,
-                    "BackoffRate": 2.0
-                  }
-                ],
-                "Catch": [
-                  {
-                    "ErrorEquals": ["States.ALL"],
-                    "ResultPath": "$.error",
-                    "Next": "FailState"
-                  }
-                ]
-              },
-              "GoogleAdsAction": {
-                "Type": "Task",
-                "Resource": "${self:functions.googleAdsAction.arn}",
-                "Next": "SuccessState",
-                "Retry": [
-                  {
-                    "ErrorEquals": ["States.TaskFailed", "ThrottlingException"],
-                    "IntervalSeconds": 3,
-                    "MaxAttempts": 2,
-                    "BackoffRate": 2.0
-                  }
-                ],
-                "Catch": [
-                  {
-                    "ErrorEquals": ["States.ALL"],
-                    "ResultPath": "$.error",
-                    "Next": "FailState"
-                  }
-                ]
-              },
-              "SuccessState": {
-                "Type": "Succeed"
-              },
-              "FailState": {
-                "Type": "Fail",
-                "Error": "CampaignOptimizationFailed",
-                "Cause": "Check the execution history for detailed error information"
-              }
-            }
-          }
-
-    # IAM Role para o Step Functions
-    StepFunctionsExecutionRole:
-      Type: AWS::IAM::Role
-      Properties:
-        AssumeRolePolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service: states.amazonaws.com
-              Action: sts:AssumeRole
-        Policies:
-          - PolicyName: StepFunctionsLambdaInvoke
-            PolicyDocument:
-              Version: '2012-10-17'
-              Statement:
-                - Effect: Allow
-                  Action:
-                    - lambda:InvokeFunction
-                  Resource:
-                    - !GetAtt TemplateFetchLambdaFunction.Arn
-                    - !GetAtt MetricsCollectorLambdaFunction.Arn
-                    - !GetAtt OpenaiCallerLambdaFunction.Arn
-                    - !GetAtt ResponseParserLambdaFunction.Arn
-                    - !GetAtt GoogleAdsActionLambdaFunction.Arn
-                - Effect: Allow
-                  Action:
-                    - logs:CreateLogGroup
-                    - logs:CreateLogStream
-                    - logs:PutLogEvents
-                  Resource: "arn:aws:logs:*:*:*"
+    - ${file(sls/resources/stepfunctions/campaign-optimization-flow.yml)}
+    - ${file(sls/resources/dynamodb/tables.yml)}
