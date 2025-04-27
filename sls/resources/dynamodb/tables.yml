@@ -1,0 +1,53 @@
+# Tabela DynamoDB T1 - CampaignTemplates
+CampaignTemplatesTable:
+  Type: AWS::DynamoDB::Table
+  Properties:
+    TableName: ${self:custom.resourcePrefix}-campaign-templates
+    BillingMode: PAY_PER_REQUEST
+    AttributeDefinitions:
+      - AttributeName: templateId
+        AttributeType: S
+    KeySchema:
+      - AttributeName: templateId
+        KeyType: HASH
+
+# Tabela DynamoDB T2 - ExecutionHistory
+ExecutionHistoryTable:
+  Type: AWS::DynamoDB::Table
+  Properties:
+    TableName: ${self:custom.resourcePrefix}-execution-history
+    BillingMode: PAY_PER_REQUEST
+    AttributeDefinitions:
+      - AttributeName: traceId
+        AttributeType: S
+      - AttributeName: stageTm
+        AttributeType: S
+      - AttributeName: stage
+        AttributeType: S
+    KeySchema:
+      - AttributeName: traceId
+        KeyType: HASH
+      - AttributeName: stageTm
+        KeyType: RANGE
+    GlobalSecondaryIndexes:
+      - IndexName: traceId-stage-index
+        KeySchema:
+          - AttributeName: traceId
+            KeyType: HASH
+          - AttributeName: stage
+            KeyType: RANGE
+        Projection:
+          ProjectionType: ALL
+
+# Tabela DynamoDB T3 - CampaignMetadata
+CampaignMetadataTable:
+  Type: AWS::DynamoDB::Table
+  Properties:
+    TableName: ${self:custom.resourcePrefix}-campaign-metadata
+    BillingMode: PAY_PER_REQUEST
+    AttributeDefinitions:
+      - AttributeName: googleCampaignId
+        AttributeType: S
+    KeySchema:
+      - AttributeName: googleCampaignId
+        KeyType: HASH 
