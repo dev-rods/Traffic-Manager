@@ -1,0 +1,12 @@
+# Tabela DynamoDB para armazenar templates de campanha
+CampaignTemplatesTable:
+  Type: AWS::DynamoDB::Table
+  Properties:
+    TableName: ${self:custom.resourcePrefix}-campaign-templates
+    BillingMode: PAY_PER_REQUEST
+    AttributeDefinitions:
+      - AttributeName: templateId
+        AttributeType: S
+    KeySchema:
+      - AttributeName: templateId
+        KeyType: HASH 

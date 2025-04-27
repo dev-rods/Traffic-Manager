@@ -1,5 +1,6 @@
 id: CampaignOptimizationStateMachine
 name: ${self:provider.environment.BASE_STATE_MACHINE_NAME}CampaignOptimization
+role: ${self:provider.environment.BASE_ROLE_ARN}StateMachineRole
 definition:
   Comment: "Esta step function orquestra o fluxo de otimização de campanhas do Google Ads usando OpenAI. Inclui passos para orquestração, fetch de templates ou métricas, chamada à OpenAI, parsing da resposta e interação com a API do Google Ads."
   StartAt: CampaignOrchestrator
