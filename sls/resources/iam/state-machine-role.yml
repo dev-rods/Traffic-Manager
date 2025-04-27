@@ -1,4 +1,4 @@
-# IAM Role para a Step Function que executa o processo de otimização
+# IAM Role para a StepFunction que executa o processo de otimização
 StateMachineRole:
   Type: AWS::IAM::Role
   Properties:
