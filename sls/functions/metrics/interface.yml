@@ -1,5 +1,6 @@
-handler: src/functions/metrics/collector.handler
-name: ${self:provider.environment.BASE_FUNCTION_NAME}FetchCampaignMetrics
-description: Coleta métricas de campanhas existentes no Google Ads
-memorySize: 256
-timeout: 60 
+fetchMetrics:
+  handler: src/functions/metrics/collector.handler
+  name: ${self:provider.environment.BASE_FUNCTION_NAME}FetchCampaignMetrics
+  description: Coleta métricas de campanhas existentes no Google Ads
+  memorySize: 256
+  timeout: 60 

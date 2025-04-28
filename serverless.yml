@@ -19,9 +19,9 @@ provider:
     GOOGLE_ADS_CLIENT_SECRET: ${ssm:/traffic/google-ads-client-secret~true}
     GOOGLE_ADS_REFRESH_TOKEN: ${ssm:/traffic/google-ads-refresh-token~true}
     GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/traffic/google-ads-developer-token~true}
-    CAMPAIGN_TEMPLATES_TABLE: ${self:resources.Resources.CampaignTemplatesTable.Properties.TableName}
-    EXECUTION_HISTORY_TABLE: ${self:resources.Resources.ExecutionHistoryTable.Properties.TableName}
-    CAMPAIGN_METADATA_TABLE: ${self:resources.Resources.CampaignMetadataTable.Properties.TableName}
+    CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
+    EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
+    CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
     BASE_FUNCTION_NAME: ${self:service}-${self:custom.stage}-
     BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
     BASE_ROLE_ARN: arn:aws:iam::${aws:accountId}:role/${self:service}-${self:custom.stage}-

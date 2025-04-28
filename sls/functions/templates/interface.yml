@@ -1,5 +1,6 @@
-handler: src/functions/templates/fetch.handler
-name: ${self:provider.environment.BASE_FUNCTION_NAME}FetchCampaignTemplate
-description: Busca template de campanha no DynamoDB
-memorySize: 256
-timeout: 30 
+fetchTemplate:
+  handler: src/functions/templates/fetch.handler
+  name: ${self:provider.environment.BASE_FUNCTION_NAME}FetchCampaignTemplate
+  description: Busca template de campanha no DynamoDB
+  memorySize: 256
+  timeout: 30 

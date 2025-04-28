@@ -1,5 +1,6 @@
-handler: src/functions/openai/caller.handler
-name: ${self:provider.environment.BASE_FUNCTION_NAME}OpenAIOptimizationEngine
-description: Chama a API da OpenAI com o prompt adequado para otimização de campanhas
-memorySize: 512
-timeout: 30 
+optimizationEngine:
+  handler: src/functions/openai/caller.handler
+  name: ${self:provider.environment.BASE_FUNCTION_NAME}OpenAIOptimizationEngine
+  description: Chama a API da OpenAI com o prompt adequado para otimização de campanhas
+  memorySize: 512
+  timeout: 30 

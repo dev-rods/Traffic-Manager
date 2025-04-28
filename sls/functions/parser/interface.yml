@@ -1,5 +1,6 @@
-handler: src/functions/parser/parser.handler
-name: ${self:provider.environment.BASE_FUNCTION_NAME}GoogleAdsPayloadParser
-description: Processa e valida a resposta da OpenAI
-memorySize: 256
-timeout: 30 
+payloadParser:
+  handler: src/functions/parser/parser.handler
+  name: ${self:provider.environment.BASE_FUNCTION_NAME}GoogleAdsPayloadParser
+  description: Processa e valida a resposta da OpenAI
+  memorySize: 256
+  timeout: 30 
