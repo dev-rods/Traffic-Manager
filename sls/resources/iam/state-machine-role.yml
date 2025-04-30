@@ -1,28 +1,28 @@
-# IAM Role para a StepFunction que executa o processo de otimização
-StateMachineRole:
-  Type: AWS::IAM::Role
-  Properties:
-    RoleName: ${self:custom.resourcePrefix}-StateMachineRole
-    AssumeRolePolicyDocument:
-      Version: '2012-10-17'
-      Statement:
-        - Effect: Allow
-          Principal:
-            Service: states.amazonaws.com
-          Action: sts:AssumeRole
-    Policies:
-      - PolicyName: StepFunctionsLambdaInvoke
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-            - Effect: Allow
-              Action:
-                - lambda:InvokeFunction
-              Resource:
-                - arn:aws:lambda:${self:provider.region}:${aws:accountId}:function:${self:provider.environment.BASE_FUNCTION_NAME}*
-            - Effect: Allow
-              Action:
-                - logs:CreateLogGroup
-                - logs:CreateLogStream
-                - logs:PutLogEvents
-              Resource: "arn:aws:logs:*:*:*" 
+Resources:
+  StateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ${self:custom.resourcePrefix}-StateMachineRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: StepFunctionsLambdaInvoke
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - arn:aws:lambda:${self:provider.region}:${aws:accountId}:function:${self:provider.environment.BASE_FUNCTION_NAME}*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "arn:aws:logs:*:*:*" 

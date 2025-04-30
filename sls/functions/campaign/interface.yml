@@ -1,20 +1,11 @@
-orchestrator:
+Orchestrator:
   handler: src/functions/campaign/orchestrator.handler
-  name: ${self:provider.environment.BASE_FUNCTION_NAME}CampaignOrchestrator
-  description: Orquestra o fluxo de otimização de campanhas
-  memorySize: 256
-  timeout: 30
+  memorySize: 512
 
-recorder:
+Recorder:
   handler: src/functions/campaign/recorder.handler
-  name: ${self:provider.environment.BASE_FUNCTION_NAME}OptimizationProcessRecorder
-  description: Registra o término do processo de otimização
-  memorySize: 256
-  timeout: 30
+  memorySize: 512
 
-errorNotifier:
+ErrorNotifier:
   handler: src/functions/campaign/error_notifier.handler
-  name: ${self:provider.environment.BASE_FUNCTION_NAME}NotifyOptimizationError
-  description: Notifica erros no processo de otimização
-  memorySize: 256
-  timeout: 30 
+  memorySize: 512

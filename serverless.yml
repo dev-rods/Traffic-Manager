@@ -14,11 +14,11 @@ provider:
   region: ${opt:region, 'us-east-1'}
   environment:
     STAGE: ${self:custom.stage}
-    OPENAI_API_KEY: ${ssm:/traffic/openai-key~true}
-    GOOGLE_ADS_CLIENT_ID: ${ssm:/traffic/google-ads-client-id~true}
-    GOOGLE_ADS_CLIENT_SECRET: ${ssm:/traffic/google-ads-client-secret~true}
-    GOOGLE_ADS_REFRESH_TOKEN: ${ssm:/traffic/google-ads-refresh-token~true}
-    GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/traffic/google-ads-developer-token~true}
+    # OPENAI_API_KEY: ${ssm:/traffic/openai-key~true}
+    # GOOGLE_ADS_CLIENT_ID: ${ssm:/traffic/google-ads-client-id~true}
+    # GOOGLE_ADS_CLIENT_SECRET: ${ssm:/traffic/google-ads-client-secret~true}
+    # GOOGLE_ADS_REFRESH_TOKEN: ${ssm:/traffic/google-ads-refresh-token~true}
+    # GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/traffic/google-ads-developer-token~true}
     CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
     EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
@@ -34,14 +34,13 @@ functions:
   - ${file(sls/functions/parser/interface.yml)}
   - ${file(sls/functions/googleads/interface.yml)}
 
+stepFunctions:
+  stateMachines:
+    CampaignOptimizationFlow: ${file(sls/resources/stepfunctions/campaign-optimization-flow.yml)}
+
 resources:
-  Resources:
-    # Step Functions
-    - ${file(sls/resources/stepfunctions/campaign-optimization-flow.yml)}
-    
     # IAM Roles
     - ${file(sls/resources/iam/state-machine-role.yml)}
-    
     # Tabelas DynamoDB - uma tabela por arquivo
     - ${file(sls/resources/dynamodb/campaign-templates-table.yml)}
     - ${file(sls/resources/dynamodb/execution-history-table.yml)}
