@@ -1,3 +1,22 @@
 FetchMetrics:
   handler: src/functions/metrics/collector.handler
   memorySize: 512
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-FetchMetrics-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:custom.resourcePrefix}-*"
+        - "arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:custom.resourcePrefix}-*/index/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"

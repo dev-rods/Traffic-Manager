@@ -1,6 +1,6 @@
 service: traffic-manager-infra
 
-frameworkVersion: '3'
+frameworkVersion: "3"
 
 custom:
   stage: ${opt:stage, self:provider.stage}
@@ -50,3 +50,5 @@ resources:
 
 plugins:
   - serverless-step-functions
+  - serverless-iam-roles-per-function
+  

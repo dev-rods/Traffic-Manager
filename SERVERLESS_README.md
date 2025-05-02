@@ -14,3 +14,8 @@ serverless deploy --stage dev --aws-profile traffic-manager
 
 # Instalar plugins
 serverless plugin install -n serverless-step-functions
+serverless plugin install -n serverless-iam-roles-per-function
+
+
+# Start
+serverless step-functions invoke --name CampaignOptimizationFlow -s dev
