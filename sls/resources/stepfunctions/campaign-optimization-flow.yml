@@ -7,7 +7,7 @@ definition:
   States:
     CampaignOrchestrator:
       Type: Task
-      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}CampaignOrchestrator
+      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}CampaignOrchestrator 
       Retry:
         - ErrorEquals: ["States.ALL"]
           IntervalSeconds: 3
@@ -32,7 +32,7 @@ definition:
     
     FetchCampaignTemplate:
       Type: Task
-      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}FetchCampaignTemplate
+      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}FetchTemplate
       Retry:
         - ErrorEquals: ["States.ALL"]
           IntervalSeconds: 2
@@ -46,7 +46,7 @@ definition:
     
     FetchCampaignMetrics:
       Type: Task
-      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}FetchCampaignMetrics
+      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}FetchMetrics
       Retry:
         - ErrorEquals: ["States.ALL"]
           IntervalSeconds: 2
@@ -60,7 +60,7 @@ definition:
     
     CallOpenAI:
       Type: Task
-      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}OpenAIOptimizationEngine
+      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}OptimizationEngine
       Retry:
         - ErrorEquals: ["States.TaskFailed", "ThrottlingException"]
           IntervalSeconds: 3
@@ -74,7 +74,7 @@ definition:
     
     ParseOpenAIResponse:
       Type: Task
-      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}GoogleAdsPayloadParser
+      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}PayloadParser
       Retry:
         - ErrorEquals: ["States.ALL"]
           IntervalSeconds: 2
@@ -88,7 +88,7 @@ definition:
     
     ApplyGoogleAdsChanges:
       Type: Task
-      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}GoogleAdsAPIClient
+      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}GoogleAdsApiClient
       Retry:
         - ErrorEquals: ["States.TaskFailed", "ThrottlingException"]
           IntervalSeconds: 5
@@ -102,7 +102,7 @@ definition:
     
     FinishCampaignOptimization:
       Type: Task
-      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}OptimizationProcessRecorder
+      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}CampaignRecorder
       Retry:
         - ErrorEquals: ["States.ALL"]
           IntervalSeconds: 2
@@ -116,7 +116,7 @@ definition:
     
     NotifyError:
       Type: Task
-      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}NotifyOptimizationError
+      Resource: ${self:provider.environment.BASE_FUNCTION_NAME}ErrorNotifier
       Next: Failed
     
     Failed:
@@ -126,6 +126,5 @@ definition:
     
     Successful:
       Type: Succeed
-
 dependsOn:
   - StateMachineRole 

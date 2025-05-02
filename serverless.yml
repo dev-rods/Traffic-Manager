@@ -5,7 +5,9 @@ frameworkVersion: '3'
 custom:
   stage: ${opt:stage, self:provider.stage}
   resourcePrefix: ${self:service}-${self:custom.stage}
-  
+  accountId: "796000356030"
+  awsId: "796000356030"
+
 
 provider:
   name: aws
@@ -22,7 +24,7 @@ provider:
     CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
     EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
-    BASE_FUNCTION_NAME: ${self:service}-${self:custom.stage}-
+    BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
     BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
     BASE_ROLE_ARN: arn:aws:iam::${aws:accountId}:role/${self:service}-${self:custom.stage}-
 
@@ -45,3 +47,6 @@ resources:
     - ${file(sls/resources/dynamodb/campaign-templates-table.yml)}
     - ${file(sls/resources/dynamodb/execution-history-table.yml)}
     - ${file(sls/resources/dynamodb/campaign-metadata-table.yml)}
+
+plugins:
+  - serverless-step-functions

@@ -1,8 +1,8 @@
-Orchestrator:
+CampaignOrchestrator:
   handler: src/functions/campaign/orchestrator.handler
   memorySize: 512
 
-Recorder:
+CampaignRecorder:
   handler: src/functions/campaign/recorder.handler
   memorySize: 512
 
