@@ -26,7 +26,7 @@ provider:
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
     BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
     BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
-    BASE_ROLE_ARN: arn:aws:iam::${aws:accountId}:role/${self:service}-${self:custom.stage}-
+    BASE_ROLE_ARN: arn:aws:iam::*:role/${self:service}-${self:custom.stage}-
 
 functions:
   - ${file(sls/functions/campaign/interface.yml)}

@@ -5,15 +5,8 @@ OptimizationEngine:
   iamRoleStatements:
     - Effect: Allow
       Action:
-        - dynamodb:Query
-        - dynamodb:Scan
-        - dynamodb:GetItem
-        - dynamodb:PutItem
-        - dynamodb:UpdateItem
-        - dynamodb:DeleteItem
-      Resource:
-        - "arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:custom.resourcePrefix}-*"
-        - "arn:aws:dynamodb:${self:provider.region}:${aws:accountId}:table/${self:custom.resourcePrefix}-*/index/*"
+        - dynamodb:*
+      Resource: "*"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
