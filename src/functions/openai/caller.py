@@ -16,7 +16,7 @@ execution_history_table = dynamodb.Table(os.environ.get('EXECUTION_HISTORY_TABLE
 
 # Configurações da OpenAI
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
-OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4')
+OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4.1')
 OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 
 def handler(event, context):
@@ -31,18 +31,12 @@ def handler(event, context):
         stage = 'OPENAI_CALL'
         timestamp = datetime.utcnow().isoformat()
         run_type = event.get('runType', 'FIRST_RUN')
-        
         logger.info(f"[traceId: {trace_id}] Iniciando chamada à OpenAI para runType: {run_type}")
-        
-        # Montar o prompt adequado baseado no tipo de execução
         if run_type == 'FIRST_RUN':
-            # Para primeira execução, usar o template
             if 'templateData' not in event:
                 raise Exception("templateData é obrigatório para execução FIRST_RUN")
-                
             template_data = event.get('templateData')
             template_info = event.get('templateInfo', {})
-            
             prompt = create_first_run_prompt(template_data, template_info)
             context_data = {
                 'templateId': template_info.get('templateId', 'unknown'),
@@ -50,14 +44,11 @@ def handler(event, context):
                 'templateVersion': template_info.get('version', '1.0')
             }
         else:
-            # Para melhorias, usar as métricas
             if 'metrics' not in event or 'campaignStructure' not in event:
                 raise Exception("metrics e campaignStructure são obrigatórios para execução IMPROVE")
-                
             metrics = event.get('metrics')
             campaign_structure = event.get('campaignStructure')
             campaign_id = event.get('campaignId')
-            
             prompt = create_improve_prompt(metrics, campaign_structure, campaign_id)
             context_data = {
                 'campaignId': campaign_id,
@@ -176,10 +167,6 @@ def call_openai_api(prompt, model=OPENAI_MODEL):
     """
     Faz uma chamada para a API da OpenAI
     """
-    # Em produção, implemente a chamada real à API
-    # Simular uma chamada à API da OpenAI para este esqueleto
-    
-    # Para implementação real:
     headers = {
         'Authorization': f'Bearer {OPENAI_API_KEY}',
         'Content-Type': 'application/json'
@@ -201,9 +188,30 @@ def call_openai_api(prompt, model=OPENAI_MODEL):
         'max_tokens': 1500
     }
     
-    # Comentado para não fazer chamadas reais durante o desenvolvimento do esqueleto
     response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
-    return response.json()
+    print("response", response.json())
+    
+    # Adicionar tratamento básico de erro e retry
+    retry_count = 0
+    max_retries = 3
+    
+    while retry_count < max_retries:
+        response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
+        
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 429 or response.status_code >= 500:
+            # Rate limit ou erro de servidor - aguardar e tentar novamente
+            retry_count += 1
+            wait_time = 2 ** retry_count  # Exponential backoff
+            logger.warning(f"Erro na API da OpenAI (status {response.status_code}). Tentando novamente em {wait_time}s...")
+            time.sleep(wait_time)
+        else:
+            # Outro tipo de erro - falhar rapidamente
+            response.raise_for_status()
+    
+    # Se chegou aqui, todas as tentativas falharam
+    raise Exception(f"Falha ao chamar a API da OpenAI após {max_retries} tentativas. Último status: {response.status_code}")
     
 def create_first_run_prompt(template_data, template_info):
     """
