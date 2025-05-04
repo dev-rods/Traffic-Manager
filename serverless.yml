@@ -11,12 +11,12 @@ custom:
 
 provider:
   name: aws
-  runtime: python3.9
+  runtime: python3.8
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-east-1'}
   environment:
     STAGE: ${self:custom.stage}
-    # OPENAI_API_KEY: ${ssm:/traffic/openai-key~true}
+    OPENAI_API_KEY: ${ssm:/OPENAI_API_KEY}
     # GOOGLE_ADS_CLIENT_ID: ${ssm:/traffic/google-ads-client-id~true}
     # GOOGLE_ADS_CLIENT_SECRET: ${ssm:/traffic/google-ads-client-secret~true}
     # GOOGLE_ADS_REFRESH_TOKEN: ${ssm:/traffic/google-ads-refresh-token~true}

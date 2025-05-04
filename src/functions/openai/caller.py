@@ -202,65 +202,8 @@ def call_openai_api(prompt, model=OPENAI_MODEL):
     }
     
     # Comentado para não fazer chamadas reais durante o desenvolvimento do esqueleto
-    # response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
-    # return response.json()
-    
-    # Simulação para o esqueleto:
-    time.sleep(2)  # Simular latência de rede
-    
-    simulated_response = {
-        'id': 'chatcmpl-123456789',
-        'object': 'chat.completion',
-        'created': int(time.time()),
-        'model': model,
-        'usage': {
-            'prompt_tokens': len(prompt) // 4,  # Estimativa grosseira
-            'completion_tokens': 850,
-            'total_tokens': (len(prompt) // 4) + 850
-        },
-        'choices': [
-            {
-                'message': {
-                    'role': 'assistant',
-                    'content': json.dumps({
-                        'analysis': 'Com base nos dados fornecidos, identifiquei várias oportunidades de otimização para esta campanha.',
-                        'recommendations': [
-                            {
-                                'type': 'keywords',
-                                'action': 'add',
-                                'items': ['novo keyword1', 'novo keyword2', 'novo keyword3']
-                            },
-                            {
-                                'type': 'bidding',
-                                'action': 'increase',
-                                'target': 'Produtos Principais',
-                                'value': 0.15  # 15% de aumento
-                            },
-                            {
-                                'type': 'ad',
-                                'action': 'modify',
-                                'ad_group': 'Produtos Principais',
-                                'headlines': [
-                                    'Promoção Imperdível',
-                                    'Qualidade Garantida',
-                                    'Entrega em 24h'
-                                ],
-                                'descriptions': [
-                                    'Aproveite nossos descontos exclusivos hoje mesmo',
-                                    'Satisfação garantida ou seu dinheiro de volta'
-                                ]
-                            }
-                        ],
-                        'reasoning': 'A campanha atual tem um bom ROAS mas o CTR está abaixo do ideal para o setor. Os anúncios atuais não estão gerando suficiente interesse, e os termos de pesquisa mostram oportunidades para novos keywords.'
-                    })
-                },
-                'finish_reason': 'stop',
-                'index': 0
-            }
-        ]
-    }
-    
-    return simulated_response
+    response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
+    return response.json()
     
 def create_first_run_prompt(template_data, template_info):
     """
