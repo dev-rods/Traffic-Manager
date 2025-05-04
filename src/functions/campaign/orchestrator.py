@@ -35,14 +35,15 @@ def handler(event, context):
             'runType': run_type,
             'status': 'STARTED',
             'timestamp': timestamp,
-            'payload': json.dumps(event)
+            'payload': json.dumps(event),
+            'stageTm': 'orchestrator'
         }
         if 'storeId' in event:
             execution_record['storeId'] = event['storeId']
         if 'campaignId' in event:
             execution_record['campaignId'] = event['campaignId']
         execution_history_table.put_item(Item=execution_record)
-        logger.info(f"[traceId: {trace_id}] Registro criado na tabela ExecutionHistory para estágio {stage}")
+        logger.info(f"[traceId: {trace_id}] Registro criado na tabela ExecutionHistory")
         response = {
             'traceId': trace_id,
             'runType': run_type,
@@ -64,7 +65,8 @@ def handler(event, context):
                     'status': 'ERROR',
                     'timestamp': timestamp,
                     'errorMsg': error_msg,
-                    'payload': json.dumps(event)
+                    'payload': json.dumps(event),
+                    'stageTm': 'orchestrator'
                 }
                 execution_history_table.put_item(Item=error_record)
             except Exception as inner_e:

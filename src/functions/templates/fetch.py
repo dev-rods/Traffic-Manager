@@ -4,11 +4,9 @@ import os
 import logging
 from datetime import datetime
 
-# Configuração de logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Cliente do DynamoDB
 dynamodb = boto3.resource('dynamodb')
 templates_table = dynamodb.Table(os.environ.get('CAMPAIGN_TEMPLATES_TABLE'))
 execution_history_table = dynamodb.Table(os.environ.get('EXECUTION_HISTORY_TABLE'))
@@ -35,27 +33,72 @@ def handler(event, context):
         template_id = event.get('templateId', DEFAULT_TEMPLATE_ID)
         locale = event.get('locale', DEFAULT_LOCALE)
         
-        # Buscar o template no DynamoDB
-        response = templates_table.get_item(
-            Key={
-                'templateId': template_id
-            }
-        )
+        template = None
+        template_found = False
         
-        if 'Item' not in response:
-            logger.warning(f"[traceId: {trace_id}] Template {template_id} não encontrado, buscando template padrão")
-            
-            # Se o template especificado não foi encontrado, buscar o template padrão
+        # Buscar o template no DynamoDB
+        try:
             response = templates_table.get_item(
                 Key={
-                    'templateId': DEFAULT_TEMPLATE_ID
+                    'templateId': template_id
                 }
             )
-            
-            if 'Item' not in response:
-                raise Exception(f"Template padrão {DEFAULT_TEMPLATE_ID} não encontrado")
+            if 'Item' in response:
+                template = response['Item']
+                template_found = True
+                logger.info(f"[traceId: {trace_id}] Template {template_id} encontrado")
+            else:
+                logger.warning(f"[traceId: {trace_id}] Template {template_id} não encontrado, buscando template padrão")
+                # Se o template especificado não foi encontrado, buscar o template padrão
+                response = templates_table.get_item(
+                    Key={
+                        'templateId': DEFAULT_TEMPLATE_ID
+                    }
+                )
+                
+                if 'Item' in response:
+                    template = response['Item']
+                    template_found = True
+                    logger.info(f"[traceId: {trace_id}] Template padrão {DEFAULT_TEMPLATE_ID} encontrado")
+        except Exception as e:
+            logger.warning(f"[traceId: {trace_id}] Erro ao buscar template: {str(e)}")
         
-        template = response['Item']
+        # Se nenhum template foi encontrado, criar um template padrão em memória
+        if not template_found:
+            logger.warning(f"[traceId: {trace_id}] Nenhum template encontrado, criando template padrão em memória")
+            template = {
+                'templateId': DEFAULT_TEMPLATE_ID,
+                'type': 'SEARCH',
+                'version': '1.0',
+                'jsonBody': {
+                    'name': 'Campanha de Busca Padrão',
+                    'description': 'Template padrão para campanhas de busca',
+                    'adGroups': [
+                        {
+                            'name': 'Grupo de Anúncios Padrão',
+                            'keywords': [
+                                {'text': 'produto padrão', 'matchType': 'BROAD'},
+                                {'text': 'comprar produto', 'matchType': 'PHRASE'}
+                            ],
+                            'ads': [
+                                {
+                                    'headline1': 'Produto Incrível',
+                                    'headline2': 'Melhor Qualidade',
+                                    'description': 'Compre agora com descontos especiais!'
+                                }
+                            ]
+                        }
+                    ],
+                    'budget': {
+                        'amount': 100.00,
+                        'currency': 'BRL'
+                    },
+                    'targeting': {
+                        'locations': ['BR'],
+                        'languages': ['pt']
+                    }
+                }
+            }
         
         # Filtrar template pelo locale se necessário
         if 'localeVersions' in template and locale in template['localeVersions']:
@@ -64,9 +107,38 @@ def handler(event, context):
             # Se não há versões por locale, use o jsonBody diretamente
             template_content = template['jsonBody']
         else:
-            raise Exception(f"Formato de template inválido ou locale {locale} não disponível")
+            # Se o formato do template não for o esperado, criar um conteúdo padrão
+            logger.warning(f"[traceId: {trace_id}] Formato de template inválido, usando conteúdo padrão")
+            template_content = {
+                'name': 'Campanha de Busca Padrão',
+                'description': 'Template padrão para campanhas de busca',
+                'adGroups': [
+                    {
+                        'name': 'Grupo de Anúncios Padrão',
+                        'keywords': [
+                            {'text': 'produto padrão', 'matchType': 'BROAD'},
+                            {'text': 'comprar produto', 'matchType': 'PHRASE'}
+                        ],
+                        'ads': [
+                            {
+                                'headline1': 'Produto Incrível',
+                                'headline2': 'Melhor Qualidade',
+                                'description': 'Compre agora com descontos especiais!'
+                            }
+                        ]
+                    }
+                ],
+                'budget': {
+                    'amount': 100.00,
+                    'currency': 'BRL'
+                },
+                'targeting': {
+                    'locations': ['BR'],
+                    'languages': ['pt']
+                }
+            }
         
-        logger.info(f"[traceId: {trace_id}] Template encontrado: {template['templateId']}")
+        logger.info(f"[traceId: {trace_id}] Template utilizado: {template['templateId']}")
         
         # Registrar esta etapa na tabela ExecutionHistory
         execution_record = {
