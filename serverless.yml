@@ -16,6 +16,7 @@ provider:
   region: ${opt:region, 'us-east-1'}
   environment:
     STAGE: ${self:custom.stage}
+    ACCOUNT_ID: ${self:custom.accountId}
     OPENAI_API_KEY: ${ssm:/OPENAI_API_KEY}
     # GOOGLE_ADS_CLIENT_ID: ${ssm:/traffic/google-ads-client-id~true}
     # GOOGLE_ADS_CLIENT_SECRET: ${ssm:/traffic/google-ads-client-secret~true}
@@ -24,6 +25,7 @@ provider:
     CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
     EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
+    CLIENTS_TABLE: ${self:custom.resourcePrefix}-clients
     BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
     BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
     BASE_ROLE_ARN: arn:aws:iam::${self:custom.awsId}:role/${self:service}-${self:custom.stage}-
@@ -35,6 +37,7 @@ functions:
   - ${file(sls/functions/openai/interface.yml)}
   - ${file(sls/functions/parser/interface.yml)}
   - ${file(sls/functions/googleads/interface.yml)}
+  - ${file(sls/functions/webhooks/interface.yml)}
 
 stepFunctions:
   stateMachines:
@@ -47,6 +50,7 @@ resources:
     - ${file(sls/resources/dynamodb/campaign-templates-table.yml)}
     - ${file(sls/resources/dynamodb/execution-history-table.yml)}
     - ${file(sls/resources/dynamodb/campaign-metadata-table.yml)}
+    - ${file(sls/resources/dynamodb/clients-table.yml)}
 
 plugins:
   - serverless-step-functions

@@ -24,6 +24,12 @@ def handler(event, context):
         trace_id = event.get('traceId', str(uuid.uuid4()))
         timestamp = datetime.utcnow().isoformat()
         logger.info(f"[traceId: {trace_id}] Iniciando orquestração do processo de otimização")
+        
+        # Verificar se temos o ID do cliente (storeId)
+        if 'storeId' not in event:
+            logger.warning(f"[traceId: {trace_id}] storeId não fornecido no evento")
+            raise Exception("storeId é obrigatório para identificação do cliente")
+        
         if 'campaignId' in event and event['campaignId']:
             run_type = 'IMPROVE'
             logger.info(f"[traceId: {trace_id}] Tipo de execução: {run_type} para campanha {event['campaignId']}")
@@ -36,23 +42,29 @@ def handler(event, context):
             'status': 'STARTED',
             'timestamp': timestamp,
             'payload': json.dumps(event),
-            'stageTm': 'orchestrator'
+            'stageTm': 'orchestrator',
+            'storeId': event['storeId']
         }
-        if 'storeId' in event:
-            execution_record['storeId'] = event['storeId']
+        if 'storeName' in event:
+            execution_record['storeName'] = event['storeName']
         if 'campaignId' in event:
             execution_record['campaignId'] = event['campaignId']
+        if 'formData' in event:
+            execution_record['formData'] = json.dumps(event['formData'])
         execution_history_table.put_item(Item=execution_record)
         logger.info(f"[traceId: {trace_id}] Registro criado na tabela ExecutionHistory")
         response = {
             'traceId': trace_id,
             'runType': run_type,
-            'timestamp': timestamp
+            'timestamp': timestamp,
+            'storeId': event['storeId']
         }
+        if 'storeName' in event:
+            response['storeName'] = event['storeName']
         if 'campaignId' in event:
             response['campaignId'] = event['campaignId']
-        if 'storeId' in event:
-            response['storeId'] = event['storeId']
+        if 'formData' in event:
+            response['formData'] = event['formData']
         response['originalEvent'] = event
         return response
     except Exception as e:
@@ -68,6 +80,8 @@ def handler(event, context):
                     'payload': json.dumps(event),
                     'stageTm': 'orchestrator'
                 }
+                if 'storeId' in event:
+                    error_record['storeId'] = event['storeId']
                 execution_history_table.put_item(Item=error_record)
             except Exception as inner_e:
                 logger.error(f"[traceId: {trace_id}] Erro ao registrar falha: {str(inner_e)}")        

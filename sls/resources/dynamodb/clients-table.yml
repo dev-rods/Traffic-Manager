@@ -1,0 +1,21 @@
+Resources:
+  ClientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-clients
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: clientId
+          AttributeType: S
+        - AttributeName: apiKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: clientId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: apiKey-index
+          KeySchema:
+            - AttributeName: apiKey
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL 

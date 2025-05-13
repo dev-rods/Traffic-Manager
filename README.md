@@ -112,3 +112,44 @@ Para desenvolvimento local, é recomendado utilizar o SAM CLI ou o plugin server
 ## Licença
 
 Este projeto é proprietário. Todos os direitos reservados.
+
+## Integrações
+
+### Google Sheets
+
+O sistema agora suporta integração com o Google Sheets, permitindo que formulários do Google Forms iniciem automaticamente fluxos de otimização de campanhas. 
+
+Recursos da integração:
+- Autenticação via API Key
+- Multitenancy (suporte a múltiplos clientes)
+- Processamento automático de novos registros de formulários
+- Documentação detalhada para configuração
+
+Para configurar a integração, consulte o [guia detalhado](docs/GOOGLE_SHEETS_INTEGRATION.md).
+
+### Gerenciamento de Clientes
+
+Para gerenciar clientes (criar novos, listar existentes, regenerar API keys), utilize o script CLI:
+
+```bash
+# Listar todos os clientes
+python src/scripts/client_manager.py list
+
+# Criar um novo cliente
+python src/scripts/client_manager.py create --name "Nome do Cliente" --email "email@cliente.com"
+
+# Regenerar API key
+python src/scripts/client_manager.py regenerate-key --id "client-id"
+
+# Desativar um cliente
+python src/scripts/client_manager.py deactivate --id "client-id"
+
+# Ativar um cliente
+python src/scripts/client_manager.py activate --id "client-id"
+```
+
+## Modelo de Dados
+
+O sistema agora inclui as seguintes tabelas adicionais:
+- `clients`: Armazena informações de clientes e suas API keys
+- `execution-history`: Inclui campo storeId para rastrear execuções por cliente
