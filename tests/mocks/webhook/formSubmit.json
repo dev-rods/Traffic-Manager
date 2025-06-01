@@ -1,0 +1,119 @@
+{
+    "resource": "/webhook/campaign",
+    "path": "/webhook/campaign",
+    "httpMethod": "POST",
+    "headers": {
+        "Accept-Encoding": "gzip, deflate, br",
+        "CloudFront-Forwarded-Proto": "https",
+        "CloudFront-Is-Desktop-Viewer": "true",
+        "CloudFront-Is-Mobile-Viewer": "false",
+        "CloudFront-Is-SmartTV-Viewer": "false",
+        "CloudFront-Is-Tablet-Viewer": "false",
+        "CloudFront-Viewer-ASN": "15169",
+        "CloudFront-Viewer-Country": "US",
+        "Content-Type": "application/json",
+        "Host": "kc9p8gxfa1.execute-api.us-east-1.amazonaws.com",
+        "User-Agent": "Mozilla/5.0 (compatible; Google-Apps-Script; beanserver; +https://script.google.com; id: UAEmdDd8TPRiG4q0BgWUYnCR6Zm1LYWmZ0f0)",
+        "Via": "1.1 a642518ef4d5fb78c3190de112922a38.cloudfront.net (CloudFront)",
+        "X-Amz-Cf-Id": "em7-P1AkIt3e3Z2O380GT_ko1oXzSzaSWANT5aqtD8Q_23lkJrqlEw==",
+        "X-Amzn-Trace-Id": "Root=1-683c800a-23b4862f69ebd05416f608f5",
+        "x-api-key": "ae9bfaa64f0110468e69d36e00ad04efca63805bb0b419f27a9105e6c37b5ce0",
+        "X-Forwarded-For": "2804:7f0:90c0:cf72:8c9a:e1dc:ce07:d752, 35.187.143.133, 18.68.45.6",
+        "X-Forwarded-Port": "443",
+        "X-Forwarded-Proto": "https"
+    },
+    "multiValueHeaders": {
+        "Accept-Encoding": [
+            "gzip, deflate, br"
+        ],
+        "CloudFront-Forwarded-Proto": [
+            "https"
+        ],
+        "CloudFront-Is-Desktop-Viewer": [
+            "true"
+        ],
+        "CloudFront-Is-Mobile-Viewer": [
+            "false"
+        ],
+        "CloudFront-Is-SmartTV-Viewer": [
+            "false"
+        ],
+        "CloudFront-Is-Tablet-Viewer": [
+            "false"
+        ],
+        "CloudFront-Viewer-ASN": [
+            "15169"
+        ],
+        "CloudFront-Viewer-Country": [
+            "US"
+        ],
+        "Content-Type": [
+            "application/json"
+        ],
+        "Host": [
+            "kc9p8gxfa1.execute-api.us-east-1.amazonaws.com"
+        ],
+        "User-Agent": [
+            "Mozilla/5.0 (compatible; Google-Apps-Script; beanserver; +https://script.google.com; id: UAEmdDd8TPRiG4q0BgWUYnCR6Zm1LYWmZ0f0)"
+        ],
+        "Via": [
+            "1.1 a642518ef4d5fb78c3190de112922a38.cloudfront.net (CloudFront)"
+        ],
+        "X-Amz-Cf-Id": [
+            "em7-P1AkIt3e3Z2O380GT_ko1oXzSzaSWANT5aqtD8Q_23lkJrqlEw=="
+        ],
+        "X-Amzn-Trace-Id": [
+            "Root=1-683c800a-23b4862f69ebd05416f608f5"
+        ],
+        "x-api-key": [
+            "ae9bfaa64f0110468e69d36e00ad04efca63805bb0b419f27a9105e6c37b5ce0"
+        ],
+        "X-Forwarded-For": [
+            "2804:7f0:90c0:cf72:8c9a:e1dc:ce07:d752, 35.187.143.133, 18.68.45.6"
+        ],
+        "X-Forwarded-Port": [
+            "443"
+        ],
+        "X-Forwarded-Proto": [
+            "https"
+        ]
+    },
+    "queryStringParameters": null,
+    "multiValueQueryStringParameters": null,
+    "pathParameters": null,
+    "stageVariables": null,
+    "requestContext": {
+        "resourceId": "8izfjf",
+        "resourcePath": "/webhook/campaign",
+        "httpMethod": "POST",
+        "extendedRequestId": "LfjxqG6PIAMEP0w=",
+        "requestTime": "01/Jun/2025:16:30:02 +0000",
+        "path": "/dev/webhook/campaign",
+        "accountId": "796000356030",
+        "protocol": "HTTP/1.1",
+        "stage": "dev",
+        "domainPrefix": "kc9p8gxfa1",
+        "requestTimeEpoch": 1748795402294,
+        "requestId": "86d84f41-adc8-4dc0-8512-c770d5edc277",
+        "identity": {
+            "cognitoIdentityPoolId": null,
+            "cognitoIdentityId": null,
+            "apiKey": "ae9bfaa64f0110468e69d36e00ad04efca63805bb0b419f27a9105e6c37b5ce0",
+            "principalOrgId": null,
+            "cognitoAuthenticationType": null,
+            "userArn": null,
+            "userAgent": "Mozilla/5.0 (compatible; Google-Apps-Script; beanserver; +https://script.google.com; id: UAEmdDd8TPRiG4q0BgWUYnCR6Zm1LYWmZ0f0)",
+            "accountId": null,
+            "caller": null,
+            "sourceIp": "35.187.143.133",
+            "accessKey": null,
+            "cognitoAuthenticationProvider": null,
+            "user": null
+        },
+        "domainName": "kc9p8gxfa1.execute-api.us-east-1.amazonaws.com",
+        "deploymentId": "1c12ne",
+        "apiId": "kc9p8gxfa1"
+    },
+    "body": "{\"Carimbo de data/hora\":\"2025/05/12 21:13:10\",\"Selecione seu objetivo (Com o Google)\":\"Gerar leads (contatos de clientes interessados)\",\"Quanto estaria disposto (a) a investir mensalmentel?\":\"R$ 600\",\"Qual é o endereço do seu local de atendimento? (Se não for físico, digite online)\":\"online\",\"Onde encontramos seu público? (Próximo ao seu local? Em sua cidade? Em seu Estado? Em todo o país? Em sua microregião?)\":\"Santo Anastácio\",\"Qual é o seu produto ou serviço?\":\"consultoria judicial\",\"Qual é o maior diferencial competitivo do seu produto/serviço? (Ex: preço, tecnologia, atendimento, localização, experiência, etc.)  \":\"preço baixo e atendimento de qualidade\",\"O que o seu cliente ganha ao escolher você e não o concorrente? (Ex: menor preço, atendimento mais humano, melhores resultados, etc.)\":\"melhores resultados\",\"Quais são os desejos das pessoas que se conectam com seu produto/serviço?  \":\"acompanhamento judicial\",\"Quais são as dores ou frustrações que ela quer resolver com o seu produto?  \":\"lentidão no sistema judiciario\",\"Quanto você espera pagar por resultado?\":\"10\",\"Qual é o seu Ticket Médio? (Divida seu faturamento em um período (dia ou semana) e divida pela quantidade de clientes nesse período. Vai ajudar a limitarmos os gastos por cliente.)\":\"100\",\"Como você quer ser percebido(a)? (Ex: Premium, acessível, inovador, confiável, rápido…)  \":\"acessível\",\"Seu cliente procura por você ou precisa ser convencido? \":\"procura por mim\"}",
+    "isBase64Encoded": false
+}
