@@ -4,17 +4,12 @@ import os
 import uuid
 import logging
 from datetime import datetime
-
-# Utilitários de autenticação
 from src.utils.auth import ClientAuth
 
-# Configuração de logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Cliente da Step Function
 step_functions = boto3.client('stepfunctions')
-# Cliente do DynamoDB para histórico de execução
 dynamodb = boto3.resource('dynamodb')
 execution_history_table = dynamodb.Table(os.environ.get('EXECUTION_HISTORY_TABLE'))
 
@@ -28,17 +23,10 @@ def handler(event, context):
     3. Inicia a Step Function de otimização da campanha
     """
     try:
-        # Log da requisição
         logger.info(f"Requisição recebida de webhook: {json.dumps(event)}")
-        
-        # Verificar se há dados no body
-        if 'body' not in event or not event['body']:
-            return response(400, "Corpo da requisição vazio ou inválido")
-        
-        # Parse do corpo da requisição
-        body = json.loads(event['body']) if isinstance(event['body'], str) else event['body']
-        
-        # Verificar se a API key foi fornecida
+        if "body" not in event or not event["body"]:
+            return response(400, "Corpo da requisição vazio ou inválido")        
+        body = json.loads(event["body"]) if isinstance(event["body"], str) else event["body"]        
         api_key = get_api_key(event, body)
         if not api_key:
             logger.warning("API key não fornecida na requisição")
@@ -110,32 +98,21 @@ def handler(event, context):
         return response(500, {"message": "Erro interno no servidor", "error": error_msg})
 
 def get_api_key(event, body):
-    """
-    Extrai a API key da requisição, verificando headers, query string e body
-    """
-    # Verificar nos headers (Authorization)
-    if 'headers' in event and event['headers']:
-        headers = event['headers']
-        if 'Authorization' in headers:
-            auth_header = headers['Authorization']
-            if auth_header.startswith('Bearer '):
-                return auth_header[7:]  # Remove o prefixo 'Bearer '
-        
-        # Verificar formato alternativo de header (x-api-key)
-        if 'x-api-key' in headers:
-            return headers['x-api-key']
-    
-    # Verificar query string
-    if 'queryStringParameters' in event and event['queryStringParameters']:
-        query_params = event['queryStringParameters']
-        if 'apiKey' in query_params:
-            return query_params['apiKey']
-    
-    # Verificar no body
+    if "headers" in event and event["headers"]:
+        headers = event["headers"]
+        if "Authorization" in headers:
+            auth_header = headers["Authorization"]
+            if auth_header.startswith("Bearer "):
+                return auth_header[7:]
+        if "x-api-key" in headers:
+            return headers["x-api-key"]
+    if "queryStringParameters" in event and event["queryStringParameters"]:
+        query_params = event["queryStringParameters"]
+        if "apiKey" in query_params:
+            return query_params["apiKey"]
     if body and isinstance(body, dict):
-        if 'apiKey' in body:
-            return body['apiKey']
-    
+        if "apiKey" in body:
+            return body["apiKey"]
     return None
 
 def parse_form_data(body):

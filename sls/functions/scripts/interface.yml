@@ -15,7 +15,7 @@ ScriptManager:
         - dynamodb:Scan
       Resource: 
         - !GetAtt ClientsTable.Arn
-        - !GetAtt ClientsTable.Arn/index/*
+        - !Sub "${ClientsTable.Arn}/index/*"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup

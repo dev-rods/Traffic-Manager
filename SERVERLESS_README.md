@@ -22,3 +22,6 @@ serverless print
 
 # Start
 serverless invoke stepf --name CampaignOptimizationFlow -s dev --aws-profile traffic-manager 
+
+# Script
+serverless invoke local -s dev -f ScriptManager -p tests/mocks/scripts/manager/create_client.json --aws-profile traffic-manager

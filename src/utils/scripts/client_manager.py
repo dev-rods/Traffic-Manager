@@ -10,13 +10,13 @@ import secrets
 import hashlib
 from boto3.dynamodb.conditions import Key
 from datetime import datetime
+from src.utils.auth import ClientAuth
 
-# Configuração de logging
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Cliente do DynamoDB
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource("dynamodb")
 
 
 def create_client(params):
@@ -31,25 +31,21 @@ def create_client(params):
     Returns:
         dict: Dados do cliente criado
     """
-    name = params.get('name')
-    email = params.get('email')
-
+    name = params.get("name")
+    email = params.get("email")
     if not name or not email:
-        raise ValueError('Nome e email são obrigatórios')
-
-    clients_table = dynamodb.Table(os.environ.get('CLIENTS_TABLE'))
+        raise ValueError("Nome e email são obrigatórios")
+    clients_table = dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
     client_id = _generate_client_id(name)
-    api_key = generate_api_key()
-
+    api_key = ClientAuth().generate_api_key()
     client_data = {
-        'clientId': client_id,
-        'name': name,
-        'email': email,
-        'apiKey': api_key,
-        'active': True,
-        'createdAt': datetime.utcnow().isoformat()
+        "clientId": client_id,
+        "name": name,
+        "email": email,
+        "apiKey": api_key,
+        "active": True,
+        "createdAt": datetime.utcnow().isoformat()
     }
-
     clients_table.put_item(Item=client_data)
     return client_data
 
@@ -64,9 +60,9 @@ def list_clients(params=None):
     Returns:
         list: Lista de clientes
     """
-    clients_table = dynamodb.Table(os.environ.get('CLIENTS_TABLE'))
+    clients_table = dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
     result = clients_table.scan()
-    return result.get('Items', [])
+    return result.get("Items", [])
 
 
 def regenerate_key(params):
@@ -80,33 +76,25 @@ def regenerate_key(params):
     Returns:
         dict: Cliente com nova API key
     """
-    client_id = params.get('clientId')
+    client_id = params.get("clientId")
     if not client_id:
-        raise ValueError('ID do cliente é obrigatório')
-
-    clients_table = dynamodb.Table(os.environ.get('CLIENTS_TABLE'))
-    
-    # Verificar se o cliente existe
-    client = get_client({'clientId': client_id})
-    
-    # Gerar nova API key
-    new_api_key = generate_api_key()
-    
-    # Atualizar no DynamoDB
+        raise ValueError("ID do cliente é obrigatório")
+    clients_table = dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
+    client = get_client({"clientId": client_id})
+    new_api_key = ClientAuth().generate_api_key()
     result = clients_table.update_item(
-        Key={'clientId': client_id},
-        UpdateExpression='set apiKey = :apiKey, updatedAt = :updatedAt',
+        Key={"clientId": client_id},
+        UpdateExpression="set apiKey = :apiKey, updatedAt = :updatedAt",
         ExpressionAttributeValues={
-            ':apiKey': new_api_key,
-            ':updatedAt': datetime.utcnow().isoformat()
+            ":apiKey": new_api_key,
+            ":updatedAt": datetime.utcnow().isoformat()
         },
-        ReturnValues='ALL_NEW'
+        ReturnValues="ALL_NEW"
     )
-    
     return {
-        'clientId': client_id,
-        'name': client.get('name'),
-        'apiKey': new_api_key
+        "clientId": client_id,
+        "name": client.get("name"),
+        "apiKey": new_api_key
     }
 
 
@@ -122,29 +110,29 @@ def update_client_status(params):
     Returns:
         dict: Cliente atualizado
     """
-    client_id = params.get('clientId')
-    active = params.get('active')
+    client_id = params.get("clientId")
+    active = params.get("active")
     
     if client_id is None or active is None:
-        raise ValueError('ID do cliente e status são obrigatórios')
+        raise ValueError("ID do cliente e status são obrigatórios")
     
-    clients_table = dynamodb.Table(os.environ.get('CLIENTS_TABLE'))
+    clients_table = dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
     
     # Verificar se o cliente existe
-    get_client({'clientId': client_id})
+    get_client({"clientId": client_id})
     
     # Atualizar status
     result = clients_table.update_item(
-        Key={'clientId': client_id},
-        UpdateExpression='set active = :active, updatedAt = :updatedAt',
+        Key={"clientId": client_id},
+        UpdateExpression="set active = :active, updatedAt = :updatedAt",
         ExpressionAttributeValues={
-            ':active': active,
-            ':updatedAt': datetime.utcnow().isoformat()
+            ":active": active,
+            ":updatedAt": datetime.utcnow().isoformat()
         },
-        ReturnValues='ALL_NEW'
+        ReturnValues="ALL_NEW"
     )
     
-    return result.get('Attributes', {})
+    return result.get("Attributes", {})
 
 
 def get_client(params):
@@ -158,19 +146,14 @@ def get_client(params):
     Returns:
         dict: Dados do cliente
     """
-    client_id = params.get('clientId')
+    client_id = params.get("clientId")
     if not client_id:
-        raise ValueError('ID do cliente é obrigatório')
-    
-    clients_table = dynamodb.Table(os.environ.get('CLIENTS_TABLE'))
-    result = clients_table.get_item(
-        Key={'clientId': client_id}
-    )
-    
-    if 'Item' not in result:
-        raise ValueError(f"Cliente com ID '{client_id}' não encontrado")
-    
-    return result['Item']
+        raise ValueError("ID do cliente é obrigatório")
+    clients_table = dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
+    result = clients_table.get_item(Key={"clientId": client_id})
+    if "Item" not in result:
+        raise ValueError(f"Cliente com ID "{client_id}" não encontrado")
+    return result["Item"]
 
 
 def _generate_client_id(client_name):
@@ -183,18 +166,6 @@ def _generate_client_id(client_name):
     Returns:
         str: ID gerado
     """
-    # Remove espaços e caracteres especiais e converte para lowercase
-    base = ''.join(e for e in client_name if e.isalnum()).lower()
-    # Adiciona um hash curto para evitar colisões
+    base = "".join(e for e in client_name if e.isalnum()).lower()
     hash_suffix = hashlib.md5(client_name.encode()).hexdigest()[:6]
     return f"{base}-{hash_suffix}"
-
-
-def generate_api_key():
-    """
-    Gera uma nova API key segura
-
-    Returns:
-        str: API key gerada
-    """
-    return secrets.token_hex(32)  # 64 caracteres hexadecimais 

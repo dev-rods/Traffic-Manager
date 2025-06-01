@@ -1,0 +1,7 @@
+{
+    "command": "create_client",
+    "params": {
+        "name": "Empresa rods",
+        "email": "rodsebaiano@gmail.com"
+    }
+} 
