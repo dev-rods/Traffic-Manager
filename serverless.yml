@@ -38,6 +38,7 @@ functions:
   - ${file(sls/functions/parser/interface.yml)}
   - ${file(sls/functions/googleads/interface.yml)}
   - ${file(sls/functions/webhooks/interface.yml)}
+  - ${file(sls/functions/scripts/interface.yml)}
 
 stepFunctions:
   stateMachines:

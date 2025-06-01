@@ -1,0 +1,24 @@
+ScriptManager:
+  handler: src/functions/scripts/manager.handler
+  memorySize: 512
+  timeout: 60
+  runtime: python3.8
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ScriptManager-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:Query
+        - dynamodb:Scan
+      Resource: 
+        - !GetAtt ClientsTable.Arn
+        - !GetAtt ClientsTable.Arn/index/*
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*" 
