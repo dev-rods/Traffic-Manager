@@ -38,17 +38,12 @@ Para gerenciar clientes (criar novos, listar existentes, regenerar API keys), ut
 
 ```bash
 # Listar todos os clientes
-python src/scripts/client_manager.py list
+serverless invoke local -s dev -f ScriptManager -p tests/mocks/scripts/manager/list_clients.json --aws-profile traffic-manager
 
 # Criar um novo cliente
-python src/scripts/client_manager.py create --name "Nome do Cliente" --email "email@cliente.com"
+serverless invoke local -s dev -f ScriptManager -p tests/mocks/scripts/manager/create_client.json --aws-profile traffic-manager
 
 # Regenerar API key
-python src/scripts/client_manager.py regenerate-key --id "client-id"
+serverless invoke local -s dev -f ScriptManager -p tests/mocks/scripts/manager/regenerate_key.json --aws-profile traffic-manager
 
-# Desativar um cliente
-python src/scripts/client_manager.py deactivate --id "client-id"
-
-# Ativar um cliente
-python src/scripts/client_manager.py activate --id "client-id"
 ```

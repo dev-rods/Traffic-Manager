@@ -1,5 +1,5 @@
 {
-  "command": "regenerate-key",
+  "command": "regenerate_key",
   "params": {
     "id": "empresaabc-a1b2c3"
   }
