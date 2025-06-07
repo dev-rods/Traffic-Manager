@@ -18,3 +18,4 @@ var/
 node_modules/
 # Serverless directories
 .serverless
+*.pycache*

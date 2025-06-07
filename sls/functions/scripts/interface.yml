@@ -1,7 +1,7 @@
 ScriptManager:
   handler: src/functions/scripts/manager.handler
   memorySize: 512
-  timeout: 60
+  timeout: 30
   runtime: python3.8
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-ScriptManager-lambdaRole
   iamRoleStatements:
@@ -13,9 +13,16 @@ ScriptManager:
         - dynamodb:DeleteItem
         - dynamodb:Query
         - dynamodb:Scan
-      Resource: 
+      Resource:
         - !GetAtt ClientsTable.Arn
         - !Sub "${ClientsTable.Arn}/index/*"
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+        - ssm:PutParameter
+        - ssm:DeleteParameter
+      Resource: 
+        - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/traffic-manager/*"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
