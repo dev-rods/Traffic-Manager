@@ -14,76 +14,66 @@ execution_history_table = dynamodb.Table(os.environ.get('EXECUTION_HISTORY_TABLE
 campaign_metadata_table = dynamodb.Table(os.environ.get('CAMPAIGN_METADATA_TABLE'))
 
 def handler(event, context):
-    """
-    Função para registrar o término do processo de otimização
-    
-    Esta função registra o término bem-sucedido do processo completo
-    e atualiza o status na tabela de metadados da campanha.
-    """
     try:
-        trace_id = event.get('traceId')
-        stage = 'FINISH'
+        trace_id = event.get("traceId")
+        client_id = event.get("clientId")
+        stage = "FINISH"
         timestamp = datetime.utcnow().isoformat()
-        run_type = event.get('runType', 'FIRST_RUN')
+        run_type = event.get("runType", "FIRST_RUN")
         
         logger.info(f"[traceId: {trace_id}] Registrando conclusão do processo de otimização para runType: {run_type}")
         
-        # Obter o ID da campanha, que pode vir diretamente do evento ou dos resultados do Google Ads
-        campaign_id = event.get('campaignId')
+        campaign_id = event.get("campaignId")
+        google_ads_results = event.get("googleAdsResults", {})
         
-        if not campaign_id and 'googleAdsResults' in event and 'created_campaign_id' in event['googleAdsResults']:
-            campaign_id = event['googleAdsResults']['created_campaign_id']
+        if not campaign_id and "created_campaign_id" in google_ads_results:
+            campaign_id = google_ads_results["created_campaign_id"]
             
         if not campaign_id:
             logger.warning(f"[traceId: {trace_id}] Nenhum ID de campanha encontrado para registro")
         
-        # Registrar conclusão na tabela ExecutionHistory
+        process_summary = generate_process_summary(trace_id, run_type, google_ads_results)
+        
         execution_record = {
-            'traceId': trace_id,
-            'stageTm': f"{stage}#{timestamp}",
-            'stage': stage,
-            'status': 'COMPLETED',
-            'timestamp': timestamp,
-            'payload': json.dumps({
-                'summary': {
-                    'runType': run_type,
-                    'duration': calculate_duration(trace_id),
-                    'status': 'SUCCESS'
-                }
-            })
+            "traceId": trace_id,
+            "stageTm": f"{stage}#{timestamp}",
+            "stage": stage,
+            "status": "COMPLETED",
+            "timestamp": timestamp,
+            "payload": json.dumps(process_summary)
         }
         
-        # Adicionar campos adicionais, se existirem no evento original
-        if 'runType' in event:
-            execution_record['runType'] = event['runType']
-        
-        if 'storeId' in event:
-            execution_record['storeId'] = event['storeId']
-            
+        if "runType" in event:
+            execution_record["runType"] = event["runType"]
+        if "storeId" in event:
+            execution_record["storeId"] = event["storeId"]
+        if "clientId" in event:
+            execution_record["clientId"] = event["clientId"]
         if campaign_id:
-            execution_record['campaignId'] = campaign_id
+            execution_record["campaignId"] = campaign_id
             
-        # Salvar no DynamoDB
         execution_history_table.put_item(Item=execution_record)
         
-        # Atualizar metadados da campanha, se tivermos um ID de campanha
         if campaign_id:
-            update_campaign_status(campaign_id, 'ACTIVE', trace_id)
+            if run_type == "FIRST_RUN":
+                create_campaign_metadata_record(campaign_id, client_id, trace_id, event)
+            else:
+                update_campaign_metadata_record(campaign_id, trace_id, google_ads_results)
         
-        # Preparar resposta
         response = {
-            'traceId': trace_id,
-            'timestamp': timestamp,
-            'runType': run_type,
-            'status': 'SUCCESS'
+            "traceId": trace_id,
+            "timestamp": timestamp,
+            "runType": run_type,
+            "status": "SUCCESS",
+            "summary": process_summary
         }
         
-        # Incluir outros campos relevantes do evento original
-        if 'storeId' in event:
-            response['storeId'] = event['storeId']
-            
+        if "storeId" in event:
+            response["storeId"] = event["storeId"]
+        if "clientId" in event:
+            response["clientId"] = event["clientId"]
         if campaign_id:
-            response['campaignId'] = campaign_id
+            response["campaignId"] = campaign_id
             
         logger.info(f"[traceId: {trace_id}] Processo de otimização concluído e registrado com sucesso")
         return response
@@ -178,4 +168,81 @@ def update_campaign_status(campaign_id, status, trace_id):
         logger.info(f"[traceId: {trace_id}] Status da campanha {campaign_id} atualizado para {status}")
     except Exception as e:
         logger.error(f"[traceId: {trace_id}] Erro ao atualizar status da campanha {campaign_id}: {str(e)}")
-        # Não propagar este erro para evitar falhar o processo principal 
+
+
+def generate_process_summary(trace_id, run_type, google_ads_results):
+    duration = calculate_duration(trace_id)
+    
+    summary = {
+        "runType": run_type,
+        "duration": duration,
+        "status": "SUCCESS",
+        "googleAdsResults": {
+            "successCount": google_ads_results.get("success_count", 0),
+            "failureCount": google_ads_results.get("failure_count", 0)
+        }
+    }
+    
+    if run_type == "FIRST_RUN":
+        summary["campaignCreated"] = google_ads_results.get("created_campaign_id") is not None
+        if google_ads_results.get("created_campaign_id"):
+            summary["newCampaignId"] = google_ads_results["created_campaign_id"]
+    else:
+        summary["optimizationsApplied"] = google_ads_results.get("success_count", 0)
+    
+    return summary
+
+
+def create_campaign_metadata_record(campaign_id, client_id, trace_id, event):
+    try:
+        metadata_record = {
+            "googleCampaignId": campaign_id,
+            "clientId": client_id,
+            "createdAt": datetime.utcnow().isoformat(),
+            "currentStatus": "ACTIVE",
+            "lastUpdatedAt": datetime.utcnow().isoformat(),
+            "creationTraceId": trace_id,
+            "campaignType": "SEARCH"
+        }
+        
+        if "storeId" in event:
+            metadata_record["storeId"] = event["storeId"]
+        if "formData" in event:
+            form_data = event["formData"]
+            if isinstance(form_data, str):
+                form_data = json.loads(form_data)
+            
+            client_info = form_data.get("clientInfo", {})
+            metadata_record["businessName"] = client_info.get("businessName", "")
+            metadata_record["businessEmail"] = client_info.get("email", "")
+        
+        campaign_metadata_table.put_item(Item=metadata_record)
+        logger.info(f"[traceId: {trace_id}] Metadados da campanha {campaign_id} criados")
+        
+    except Exception as e:
+        logger.error(f"[traceId: {trace_id}] Erro ao criar metadados da campanha {campaign_id}: {str(e)}")
+
+
+def update_campaign_metadata_record(campaign_id, trace_id, google_ads_results):
+    try:
+        update_expression = "SET lastUpdatedAt = :timestamp, lastOptimizationTraceId = :traceId"
+        expression_values = {
+            ":timestamp": datetime.utcnow().isoformat(),
+            ":traceId": trace_id
+        }
+        
+        if google_ads_results.get("success_count", 0) > 0:
+            update_expression += ", optimizationCount = if_not_exists(optimizationCount, :zero) + :increment"
+            expression_values[":zero"] = 0
+            expression_values[":increment"] = 1
+        
+        campaign_metadata_table.update_item(
+            Key={"googleCampaignId": campaign_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values
+        )
+        
+        logger.info(f"[traceId: {trace_id}] Metadados da campanha {campaign_id} atualizados")
+        
+    except Exception as e:
+        logger.error(f"[traceId: {trace_id}] Erro ao atualizar metadados da campanha {campaign_id}: {str(e)}") 

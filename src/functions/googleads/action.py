@@ -1,332 +1,322 @@
+"""
+Google Ads Action Handler
+
+Este módulo implementa as ações do Google Ads seguindo exatamente a documentação oficial:
+https://github.com/googleads/google-ads-python/tree/1d2434e452e1c8f4e356ae2c8b0e261aaa5da640
+
+Baseado no exemplo: get_campaigns.py da documentação oficial
+"""
+
 import json
 import boto3
 import os
+import sys
 import logging
 from datetime import datetime
-import time
+from typing import Dict, Any, Optional
 
-# Configuração de logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+# Imports do Google Ads seguindo a documentação
+from google.ads.googleads.client import GoogleAdsClient
+from google.ads.googleads.errors import GoogleAdsException
 
-# Cliente do DynamoDB
-dynamodb = boto3.resource('dynamodb')
-execution_history_table = dynamodb.Table(os.environ.get('EXECUTION_HISTORY_TABLE'))
-campaign_metadata_table = dynamodb.Table(os.environ.get('CAMPAIGN_METADATA_TABLE'))
+# Imports dos nossos serviços
+from src.services.google_ads_config import GoogleAdsConfig
 
-# Importação para simular a API do Google Ads para este esqueleto
-# Em produção, use a biblioteca real do Google Ads: 
-# from google.ads.googleads.client import GoogleAdsClient
+# Configurar logging seguindo a documentação do Google Ads
+# DynamoDB resources
+dynamodb = boto3.resource("dynamodb")
+execution_history_table = dynamodb.Table(os.environ.get("EXECUTION_HISTORY_TABLE"))
+campaign_metadata_table = dynamodb.Table(os.environ.get("CAMPAIGN_METADATA_TABLE"))
+clients_table = dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
 
 def handler(event, context):
     """
-    Função para executar operações na API do Google Ads
+    Handler principal seguindo a documentação do Google Ads
     
-    Esta função recebe o payload preparado pelo parser e executa
-    as operações necessárias na API do Google Ads.
+    Este handler implementa o padrão da documentação oficial:
+    1. Obter dados do cliente do event
+    2. Configurar credenciais do Google Ads
+    3. Criar cliente GoogleAds 
+    4. Executar get_campaigns seguindo o exemplo da documentação
+    
+    Args:
+        event: Evento Lambda contendo clientId e customerIds
+        context: Contexto da execução Lambda
+        
+    Returns:
+        dict: Resposta com campanhas encontradas
     """
+    
+    trace_id = event.get("traceId", "unknown")
+    client_id = event.get("clientId")
+    stage = "GOOGLE_ADS_GET_CAMPAIGNS"
+    timestamp = datetime.utcnow().isoformat()
+    
+    print(f"[traceId: {trace_id}] Iniciando busca de campanhas do Google Ads para cliente: {client_id}")
+    
     try:
-        trace_id = event.get('traceId')
-        stage = 'GOOGLE_ADS_ACTION'
-        timestamp = datetime.utcnow().isoformat()
-        run_type = event.get('runType', 'FIRST_RUN')
+        # Validar parâmetros obrigatórios
+        if not client_id:
+            raise ValueError("clientId é obrigatório")
         
-        logger.info(f"[traceId: {trace_id}] Iniciando execução de ações no Google Ads para runType: {run_type}")
+        # Obter customer_id do cliente no DynamoDB
+        customer_id = get_customer_id_for_client(client_id)
+        if not customer_id:
+            raise ValueError(f"Customer ID não encontrado para cliente: {client_id}")
         
-        # Verificar se temos o payload do Google Ads
-        if 'googleAdsPayload' not in event:
-            raise Exception("googleAdsPayload é obrigatório")
-            
-        google_ads_payload = event.get('googleAdsPayload')
-        operations = google_ads_payload.get('operations', [])
+        print(f"[traceId: {trace_id}] Customer ID encontrado: {customer_id}")
         
-        if not operations:
-            logger.warning(f"[traceId: {trace_id}] Nenhuma operação para executar no Google Ads")
-        else:
-            logger.info(f"[traceId: {trace_id}] Executando {len(operations)} operações no Google Ads")
+        # Configurar Google Ads Client seguindo a documentação
+        googleads_client = create_google_ads_client(client_id)
         
-        # TODO: Em um ambiente real, inicializar o cliente do Google Ads
-        # google_ads_client = GoogleAdsClient.load_from_env()
+        # Executar get_campaigns seguindo exatamente o exemplo da documentação
+        campaigns = get_campaigns_from_google_ads(googleads_client, customer_id, trace_id)
         
-        # Resultados das operações
-        results = {
-            'success': [],
-            'failure': []
-        }
-        
-        # Agrupar operações por tipo para execução
-        operation_groups = {}
-        for op in operations:
-            op_type = op.get('type')
-            if op_type not in operation_groups:
-                operation_groups[op_type] = []
-            operation_groups[op_type].append(op)
-        
-        # Processar operações na ordem correta
-        # 1. Campanha
-        # 2. Grupos de anúncios
-        # 3. Keywords
-        # 4. Anúncios
-        # 5. Ajustes de lances (bidding)
-        
-        # Simular o processamento das operações
-        created_campaign_id = None
-        
-        # Criar/atualizar campanha
-        if 'campaign' in operation_groups:
-            created_campaign_id = process_campaign_operations(operation_groups['campaign'], results, trace_id)
-        
-        # Criar/atualizar grupos de anúncios
-        if 'adGroup' in operation_groups:
-            process_ad_group_operations(operation_groups['adGroup'], results, trace_id, created_campaign_id)
-        
-        # Criar/atualizar keywords
-        if 'keyword' in operation_groups:
-            process_keyword_operations(operation_groups['keyword'], results, trace_id)
-        
-        # Criar/atualizar anúncios
-        if 'ad' in operation_groups:
-            process_ad_operations(operation_groups['ad'], results, trace_id)
-            
-        # Ajustar lances
-        if 'bidding' in operation_groups:
-            process_bidding_operations(operation_groups['bidding'], results, trace_id)
-        
-        # Atualizar metadados da campanha se for FIRST_RUN e uma campanha foi criada
-        if run_type == 'FIRST_RUN' and created_campaign_id:
-            update_campaign_metadata(created_campaign_id, trace_id, event.get('storeId', 'unknown'))
-        
-        # Registrar os resultados na tabela ExecutionHistory
+        # Registrar execução bem-sucedida
         execution_record = {
             'traceId': trace_id,
             'stageTm': f"{stage}#{timestamp}",
             'stage': stage,
             'status': 'COMPLETED',
             'timestamp': timestamp,
+            'clientId': client_id,
+            'customerId': customer_id,
             'payload': json.dumps({
-                'summary': {
-                    'total_operations': len(operations),
-                    'success_count': len(results['success']),
-                    'failure_count': len(results['failure'])
-                }
+                'campaigns_found': len(campaigns),
+                'campaigns': campaigns[:5]  # Primeiras 5 para log
             })
         }
         
-        # Adicionar campos adicionais, se existirem no evento original
-        if 'runType' in event:
-            execution_record['runType'] = event['runType']
-        
-        if 'storeId' in event:
-            execution_record['storeId'] = event['storeId']
-            
-        if 'campaignId' in event:
-            execution_record['campaignId'] = event['campaignId']
-        elif created_campaign_id:
-            execution_record['campaignId'] = created_campaign_id
-            
-        # Salvar no DynamoDB
         execution_history_table.put_item(Item=execution_record)
         
-        # Preparar resposta para o próximo passo
+        # Preparar resposta
         response = {
             'traceId': trace_id,
             'timestamp': timestamp,
-            'runType': run_type,
-            'googleAdsResults': {
-                'success_count': len(results['success']),
-                'failure_count': len(results['failure']),
-                'created_campaign_id': created_campaign_id
-            }
+            'clientId': client_id,
+            'customerId': customer_id,
+            'stage': stage,
+            'status': 'SUCCESS',
+            'campaigns': campaigns,
+            'total_campaigns': len(campaigns)
         }
         
-        # Incluir outros campos relevantes do evento original
-        if 'storeId' in event:
-            response['storeId'] = event['storeId']
-            
-        if 'campaignId' in event:
-            response['campaignId'] = event['campaignId']
-        elif created_campaign_id:
-            response['campaignId'] = created_campaign_id
-            
-        logger.info(f"[traceId: {trace_id}] Execução de ações no Google Ads concluída com sucesso. Operações: {len(results['success'])} sucesso, {len(results['failure'])} falha")
+        print(f"[traceId: {trace_id}] Busca de campanhas concluída com sucesso. Total: {len(campaigns)} campanhas")
         return response
+        
+    except GoogleAdsException as ex:
+        # Tratamento específico para erros do Google Ads (seguindo documentação)
+        error_msg = f'Request with ID "{ex.request_id}" failed with status "{ex.error.code().name}"'
+        
+        if ex.failure and ex.failure.errors:
+            error_details = []
+            for error in ex.failure.errors:
+                error_detail = f'Error with message "{error.message}"'
+                if error.location:
+                    for field_path_element in error.location.field_path_elements:
+                        error_detail += f' On field: {field_path_element.field_name}'
+                error_details.append(error_detail)
+            error_msg += f" Errors: {'; '.join(error_details)}"
+        
+        print(f"[traceId: {trace_id}] Google Ads API Error: {error_msg}")
+        
+        # Registrar erro específico do Google Ads
+        error_record = {
+            'traceId': trace_id,
+            'stageTm': f"{stage}#{timestamp}",
+            'stage': stage,
+            'status': 'GOOGLE_ADS_ERROR',
+            'timestamp': timestamp,
+            'clientId': client_id,
+            'errorMsg': error_msg,
+            'requestId': ex.request_id,
+            'errorCode': ex.error.code().name,
+            'payload': json.dumps({'error': error_msg})
+        }
+        
+        execution_history_table.put_item(Item=error_record)
+        
+        return {
+            'traceId': trace_id,
+            'timestamp': timestamp,
+            'status': 'ERROR',
+            'error_type': 'GOOGLE_ADS_API_ERROR',
+            'error': error_msg,
+            'request_id': ex.request_id,
+            'error_code': ex.error.code().name
+        }
         
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"[traceId: {trace_id if 'trace_id' in locals() else 'unknown'}] Erro na execução de ações no Google Ads: {error_msg}")
+        print(f"[traceId: {trace_id}] Erro geral: {error_msg}")
         
-        # Tentar registrar o erro se possível
-        if 'trace_id' in locals():
-            try:
-                error_record = {
-                    'traceId': trace_id,
-                    'stageTm': f"{stage}#{timestamp}",
-                    'stage': stage,
-                    'status': 'ERROR',
-                    'timestamp': timestamp,
-                    'errorMsg': error_msg,
-                    'payload': json.dumps({
-                        'error': error_msg
-                    })
-                }
-                
-                # Adicionar campos adicionais se disponíveis
-                if 'run_type' in locals():
-                    error_record['runType'] = run_type
-                    
-                if 'campaignId' in event:
-                    error_record['campaignId'] = event['campaignId']
-                    
-                execution_history_table.put_item(Item=error_record)
-            except Exception as inner_e:
-                logger.error(f"[traceId: {trace_id}] Erro ao registrar falha: {str(inner_e)}")
+        # Registrar erro geral
+        try:
+            error_record = {
+                'traceId': trace_id,
+                'stageTm': f"{stage}#{timestamp}",
+                'stage': stage,
+                'status': 'ERROR',
+                'timestamp': timestamp,
+                'clientId': client_id if 'client_id' in locals() else 'unknown',
+                'errorMsg': error_msg,
+                'payload': json.dumps({'error': error_msg})
+            }
+            
+            execution_history_table.put_item(Item=error_record)
+        except Exception as inner_e:
+            print(f"[traceId: {trace_id}] Erro ao registrar falha: {str(inner_e)}")
         
-        # Propagar o erro para a Step Function
-        raise Exception(f"Erro ao executar ações no Google Ads: {error_msg}")
-
-def process_campaign_operations(operations, results, trace_id):
-    """
-    Processa operações relacionadas a campanhas
-    
-    Para este esqueleto, estamos apenas simulando a chamada à API.
-    Em um ambiente real, implementar a chamada real à API do Google Ads.
-    """
-    # Simular processamento com uma pequena latência
-    time.sleep(0.5)
-    
-    # Para fins de simulação, gerar um ID de campanha
-    campaign_id = f"campaign-{int(time.time())}"
-    
-    # Processar cada operação
-    for op in operations:
-        operation = op.get('operation', {})
-        
-        # Simular sucesso da operação
-        results['success'].append({
-            'type': 'campaign',
-            'operation': 'create' if 'create' in operation else 'update',
-            'resourceName': f"customers/123456789/campaigns/{campaign_id}"
-        })
-        
-        logger.info(f"[traceId: {trace_id}] Campanha criada/atualizada com sucesso: {campaign_id}")
-    
-    return campaign_id
-
-def process_ad_group_operations(operations, results, trace_id, campaign_id=None):
-    """
-    Processa operações relacionadas a grupos de anúncios
-    """
-    # Simular processamento com uma pequena latência
-    time.sleep(0.5)
-    
-    # Processar cada operação
-    for op in operations:
-        operation = op.get('operation', {})
-        ad_group_name = operation.get('create', {}).get('adGroup', {}).get('name', 'Unnamed')
-        
-        # Simular sucesso da operação
-        ad_group_id = f"adgroup-{ad_group_name.replace(' ', '')}-{int(time.time())}"
-        
-        results['success'].append({
-            'type': 'adGroup',
-            'operation': 'create' if 'create' in operation else 'update',
-            'resourceName': f"customers/123456789/adGroups/{ad_group_id}",
-            'adGroupName': ad_group_name,
-            'campaignId': campaign_id
-        })
-        
-        logger.info(f"[traceId: {trace_id}] Grupo de anúncios criado/atualizado com sucesso: {ad_group_id} ({ad_group_name})")
-
-def process_keyword_operations(operations, results, trace_id):
-    """
-    Processa operações relacionadas a keywords
-    """
-    # Simular processamento com uma pequena latência
-    time.sleep(0.3)
-    
-    # Processar cada operação
-    for op in operations:
-        operation = op.get('operation', {})
-        keyword = operation.get('create', {}).get('keyword', {}).get('text', 'unknown')
-        
-        # Simular sucesso da operação
-        keyword_id = f"keyword-{int(time.time())}"
-        
-        results['success'].append({
-            'type': 'keyword',
-            'operation': 'create' if 'create' in operation else ('remove' if 'remove' in operation else 'update'),
-            'resourceName': f"customers/123456789/keywords/{keyword_id}",
-            'keyword': keyword
-        })
-        
-        logger.info(f"[traceId: {trace_id}] Keyword processada com sucesso: {keyword}")
-
-def process_ad_operations(operations, results, trace_id):
-    """
-    Processa operações relacionadas a anúncios
-    """
-    # Simular processamento com uma pequena latência
-    time.sleep(0.4)
-    
-    # Processar cada operação
-    for op in operations:
-        operation = op.get('operation', {})
-        ad_data = operation.get('create', {}).get('ad', {}).get('expandedTextAd', {})
-        headline1 = ad_data.get('headlinePart1', '')
-        
-        # Simular sucesso da operação
-        ad_id = f"ad-{int(time.time())}"
-        
-        results['success'].append({
-            'type': 'ad',
-            'operation': 'create' if 'create' in operation else 'update',
-            'resourceName': f"customers/123456789/ads/{ad_id}",
-            'headline': headline1
-        })
-        
-        logger.info(f"[traceId: {trace_id}] Anúncio processado com sucesso: {headline1}")
-
-def process_bidding_operations(operations, results, trace_id):
-    """
-    Processa operações relacionadas a ajustes de lances
-    """
-    # Simular processamento com uma pequena latência
-    time.sleep(0.2)
-    
-    # Processar cada operação
-    for op in operations:
-        operation = op.get('operation', {})
-        target = op.get('target', 'unknown')
-        action = op.get('action', 'unknown')
-        
-        # Simular sucesso da operação
-        results['success'].append({
-            'type': 'bidding',
-            'operation': 'update',
-            'target': target,
-            'action': action
-        })
-        
-        logger.info(f"[traceId: {trace_id}] Lance ajustado com sucesso para {target} ({action})")
-
-def update_campaign_metadata(campaign_id, trace_id, store_id):
-    """
-    Atualiza ou cria um registro de metadados para a campanha no DynamoDB
-    """
-    try:
-        # Preparar o item para o DynamoDB
-        item = {
-            'googleCampaignId': campaign_id,
+        return {
             'traceId': trace_id,
-            'storeId': store_id,
-            'createdAt': datetime.utcnow().isoformat(),
-            'currentStatus': 'ACTIVE'
+            'timestamp': timestamp,
+            'status': 'ERROR',
+            'error_type': 'GENERAL_ERROR',
+            'error': error_msg
         }
+
+
+def get_customer_id_for_client(client_id: str) -> Optional[str]:
+    """
+    Busca o customer_id do Google Ads para um cliente específico
+    
+    Args:
+        client_id (str): ID do cliente no sistema
         
-        # Salvar no DynamoDB
-        campaign_metadata_table.put_item(Item=item)
+    Returns:
+        str: Customer ID do Google Ads ou None se não encontrado
+    """
+    
+    try:
+        response = clients_table.get_item(Key={"clientId": client_id})
         
-        logger.info(f"[traceId: {trace_id}] Metadados da campanha {campaign_id} atualizados com sucesso")
+        if "Item" not in response:
+            print(f"Cliente não encontrado no DynamoDB: {client_id}")
+            return None
+        
+        client_data = response["Item"]
+        
+        # Verificar se tem configuração do Google Ads
+        if "googleAdsConfig" not in client_data:
+            print(f"Cliente {client_id} não tem configuração do Google Ads")
+            return None
+        
+        google_ads_config = client_data["googleAdsConfig"]
+        
+        # Buscar customer_id (pode estar em diferentes campos)
+        customer_id = (
+            google_ads_config.get("customerId") or 
+            google_ads_config.get("developerId") or 
+            google_ads_config.get("customer_id")
+        )
+        
+        if not customer_id:
+            print(f"Customer ID não encontrado na configuração do cliente {client_id}")
+            return None
+        
+        print(f"Customer ID encontrado para cliente {client_id}: {customer_id}")
+        return str(customer_id)
+        
     except Exception as e:
-        logger.error(f"[traceId: {trace_id}] Erro ao atualizar metadados da campanha: {str(e)}")
-        # Não propagar este erro para evitar falhar o processo principal 
+        print(f"Erro ao buscar customer_id para cliente {client_id}: {str(e)}")
+        return None
+
+
+def create_google_ads_client(client_id: str) -> GoogleAdsClient:
+    """
+    Cria um cliente Google Ads seguindo exatamente a documentação oficial
+    
+    Equivalente ao exemplo:
+    googleads_client = GoogleAdsClient.load_from_storage(version="v20")
+    
+    Mas usando nossas configurações do SSM/DynamoDB
+    
+    Args:
+        client_id (str): ID do cliente no sistema
+        
+    Returns:
+        GoogleAdsClient: Cliente autenticado
+        
+    Raises:
+        ValueError: Se configuração inválida
+        GoogleAdsException: Se erro de autenticação
+    """
+    
+    print(f"Criando Google Ads Client para cliente: {client_id}")
+    
+    # Usar nossa classe de configuração
+    ads_config = GoogleAdsConfig()
+    config = ads_config.get_google_ads_config()
+    
+    # Validar configuração
+    if not ads_config.validate_config(config):
+        raise ValueError("Configuração do Google Ads inválida")
+    
+    # Log da configuração (sem dados sensíveis)
+    config_summary = ads_config.get_config_summary(config)
+    print(f"Configuração Google Ads: {config_summary}")
+    
+    try:
+        # Criar cliente seguindo a documentação
+        # Equivalente a: GoogleAdsClient.load_from_storage(version="v20")
+        googleads_client = GoogleAdsClient.load_from_dict(config, version="v16")
+        
+        print(f"Google Ads Client criado com sucesso para cliente: {client_id}")
+        return googleads_client
+        
+    except Exception as e:
+        print(f"Erro ao criar Google Ads Client: {str(e)}")
+        raise
+
+
+def get_campaigns_from_google_ads(client: GoogleAdsClient, customer_id: str, trace_id: str) -> list:
+    """
+    Busca campanhas seguindo EXATAMENTE o exemplo da documentação oficial
+    
+    Baseado em: 
+    https://github.com/googleads/google-ads-python/blob/main/examples/basic_operations/get_campaigns.py
+    
+    Args:
+        client (GoogleAdsClient): Cliente autenticado
+        customer_id (str): ID do customer
+        trace_id (str): ID de rastreamento
+        
+    Returns:
+        list: Lista de campanhas encontradas
+    """
+    
+    print(f"[traceId: {trace_id}] Buscando campanhas para customer: {customer_id}")
+    
+    # [START get_campaigns] - Seguindo exatamente a documentação
+    ga_service = client.get_service("GoogleAdsService")
+
+    query = """
+        SELECT
+          campaign.id,
+          campaign.name
+        FROM campaign
+        ORDER BY campaign.id"""
+
+    # Issues a search request using streaming. - Exatamente como na documentação
+    stream = ga_service.search_stream(customer_id=customer_id, query=query)
+    
+    campaigns = []
+    
+    for batch in stream:
+        for row in batch.results:
+            # Log seguindo o formato da documentação
+            print(
+                f"Campaign with ID {row.campaign.id} and name "
+                f'"{row.campaign.name}" was found.'
+            )
+            
+            # Adicionar à lista de retorno
+            campaign_data = {
+                'id': row.campaign.id,
+                'name': row.campaign.name
+            }
+            campaigns.append(campaign_data)
+    # [END get_campaigns]
+    
+    print(f"[traceId: {trace_id}] Total de campanhas encontradas: {len(campaigns)}")
+    return campaigns   

@@ -5,16 +5,26 @@ Este serviço cria e gerencia clientes autenticados do Google Ads
 baseado nos tokens específicos de cada cliente.
 """
 import os
+import sys
 import boto3
 import logging
+from typing import Dict, List, Optional, Tuple, Any
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 from src.utils.encryption import TokenEncryption
 
-logger = logging.getLogger()
+# Configurar logging seguindo a documentação do Google Ads
+logger = logging.getLogger('google.ads.googleads.client')
+logger.addHandler(logging.StreamHandler(sys.stdout))
 logger.setLevel(logging.INFO)
 
 class GoogleAdsClientService:
+    """
+    Serviço para interagir com a API do Google Ads
+    
+    Fornece métodos para autenticação, busca de dados e execução de operações
+    seguindo as melhores práticas da documentação oficial do Google Ads.
+    """
     
     def __init__(self):
         self.dynamodb = boto3.resource("dynamodb")
@@ -22,7 +32,7 @@ class GoogleAdsClientService:
         self.encryption = TokenEncryption()
         self._client_cache = {}
     
-    def get_client_for_customer(self, client_id):
+    def get_client_for_customer(self, client_id: str) -> Tuple[Optional[GoogleAdsClient], Optional[str]]:
         """
         Obtém um cliente autenticado do Google Ads para um cliente específico
         
@@ -55,13 +65,14 @@ class GoogleAdsClientService:
             encrypted_config = client_data["googleAdsConfig"]
             config = self.encryption.decrypt_google_ads_config(encrypted_config)
             
-            # Criar cliente do Google Ads
+            # Criar cliente do Google Ads seguindo a documentação
             google_ads_config = {
                 'developer_token': config['developerToken'],
                 'client_id': config['clientId'],
                 'client_secret': config['clientSecret'],
                 'refresh_token': config['refreshToken'],
-                'use_proto_plus': True
+                'use_proto_plus': True,
+                'login_customer_id': config.get('loginCustomerId')  # Opcional
             }
             
             google_ads_client = GoogleAdsClient.load_from_dict(google_ads_config)
@@ -77,7 +88,7 @@ class GoogleAdsClientService:
             logger.error(f"Erro ao criar cliente Google Ads para {client_id}: {str(e)}")
             return None, None
     
-    def validate_client_access(self, client_id):
+    def validate_client_access(self, client_id: str) -> Dict[str, Any]:
         """
         Valida se o cliente tem acesso válido ao Google Ads
         
@@ -131,7 +142,255 @@ class GoogleAdsClientService:
                 'error': f"Erro na validação: {str(e)}"
             }
     
-    def clear_cache(self, client_id=None):
+    def get_campaigns(self, client_id: str, limit: int = 50, include_metrics: bool = True) -> List[Dict[str, Any]]:
+        """
+        Obtém campanhas do cliente no Google Ads seguindo a documentação oficial
+        
+        Args:
+            client_id (str): ID do cliente no sistema
+            limit (int): Limite de campanhas a retornar
+            include_metrics (bool): Se deve incluir métricas nas campanhas
+            
+        Returns:
+            list: Lista de campanhas ou lista vazia se erro
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+            
+            if not google_ads_client:
+                logger.error(f"Cliente {client_id} não configurado para Google Ads")
+                return []
+            
+            # Buscar campanhas usando GoogleAdsService seguindo a documentação
+            ga_service = google_ads_client.get_service("GoogleAdsService")
+            
+            # Query base sempre incluindo campos essenciais
+            base_fields = """
+                campaign.id,
+                campaign.name,
+                campaign.status,
+                campaign.advertising_channel_type,
+                campaign.advertising_channel_sub_type,
+                campaign.start_date,
+                campaign.end_date,
+                campaign_budget.amount_micros
+            """
+            
+            # Adicionar métricas se solicitado
+            metrics_fields = ""
+            if include_metrics:
+                metrics_fields = """,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros,
+                    metrics.conversions,
+                    metrics.ctr,
+                    metrics.average_cpc
+                """
+            
+            query = f"""
+                SELECT 
+                    {base_fields}{metrics_fields}
+                FROM campaign 
+                WHERE campaign.status != 'REMOVED'
+                ORDER BY campaign.id
+                LIMIT {limit}
+            """
+            
+            logger.info(f"Executando query para campanhas do cliente {client_id}")
+            
+            # Usar search_stream para otimizar performance conforme documentação
+            stream = ga_service.search_stream(customer_id=customer_id, query=query)
+            
+            campaigns = []
+            for batch in stream:
+                for row in batch.results:
+                    campaign_data = {
+                        'id': row.campaign.id,
+                        'name': row.campaign.name,
+                        'status': row.campaign.status.name,
+                        'type': row.campaign.advertising_channel_type.name,
+                        'sub_type': row.campaign.advertising_channel_sub_type.name if row.campaign.advertising_channel_sub_type else None,
+                        'start_date': row.campaign.start_date if row.campaign.start_date else None,
+                        'end_date': row.campaign.end_date if row.campaign.end_date else None,
+                        'budget_micros': row.campaign_budget.amount_micros if hasattr(row, 'campaign_budget') else None
+                    }
+                    
+                    # Adicionar métricas se incluídas
+                    if include_metrics and hasattr(row, 'metrics'):
+                        campaign_data['metrics'] = {
+                            'impressions': row.metrics.impressions,
+                            'clicks': row.metrics.clicks,
+                            'cost': row.metrics.cost_micros / 1000000,  # Converter de micros para unidade
+                            'conversions': row.metrics.conversions,
+                            'ctr': round(row.metrics.ctr * 100, 2),  # Converter para porcentagem
+                            'average_cpc': row.metrics.average_cpc / 1000000 if row.metrics.average_cpc else 0
+                        }
+                    
+                    campaigns.append(campaign_data)
+            
+            logger.info(f"Encontradas {len(campaigns)} campanhas para cliente {client_id}")
+            return campaigns
+            
+        except GoogleAdsException as ex:
+            logger.error(f"Erro da API do Google Ads ao buscar campanhas para cliente {client_id}: {ex.error.code().name}")
+            return []
+            
+        except Exception as e:
+            logger.error(f"Erro ao buscar campanhas para cliente {client_id}: {str(e)}")
+            return []
+    
+    def get_ad_groups(self, client_id: str, campaign_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Obtém grupos de anúncios do cliente
+        
+        Args:
+            client_id (str): ID do cliente no sistema
+            campaign_id (str, opcional): ID da campanha específica
+            limit (int): Limite de grupos a retornar
+            
+        Returns:
+            list: Lista de grupos de anúncios
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+            
+            if not google_ads_client:
+                logger.error(f"Cliente {client_id} não configurado para Google Ads")
+                return []
+            
+            ga_service = google_ads_client.get_service("GoogleAdsService")
+            
+            # Construir query com filtro opcional de campanha
+            where_clause = "WHERE ad_group.status != 'REMOVED'"
+            if campaign_id:
+                where_clause += f" AND campaign.id = {campaign_id}"
+            
+            query = f"""
+                SELECT 
+                    ad_group.id,
+                    ad_group.name,
+                    ad_group.status,
+                    ad_group.type,
+                    ad_group.cpc_bid_micros,
+                    campaign.id,
+                    campaign.name
+                FROM ad_group 
+                {where_clause}
+                ORDER BY ad_group.id
+                LIMIT {limit}
+            """
+            
+            stream = ga_service.search_stream(customer_id=customer_id, query=query)
+            
+            ad_groups = []
+            for batch in stream:
+                for row in batch.results:
+                    ad_group_data = {
+                        'id': row.ad_group.id,
+                        'name': row.ad_group.name,
+                        'status': row.ad_group.status.name,
+                        'type': row.ad_group.type_.name,
+                        'cpc_bid_micros': row.ad_group.cpc_bid_micros,
+                        'campaign': {
+                            'id': row.campaign.id,
+                            'name': row.campaign.name
+                        }
+                    }
+                    ad_groups.append(ad_group_data)
+            
+            logger.info(f"Encontrados {len(ad_groups)} grupos de anúncios para cliente {client_id}")
+            return ad_groups
+            
+        except Exception as e:
+            logger.error(f"Erro ao buscar grupos de anúncios para cliente {client_id}: {str(e)}")
+            return []
+    
+    def get_keywords(self, client_id: str, ad_group_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Obtém palavras-chave do cliente
+        
+        Args:
+            client_id (str): ID do cliente no sistema
+            ad_group_id (str, opcional): ID do grupo de anúncios específico
+            limit (int): Limite de palavras-chave a retornar
+            
+        Returns:
+            list: Lista de palavras-chave
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+            
+            if not google_ads_client:
+                logger.error(f"Cliente {client_id} não configurado para Google Ads")
+                return []
+            
+            ga_service = google_ads_client.get_service("GoogleAdsService")
+            
+            # Construir query com filtro opcional de grupo de anúncios
+            where_clause = "WHERE ad_group_criterion.status != 'REMOVED' AND ad_group_criterion.type = 'KEYWORD'"
+            if ad_group_id:
+                where_clause += f" AND ad_group.id = {ad_group_id}"
+            
+            query = f"""
+                SELECT 
+                    ad_group_criterion.criterion_id,
+                    ad_group_criterion.keyword.text,
+                    ad_group_criterion.keyword.match_type,
+                    ad_group_criterion.status,
+                    ad_group_criterion.cpc_bid_micros,
+                    ad_group.id,
+                    ad_group.name,
+                    campaign.id,
+                    campaign.name,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.cost_micros
+                FROM keyword_view 
+                {where_clause}
+                ORDER BY ad_group_criterion.criterion_id
+                LIMIT {limit}
+            """
+            
+            stream = ga_service.search_stream(customer_id=customer_id, query=query)
+            
+            keywords = []
+            for batch in stream:
+                for row in batch.results:
+                    keyword_data = {
+                        'id': row.ad_group_criterion.criterion_id,
+                        'text': row.ad_group_criterion.keyword.text,
+                        'match_type': row.ad_group_criterion.keyword.match_type.name,
+                        'status': row.ad_group_criterion.status.name,
+                        'cpc_bid_micros': row.ad_group_criterion.cpc_bid_micros,
+                        'ad_group': {
+                            'id': row.ad_group.id,
+                            'name': row.ad_group.name
+                        },
+                        'campaign': {
+                            'id': row.campaign.id,
+                            'name': row.campaign.name
+                        }
+                    }
+                    
+                    # Adicionar métricas se disponíveis
+                    if hasattr(row, 'metrics'):
+                        keyword_data['metrics'] = {
+                            'impressions': row.metrics.impressions,
+                            'clicks': row.metrics.clicks,
+                            'cost': row.metrics.cost_micros / 1000000
+                        }
+                    
+                    keywords.append(keyword_data)
+            
+            logger.info(f"Encontradas {len(keywords)} palavras-chave para cliente {client_id}")
+            return keywords
+            
+        except Exception as e:
+            logger.error(f"Erro ao buscar palavras-chave para cliente {client_id}: {str(e)}")
+            return []
+    
+    def clear_cache(self, client_id: Optional[str] = None):
         """
         Limpa o cache de clientes
         
@@ -145,65 +404,9 @@ class GoogleAdsClientService:
             self._client_cache.clear()
             logger.info("Cache de clientes Google Ads limpo completamente")
     
-    def get_customer_campaigns(self, client_id, limit=50):
+    # Método mantido para compatibilidade com código existente
+    def get_customer_campaigns(self, client_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """
-        Obtém campanhas do cliente no Google Ads
-        
-        Args:
-            client_id (str): ID do cliente no sistema
-            limit (int): Limite de campanhas a retornar
-            
-        Returns:
-            list: Lista de campanhas ou lista vazia se erro
+        Método mantido para compatibilidade. Use get_campaigns() para nova implementação.
         """
-        try:
-            google_ads_client, customer_id = self.get_client_for_customer(client_id)
-            
-            if not google_ads_client:
-                logger.error(f"Cliente {client_id} não configurado para Google Ads")
-                return []
-            
-            # Buscar campanhas
-            ga_service = google_ads_client.get_service("GoogleAdsService")
-            
-            query = f"""
-                SELECT 
-                    campaign.id,
-                    campaign.name,
-                    campaign.status,
-                    campaign.advertising_channel_type,
-                    metrics.impressions,
-                    metrics.clicks,
-                    metrics.cost_micros
-                FROM campaign 
-                WHERE campaign.status != 'REMOVED'
-                LIMIT {limit}
-            """
-            
-            search_request = google_ads_client.get_type("SearchGoogleAdsRequest")
-            search_request.customer_id = customer_id
-            search_request.query = query
-            
-            response = ga_service.search(request=search_request)
-            
-            campaigns = []
-            for row in response:
-                campaign = {
-                    'id': row.campaign.id,
-                    'name': row.campaign.name,
-                    'status': row.campaign.status.name,
-                    'type': row.campaign.advertising_channel_type.name,
-                    'metrics': {
-                        'impressions': row.metrics.impressions,
-                        'clicks': row.metrics.clicks,
-                        'cost': row.metrics.cost_micros / 1000000  # Converter de micros para unidade
-                    }
-                }
-                campaigns.append(campaign)
-            
-            logger.info(f"Encontradas {len(campaigns)} campanhas para cliente {client_id}")
-            return campaigns
-            
-        except Exception as e:
-            logger.error(f"Erro ao buscar campanhas para cliente {client_id}: {str(e)}")
-            return [] 
+        return self.get_campaigns(client_id, limit, include_metrics=True) 

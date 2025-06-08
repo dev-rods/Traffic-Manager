@@ -14,25 +14,19 @@ dynamodb = boto3.resource('dynamodb')
 execution_history_table = dynamodb.Table(os.environ.get('EXECUTION_HISTORY_TABLE'))
 
 def handler(event, context):
-    """
-    Função para processar a resposta da OpenAI e transformar em um payload para o Google Ads
-    
-    Esta função valida o JSON retornado pela OpenAI, extrai as recomendações
-    e prepara um payload estruturado para a API do Google Ads.
-    """
     try:
-        trace_id = event.get('traceId')
-        stage = 'PARSER'
+        trace_id = event.get("traceId")
+        client_id = event.get("clientId")
+        stage = "PARSER"
         timestamp = datetime.utcnow().isoformat()
-        run_type = event.get('runType', 'FIRST_RUN')
+        run_type = event.get("runType", "FIRST_RUN")
         
         logger.info(f"[traceId: {trace_id}] Iniciando parsing da resposta da OpenAI para runType: {run_type}")
         
-        # Verificar se temos a resposta da OpenAI
-        if 'openAIResponse' not in event:
+        if "openAIResponse" not in event:
             raise Exception("openAIResponse é obrigatório")
             
-        openai_response = event.get('openAIResponse')
+        openai_response = event.get("openAIResponse")
         
         # Extrair o JSON da resposta da OpenAI
         # A resposta pode ser um JSON direto ou um texto que contém um JSON
@@ -51,54 +45,60 @@ def handler(event, context):
             else:
                 raise Exception("Resposta não contém um JSON válido")
                 
-        # Preparar o payload do Google Ads com base no tipo de execução
-        if run_type == 'FIRST_RUN':
-            google_ads_payload = process_first_run(openai_data, event)
+        if run_type == "FIRST_RUN":
+            google_ads_payload = build_campaign_creation_operations(
+                openai_data, 
+                event.get("templateData"),
+                event.get("formData")
+            )
         else:
-            google_ads_payload = process_improve(openai_data, event)
+            google_ads_payload = build_optimization_operations(
+                openai_data,
+                event.get("metricsData"),
+                event.get("campaignId")
+            )
             
-        # Registrar esta etapa na tabela ExecutionHistory
         execution_record = {
-            'traceId': trace_id,
-            'stageTm': f"{stage}#{timestamp}",
-            'stage': stage,
-            'status': 'COMPLETED',
-            'timestamp': timestamp,
-            'payload': json.dumps({
-                'openai_processed': {
-                    'valid': True,
-                    'summary': summarize_payload(google_ads_payload, run_type)
+            "traceId": trace_id,
+            "stageTm": f"{stage}#{timestamp}",
+            "stage": stage,
+            "status": "COMPLETED",
+            "timestamp": timestamp,
+            "payload": json.dumps({
+                "openai_processed": {
+                    "valid": True,
+                    "summary": summarize_payload(google_ads_payload, run_type)
                 }
             })
         }
         
-        # Adicionar campos adicionais, se existirem no evento original
-        if 'runType' in event:
-            execution_record['runType'] = event['runType']
-        
-        if 'storeId' in event:
-            execution_record['storeId'] = event['storeId']
+        if "runType" in event:
+            execution_record["runType"] = event["runType"]
+        if "storeId" in event:
+            execution_record["storeId"] = event["storeId"]
+        if "campaignId" in event:
+            execution_record["campaignId"] = event["campaignId"]
+        if "clientId" in event:
+            execution_record["clientId"] = event["clientId"]
             
-        if 'campaignId' in event:
-            execution_record['campaignId'] = event['campaignId']
-            
-        # Salvar no DynamoDB
         execution_history_table.put_item(Item=execution_record)
         
-        # Preparar resposta para o próximo passo
         response = {
-            'traceId': trace_id,
-            'timestamp': timestamp,
-            'runType': run_type,
-            'googleAdsPayload': google_ads_payload
+            "traceId": trace_id,
+            "timestamp": timestamp,
+            "runType": run_type,
+            "clientId": client_id,
+            "googleAdsPayload": {
+                "operations": google_ads_payload,
+                "clientId": client_id,
+                "runType": run_type
+            }
         }
         
-        # Incluir outros campos relevantes do evento original
-        if 'storeId' in event:
-            response['storeId'] = event['storeId']
-            
-        if 'campaignId' in event:
-            response['campaignId'] = event['campaignId']
+        if "storeId" in event:
+            response["storeId"] = event["storeId"]
+        if "campaignId" in event:
+            response["campaignId"] = event["campaignId"]
             
         logger.info(f"[traceId: {trace_id}] Parsing da resposta concluído com sucesso")
         return response
@@ -442,3 +442,203 @@ def summarize_payload(payload, run_type):
         summary['by_type'][op_type] += 1
     
     return summary
+
+
+def build_campaign_creation_operations(ai_response, template_data, form_data):
+    operations = []
+    
+    business_name = form_data.get("clientInfo", {}).get("businessName", "Sua Empresa")
+    monthly_budget = form_data.get("marketingGoals", {}).get("monthlyBudget", 3000)
+    daily_budget_micros = int((monthly_budget / 30) * 1000000)
+    
+    campaign_op = {
+        "type": "CREATE_CAMPAIGN",
+        "data": {
+            "name": f"{business_name} - {ai_response.get('campaignStrategy', 'Pesquisa')}",
+            "advertisingChannelType": "SEARCH",
+            "status": "ACTIVE",
+            "budget": {
+                "dailyBudgetMicros": daily_budget_micros
+            },
+            "biddingStrategy": {
+                "type": ai_response.get("biddingStrategy", "MAXIMIZE_CLICKS")
+            },
+            "geoTargeting": {
+                "includedLocations": form_data.get("marketingGoals", {}).get("geoTargeting", ["2076"])
+            }
+        }
+    }
+    operations.append(campaign_op)
+    
+    for i, ad_group in enumerate(ai_response.get("adGroups", [])):
+        ad_group_op = {
+            "type": "CREATE_AD_GROUP",
+            "data": {
+                "name": ad_group.get("name", f"Grupo {i+1}"),
+                "campaignId": "{CAMPAIGN_ID}",
+                "status": "ACTIVE",
+                "cpcBidMicros": int(ad_group.get("defaultBid", 2.0) * 1000000)
+            }
+        }
+        operations.append(ad_group_op)
+        
+        keywords = ad_group.get("keywords", [])
+        if keywords:
+            keyword_op = {
+                "type": "CREATE_KEYWORDS",
+                "data": {
+                    "adGroupId": f"{{AD_GROUP_ID_{i}}}",
+                    "keywords": [
+                        {
+                            "text": kw.get("text", kw) if isinstance(kw, dict) else kw,
+                            "matchType": kw.get("matchType", "PHRASE") if isinstance(kw, dict) else "PHRASE",
+                            "cpcBidMicros": int(kw.get("bid", 2.5) * 1000000) if isinstance(kw, dict) else 2500000
+                        }
+                        for kw in keywords[:10]
+                    ]
+                }
+            }
+            operations.append(keyword_op)
+        
+        ads = ad_group.get("ads", [])
+        if ads:
+            ad_op = {
+                "type": "CREATE_ADS",
+                "data": {
+                    "adGroupId": f"{{AD_GROUP_ID_{i}}}",
+                    "ads": [
+                        {
+                            "type": "RESPONSIVE_SEARCH_AD",
+                            "headlines": [
+                                ad.get("headline1", "Produto Incrível"),
+                                ad.get("headline2", "Melhor Qualidade"),
+                                ad.get("headline3", "Entrega Rápida")
+                            ],
+                            "descriptions": [
+                                ad.get("description1", "Compre agora com desconto"),
+                                ad.get("description2", "Garantia de satisfação")
+                            ]
+                        }
+                        for ad in ads[:3]
+                    ]
+                }
+            }
+            operations.append(ad_op)
+    
+    return operations
+
+
+def build_optimization_operations(ai_response, metrics_data, campaign_id):
+    operations = []
+    
+    for recommendation in ai_response.get("recommendations", []):
+        rec_type = recommendation.get("type")
+        
+        if rec_type == "KEYWORD_BID_ADJUSTMENT":
+            operations.extend(build_keyword_bid_operations(recommendation, campaign_id))
+        elif rec_type == "ADD_KEYWORDS":
+            operations.extend(build_add_keywords_operations(recommendation, campaign_id))
+        elif rec_type == "PAUSE_KEYWORDS":
+            operations.extend(build_pause_keywords_operations(recommendation, campaign_id))
+        elif rec_type == "AD_COPY_UPDATE":
+            operations.extend(build_ad_copy_operations(recommendation, campaign_id))
+        elif rec_type == "BUDGET_ADJUSTMENT":
+            operations.extend(build_budget_operations(recommendation, campaign_id))
+    
+    return operations
+
+
+def build_keyword_bid_operations(recommendation, campaign_id):
+    operations = []
+    
+    for keyword_adjustment in recommendation.get("keywords", []):
+        operation = {
+            "type": "UPDATE_KEYWORD_BID",
+            "data": {
+                "campaignId": campaign_id,
+                "keywordId": keyword_adjustment.get("keywordId"),
+                "newBidMicros": int(keyword_adjustment.get("newBid", 2.0) * 1000000),
+                "reason": keyword_adjustment.get("reason", "IA recommendation")
+            }
+        }
+        operations.append(operation)
+    
+    return operations
+
+
+def build_add_keywords_operations(recommendation, campaign_id):
+    operations = []
+    
+    for ad_group_keywords in recommendation.get("adGroups", []):
+        operation = {
+            "type": "ADD_KEYWORDS",
+            "data": {
+                "campaignId": campaign_id,
+                "adGroupId": ad_group_keywords.get("adGroupId"),
+                "keywords": [
+                    {
+                        "text": kw.get("text"),
+                        "matchType": kw.get("matchType", "PHRASE"),
+                        "cpcBidMicros": int(kw.get("bid", 2.0) * 1000000)
+                    }
+                    for kw in ad_group_keywords.get("keywords", [])
+                ]
+            }
+        }
+        operations.append(operation)
+    
+    return operations
+
+
+def build_pause_keywords_operations(recommendation, campaign_id):
+    operations = []
+    
+    for keyword_id in recommendation.get("keywordIds", []):
+        operation = {
+            "type": "PAUSE_KEYWORD",
+            "data": {
+                "campaignId": campaign_id,
+                "keywordId": keyword_id,
+                "reason": recommendation.get("reason", "Low performance")
+            }
+        }
+        operations.append(operation)
+    
+    return operations
+
+
+def build_ad_copy_operations(recommendation, campaign_id):
+    operations = []
+    
+    for ad_update in recommendation.get("ads", []):
+        operation = {
+            "type": "UPDATE_AD",
+            "data": {
+                "campaignId": campaign_id,
+                "adGroupId": ad_update.get("adGroupId"),
+                "adId": ad_update.get("adId"),
+                "headlines": ad_update.get("headlines", []),
+                "descriptions": ad_update.get("descriptions", [])
+            }
+        }
+        operations.append(operation)
+    
+    return operations
+
+
+def build_budget_operations(recommendation, campaign_id):
+    operations = []
+    
+    new_budget = recommendation.get("newDailyBudget")
+    if new_budget:
+        operation = {
+            "type": "UPDATE_BUDGET",
+            "data": {
+                "campaignId": campaign_id,
+                "dailyBudgetMicros": int(new_budget * 1000000),
+                "reason": recommendation.get("reason", "Performance optimization")
+            }
+        }
+        operations.append(operation)
+    
+    return operations
