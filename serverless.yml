@@ -21,11 +21,11 @@ provider:
     GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/MCC_DEVELOPER_TOKEN}
     GOOGLE_ADS_CLIENT_ID: ${ssm:/GOOGLE_ADS_CLIENT_ID}
     GOOGLE_ADS_CLIENT_SECRET: ${ssm:/GOOGLE_ADS_CLIENT_SECRET}
-    GOOGLE_ADS_REFRESH_TOKEN: ${ssm:/traffic/google-ads-refresh-token~true}
     CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
     EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
     CLIENTS_TABLE: ${self:custom.resourcePrefix}-clients
+    TOKENS_TABLE: ${self:custom.resourcePrefix}-google-ads-tokens
     BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
     BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
     BASE_ROLE_ARN: arn:aws:iam::${self:custom.awsId}:role/${self:service}-${self:custom.stage}-
@@ -52,6 +52,7 @@ resources:
     - ${file(sls/resources/dynamodb/execution-history-table.yml)}
     - ${file(sls/resources/dynamodb/campaign-metadata-table.yml)}
     - ${file(sls/resources/dynamodb/clients-table.yml)}
+    - ${file(sls/resources/dynamodb/google-ads-tokens-table.yml)}
 
 plugins:
   - serverless-step-functions

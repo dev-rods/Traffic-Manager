@@ -28,3 +28,7 @@ serverless invoke local -s dev -f ScriptManager -p tests/mocks/scripts/manager/c
 
 # Webhook
 serverless invoke local -s dev -f WebhookHandler -p tests/mocks/webhook/formSubmit.json --aws-profile traffic-manager
+
+
+# Google Ads
+serverless invoke local -s dev -f GoogleAdsApiClient -p tests/mocks/googleads/integration_api.json --aws-profile traffic-manager

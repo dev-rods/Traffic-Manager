@@ -28,11 +28,11 @@ def load_scripts():
             module = import_module(module_path)
             if hasattr(module, 'execute'):
                 scripts_map[module_name] = module.execute
-                logger.info(f"Script carregado: {module_name}")
+                print(f"Script carregado: {module_name}")
             else:
                 logger.warning(f"Script {module_name} não possui função 'execute'")
         except Exception as e:
-            logger.error(f"Erro ao carregar script {script_file.name}: {str(e)}")
+            print(f"Erro ao carregar script {script_file.name}: {str(e)}")
     
     return scripts_map
 
@@ -49,7 +49,7 @@ def load_config_from_file(file_path):
         raise ValueError(f"Erro ao decodificar JSON: {str(e)}")
 
 def handler(event, context):
-    logger.info(f"Evento recebido: {json.dumps(event)}")
+    print(f"Evento recebido: {json.dumps(event)}")
     start_time = time.time()
     try:
         scripts_map = load_scripts()
@@ -67,11 +67,11 @@ def handler(event, context):
         if command not in scripts_map:
             available_commands = ", ".join(scripts_map.keys())
             raise ValueError(f'Comando "{command}" não encontrado. Comandos disponíveis: {available_commands}')
-        logger.info(f'Executando comando "{command}" com parâmetros: {json.dumps(params)}')
+        print(f'Executando comando "{command}" com parâmetros: {json.dumps(params)}')
         script_function = scripts_map[command]
         result = script_function(params)
         duration = (time.time() - start_time) * 1000
-        logger.info(f'Comando "{command}" executado com sucesso em {duration:.2f}ms')
+        print(f'Comando "{command}" executado com sucesso em {duration:.2f}ms')
         return {
             'success': True,
             'command': command,
@@ -85,7 +85,7 @@ def handler(event, context):
         error_type = type(e).__name__
         error_message = str(e)
         stack_trace = traceback.format_exc()
-        logger.error(f"Erro na execução do comando: {error_type} - {error_message}\n{stack_trace}")
+        print(f"Erro na execução do comando: {error_type} - {error_message}\n{stack_trace}")
         return {
             'success': False,
             'error': error_message,

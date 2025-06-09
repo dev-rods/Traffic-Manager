@@ -1,6 +1,8 @@
 boto3==1.26.161
 google-ads==21.2.0
 google-api-python-client==2.86.0
+google-auth-oauthlib==1.0.0
+google-auth==2.24.0
 openai==0.27.8
 requests==2.31.0
 python-dotenv==1.0.0

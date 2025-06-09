@@ -2,6 +2,7 @@
     "command": "create_client",
     "params": {
         "name": "Empresa rods",
-        "email": "rodsebaiano@gmail.com"
+        "email": "rodsebaiano@gmail.com",
+        "googleAdsCustomerId": "157-093-2315"
     }
 } 

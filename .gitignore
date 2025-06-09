@@ -19,3 +19,27 @@ node_modules/
 # Serverless directories
 .serverless
 *.pycache*
+*.__pycache__*
+
+# Environment variables and secrets
+.env
+.env.local
+.env.prod
+
+# AWS credentials
+.aws/
+
+# Logs
+*.log
+logs/
+
+# Google Ads sensitive files
+*service_account*.json
+*google_ads_service_account_config*.txt
+google-ads.yaml
+*auth_codes*.txt
+*tokens*.json
+
+# Mac/Windows
+.DS_Store
+Thumbs.db
