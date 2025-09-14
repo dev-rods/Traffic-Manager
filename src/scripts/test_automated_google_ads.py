@@ -53,7 +53,7 @@ def test_automated_flow():
         
         # 3. Testar Cliente Google Ads
         print("\n3️⃣ Testando Cliente Google Ads...")
-        client = GoogleAdsClient.load_from_dict(config, version="v20")
+        client = GoogleAdsClient.load_from_dict(config, version="v14")
         print("   ✅ Cliente criado com sucesso")
         
         # 4. Testar Conexão Real

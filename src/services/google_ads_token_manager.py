@@ -18,6 +18,33 @@ import socket
 from urllib.parse import unquote
 import socket
 import re
+import sys
+
+# Ensure console uses UTF-8 when possible and provide safe print fallback for Windows
+try:
+    # Reconfigure stdout/stderr to UTF-8 (best effort; harmless if not supported)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+def safe_print(*args, **kwargs):
+    """Print wrapper that falls back to ASCII-only output if console encoding
+    does not support certain Unicode characters (e.g., emojis on Windows)."""
+    try:
+        print(*args, **kwargs)
+    except UnicodeEncodeError:
+        sanitized_args = []
+        for arg in args:
+            try:
+                text = str(arg)
+            except Exception:
+                text = repr(arg)
+            # Strip non-ASCII characters as a fallback
+            sanitized_args.append(text.encode("ascii", "ignore").decode("ascii"))
+        print(*sanitized_args, **kwargs)
 
 
 class GoogleAdsTokenManager:
@@ -201,10 +228,10 @@ class GoogleAdsTokenManager:
             refresh_token = flow.credentials.refresh_token
             
             if refresh_token:
-                print(f"✅ Refresh token obtido com sucesso para customer: {customer_id}")
+                safe_print(f"✅ Refresh token obtido com sucesso para customer: {customer_id}")
                 return refresh_token
             else:
-                print("❌ Não foi possível obter refresh token")
+                safe_print("❌ Não foi possível obter refresh token")
                 return None
                 
         except Exception as e:
@@ -269,17 +296,17 @@ class GoogleAdsTokenManager:
             sock.close()
             
             if success:
-                print("✅ Autorização concluída com sucesso!")
+                safe_print("✅ Autorização concluída com sucesso!")
                 return params.get("code")
             else:
-                print(f"❌ {message}")
+                safe_print(f"❌ {message}")
                 return None
                 
         except socket.timeout:
-            print("❌ Timeout: Autorização não recebida em 5 minutos")
+            safe_print("❌ Timeout: Autorização não recebida em 5 minutos")
             return None
         except Exception as e:
-            print(f"❌ Erro no servidor de autorização: {str(e)}")
+            safe_print(f"❌ Erro no servidor de autorização: {str(e)}")
             return None
         finally:
             try:
@@ -287,7 +314,8 @@ class GoogleAdsTokenManager:
             except:
                 pass
     
-    def parse_raw_query_params(data):
+    @staticmethod
+    def _parse_raw_query_params(data):
         """Parses a raw HTTP request to extract its query params as a dict.
 
         Note that this logic is likely irrelevant if you're building OAuth logic

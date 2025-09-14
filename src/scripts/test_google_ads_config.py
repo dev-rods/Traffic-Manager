@@ -85,8 +85,8 @@ def test_google_ads_client():
         config_service = GoogleAdsConfig()
         config = config_service.get_google_ads_config("1570932315")
         
-        # Tentar criar cliente
-        client = GoogleAdsClient.load_from_dict(config, version="v20")
+        # Tentar criar cliente fixando na versão suportada pelo ambiente
+        client = GoogleAdsClient.load_from_dict(config, version="v14")
         print("  ✅ Cliente Google Ads criado com sucesso")
         
         # Testar obtenção de serviço

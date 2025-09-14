@@ -188,7 +188,7 @@ def create_google_ads_client(google_ads_customer_id: str) -> GoogleAdsClient:
     Cria um cliente Google Ads seguindo exatamente a documentação oficial
     
     Equivalente ao exemplo:
-    googleads_client = GoogleAdsClient.load_from_storage(version="v20")
+    googleads_client = GoogleAdsClient.load_from_storage()
     
     Mas usando nossas configurações do SSM/DynamoDB
     
@@ -211,7 +211,7 @@ def create_google_ads_client(google_ads_customer_id: str) -> GoogleAdsClient:
     
     try:
         # Criar cliente seguindo a documentação
-        # Equivalente a: GoogleAdsClient.load_from_storage(version="v20")
+        # Equivalente a: GoogleAdsClient.load_from_storage() usando a versão padrão instalada
         googleads_client = GoogleAdsClient.load_from_dict(config, version="v20")
         
         print(f"Google Ads Client criado com sucesso para cliente: {google_ads_customer_id}")
