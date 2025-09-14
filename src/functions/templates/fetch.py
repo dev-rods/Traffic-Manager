@@ -229,7 +229,7 @@ def customize_template_with_form_data(template_content, form_data):
     
     customized = template_content.copy()
     
-    business_name = client_info.get("businessName", "Sua Empresa")
+    business_name = client_info.get("business_name", "Sua Empresa")
     customized["name"] = f"{business_name} - Campanha de Busca"
     
     if marketing_goals.get("monthlyBudget"):

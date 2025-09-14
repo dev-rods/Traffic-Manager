@@ -20,11 +20,11 @@ def execute(params):
         params (dict): Parâmetros do comando
             - url (str): URL do webhook
             - apiKey (str): API Key do cliente
-            - businessName (str, opcional): Nome da empresa
+            - business_name (str, opcional): Nome da empresa
             - industry (str, opcional): Indústria/Setor
             - budget (str, opcional): Orçamento mensal
             - objectives (str, opcional): Objetivos
-            - targetAudience (str, opcional): Público-alvo
+            - target_audience (str, opcional): Público-alvo
             
     Returns:
         dict: Resultado do teste
@@ -39,11 +39,11 @@ def execute(params):
     
     # Montar dados do formulário
     form_data = {
-        'businessName': params.get('businessName', 'Empresa Teste'),
+        'business_name': params.get('business_name', 'Empresa Teste'),
         'industry': params.get('industry', 'Tecnologia'),
         'budget': params.get('budget', '1000'),
         'objectives': params.get('objectives', 'Aumentar vendas online'),
-        'targetAudience': params.get('targetAudience', 'Homens e mulheres, 25-45 anos'),
+        'target_audience': params.get('target_audience', 'Homens e mulheres, 25-45 anos'),
         'timestamp': datetime.utcnow().isoformat()
     }
     

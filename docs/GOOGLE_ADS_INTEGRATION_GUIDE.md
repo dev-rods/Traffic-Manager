@@ -278,9 +278,9 @@ class TokenEncryption:
     }
   ],
   "requiredFields": [
-    "businessName",
+    "business_name",
     "productCategories",
-    "targetAudience",
+    "target_audience",
     "monthlyBudget"
   ]
 }
@@ -293,7 +293,7 @@ class TokenEncryption:
   "formId": "form-123",
   "timestamp": "2024-01-01T10:00:00Z",
   "clientInfo": {
-    "businessName": "Loja da Maria",
+    "business_name": "Loja da Maria",
     "email": "maria@loja.com",
     "phone": "+5511999999999",
     "website": "https://lojadamaria.com.br"
@@ -302,7 +302,7 @@ class TokenEncryption:
     "category": "ECOMMERCE",
     "productCategories": ["roupas femininas", "acessórios"],
     "mainProducts": ["vestidos", "bolsas", "sapatos"],
-    "targetAudience": "mulheres 25-45 anos classe B/C",
+    "target_audience": "mulheres 25-45 anos classe B/C",
     "competitors": ["Renner", "C&A", "Zara"],
     "uniqueSellingPoints": ["entrega rápida", "preços competitivos"]
   },

@@ -26,8 +26,7 @@ class ClientAuth:
             return None
     
     def generate_api_key(self):
-        """Gera uma nova API key segura"""
-        return secrets.token_hex(32)  # 64 caracteres hexadecimais
+        return secrets.token_hex(32)
     
     def create_client(self, client_name, client_email):
         client_id = self._generate_client_id(client_name)

@@ -35,11 +35,11 @@ def test_webhook(params):
     
     # Preparando os dados do formulário com valores padrão se não fornecidos
     default_form_data = {
-        'businessName': form_data.get('businessName', 'Empresa Teste'),
+        'business_name': form_data.get('business_name', 'Empresa Teste'),
         'industry': form_data.get('industry', 'Tecnologia'),
         'budget': form_data.get('budget', '1000'),
         'objectives': form_data.get('objectives', 'Aumentar vendas online'),
-        'targetAudience': form_data.get('targetAudience', 'Homens e mulheres, 25-45 anos'),
+        'target_audience': form_data.get('target_audience', 'Homens e mulheres, 25-45 anos'),
         'timestamp': datetime.utcnow().isoformat()
     }
     

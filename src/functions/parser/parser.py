@@ -447,7 +447,7 @@ def summarize_payload(payload, run_type):
 def build_campaign_creation_operations(ai_response, template_data, form_data):
     operations = []
     
-    business_name = form_data.get("clientInfo", {}).get("businessName", "Sua Empresa")
+    business_name = form_data.get("clientInfo", {}).get("business_name", "Sua Empresa")
     monthly_budget = form_data.get("marketingGoals", {}).get("monthlyBudget", 3000)
     daily_budget_micros = int((monthly_budget / 30) * 1000000)
     

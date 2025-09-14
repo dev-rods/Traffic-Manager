@@ -213,7 +213,7 @@ def create_campaign_metadata_record(campaign_id, client_id, trace_id, event):
                 form_data = json.loads(form_data)
             
             client_info = form_data.get("clientInfo", {})
-            metadata_record["businessName"] = client_info.get("businessName", "")
+            metadata_record["business_name"] = client_info.get("business_name", "")
             metadata_record["businessEmail"] = client_info.get("email", "")
         
         campaign_metadata_table.put_item(Item=metadata_record)
