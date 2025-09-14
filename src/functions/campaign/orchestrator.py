@@ -2,12 +2,9 @@ import json
 import boto3
 import os
 import uuid
-import logging
 from datetime import datetime
 from src.services.google_ads_client_service import GoogleAdsClientService
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
 
 dynamodb = boto3.resource("dynamodb")
 execution_history_table = dynamodb.Table(os.environ.get("EXECUTION_HISTORY_TABLE"))
@@ -17,7 +14,7 @@ def handler(event, context):
     try:
         trace_id = event.get("traceId", str(uuid.uuid4()))
         timestamp = datetime.utcnow().isoformat()
-        logger.info(f"[traceId: {trace_id}] Iniciando orquestração do processo de otimização")
+        print(f"[traceId: {trace_id}] Iniciando orquestração do processo de otimização")
         
         client_id = None
         run_type = None
@@ -25,15 +22,15 @@ def handler(event, context):
         if "formData" in event:
             run_type = "FIRST_RUN"
             client_id = determine_client_from_email(event["formData"].get("email"))
-            logger.info(f"[traceId: {trace_id}] Dados do Forms detectados - runType: {run_type}")
+            print(f"[traceId: {trace_id}] Dados do Forms detectados - runType: {run_type}")
         elif "campaignId" in event and event["campaignId"]:
             run_type = "IMPROVE"
             client_id = get_client_from_campaign(event["campaignId"])
-            logger.info(f"[traceId: {trace_id}] Campanha existente detectada - runType: {run_type}")
+            print(f"[traceId: {trace_id}] Campanha existente detectada - runType: {run_type}")
         elif "storeId" in event:
             client_id = event["storeId"]
             run_type = "IMPROVE" if event.get("campaignId") else "FIRST_RUN"
-            logger.info(f"[traceId: {trace_id}] StoreId fornecido - runType: {run_type}")
+            print(f"[traceId: {trace_id}] StoreId fornecido - runType: {run_type}")
         else:
             raise Exception("Dados insuficientes: formData, campaignId ou storeId são obrigatórios")
         
@@ -64,7 +61,7 @@ def handler(event, context):
             execution_record["storeId"] = event["storeId"]
             
         execution_history_table.put_item(Item=execution_record)
-        logger.info(f"[traceId: {trace_id}] Registro criado na tabela ExecutionHistory")
+        print(f"[traceId: {trace_id}] Registro criado na tabela ExecutionHistory")
         
         response = {
             "traceId": trace_id,
@@ -86,7 +83,7 @@ def handler(event, context):
         return response
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"[traceId: {trace_id if 'trace_id' in locals() else 'unknown'}] Erro na orquestração: {error_msg}")
+        print(f"[traceId: {trace_id if 'trace_id' in locals() else 'unknown'}] Erro na orquestração: {error_msg}")
         if "trace_id" in locals():
             try:
                 error_record = {
@@ -103,28 +100,22 @@ def handler(event, context):
                     error_record["clientId"] = client_id
                 execution_history_table.put_item(Item=error_record)
             except Exception as inner_e:
-                logger.error(f"[traceId: {trace_id}] Erro ao registrar falha: {str(inner_e)}")        
+                print(f"[traceId: {trace_id}] Erro ao registrar falha: {str(inner_e)}")        
         raise Exception(f"Erro na orquestração do processo: {error_msg}")
 
 
 def determine_client_from_email(email):
     if not email:
         raise Exception("Email é obrigatório para determinar o cliente")
-    
     try:
-        response = clients_table.scan(
-            FilterExpression="email = :email",
-            ExpressionAttributeValues={":email": email}
-        )
-        
+        response = clients_table.scan(FilterExpression="email = :email", ExpressionAttributeValues={":email": email})
         if response["Items"]:
             client = response["Items"][0]
             return client["clientId"]
         else:
             raise Exception(f"Cliente não encontrado para o email: {email}")
-            
     except Exception as e:
-        logger.error(f"Erro ao buscar cliente por email {email}: {str(e)}")
+        print(f"Erro ao buscar cliente por email {email}: {str(e)}")
         raise
 
 
@@ -148,5 +139,5 @@ def get_client_from_campaign(campaign_id):
             raise Exception(f"Cliente não encontrado para a campanha: {campaign_id}")
             
     except Exception as e:
-        logger.error(f"Erro ao buscar cliente por campanha {campaign_id}: {str(e)}")
+        print(f"Erro ao buscar cliente por campanha {campaign_id}: {str(e)}")
         raise 
