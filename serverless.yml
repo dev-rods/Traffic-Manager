@@ -17,11 +17,11 @@ provider:
   environment:
     STAGE: ${self:custom.stage}
     ACCOUNT_ID: ${self:custom.accountId}
-    OPENAI_API_KEY: ${ssm:/OPENAI_API_KEY}
-    GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/MCC_DEVELOPER_TOKEN}
-    GOOGLE_ADS_CLIENT_ID: ${ssm:/GOOGLE_ADS_CLIENT_ID}
-    GOOGLE_ADS_CLIENT_SECRET: ${ssm:/GOOGLE_ADS_CLIENT_SECRET}
-    MCC_CUSTOMER_ID: ${ssm:/MCC_ACCOUNT_ID}
+    OPENAI_API_KEY: ${ssm:/${self:custom.stage}/OPENAI_API_KEY}
+    GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/${self:custom.stage}/MCC_DEVELOPER_TOKEN}
+    OAUTH2_CLIENT_ID: ${ssm:/${self:custom.stage}/OAUTH2_CLIENT_ID}
+    OAUTH2_CLIENT_SECRET: ${ssm:/${self:custom.stage}/OAUTH2_CLIENT_SECRET}
+    MCC_CUSTOMER_ID: ${ssm:/${self:custom.stage}/MCC_ACCOUNT_ID}
     CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
     EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata

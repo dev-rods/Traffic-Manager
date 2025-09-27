@@ -32,8 +32,8 @@ def check_mcc_configuration():
     
     required_vars = [
         'GOOGLE_ADS_DEVELOPER_TOKEN',
-        'GOOGLE_ADS_CLIENT_ID', 
-        'GOOGLE_ADS_CLIENT_SECRET',
+        'OAUTH2_CLIENT_ID', 
+        'OAUTH2_CLIENT_SECRET',
         'GOOGLE_ADS_REFRESH_TOKEN',
         'MCC_CUSTOMER_ID'
     ]
@@ -273,8 +273,8 @@ def show_help():
     
     print("\n🔧 Configuração necessária:")
     print("   - GOOGLE_ADS_DEVELOPER_TOKEN: Token de desenvolvedor")
-    print("   - GOOGLE_ADS_CLIENT_ID: Client ID do OAuth2")
-    print("   - GOOGLE_ADS_CLIENT_SECRET: Client Secret do OAuth2")
+    print("   - OAUTH2_CLIENT_ID: Client ID do OAuth2")
+    print("   - OAUTH2_CLIENT_SECRET: Client Secret do OAuth2")
     print("   - GOOGLE_ADS_REFRESH_TOKEN: Refresh Token do OAuth2")
     print("   - MCC_CUSTOMER_ID: ID da sua conta MCC")
 

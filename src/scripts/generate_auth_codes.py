@@ -5,13 +5,13 @@ from pathlib import Path
 from google_auth_oauthlib.flow import Flow
 
 def generate_authorization_url():    
-    client_id = os.environ.get('GOOGLE_ADS_CLIENT_ID')
-    client_secret = os.environ.get('GOOGLE_ADS_CLIENT_SECRET')
+    client_id = os.environ.get('OAUTH2_CLIENT_ID')
+    client_secret = os.environ.get('OAUTH2_CLIENT_SECRET')
     
     if not client_id or not client_secret:
         print("❌ Erro: Configure primeiro as variáveis de ambiente:")
-        print("   export GOOGLE_ADS_CLIENT_ID='your_client_id'")
-        print("   export GOOGLE_ADS_CLIENT_SECRET='your_client_secret'")
+        print("   export OAUTH2_CLIENT_ID='your_client_id'")
+        print("   export OAUTH2_CLIENT_SECRET='your_client_secret'")
         return None
     
     flow_config = {
@@ -120,16 +120,16 @@ def main():
         print("\n📋 Adicione estas variáveis de ambiente:")
         print("=" * 60)
         
-        print(f'export GOOGLE_ADS_CLIENT_ID="{tokens["client_id"]}"')
-        print(f'export GOOGLE_ADS_CLIENT_SECRET="{tokens["client_secret"]}"')
+        print(f'export OAUTH2_CLIENT_ID="{tokens["client_id"]}"')
+        print(f'export OAUTH2_CLIENT_SECRET="{tokens["client_secret"]}"')
         print(f'export GOOGLE_ADS_AUTH_CODE_{clean_customer_id}="{authorization_code}"')
         print(f'export GOOGLE_ADS_DEVELOPER_TOKEN="your_developer_token_here"')
         
         print("\n📋 Ou adicione ao serverless.yml:")
         print("=" * 60)
         print("environment:")
-        print(f'  GOOGLE_ADS_CLIENT_ID: "{tokens["client_id"]}"')
-        print(f'  GOOGLE_ADS_CLIENT_SECRET: "{tokens["client_secret"]}"')
+        print(f'  OAUTH2_CLIENT_ID: "{tokens["client_id"]}"')
+        print(f'  OAUTH2_CLIENT_SECRET: "{tokens["client_secret"]}"')
         print(f'  GOOGLE_ADS_AUTH_CODE_{clean_customer_id}: "{authorization_code}"')
         print('  GOOGLE_ADS_DEVELOPER_TOKEN: "your_developer_token_here"')
         

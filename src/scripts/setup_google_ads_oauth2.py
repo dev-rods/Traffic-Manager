@@ -49,14 +49,14 @@ def check_current_configuration():
     # Verificar variáveis básicas
     developer_token = os.environ.get('GOOGLE_ADS_DEVELOPER_TOKEN')
     service_account = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
-    client_id = os.environ.get('GOOGLE_ADS_CLIENT_ID')
-    client_secret = os.environ.get('GOOGLE_ADS_CLIENT_SECRET')
+    client_id = os.environ.get('OAUTH2_CLIENT_ID')
+    client_secret = os.environ.get('OAUTH2_CLIENT_SECRET')
     
     print(f"\n📊 Status das Variáveis:")
     print(f"   GOOGLE_ADS_DEVELOPER_TOKEN: {'✅ Configurado' if developer_token else '❌ Ausente'}")
     print(f"   GOOGLE_SERVICE_ACCOUNT_JSON: {'✅ Configurado' if service_account else '❌ Ausente'}")
-    print(f"   GOOGLE_ADS_CLIENT_ID: {'✅ Configurado' if client_id else '❌ Ausente'}")
-    print(f"   GOOGLE_ADS_CLIENT_SECRET: {'✅ Configurado' if client_secret else '❌ Ausente'}")
+    print(f"   OAUTH2_CLIENT_ID: {'✅ Configurado' if client_id else '❌ Ausente'}")
+    print(f"   OAUTH2_CLIENT_SECRET: {'✅ Configurado' if client_secret else '❌ Ausente'}")
     
     # Determinar estratégia recomendada
     if service_account and developer_token:

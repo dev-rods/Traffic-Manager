@@ -64,8 +64,8 @@ class GoogleAdsConfig:
         
         config = {
             'developer_token': os.environ.get('GOOGLE_ADS_DEVELOPER_TOKEN'),
-            'client_id': os.environ.get('GOOGLE_ADS_CLIENT_ID'),
-            'client_secret': os.environ.get('GOOGLE_ADS_CLIENT_SECRET'),
+            'client_id': os.environ.get('OAUTH2_CLIENT_ID'),
+            'client_secret': os.environ.get('OAUTH2_CLIENT_SECRET'),
             'refresh_token': refresh_token,
             'use_proto_plus': True,
             'login_customer_id': customer_id

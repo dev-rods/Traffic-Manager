@@ -203,8 +203,8 @@ def main():
     print("=" * 60)
     
     # Verificar configuração MCC
-    required_vars = ['GOOGLE_ADS_DEVELOPER_TOKEN', 'GOOGLE_ADS_CLIENT_ID', 
-                     'GOOGLE_ADS_CLIENT_SECRET', 'GOOGLE_ADS_REFRESH_TOKEN', 'MCC_CUSTOMER_ID']
+    required_vars = ['GOOGLE_ADS_DEVELOPER_TOKEN', 'OAUTH2_CLIENT_ID', 
+                     'OAUTH2_CLIENT_SECRET', 'GOOGLE_ADS_REFRESH_TOKEN', 'MCC_CUSTOMER_ID']
     
     missing_vars = [var for var in required_vars if not os.environ.get(var)]
     if missing_vars:

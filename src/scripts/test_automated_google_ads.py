@@ -93,8 +93,8 @@ def test_automated_flow():
             print("      export GOOGLE_SERVICE_ACCOUNT_JSON='{\"type\":\"service_account\",...}'")
         elif "refresh_token" in error_str or "oauth" in error_str:
             print("   💡 Configure códigos de autorização ou credenciais OAuth2:")
-            print("      export GOOGLE_ADS_CLIENT_ID='your_client_id'")
-            print("      export GOOGLE_ADS_CLIENT_SECRET='your_client_secret'")
+            print("      export OAUTH2_CLIENT_ID='your_client_id'")
+            print("      export OAUTH2_CLIENT_SECRET='your_client_secret'")
             print("      export GOOGLE_ADS_AUTH_CODE_1570932315='your_auth_code'")
         elif "developer_token" in error_str:
             print("   💡 Configure GOOGLE_ADS_DEVELOPER_TOKEN")
@@ -116,7 +116,7 @@ def test_environment_variables():
     service_account_vars = ['GOOGLE_ADS_DEVELOPER_TOKEN', 'GOOGLE_SERVICE_ACCOUNT_JSON']
     
     # Variáveis para OAuth2
-    oauth2_vars = ['GOOGLE_ADS_DEVELOPER_TOKEN', 'GOOGLE_ADS_CLIENT_ID', 'GOOGLE_ADS_CLIENT_SECRET']
+    oauth2_vars = ['GOOGLE_ADS_DEVELOPER_TOKEN', 'OAUTH2_CLIENT_ID', 'OAUTH2_CLIENT_SECRET']
     
     print("\n📋 Service Account:")
     service_account_complete = True

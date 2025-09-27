@@ -125,8 +125,8 @@ class GoogleAdsTokenManager:
                 token=None,  # Access token será gerado automaticamente
                 refresh_token=refresh_token,
                 token_uri="https://oauth2.googleapis.com/token",
-                client_id=os.environ.get('GOOGLE_ADS_CLIENT_ID'),
-                client_secret=os.environ.get('GOOGLE_ADS_CLIENT_SECRET')
+                client_id=os.environ.get('OAUTH2_CLIENT_ID'),
+                client_secret=os.environ.get('OAUTH2_CLIENT_SECRET')
             )
             
             # Tentar renovar access token
@@ -184,8 +184,8 @@ class GoogleAdsTokenManager:
             # Criar configuração do fluxo OAuth
             flow_config = {
                 'web': {
-                    'client_id': os.environ.get('GOOGLE_ADS_CLIENT_ID'),
-                    'client_secret': os.environ.get('GOOGLE_ADS_CLIENT_SECRET'),
+                    'client_id': os.environ.get('OAUTH2_CLIENT_ID'),
+                    'client_secret': os.environ.get('OAUTH2_CLIENT_SECRET'),
                     'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
                     'token_uri': 'https://oauth2.googleapis.com/token'
                 }

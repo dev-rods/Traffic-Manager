@@ -20,8 +20,8 @@ def test_environment_variables():
     
     required_vars = [
         'GOOGLE_ADS_DEVELOPER_TOKEN',
-        'GOOGLE_ADS_CLIENT_ID', 
-        'GOOGLE_ADS_CLIENT_SECRET',
+        'OAUTH2_CLIENT_ID', 
+        'OAUTH2_CLIENT_SECRET',
         'GOOGLE_ADS_REFRESH_TOKEN'
     ]
     
@@ -104,9 +104,9 @@ def test_google_ads_client():
         if "refresh_token" in error_str.lower():
             print("  💡 Dica: Verifique se a variável GOOGLE_ADS_REFRESH_TOKEN está configurada")
         elif "client_id" in error_str.lower():
-            print("  💡 Dica: Verifique se a variável GOOGLE_ADS_CLIENT_ID está configurada")
+            print("  💡 Dica: Verifique se a variável OAUTH2_CLIENT_ID está configurada")
         elif "client_secret" in error_str.lower():
-            print("  💡 Dica: Verifique se a variável GOOGLE_ADS_CLIENT_SECRET está configurada")
+            print("  💡 Dica: Verifique se a variável OAUTH2_CLIENT_SECRET está configurada")
         elif "developer_token" in error_str.lower():
             print("  💡 Dica: Verifique se a variável GOOGLE_ADS_DEVELOPER_TOKEN está configurada")
         

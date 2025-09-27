@@ -31,8 +31,8 @@ class TestGoogleAdsMCCService(unittest.TestCase):
         # Mock das variáveis de ambiente
         self.env_patcher = patch.dict(os.environ, {
             'GOOGLE_ADS_DEVELOPER_TOKEN': 'test_developer_token',
-            'GOOGLE_ADS_CLIENT_ID': 'test_client_id',
-            'GOOGLE_ADS_CLIENT_SECRET': 'test_client_secret',
+            'OAUTH2_CLIENT_ID': 'test_client_id',
+            'OAUTH2_CLIENT_SECRET': 'test_client_secret',
             'GOOGLE_ADS_REFRESH_TOKEN': 'test_refresh_token',
             'MCC_CUSTOMER_ID': '1234567890',
             'CLIENTS_TABLE': 'test-clients-table',
@@ -225,8 +225,8 @@ class TestCreateClientIntegration(unittest.TestCase):
         self.env_patcher = patch.dict(os.environ, {
             'CLIENTS_TABLE': 'test-clients-table',
             'GOOGLE_ADS_DEVELOPER_TOKEN': 'test_token',
-            'GOOGLE_ADS_CLIENT_ID': 'test_client_id',
-            'GOOGLE_ADS_CLIENT_SECRET': 'test_secret',
+            'OAUTH2_CLIENT_ID': 'test_client_id',
+            'OAUTH2_CLIENT_SECRET': 'test_secret',
             'GOOGLE_ADS_REFRESH_TOKEN': 'test_refresh',
             'MCC_CUSTOMER_ID': '1234567890'
         })
@@ -348,8 +348,8 @@ class TestMonitorMCCStatus(unittest.TestCase):
         self.env_patcher = patch.dict(os.environ, {
             'CLIENTS_TABLE': 'test-clients-table',
             'GOOGLE_ADS_DEVELOPER_TOKEN': 'test_token',
-            'GOOGLE_ADS_CLIENT_ID': 'test_client_id',
-            'GOOGLE_ADS_CLIENT_SECRET': 'test_secret',
+            'OAUTH2_CLIENT_ID': 'test_client_id',
+            'OAUTH2_CLIENT_SECRET': 'test_secret',
             'GOOGLE_ADS_REFRESH_TOKEN': 'test_refresh',
             'MCC_CUSTOMER_ID': '1234567890'
         })
