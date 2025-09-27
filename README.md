@@ -37,6 +37,17 @@ O projeto utiliza os seguintes serviços AWS:
 
 Cada cliente do sistema possui seus próprios tokens do Google Ads, permitindo operações multi-tenant seguras.
 
+### Sistema de Associação MCC (My Client Center)
+
+O sistema agora inclui funcionalidade completa para associar automaticamente contas de clientes à sua conta MCC:
+
+- **Envio automático de convites**: Convites são enviados automaticamente ao criar novos clientes
+- **Monitoramento de status**: Acompanhamento em tempo real do status das associações
+- **Gerenciamento centralizado**: Interface unificada para gerenciar todas as associações MCC
+- **Integração transparente**: Funciona automaticamente no fluxo existente de criação de clientes
+
+Para mais detalhes, consulte a [documentação completa do sistema MCC](docs/MCC_SYSTEM_GUIDE.md).
+
 ### Estrutura do Cliente
 
 ```json
@@ -80,6 +91,27 @@ serverless invoke local -s dev -f ScriptManager -p tests/mocks/scripts/manager/c
 
 # Regenerar API key
 serverless invoke local -s dev -f ScriptManager -p tests/mocks/scripts/manager/regenerate_key.json --aws-profile traffic-manager
+```
+
+### Scripts de Gerenciamento MCC
+
+O sistema inclui scripts especializados para gerenciar associações MCC:
+
+```bash
+# Gerenciar associações MCC (modo interativo)
+python src/scripts/manage_mcc_links.py
+
+# Monitorar status das associações
+python src/scripts/monitor_mcc_status.py
+
+# Executar testes do sistema MCC
+python src/scripts/test_mcc_system.py
+
+# Exemplos práticos de uso
+python src/scripts/exemplo_uso_mcc.py
+
+# Enviar convite MCC via linha de comando
+python src/scripts/manage_mcc_links.py --operation send_invitation --client-customer-id 1234567890 --client-name "Empresa ABC"
 ```
 
 ### Configuração do Google Ads por Cliente

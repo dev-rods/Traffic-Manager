@@ -1,19 +1,10 @@
 #!/usr/bin/env python
-"""
-Script para gerar códigos de autorização do Google Ads
-
-Este script ajuda a gerar códigos de autorização que podem ser configurados
-como variáveis de ambiente para permitir o fluxo automático.
-"""
-
 import os
 import sys
 from pathlib import Path
 from google_auth_oauthlib.flow import Flow
 
-def generate_authorization_url():
-    """Gera URL de autorização do Google"""
-    
+def generate_authorization_url():    
     client_id = os.environ.get('GOOGLE_ADS_CLIENT_ID')
     client_secret = os.environ.get('GOOGLE_ADS_CLIENT_SECRET')
     
@@ -23,7 +14,6 @@ def generate_authorization_url():
         print("   export GOOGLE_ADS_CLIENT_SECRET='your_client_secret'")
         return None
     
-    # Configuração do fluxo OAuth2
     flow_config = {
         'web': {
             'client_id': client_id,
@@ -38,27 +28,15 @@ def generate_authorization_url():
         scopes=['https://www.googleapis.com/auth/adwords']
     )
     
-    # URI de redirecionamento
-    flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
-    
-    # Gerar URL de autorização
-    authorization_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true',
-        prompt='consent'  # Força o prompt para garantir refresh_token
-    )
+    flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'    
+    authorization_url, state = flow.authorization_url(access_type='offline', include_granted_scopes='true', prompt='consent')
     
     return authorization_url, flow, state
 
 def exchange_code_for_token(authorization_code, flow):
-    """Troca código de autorização por tokens"""
-    
     try:
-        # Trocar código por tokens
         flow.fetch_token(code=authorization_code)
-        
         credentials = flow.credentials
-        
         return {
             'access_token': credentials.token,
             'refresh_token': credentials.refresh_token,
@@ -66,7 +44,6 @@ def exchange_code_for_token(authorization_code, flow):
             'client_id': credentials.client_id,
             'client_secret': credentials.client_secret
         }
-        
     except Exception as e:
         print(f"❌ Erro ao trocar código por tokens: {str(e)}")
         return None
