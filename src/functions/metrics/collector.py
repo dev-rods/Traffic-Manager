@@ -86,8 +86,6 @@ def handler(event, context):
     except Exception as e:
         error_msg = str(e)
         logger.error(f"[traceId: {trace_id if 'trace_id' in locals() else 'unknown'}] Erro ao coletar métricas: {error_msg}")
-        
-        # Tentar registrar o erro se possível
         if 'trace_id' in locals():
             try:
                 error_record = {

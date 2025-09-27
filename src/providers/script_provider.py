@@ -10,7 +10,6 @@ import boto3
 import os
 import logging
 from datetime import datetime
-
 from src.utils.scripts.python import SCRIPT_MAP
 
 # Configuração de logging
