@@ -4,6 +4,9 @@ import os
 import uuid
 from datetime import datetime
 from src.utils.auth import ClientAuth
+from src.services.google_ads_mcc_service import GoogleAdsMCCService
+import hashlib
+
 
 step_functions = boto3.client('stepfunctions')
 dynamodb = boto3.resource('dynamodb')
@@ -40,37 +43,23 @@ def handler(event, context):
         client_id = client['clientId']
         print(f"Cliente processado: {client_id} ({client['name']})")
         
-        trace_id = str(uuid.uuid4())
-        payload = {
-            'traceId': trace_id,
-            'storeId': client_id,
-            'storeName': client['name'],
-            'formData': form_data,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        record_execution_start(trace_id, client_id, payload)
-
-        region = os.environ.get('AWS_REGION', context.invoked_function_arn.split(':')[3])
-        account_id = os.environ.get('ACCOUNT_ID', context.invoked_function_arn.split(':')[4])
+        google_ads_customer_id = client.get('googleAdsCustomerId')
+        if not google_ads_customer_id:
+            print("Cliente não possui Google Ads Customer ID configurado")
+            return response(400, "Cliente não possui conta Google Ads configurada")
         
-        state_machine_name = os.environ.get('BASE_STATE_MACHINE_NAME') + "CampaignOptimization"
-        state_machine_arn = f"arn:aws:states:{region}:{account_id}:stateMachine:{state_machine_name}"
-        
-        print(f"Iniciando Step Function: {state_machine_arn}")
-        
-        response_sf = step_functions.start_execution(
-            stateMachineArn=state_machine_arn,
-            name=f"{client_id}-{trace_id}",
-            input=json.dumps(payload)
-        )
-        
-        print(f"Step Function iniciada: {response_sf['executionArn']}")
-        
-        return response(200, {
-            "message": "Processamento iniciado com sucesso",
-            "traceId": trace_id,
-            "executionArn": response_sf['executionArn']
-        })
+        mcc_status = client.get('mccStatus', 'NOT_LINKED')
+        if mcc_status == 'APPROVED':
+            return start_campaign_optimization(client_id, client, form_data, context)
+        elif mcc_status == 'PENDING':
+            return response(202, {
+                "message": "Convite MCC já enviado, aguardando confirmação do cliente",
+                "clientId": client_id,
+                "mccStatus": mcc_status,
+                "nextStep": "Aguardando confirmação do cliente no Google Ads"
+            })
+        else:
+            return send_mcc_invitation_and_wait(client_id, client, form_data, context)
     
     except Exception as e:
         error_msg = str(e)
@@ -122,6 +111,7 @@ def parse_form_data(body):
             'customer_behavior': form_data.get('Seu cliente procura por você ou precisa ser convencido? ', ''),
             'company_name': form_data.get('Qual é o nome da sua empresa? (Se for autônomo, digite seu nome. Exemplos: Dra. Maria, Personal Rodrigo.)', ''),
             'business_niche': form_data.get('Qual é o nicho do seu negócio? (Exemplos: Odontologia, Estética, Advocacia.)', ''),
+            'google_ads_customer_id': form_data.get('Qual é o ID da sua conta Google Ads? (formato: 123-456-7890)', ''),
         }
         return processed_data
     except Exception as e:
@@ -147,10 +137,13 @@ def record_execution_start(trace_id, client_id, payload):
 def create_or_get_client_from_form_data(form_data):
     try:
         company_name = form_data.get('company_name', '')
+        google_ads_customer_id = form_data.get('google_ads_customer_id', '')
         if not company_name:
             print("Nome da empresa não fornecido no formulário")
             return None
-        import hashlib
+        if not google_ads_customer_id:
+            print("Google Ads Customer ID não fornecido no formulário")
+            return None
         base = "".join(e for e in company_name if e.isalnum()).lower()
         hash_suffix = hashlib.md5(company_name.encode()).hexdigest()[:6]
         client_id = f"{base}-{hash_suffix}"
@@ -159,7 +152,15 @@ def create_or_get_client_from_form_data(form_data):
             response = clients_table.get_item(Key={'clientId': client_id})
             if 'Item' in response:
                 print(f"Cliente existente encontrado: {client_id}")
-                return response['Item']
+                existing_client = response['Item']
+                if not existing_client.get('googleAdsCustomerId'):
+                    clients_table.update_item(
+                        Key={'clientId': client_id},
+                        UpdateExpression="SET googleAdsCustomerId = :customer_id",
+                        ExpressionAttributeValues={':customer_id': google_ads_customer_id}
+                    )
+                    existing_client['googleAdsCustomerId'] = google_ads_customer_id
+                return existing_client
         except Exception as e:
             print(f"Erro ao verificar cliente existente: {str(e)}")        
         client_data = {
@@ -169,6 +170,8 @@ def create_or_get_client_from_form_data(form_data):
             'active': True,
             'createdAt': datetime.utcnow().isoformat(),
             'source': 'google_sheets_form',
+            'googleAdsCustomerId': google_ads_customer_id,
+            'mccStatus': 'NOT_LINKED',
             'formData': {
                 'business_niche': form_data.get('business_niche', ''),
                 'industry': form_data.get('industry', ''),
@@ -187,12 +190,104 @@ def create_or_get_client_from_form_data(form_data):
             }
         }        
         clients_table.put_item(Item=client_data)
-        print(f"Novo cliente criado: {client_id} ({company_name})")
+        print(f"Novo cliente criado: {client_id} ({company_name}) com Google Ads ID: {google_ads_customer_id}")
         return client_data
         
     except Exception as e:
         print(f"Erro ao criar/obter cliente: {str(e)}")
         return None
+
+def send_mcc_invitation_and_wait(client_id, client, form_data, context):
+    try:
+        google_ads_customer_id = client.get('googleAdsCustomerId')
+        client_name = client.get('name')
+        print(f"Enviando convite MCC para cliente {google_ads_customer_id}...")
+        mcc_service = GoogleAdsMCCService()
+        mcc_result = mcc_service.send_link_invitation(google_ads_customer_id, client_name)
+        if mcc_result['success']:
+            print(f"✅ Convite MCC enviado com sucesso!")
+            print(f"   Link ID: {mcc_result['link_id']}")
+            print(f"   Status: {mcc_result['status']}")
+            clients_table = dynamodb.Table(os.environ.get('CLIENTS_TABLE'))
+            clients_table.update_item(
+                Key={"clientId": client_id},
+                UpdateExpression="SET mccStatus = :status, mccLinkId = :link_id, mccInvitationSentAt = :timestamp",
+                ExpressionAttributeValues={
+                    ":status": mcc_result['status'],
+                    ":link_id": mcc_result['link_id'],
+                    ":timestamp": datetime.utcnow().isoformat()
+                }
+            )
+            trace_id = str(uuid.uuid4())
+            record_execution_start(trace_id, client_id, {
+                'stage': 'mcc_invitation_sent',
+                'mccResult': mcc_result,
+                'formData': form_data
+            })
+            return response(202, {
+                "message": "Convite MCC enviado com sucesso. Aguardando confirmação do cliente.",
+                "clientId": client_id,
+                "traceId": trace_id,
+                "mccStatus": mcc_result['status'],
+                "linkId": mcc_result['link_id'],
+                "nextStep": "Cliente deve aceitar o convite no Google Ads para prosseguir"
+            })
+        else:
+            print(f"⚠️  Erro ao enviar convite MCC: {mcc_result['error']}")
+            return response(500, {
+                "message": "Erro ao enviar convite MCC",
+                "error": mcc_result['error']
+            })
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Erro ao enviar convite MCC: {error_msg}")
+        return response(500, {
+            "message": "Erro ao enviar convite MCC",
+            "error": error_msg
+        })
+
+def start_campaign_optimization(client_id, client, form_data, context):
+    """Inicia a Step Function de otimização de campanha"""
+    try:
+        trace_id = str(uuid.uuid4())
+        payload = {
+            'traceId': trace_id,
+            'storeId': client_id,
+            'storeName': client['name'],
+            'formData': form_data,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        record_execution_start(trace_id, client_id, payload)
+
+        region = os.environ.get('AWS_REGION', context.invoked_function_arn.split(':')[3])
+        account_id = os.environ.get('ACCOUNT_ID', context.invoked_function_arn.split(':')[4])
+        
+        state_machine_name = os.environ.get('BASE_STATE_MACHINE_NAME') + "CampaignOptimization"
+        state_machine_arn = f"arn:aws:states:{region}:{account_id}:stateMachine:{state_machine_name}"
+        
+        print(f"Iniciando Step Function: {state_machine_arn}")
+        
+        response_sf = step_functions.start_execution(
+            stateMachineArn=state_machine_arn,
+            name=f"{client_id}-{trace_id}",
+            input=json.dumps(payload)
+        )
+        
+        print(f"Step Function iniciada: {response_sf['executionArn']}")
+        
+        return response(200, {
+            "message": "Processamento iniciado com sucesso",
+            "traceId": trace_id,
+            "executionArn": response_sf['executionArn']
+        })
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Erro ao iniciar Step Function: {error_msg}")
+        return response(500, {
+            "message": "Erro ao iniciar processamento",
+            "error": error_msg
+        })
 
 def response(status_code, body):
     return {

@@ -106,70 +106,37 @@ class GoogleAdsMCCService:
             return None
     
     def send_link_invitation(self, client_customer_id: str, client_name: str = None) -> Dict[str, Any]:
-        """
-        Envia convite de associação para uma conta de cliente
-        Baseado no exemplo oficial: link_manager_to_client
-        
-        Args:
-            client_customer_id (str): ID da conta do cliente (formato: 910-014-2796)
-            client_name (str, opcional): Nome do cliente para referência
-            
-        Returns:
-            dict: Resultado da operação
-                - success (bool): Se o convite foi enviado com sucesso
-                - link_id (str): ID do link criado
-                - status (str): Status atual do link
-                - error (str): Mensagem de erro se houver
-        """
         try:
             mcc_client = self.get_mcc_client()
             if not mcc_client:
                 return {
                     'success': False,
                     'error': 'Cliente MCC não configurado'
-                }
-            
-            # Remover hífens do customer_id se existirem (910-014-2796 -> 9100142796)
+                }            
             clean_customer_id = client_customer_id.replace('-', '')
             manager_customer_id = os.environ.get('MCC_CUSTOMER_ID')
             if manager_customer_id:
                 manager_customer_id = manager_customer_id.replace("-", "")
-            
-            logger.info(f"Enviando convite MCC do manager '{manager_customer_id}' para cliente '{clean_customer_id}'")
-            
-            # Obter serviço de CustomerClientLink (baseado no exemplo oficial v20)
+            logger.info(f"Enviando convite MCC do manager '{manager_customer_id}' para cliente '{clean_customer_id}'")            
             customer_client_link_service: CustomerClientLinkServiceClient = (
                 mcc_client.get_service("CustomerClientLinkService")
             )
-            
-            # Criar operação de link seguindo exatamente o padrão do exemplo oficial
             client_link_operation: CustomerClientLinkOperation = mcc_client.get_type(
                 "CustomerClientLinkOperation"
             )
             client_link: CustomerClientLink = client_link_operation.create
             client_link.client_customer = customer_client_link_service.customer_path(clean_customer_id)
-            # client_link.status espera um valor enum (int) - PENDING
             client_link.status = mcc_client.enums.ManagerLinkStatusEnum.PENDING.value
-            
-            # Executar mutação (baseado no exemplo oficial)
             response: MutateCustomerClientLinkResponse = (
                 customer_client_link_service.mutate_customer_client_link(
                     customer_id=manager_customer_id, 
                     operation=client_link_operation
                 )
             )
-            
-            # Extrair resultado (campo 'result' na v20, não 'results')
-            print(response)
-            print(response.result)
-            print(response.result.resource_name)
             resource_name = response.result.resource_name
             link_id = resource_name.split('/')[-1]
-            
             logger.info(f"Convite MCC enviado com sucesso!")
             logger.info(f'Convite enviado do manager "{manager_customer_id}" para cliente "{clean_customer_id}" com resource_name "{resource_name}"')
-            
-            # Registrar no histórico
             self._log_mcc_operation(
                 operation="SEND_INVITATION",
                 client_customer_id=clean_customer_id,
@@ -178,7 +145,6 @@ class GoogleAdsMCCService:
                 status="PENDING",
                 success=True
             )
-            
             return {
                 'success': True,
                 'link_id': link_id,
@@ -188,15 +154,11 @@ class GoogleAdsMCCService:
                 'manager_customer_id': manager_customer_id,
                 'client_customer_id': clean_customer_id
             }
-            
         except GoogleAdsException as ex:
             error_msg = f"Erro da API do Google Ads: {ex.error.code().name}"
             if ex.error.message:
                 error_msg += f" - {ex.error.message}"
-            
             logger.error(f"Erro ao enviar convite MCC para {client_customer_id}: {error_msg}")
-            
-            # Registrar erro no histórico
             self._log_mcc_operation(
                 operation="SEND_INVITATION",
                 client_customer_id=client_customer_id.replace('-', ''),
@@ -205,7 +167,6 @@ class GoogleAdsMCCService:
                 success=False,
                 error=error_msg
             )
-            
             return {
                 'success': False,
                 'error': error_msg
@@ -214,8 +175,6 @@ class GoogleAdsMCCService:
         except Exception as e:
             error_msg = f"Erro inesperado: {str(e)}"
             logger.error(f"Erro ao enviar convite MCC para {client_customer_id}: {error_msg}")
-            
-            # Registrar erro no histórico
             self._log_mcc_operation(
                 operation="SEND_INVITATION",
                 client_customer_id=client_customer_id.replace('-', ''),
@@ -224,27 +183,12 @@ class GoogleAdsMCCService:
                 success=False,
                 error=error_msg
             )
-            
             return {
                 'success': False,
                 'error': error_msg
             }
     
     def get_link_status(self, client_customer_id: str) -> Dict[str, Any]:
-        """
-        Verifica o status de uma associação MCC
-        
-        Args:
-            client_customer_id (str): ID da conta do cliente
-            
-        Returns:
-            dict: Status da associação
-                - found (bool): Se o link foi encontrado
-                - status (str): Status atual (PENDING, APPROVED, REJECTED, etc.)
-                - link_id (str): ID do link
-                - created_date (str): Data de criação
-                - error (str): Mensagem de erro se houver
-        """
         try:
             mcc_client = self.get_mcc_client()
             if not mcc_client:
@@ -252,14 +196,8 @@ class GoogleAdsMCCService:
                     'found': False,
                     'error': 'Cliente MCC não configurado'
                 }
-            
             logger.warning("⚠️  FUNCIONALIDADE MCC EM DESENVOLVIMENTO")
             logger.info(f"Simulação: Verificando status para cliente {client_customer_id}")
-            
-            # Por enquanto, vamos simular a verificação de status
-            # Em produção, você precisaria implementar usando a versão correta da API
-            
-            # Simular diferentes status baseado no ID do cliente
             if client_customer_id.endswith('0'):
                 status = 'PENDING'
                 found = True
@@ -272,11 +210,9 @@ class GoogleAdsMCCService:
             else:
                 status = 'NOT_LINKED'
                 found = False
-            
             if found:
                 link_id = f"simulated_link_{client_customer_id}"
                 created_date = datetime.utcnow().isoformat()
-                
                 return {
                     'found': True,
                     'status': status,
@@ -294,7 +230,6 @@ class GoogleAdsMCCService:
                     'simulation': True,
                     'note': 'Esta é uma simulação. Para funcionalidade real, configure a versão correta da API'
                 }
-            
         except Exception as e:
             logger.error(f"Erro ao verificar status MCC para {client_customer_id}: {str(e)}")
             return {
@@ -303,12 +238,7 @@ class GoogleAdsMCCService:
             }
     
     def list_all_links(self) -> List[Dict[str, Any]]:
-        """
-        Lista todas as associações MCC existentes
-        
-        Returns:
-            list: Lista de associações com seus status
-        """
+
         try:
             mcc_client = self.get_mcc_client()
             if not mcc_client:
@@ -349,15 +279,6 @@ class GoogleAdsMCCService:
             return []
     
     def cancel_link_invitation(self, client_customer_id: str) -> Dict[str, Any]:
-        """
-        Cancela um convite de associação pendente
-        
-        Args:
-            client_customer_id (str): ID da conta do cliente
-            
-        Returns:
-            dict: Resultado da operação
-        """
         try:
             mcc_client = self.get_mcc_client()
             if not mcc_client:
@@ -401,18 +322,6 @@ class GoogleAdsMCCService:
     def _log_mcc_operation(self, operation: str, client_customer_id: str, 
                           client_name: str = None, link_id: str = None, 
                           status: str = None, success: bool = True, error: str = None):
-        """
-        Registra operações MCC no histórico de execução
-        
-        Args:
-            operation (str): Tipo de operação (SEND_INVITATION, CANCEL_INVITATION, etc.)
-            client_customer_id (str): ID da conta do cliente
-            client_name (str, opcional): Nome do cliente
-            link_id (str, opcional): ID do link
-            status (str, opcional): Status da operação
-            success (bool): Se a operação foi bem-sucedida
-            error (str, opcional): Mensagem de erro
-        """
         try:
             timestamp = datetime.utcnow().isoformat()
             
