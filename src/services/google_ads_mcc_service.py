@@ -4,8 +4,7 @@ Serviço para gerenciar associações de contas do Google Ads ao MCC (My Client 
 Este serviço permite enviar convites de associação e monitorar o status
 das associações entre contas de clientes e a conta MCC.
 
-Nota: Este serviço está em desenvolvimento e pode precisar de ajustes
-dependendo da versão da API do Google Ads disponível.
+Baseado no exemplo oficial do Google Ads: link_manager_to_client
 """
 
 import os
@@ -17,14 +16,34 @@ from datetime import datetime
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
 
+# Imports baseados no exemplo oficial v20
+from google.ads.googleads.v20.services.services.customer_client_link_service.client import (
+    CustomerClientLinkServiceClient,
+)
+from google.ads.googleads.v20.services.types.customer_client_link_service import (
+    CustomerClientLinkOperation,
+    MutateCustomerClientLinkResponse,
+)
+from google.ads.googleads.v20.resources.types.customer_client_link import (
+    CustomerClientLink,
+)
+from google.ads.googleads.v20.services.services.google_ads_service.client import (
+    GoogleAdsServiceClient,
+)
+from google.ads.googleads.v20.services.types.google_ads_service import (
+    SearchGoogleAdsResponse,
+)
+
 try:
     from src.utils.encryption import TokenEncryption
+    from src.services.google_ads_config import GoogleAdsConfig
 except ImportError:
     # Para execução direta, usar import relativo
     import sys
     from pathlib import Path
     sys.path.append(str(Path(__file__).parent.parent))
     from utils.encryption import TokenEncryption
+    from services.google_ads_config import GoogleAdsConfig
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -47,11 +66,13 @@ class GoogleAdsMCCService:
         self.clients_table = self.dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
         self.execution_history_table = self.dynamodb.Table(os.environ.get("EXECUTION_HISTORY_TABLE"))
         self.encryption = TokenEncryption()
+        self.ads_config = GoogleAdsConfig()
         self._mcc_client_cache = None
     
     def get_mcc_client(self) -> Optional[GoogleAdsClient]:
         """
         Obtém cliente autenticado para a conta MCC
+        Usando a mesma abordagem da action.py com GoogleAdsConfig
         
         Returns:
             GoogleAdsClient: Cliente autenticado para MCC ou None se erro
@@ -60,28 +81,24 @@ class GoogleAdsMCCService:
             if self._mcc_client_cache:
                 return self._mcc_client_cache
             
-            # Usar configurações do MCC do ambiente
-            mcc_config = {
-                'developer_token': os.environ.get('GOOGLE_ADS_DEVELOPER_TOKEN'),
-                'client_id': os.environ.get('GOOGLE_ADS_CLIENT_ID'),
-                'client_secret': os.environ.get('GOOGLE_ADS_CLIENT_SECRET'),
-                'refresh_token': os.environ.get('GOOGLE_ADS_REFRESH_TOKEN'),
-                'use_proto_plus': True,
-                'login_customer_id': os.environ.get('MCC_CUSTOMER_ID')  # ID da conta MCC
-            }
-            
-            # Validar configurações obrigatórias
-            required_fields = ['developer_token', 'client_id', 'client_secret', 'refresh_token']
-            missing_fields = [field for field in required_fields if not mcc_config.get(field)]
-            
-            if missing_fields:
-                logger.error(f"Configurações MCC ausentes: {missing_fields}")
+            # Obter ID da conta MCC
+            mcc_customer_id = os.environ.get('MCC_CUSTOMER_ID')
+            if mcc_customer_id:
+                mcc_customer_id = mcc_customer_id.replace("-", "")
+            if not mcc_customer_id:
+                logger.error("MCC_CUSTOMER_ID não configurado")
                 return None
             
-            google_ads_client = GoogleAdsClient.load_from_dict(mcc_config)
+            logger.info(f"Criando cliente MCC para customer: {mcc_customer_id}")
+            
+            # Usar a mesma classe GoogleAdsConfig da action.py
+            config = self.ads_config.get_google_ads_config(mcc_customer_id)
+            
+            # Criar cliente seguindo o mesmo padrão da action.py
+            google_ads_client = GoogleAdsClient.load_from_dict(config, version="v20")
             self._mcc_client_cache = google_ads_client
             
-            logger.info("Cliente MCC criado com sucesso")
+            logger.info("Cliente MCC criado com sucesso usando GoogleAdsConfig")
             return google_ads_client
             
         except Exception as e:
@@ -91,9 +108,10 @@ class GoogleAdsMCCService:
     def send_link_invitation(self, client_customer_id: str, client_name: str = None) -> Dict[str, Any]:
         """
         Envia convite de associação para uma conta de cliente
+        Baseado no exemplo oficial: link_manager_to_client
         
         Args:
-            client_customer_id (str): ID da conta do cliente (formato: 1234567890)
+            client_customer_id (str): ID da conta do cliente (formato: 910-014-2796)
             client_name (str, opcional): Nome do cliente para referência
             
         Returns:
@@ -111,25 +129,50 @@ class GoogleAdsMCCService:
                     'error': 'Cliente MCC não configurado'
                 }
             
-            logger.warning("⚠️  FUNCIONALIDADE MCC EM DESENVOLVIMENTO")
-            logger.info("A funcionalidade de associação MCC requer:")
-            logger.info("1. Versão específica da API do Google Ads")
-            logger.info("2. Configuração adequada do CustomerClientLinkService")
-            logger.info("3. Permissões adequadas na conta MCC")
+            # Remover hífens do customer_id se existirem (910-014-2796 -> 9100142796)
+            clean_customer_id = client_customer_id.replace('-', '')
+            manager_customer_id = os.environ.get('MCC_CUSTOMER_ID')
+            if manager_customer_id:
+                manager_customer_id = manager_customer_id.replace("-", "")
             
-            # Por enquanto, vamos simular o envio do convite
-            # Em produção, você precisaria implementar usando a versão correta da API
-            link_id = f"simulated_link_{client_customer_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+            logger.info(f"Enviando convite MCC do manager '{manager_customer_id}' para cliente '{clean_customer_id}'")
             
-            logger.info(f"📤 Simulação: Convite MCC para cliente {client_customer_id}")
-            logger.info(f"   Link ID: {link_id}")
-            logger.info(f"   Status: PENDING")
-            logger.info(f"   Manager Customer ID: {os.environ.get('MCC_CUSTOMER_ID')}")
+            # Obter serviço de CustomerClientLink (baseado no exemplo oficial v20)
+            customer_client_link_service: CustomerClientLinkServiceClient = (
+                mcc_client.get_service("CustomerClientLinkService")
+            )
             
-            # Registrar no histórico como simulação
+            # Criar operação de link seguindo exatamente o padrão do exemplo oficial
+            client_link_operation: CustomerClientLinkOperation = mcc_client.get_type(
+                "CustomerClientLinkOperation"
+            )
+            client_link: CustomerClientLink = client_link_operation.create
+            client_link.client_customer = customer_client_link_service.customer_path(clean_customer_id)
+            # client_link.status espera um valor enum (int) - PENDING
+            client_link.status = mcc_client.enums.ManagerLinkStatusEnum.PENDING.value
+            
+            # Executar mutação (baseado no exemplo oficial)
+            response: MutateCustomerClientLinkResponse = (
+                customer_client_link_service.mutate_customer_client_link(
+                    customer_id=manager_customer_id, 
+                    operation=client_link_operation
+                )
+            )
+            
+            # Extrair resultado (campo 'result' na v20, não 'results')
+            print(response)
+            print(response.result)
+            print(response.result.resource_name)
+            resource_name = response.result.resource_name
+            link_id = resource_name.split('/')[-1]
+            
+            logger.info(f"Convite MCC enviado com sucesso!")
+            logger.info(f'Convite enviado do manager "{manager_customer_id}" para cliente "{clean_customer_id}" com resource_name "{resource_name}"')
+            
+            # Registrar no histórico
             self._log_mcc_operation(
                 operation="SEND_INVITATION",
-                client_customer_id=client_customer_id,
+                client_customer_id=clean_customer_id,
                 client_name=client_name,
                 link_id=link_id,
                 status="PENDING",
@@ -139,12 +182,33 @@ class GoogleAdsMCCService:
             return {
                 'success': True,
                 'link_id': link_id,
+                'resource_name': resource_name,
                 'status': 'PENDING',
-                'message': f'Convite simulado para cliente {client_customer_id} (funcionalidade em desenvolvimento)',
-                'simulation': True,
-                'note': 'Esta é uma simulação. Para funcionalidade real, configure a versão correta da API',
-                'manager_customer_id': os.environ.get('MCC_CUSTOMER_ID'),
-                'client_customer_id': client_customer_id
+                'message': f'Convite enviado do MCC para cliente {clean_customer_id}',
+                'manager_customer_id': manager_customer_id,
+                'client_customer_id': clean_customer_id
+            }
+            
+        except GoogleAdsException as ex:
+            error_msg = f"Erro da API do Google Ads: {ex.error.code().name}"
+            if ex.error.message:
+                error_msg += f" - {ex.error.message}"
+            
+            logger.error(f"Erro ao enviar convite MCC para {client_customer_id}: {error_msg}")
+            
+            # Registrar erro no histórico
+            self._log_mcc_operation(
+                operation="SEND_INVITATION",
+                client_customer_id=client_customer_id.replace('-', ''),
+                client_name=client_name,
+                status="ERROR",
+                success=False,
+                error=error_msg
+            )
+            
+            return {
+                'success': False,
+                'error': error_msg
             }
             
         except Exception as e:
@@ -154,7 +218,7 @@ class GoogleAdsMCCService:
             # Registrar erro no histórico
             self._log_mcc_operation(
                 operation="SEND_INVITATION",
-                client_customer_id=client_customer_id,
+                client_customer_id=client_customer_id.replace('-', ''),
                 client_name=client_name,
                 status="ERROR",
                 success=False,

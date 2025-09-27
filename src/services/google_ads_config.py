@@ -56,6 +56,7 @@ class GoogleAdsConfig:
         print("Usando configuração OAuth2 com token manager")
         
         # Obter refresh token automaticamente
+        # Remover hífens do customer_id se existirem (ex: 287-835-6629 -> 2878356629)
         refresh_token = self.token_manager.get_valid_refresh_token(customer_id)
         
         if not refresh_token:

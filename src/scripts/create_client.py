@@ -128,4 +128,37 @@ def _generate_client_id(client_name):
     """
     base = "".join(e for e in client_name if e.isalnum()).lower()
     hash_suffix = hashlib.md5(client_name.encode()).hexdigest()[:6]
-    return f"{base}-{hash_suffix}" 
+    return f"{base}-{hash_suffix}"
+
+
+if __name__ == "__main__":
+    # Teste com os parâmetros do exemplo
+    test_params = {
+        "name": "Empresa rods teste",
+        "email": "rodrigocardosoo15@gmail.com",
+        "googleAdsCustomerId": "910-014-2796",
+        "sendMccInvitation": True
+    }
+    
+    try:
+        result = execute(test_params)
+        print("\n✅ Resultado da criação do cliente:")
+        print(f"Client ID: {result['clientId']}")
+        print(f"Nome: {result['name']}")
+        print(f"Email: {result['email']}")
+        print(f"Google Ads Customer ID: {result['googleAdsCustomerId']}")
+        print(f"Status MCC: {result['mccStatus']}")
+        
+        if result.get('mccInvitation'):
+            mcc_result = result['mccInvitation']
+            if mcc_result['success']:
+                print(f"✅ Convite MCC enviado com sucesso!")
+                print(f"   Link ID: {mcc_result['link_id']}")
+                print(f"   Status: {mcc_result['status']}")
+            else:
+                print(f"❌ Erro ao enviar convite MCC: {mcc_result['error']}")
+        
+    except Exception as e:
+        print(f"❌ Erro ao executar script: {str(e)}")
+        import traceback
+        traceback.print_exc() 

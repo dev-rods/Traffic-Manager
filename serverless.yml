@@ -21,6 +21,7 @@ provider:
     GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/MCC_DEVELOPER_TOKEN}
     GOOGLE_ADS_CLIENT_ID: ${ssm:/GOOGLE_ADS_CLIENT_ID}
     GOOGLE_ADS_CLIENT_SECRET: ${ssm:/GOOGLE_ADS_CLIENT_SECRET}
+    MCC_CUSTOMER_ID: ${ssm:/MCC_ACCOUNT_ID}
     CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
     EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
