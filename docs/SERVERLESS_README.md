@@ -26,8 +26,8 @@ serverless invoke stepf --name CampaignOptimizationFlow -s dev --aws-profile tra
 # Script
 serverless invoke local -s dev -f ScriptManager -p tests/mocks/scripts/manager/create_client.json --aws-profile traffic-manager
 
-# Webhook
-serverless invoke local -s dev -f WebhookHandler -p tests/mocks/webhook/formSubmit.json --aws-profile traffic-manager
+# Form Submission Handler
+serverless invoke local -s dev -f FormSubmissionHandler -p tests/mocks/webhook/formSubmit.json --aws-profile traffic-manager
 
 
 # Google Ads

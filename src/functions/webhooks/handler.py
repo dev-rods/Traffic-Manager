@@ -5,14 +5,13 @@ import uuid
 from datetime import datetime
 from src.utils.auth import ClientAuth
 
-
 step_functions = boto3.client('stepfunctions')
 dynamodb = boto3.resource('dynamodb')
 execution_history_table = dynamodb.Table(os.environ.get('EXECUTION_HISTORY_TABLE'))
 
 def handler(event, context):
     try:
-        print(f"Requisição recebida de webhook: {json.dumps(event)}")
+        print(f"Requisição recebida de formulário: {json.dumps(event)}")
         if "body" not in event or not event["body"]:
             return response(400, "Corpo da requisição vazio ou inválido")        
         body = json.loads(event["body"]) if isinstance(event["body"], str) else event["body"]        
@@ -20,39 +19,36 @@ def handler(event, context):
         if not api_key:
             print("API key não fornecida na requisição")
             return response(401, "API key não fornecida")
-        
         client_auth = ClientAuth()
-        client = client_auth.validate_api_key(api_key)
-
-        if not client:
-            print(f"Cliente não encontrado para API key: {api_key}")
+        valid_api_key = client_auth.validate_api_key(api_key)
+        if not valid_api_key:
+            print(f"API key inválida: {api_key}")
             return response(401, "Cliente não autorizado")
-        
-        if not client.get('active', False):
-            print(f"Cliente inativo tentando acessar: {client['clientId']}")
-            return response(403, "Cliente inativo")
-        
-        print(f"Cliente autenticado: {client['clientId']} ({client['name']})")
-        
         print(f"Dados do body recebidos: {json.dumps(body)}")
-        
         form_data = parse_form_data(body)
         if not form_data:
             print("Falha ao processar dados do formulário")
             return response(400, "Dados do formulário inválidos ou incompletos")
         
-        # Log dos dados processados
         print(f"Dados do formulário processados com sucesso: {json.dumps(form_data)}")
+        
+        client = create_or_get_client_from_form_data(form_data)
+        if not client:
+            print("Não foi possível criar/obter cliente a partir dos dados do formulário")
+            return response(400, "Dados do formulário incompletos - não foi possível processar o cliente")
+        
+        client_id = client['clientId']
+        print(f"Cliente processado: {client_id} ({client['name']})")
         
         trace_id = str(uuid.uuid4())
         payload = {
             'traceId': trace_id,
-            'storeId': client['clientId'],
+            'storeId': client_id,
             'storeName': client['name'],
             'formData': form_data,
             'timestamp': datetime.utcnow().isoformat()
         }
-        record_execution_start(trace_id, client['clientId'], payload)
+        record_execution_start(trace_id, client_id, payload)
 
         region = os.environ.get('AWS_REGION', context.invoked_function_arn.split(':')[3])
         account_id = os.environ.get('ACCOUNT_ID', context.invoked_function_arn.split(':')[4])
@@ -64,7 +60,7 @@ def handler(event, context):
         
         response_sf = step_functions.start_execution(
             stateMachineArn=state_machine_arn,
-            name=f"{client['clientId']}-{trace_id}",
+            name=f"{client_id}-{trace_id}",
             input=json.dumps(payload)
         )
         
@@ -78,7 +74,7 @@ def handler(event, context):
     
     except Exception as e:
         error_msg = str(e)
-        print(f"Erro no processamento do webhook: {error_msg}")
+        print(f"Erro no processamento do formulário: {error_msg}")
         return response(500, {"message": "Erro interno no servidor", "error": error_msg})
 
 def get_api_key(event, body):
@@ -114,6 +110,7 @@ def parse_form_data(body):
             'budget': form_data.get('Quanto estaria disposto (a) a investir mensalmentel?', ''),
             'industry': form_data.get('Qual é o seu produto ou serviço?', ''),
             'target_audience': form_data.get('Onde encontramos seu público? (Próximo ao seu local? Em sua cidade? Em seu Estado? Em todo o país? Em sua microregião?)', ''),
+            'address': form_data.get('Qual é o endereço do seu local de atendimento? (Se não for físico, digite online)', ''),
             'business_name': form_data.get('Qual é o seu produto ou serviço?', ''),
             'competitive_advantage': form_data.get('Qual é o maior diferencial competitivo do seu produto/serviço? (Ex: preço, tecnologia, atendimento, localização, experiência, etc.)  ', ''),
             'customer_benefit': form_data.get('O que o seu cliente ganha ao escolher você e não o concorrente? (Ex: menor preço, atendimento mais humano, melhores resultados, etc.)', ''),
@@ -136,7 +133,7 @@ def record_execution_start(trace_id, client_id, payload):
         timestamp = datetime.utcnow().isoformat()
         execution_record = {
             'traceId': trace_id,
-            'stageTm': 'webhook',
+            'stageTm': 'form_submission',
             'status': 'RECEIVED',
             'timestamp': timestamp,
             'clientId': client_id,
@@ -146,6 +143,56 @@ def record_execution_start(trace_id, client_id, payload):
         print(f"[traceId: {trace_id}] Registro criado na tabela ExecutionHistory")
     except Exception as e:
         print(f"Erro ao registrar início da execução: {str(e)}")
+
+def create_or_get_client_from_form_data(form_data):
+    try:
+        company_name = form_data.get('company_name', '')
+        if not company_name:
+            print("Nome da empresa não fornecido no formulário")
+            return None
+        import hashlib
+        base = "".join(e for e in company_name if e.isalnum()).lower()
+        hash_suffix = hashlib.md5(company_name.encode()).hexdigest()[:6]
+        client_id = f"{base}-{hash_suffix}"
+        clients_table = dynamodb.Table(os.environ.get('CLIENTS_TABLE'))
+        try:
+            response = clients_table.get_item(Key={'clientId': client_id})
+            if 'Item' in response:
+                print(f"Cliente existente encontrado: {client_id}")
+                return response['Item']
+        except Exception as e:
+            print(f"Erro ao verificar cliente existente: {str(e)}")        
+        client_data = {
+            'clientId': client_id,
+            'name': company_name,
+            'email': '',
+            'active': True,
+            'createdAt': datetime.utcnow().isoformat(),
+            'source': 'google_sheets_form',
+            'formData': {
+                'business_niche': form_data.get('business_niche', ''),
+                'industry': form_data.get('industry', ''),
+                'address': form_data.get('address', ''),
+                'objectives': form_data.get('objectives', ''),
+                'budget': form_data.get('budget', ''),
+                'target_audience': form_data.get('target_audience', ''),
+                'competitive_advantage': form_data.get('competitive_advantage', ''),
+                'customer_benefit': form_data.get('customer_benefit', ''),
+                'customer_desires': form_data.get('customer_desires', ''),
+                'customer_pains': form_data.get('customer_pains', ''),
+                'cost_per_result': form_data.get('cost_per_result', ''),
+                'average_ticket': form_data.get('average_ticket', ''),
+                'brand_perception': form_data.get('brand_perception', ''),
+                'customer_behavior': form_data.get('customer_behavior', '')
+            }
+        }        
+        clients_table.put_item(Item=client_data)
+        print(f"Novo cliente criado: {client_id} ({company_name})")
+        return client_data
+        
+    except Exception as e:
+        print(f"Erro ao criar/obter cliente: {str(e)}")
+        return None
 
 def response(status_code, body):
     return {

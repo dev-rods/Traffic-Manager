@@ -16,11 +16,12 @@ class ClientAuth:
     
     def validate_api_key(self, api_key):
         try:
-            response = self.clients_table.query(IndexName="apiKey-index", KeyConditionExpression=Key("apiKey").eq(api_key))
-            if response.get("Items") and len(response["Items"]) > 0:
-                return response["Items"][0]
-            logger.warning(f"API key inválida: {api_key}")
-            return None
+            expected_api_key = os.environ.get("FORM_SUBMISSION_X_API_KEY")
+            if not expected_api_key:
+                logger.error("FORM_SUBMISSION_X_API_KEY não configurada no ambiente")
+                return None
+            return expected_api_key == api_key
+
         except Exception as e:
             logger.error(f"Erro ao validar API key: {str(e)}")
             return None

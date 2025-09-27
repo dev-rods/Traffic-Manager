@@ -1,7 +1,7 @@
-WebhookHandler:
+FormSubmissionHandler:
   handler: src/functions/webhooks/handler.handler
   memorySize: 512
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-WebhookHandler-lambdaRole
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-FormSubmissionHandler-lambdaRole
   iamRoleStatements:
     - Effect: Allow
       Action:

@@ -22,6 +22,7 @@ provider:
     OAUTH2_CLIENT_ID: ${ssm:/${self:custom.stage}/OAUTH2_CLIENT_ID}
     OAUTH2_CLIENT_SECRET: ${ssm:/${self:custom.stage}/OAUTH2_CLIENT_SECRET}
     MCC_CUSTOMER_ID: ${ssm:/${self:custom.stage}/MCC_ACCOUNT_ID}
+    FORM_SUBMISSION_X_API_KEY: ${ssm:/${self:custom.stage}/FORM_SUBMISSION_X_API_KEY}
     CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
     EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
