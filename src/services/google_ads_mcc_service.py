@@ -1,12 +1,3 @@
-"""
-Serviço para gerenciar associações de contas do Google Ads ao MCC (My Client Center)
-
-Este serviço permite enviar convites de associação e monitorar o status
-das associações entre contas de clientes e a conta MCC.
-
-Baseado no exemplo oficial do Google Ads: link_manager_to_client
-"""
-
 import os
 import sys
 import boto3
@@ -15,52 +6,18 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
+from google.ads.googleads.v20.services.services.customer_client_link_service.client import CustomerClientLinkServiceClient
+from google.ads.googleads.v20.services.types.customer_client_link_service import CustomerClientLinkOperation, MutateCustomerClientLinkResponse
+from google.ads.googleads.v20.resources.types.customer_client_link import CustomerClientLink
+from src.utils.encryption import TokenEncryption
+from src.services.google_ads_config import GoogleAdsConfig
 
-# Imports baseados no exemplo oficial v20
-from google.ads.googleads.v20.services.services.customer_client_link_service.client import (
-    CustomerClientLinkServiceClient,
-)
-from google.ads.googleads.v20.services.types.customer_client_link_service import (
-    CustomerClientLinkOperation,
-    MutateCustomerClientLinkResponse,
-)
-from google.ads.googleads.v20.resources.types.customer_client_link import (
-    CustomerClientLink,
-)
-from google.ads.googleads.v20.services.services.google_ads_service.client import (
-    GoogleAdsServiceClient,
-)
-from google.ads.googleads.v20.services.types.google_ads_service import (
-    SearchGoogleAdsResponse,
-)
 
-try:
-    from src.utils.encryption import TokenEncryption
-    from src.services.google_ads_config import GoogleAdsConfig
-except ImportError:
-    # Para execução direta, usar import relativo
-    import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).parent.parent))
-    from utils.encryption import TokenEncryption
-    from services.google_ads_config import GoogleAdsConfig
-
-# Configurar logging
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 logger.setLevel(logging.INFO)
 
 class GoogleAdsMCCService:
-    """
-    Serviço para gerenciar associações MCC do Google Ads
-    
-    Funcionalidades:
-    - Enviar convites de associação para contas de clientes
-    - Monitorar status das associações
-    - Listar associações existentes
-    - Cancelar associações pendentes
-    """
-    
     def __init__(self):
         self.dynamodb = boto3.resource("dynamodb")
         self.clients_table = self.dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
@@ -70,18 +27,9 @@ class GoogleAdsMCCService:
         self._mcc_client_cache = None
     
     def get_mcc_client(self) -> Optional[GoogleAdsClient]:
-        """
-        Obtém cliente autenticado para a conta MCC
-        Usando a mesma abordagem da action.py com GoogleAdsConfig
-        
-        Returns:
-            GoogleAdsClient: Cliente autenticado para MCC ou None se erro
-        """
         try:
             if self._mcc_client_cache:
                 return self._mcc_client_cache
-            
-            # Obter ID da conta MCC
             mcc_customer_id = os.environ.get('MCC_CUSTOMER_ID')
             if mcc_customer_id:
                 mcc_customer_id = mcc_customer_id.replace("-", "")
@@ -91,7 +39,6 @@ class GoogleAdsMCCService:
             
             logger.info(f"Criando cliente MCC para customer: {mcc_customer_id}")
             
-            # Usar a mesma classe GoogleAdsConfig da action.py
             config = self.ads_config.get_google_ads_config(mcc_customer_id)
             
             # Criar cliente seguindo o mesmo padrão da action.py

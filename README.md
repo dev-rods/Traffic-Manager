@@ -154,8 +154,8 @@ pip install -r requirements.txt
 
 ```bash
 # Deploy para desenvolvimento
-serverless deploy --stage dev
+serverless deploy --stage dev --aws-profile traffic-manager
 
 # Deploy para produção
-serverless deploy --stage prod
+serverless deploy --stage prod --aws-profile traffic-manager
 ```

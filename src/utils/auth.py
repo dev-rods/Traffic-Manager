@@ -3,8 +3,6 @@ import os
 import logging
 import secrets
 import hashlib
-from boto3.dynamodb.conditions import Key
-
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
