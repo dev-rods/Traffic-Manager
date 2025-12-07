@@ -1,5 +1,7 @@
 CampaignOrchestrator:
-  handler: src/functions/campaign/orchestrator.handler
+  image:
+    name: lambdaimage
+    command: ["src.functions.campaign.orchestrator.handler"]
   memorySize: 512
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-CampaignOrchestrator-lambdaRole
   iamRoleStatements:
@@ -15,7 +17,9 @@ CampaignOrchestrator:
       Resource: "arn:aws:logs:*:*:*"
 
 CampaignRecorder:
-  handler: src/functions/campaign/recorder.handler
+  image:
+    name: lambdaimage
+    command: ["src.functions.campaign.recorder.handler"]
   memorySize: 512
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-CampaignRecorder-lambdaRole
   iamRoleStatements:
@@ -31,7 +35,9 @@ CampaignRecorder:
       Resource: "arn:aws:logs:*:*:*"
 
 MccStatusChecker:
-  handler: src/functions/campaign/mcc_status_checker.handler
+  image:
+    name: lambdaimage
+    command: ["src.functions.campaign.mcc_status_checker.handler"]
   memorySize: 512
   timeout: 300
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-MccStatusChecker-lambdaRole

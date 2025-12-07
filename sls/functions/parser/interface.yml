@@ -1,5 +1,7 @@
 PayloadParser:
-  handler: src/functions/parser/parser.handler
+  image:
+    name: lambdaimage
+    command: ["src.functions.parser.parser.handler"]
   memorySize: 512
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-PayloadParser-lambdaRole
   iamRoleStatements:

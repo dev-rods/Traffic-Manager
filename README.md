@@ -19,12 +19,21 @@ Este projeto implementa uma arquitetura serverless na AWS que utiliza inteligên
 
 O projeto utiliza os seguintes serviços AWS:
 
-- **AWS Lambda**: Para processamento serverless.
+- **AWS Lambda**: Para processamento serverless (usando Docker images via ECR).
+- **ECR (Elastic Container Registry)**: Para armazenar imagens Docker das funções Lambda.
 - **Step Functions**: Para orquestração do fluxo de trabalho.
 - **DynamoDB**: Para armazenamento de dados e histórico.
 - **EventBridge**: Para agendamento das execuções.
 - **SNS**: Para notificações de erro (opcional).
 - **Systems Manager (SSM)**: Para armazenamento seguro de chaves de criptografia.
+
+### Docker Images para Lambda
+
+As funções Lambda utilizam Docker images hospedadas no ECR devido ao tamanho das dependências Python (excedendo o limite de 250MB para layers). Isso permite:
+
+- **Maior flexibilidade**: Sem limitações de tamanho de pacote
+- **Controle total**: Gerenciamento completo do ambiente de execução
+- **Performance**: Imagens otimizadas para Lambda
 
 ### Bancos de Dados (DynamoDB)
 
@@ -137,8 +146,11 @@ Quando um cliente é criado com configuração do Google Ads, os seguintes token
 
 1. Node.js e npm
 2. Python 3.8+
-3. AWS CLI configurado
+3. Docker (para build de imagens)
 4. Serverless Framework
+5. Credenciais AWS configuradas (via `--aws-profile` ou variáveis de ambiente)
+
+**Nota**: Você não precisa do AWS CLI instalado! O Serverless Framework usa as credenciais AWS diretamente.
 
 ### Dependências
 
@@ -152,6 +164,10 @@ pip install -r requirements.txt
 
 ### Deploy
 
+O Serverless Framework faz build e push da imagem Docker automaticamente durante o deploy. Você **não precisa** executar scripts separados!
+
+#### Deploy Automático (Recomendado)
+
 ```bash
 # Deploy para desenvolvimento
 serverless deploy --stage dev --aws-profile traffic-manager
@@ -159,3 +175,62 @@ serverless deploy --stage dev --aws-profile traffic-manager
 # Deploy para produção
 serverless deploy --stage prod --aws-profile traffic-manager
 ```
+
+O Serverless Framework irá automaticamente:
+1. ✅ Criar o repositório ECR (se não existir)
+2. ✅ Fazer build da imagem Docker
+3. ✅ Fazer push para o ECR
+4. ✅ Deploy das funções Lambda
+
+**Pronto!** Tudo em um comando. Você só precisa ter Docker instalado e credenciais AWS configuradas.
+
+#### Testar uma Função
+
+```bash
+serverless invoke -f CampaignOrchestrator --stage dev --aws-profile traffic-manager
+
+# Ver logs
+serverless logs -f CampaignOrchestrator --stage dev --aws-profile traffic-manager
+```
+
+#### Atualizando a Imagem
+
+Quando você atualizar código ou dependências, apenas execute:
+
+```bash
+serverless deploy --stage dev --aws-profile traffic-manager
+```
+
+O Serverless Framework detectará mudanças e fará build/push automaticamente.
+
+### Estrutura Docker
+
+- **Dockerfile**: Baseado na imagem oficial AWS Lambda Python 3.8
+- **.dockerignore**: Otimiza o build excluindo arquivos desnecessários
+- **Imagem**: Contém todas as dependências Python do `requirements.txt` e o código fonte
+- **Build Automático**: Configurado via `provider.ecr.images` no `serverless.yml`
+
+### Abordagem Manual (Opcional)
+
+Se preferir fazer build e push manualmente (requer AWS CLI):
+
+**Windows (PowerShell):**
+```powershell
+.\scripts\build-and-push-image.ps1 -stage dev -region us-east-1
+```
+
+**Linux/Mac (Bash):**
+```bash
+chmod +x scripts/build-and-push-image.sh
+./scripts/build-and-push-image.sh dev us-east-1
+```
+
+Veja [docs/ECR_OPTIONS.md](docs/ECR_OPTIONS.md) para comparação das abordagens.
+
+### Atualizando a Imagem
+
+Sempre que você atualizar o código ou dependências:
+
+1. Atualize o `requirements.txt` se necessário
+2. Execute o build e push novamente: `.\scripts\build-and-push-image.ps1 -stage dev`
+3. Faça o deploy: `serverless deploy --stage dev`

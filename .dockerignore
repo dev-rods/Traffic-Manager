@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# Node modules
+node_modules
+package-lock.json
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Serverless
+.serverless
+.serverless_plugins
+
+# Tests
+tests
+*.test.py
+
+# Documentation
+docs
+README.md
+*.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+output.txt
+
+# Environment
+.env
+.env.local
+
+# AWS
+.aws-sam

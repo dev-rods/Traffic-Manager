@@ -1,3 +1,6 @@
+# Exemplo de configuração usando provider.ecr.images do Serverless Framework
+# Isso faz build e push automaticamente - só precisa do Docker, não precisa AWS CLI
+
 service: traffic-manager-infra
 
 frameworkVersion: "3"
@@ -10,16 +13,16 @@ custom:
 
 provider:
   name: aws
-  # runtime removido - usando Docker images
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-east-1'}
   
-  # Build automático de Docker image para ECR
-  # O Serverless Framework fará build e push automaticamente durante o deploy
+  # Configuração ECR para build automático
   ecr:
     images:
-      lambdaimage:
+      lambdaImage:
         path: .
+        # O Serverless Framework criará o repositório automaticamente
+  
   environment:
     STAGE: ${self:custom.stage}
     ACCOUNT_ID: ${self:custom.accountId}
@@ -53,9 +56,6 @@ stepFunctions:
     CampaignOptimizationFlow: ${file(sls/resources/stepfunctions/campaign-optimization-flow.yml)}
 
 resources:
-    # ECR Repository (comentado - Serverless Framework gerencia automaticamente via provider.ecr.images)
-    # Mantido como backup caso precise de controle manual do repositório
-    # - ${file(sls/resources/ecr/lambda-repository.yml)}
     # IAM Roles
     - ${file(sls/resources/iam/state-machine-role.yml)}
     # Tabelas DynamoDB - uma tabela por arquivo
@@ -64,8 +64,8 @@ resources:
     - ${file(sls/resources/dynamodb/campaign-metadata-table.yml)}
     - ${file(sls/resources/dynamodb/clients-table.yml)}
     - ${file(sls/resources/dynamodb/google-ads-tokens-table.yml)}
+    # NOTA: Não precisa definir ECR aqui - o Serverless Framework cria automaticamente
 
 plugins:
   - serverless-step-functions
   - serverless-iam-roles-per-function
-  
