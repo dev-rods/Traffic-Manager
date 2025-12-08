@@ -46,6 +46,7 @@ functions:
   - ${file(sls/functions/parser/interface.yml)}
   - ${file(sls/functions/googleads/interface.yml)}
   - ${file(sls/functions/form_submission/interface.yml)}
+  - ${file(sls/functions/create_client/interface.yml)}
   - ${file(sls/functions/scripts/interface.yml)}
 
 stepFunctions:

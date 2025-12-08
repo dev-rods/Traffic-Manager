@@ -297,8 +297,6 @@ def main():
             send_invitation_interactive()
         elif choice == "2":
             check_status_interactive()
-        elif choice == "3":
-            list_all_associations()
         elif choice == "4":
             cancel_invitation_interactive()
         elif choice == "5":
