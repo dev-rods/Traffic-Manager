@@ -15,6 +15,7 @@ CreateClient:
       Resource: 
         - !GetAtt ClientsTable.Arn
         - !GetAtt ExecutionHistoryTable.Arn
+        - !GetAtt GoogleAdsTokensTable.Arn
     - Effect: Allow
       Action:
         - logs:CreateLogGroup

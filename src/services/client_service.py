@@ -48,12 +48,7 @@ class ClientService:
             print(f"Erro ao buscar cliente {client_id}: {str(e)}")
             return None
     
-    def create_or_get_client(
-        self,
-        body: Dict[str, Any],
-        source: str = 'api',
-        form_data: Optional[Dict[str, Any]] = None
-    ) -> Optional[Dict[str, Any]]:
+    def create_or_get_client(self, body: Dict[str, Any], source: str = 'api', form_data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         company_name = body.get('companyName') or body.get('company_name')
         google_ads_customer_id = body.get('googleAdsCustomerId') or body.get('google_ads_customer_id')
         email = body.get('email', '')
@@ -65,7 +60,7 @@ class ClientService:
             if not google_ads_customer_id:
                 print("Google Ads Customer ID não fornecido")
                 return None
-                
+
             google_ads_customer_id = google_ads_customer_id.replace('-', '')
             client_id = self.generate_client_id(company_name)
             

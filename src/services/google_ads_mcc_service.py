@@ -68,6 +68,7 @@ class GoogleAdsMCCService:
             client_link: CustomerClientLink = client_link_operation.create
             client_link.client_customer = customer_client_link_service.customer_path(clean_customer_id)
             client_link.status = mcc_client.enums.ManagerLinkStatusEnum.PENDING.value
+            print(f"Client link: {client_link}")
             response: MutateCustomerClientLinkResponse = (
                 customer_client_link_service.mutate_customer_client_link(
                     customer_id=manager_customer_id, 
