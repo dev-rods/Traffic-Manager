@@ -41,7 +41,7 @@ def test_automated_flow():
         # 2. Testar GoogleAdsConfig Automático
         print("\n2️⃣ Testando GoogleAdsConfig...")
         config_service = GoogleAdsConfig()
-        config = config_service.get_google_ads_config(customer_id)
+        config = config_service.get_google_ads_config()
         
         print(f"   ✅ Configuração obtida: {list(config.keys())}")
         

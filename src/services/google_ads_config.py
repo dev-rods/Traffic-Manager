@@ -28,14 +28,14 @@ class GoogleAdsConfig:
         self.clients_table = self.dynamodb.Table(os.environ.get("CLIENTS_TABLE"))
         self.token_manager = GoogleAdsTokenManager()
     
-    def get_google_ads_config(self, google_ads_customer_id: Optional[str] = None) -> Dict[str, str]:
+    def get_google_ads_config(self) -> Dict[str, str]:
         config = {
             'developer_token': os.environ.get('GOOGLE_ADS_DEVELOPER_TOKEN'),
             'client_id': os.environ.get('OAUTH2_CLIENT_ID'),
             'client_secret': os.environ.get('OAUTH2_CLIENT_SECRET'),
             'refresh_token': os.environ.get('GOOGLE_ADS_REFRESH_TOKEN'),
             'use_proto_plus': True,
-            'login_customer_id': google_ads_customer_id
+            'login_customer_id': os.environ.get('MCC_CUSTOMER_ID').replace('-', '')
         }
         
         # Validar configuração OAuth2

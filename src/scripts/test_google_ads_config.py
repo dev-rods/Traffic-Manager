@@ -52,7 +52,7 @@ def test_google_ads_config():
         from services.google_ads_config import GoogleAdsConfig
         
         config_service = GoogleAdsConfig()
-        config = config_service.get_google_ads_config("1570932315")  # Customer ID de exemplo
+        config = config_service.get_google_ads_config()  # Customer ID de exemplo
         
         print("  ✅ Configuração carregada com sucesso")
         print(f"  📋 Campos configurados: {list(config.keys())}")
@@ -83,7 +83,7 @@ def test_google_ads_client():
         
         # Obter configuração
         config_service = GoogleAdsConfig()
-        config = config_service.get_google_ads_config("1570932315")
+        config = config_service.get_google_ads_config()
         
         # Tentar criar cliente fixando na versão suportada pelo ambiente
         client = GoogleAdsClient.load_from_dict(config, version="v14")

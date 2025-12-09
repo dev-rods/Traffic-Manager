@@ -33,10 +33,12 @@ class GoogleAdsMCCService:
             
             print(f"Criando cliente MCC para customer: {mcc_customer_id}")
             
-            config = self.ads_config.get_google_ads_config(mcc_customer_id)
-            
+            config = self.ads_config.get_google_ads_config()
+            print(f"Configuração do cliente MCC: {config}")
             # Criar cliente seguindo o mesmo padrão da action.py
+
             google_ads_client = GoogleAdsClient.load_from_dict(config, version="v20")
+            print(f"Cliente MCC criado com sucesso: {google_ads_client}")
             self._mcc_client_cache = google_ads_client
             
             print("Cliente MCC criado com sucesso usando GoogleAdsConfig")
