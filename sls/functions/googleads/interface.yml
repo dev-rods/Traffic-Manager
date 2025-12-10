@@ -1,13 +1,15 @@
-GoogleAdsApiClient:
+RetrieveCampaigns:
   image:
     name: lambdaimage
-    command: ["src.functions.googleads.action.handler"]
+    command: ["src.functions.googleads.retrieve_campaigns.handler"]
   memorySize: 512
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GoogleAdsApiClient-lambdaRole
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-RetrieveCampaigns-lambdaRole
   iamRoleStatements:
     - Effect: Allow
       Action:
-        - dynamodb:*
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:Query
       Resource: "*"
     - Effect: Allow
       Action:
@@ -15,3 +17,41 @@ GoogleAdsApiClient:
         - logs:CreateLogStream
         - logs:PutLogEvents
       Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: campaigns
+        method: get
+        cors: true
+    - http:
+        path: campaigns
+        method: post
+        cors: true
+
+GetCampaign:
+  image:
+    name: lambdaimage
+    command: ["src.functions.googleads.get_campaign.handler"]
+  memorySize: 512
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetCampaign-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:Query
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: campaigns/{campaignId}
+        method: get
+        cors: true
+    - http:
+        path: campaigns
+        method: get
+        cors: true
