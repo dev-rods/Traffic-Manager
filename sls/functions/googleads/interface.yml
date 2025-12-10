@@ -22,10 +22,6 @@ RetrieveCampaigns:
         path: campaigns
         method: get
         cors: true
-    - http:
-        path: campaigns
-        method: post
-        cors: true
 
 GetCampaign:
   image:
@@ -49,9 +45,5 @@ GetCampaign:
   events:
     - http:
         path: campaigns/{campaignId}
-        method: get
-        cors: true
-    - http:
-        path: campaigns
         method: get
         cors: true
