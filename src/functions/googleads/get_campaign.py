@@ -13,6 +13,9 @@ execution_history_table = dynamodb.Table(os.environ.get("EXECUTION_HISTORY_TABLE
 
 
 def handler(event, context) -> Dict[str, Any]:
+    trace_id = event.get("requestContext", {}).get("requestId", f"get-campaign-{datetime.utcnow().isoformat()}")
+    stage = "GOOGLE_ADS_GET_CAMPAIGN"
+    timestamp = datetime.utcnow().isoformat()
     try:
         print(f"Requisição recebida para buscar campanha: {json.dumps(event)}")
         body = parse_body(event)
@@ -22,14 +25,9 @@ def handler(event, context) -> Dict[str, Any]:
             print("API key inválida ou não fornecida")
             return error_response
         
-        # Extrair parâmetros do evento HTTP
         client_id, campaign_id = extract_campaign_params(event, body)
         if not client_id or not campaign_id:
-            raise ValueError("clientId e campaignId são obrigatórios")
-        
-        trace_id = event.get("requestContext", {}).get("requestId", f"get-campaign-{datetime.utcnow().isoformat()}")
-        stage = "GOOGLE_ADS_GET_CAMPAIGN"
-        timestamp = datetime.utcnow().isoformat()
+            raise ValueError("clientId e campaignId são obrigatórios")        
         
         print(f"[traceId: {trace_id}] Iniciando busca de campanha {campaign_id} do Google Ads para cliente: {client_id}")
         

@@ -44,6 +44,6 @@ GetCampaign:
       Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
-        path: campaigns/{campaignId}
+        path: campaign/
         method: get
         cors: true

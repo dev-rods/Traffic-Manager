@@ -128,6 +128,7 @@ def get_campaigns_from_google_ads(client: GoogleAdsClient, customer_id: str, tra
 
 def get_campaign_from_google_ads(client: GoogleAdsClient, customer_id: str, campaign_id: int, trace_id: str) -> Optional[Dict[str, Any]]:
     print(f"[traceId: {trace_id}] Buscando campanha {campaign_id} para customer: {customer_id}")
+    ## Campaign query builder
     ga_service = client.get_service("GoogleAdsService")
     query = f"""
         SELECT
@@ -136,9 +137,7 @@ def get_campaign_from_google_ads(client: GoogleAdsClient, customer_id: str, camp
           campaign.status,
           campaign.advertising_channel_type,
           campaign.start_date,
-          campaign.end_date,
-          campaign.bidding_strategy_type,
-          campaign.budget
+          campaign.end_date
         FROM campaign
         WHERE campaign.id = {campaign_id}"""
     
@@ -152,8 +151,6 @@ def get_campaign_from_google_ads(client: GoogleAdsClient, customer_id: str, camp
                 'advertising_channel_type': row.campaign.advertising_channel_type.name if row.campaign.advertising_channel_type else None,
                 'start_date': row.campaign.start_date if hasattr(row.campaign, 'start_date') and row.campaign.start_date else None,
                 'end_date': row.campaign.end_date if hasattr(row.campaign, 'end_date') and row.campaign.end_date else None,
-                'bidding_strategy_type': row.campaign.bidding_strategy_type.name if hasattr(row.campaign, 'bidding_strategy_type') and row.campaign.bidding_strategy_type else None,
-                'budget': row.campaign.budget if hasattr(row.campaign, 'budget') and row.campaign.budget else None
             }
             print(f"[traceId: {trace_id}] Campanha encontrada: {campaign_data['name']}")
             return campaign_data
