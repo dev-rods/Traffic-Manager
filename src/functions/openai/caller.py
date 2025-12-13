@@ -3,17 +3,16 @@ import boto3
 import os
 import logging
 from datetime import datetime
-import requests
-import time
+from src.utils.openai_utils import call_openai_api, format_prompt,calculate_cost, get_prompt_from_table
+from decimal import Decimal
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 dynamodb = boto3.resource('dynamodb')
 execution_history_table = dynamodb.Table(os.environ.get('EXECUTION_HISTORY_TABLE'))
 
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 OPENAI_MODEL = os.environ.get('OPENAI_MODEL', 'gpt-4.1')
-OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 
 def handler(event, context):
     try:
@@ -22,35 +21,69 @@ def handler(event, context):
         timestamp = datetime.utcnow().isoformat()
         run_type = event.get('runType', 'FIRST_RUN')
         logger.info(f"[traceId: {trace_id}] Iniciando chamada à OpenAI para runType: {run_type}")
-        if run_type == 'FIRST_RUN':
-            if 'templateData' not in event:
-                raise Exception("templateData é obrigatório para execução FIRST_RUN")
-            template_data = event.get('templateData')
-            template_info = event.get('templateInfo', {})
-            prompt = create_first_run_prompt(template_data, template_info)
+        
+        prompt_id = event.get('promptId')
+        if prompt_id:
+            prompt_item = get_prompt_from_table(prompt_id)
+            if not prompt_item:
+                raise Exception(f"Prompt '{prompt_id}' não encontrado na tabela")
+            
+            if not prompt_item.get('isActive', True):
+                raise Exception(f"Prompt '{prompt_id}' está inativo")
+            
+            parameters = event.get('parameters', {})
+            prompt = format_prompt(prompt_item['prompt'], parameters, strict=False)
+            system_message = prompt_item.get('systemMessage', 'Você é um especialista em marketing digital e otimização de campanhas do Google Ads. Sua tarefa é analisar dados e fornecer recomendações para melhorar o desempenho das campanhas.')
+            model = prompt_item.get('model', OPENAI_MODEL)
+            
+            temperature_value = prompt_item.get('temperature', Decimal('0.7'))
+            max_tokens_value = prompt_item.get('maxTokens', Decimal('1500'))
+            
+            temperature = float(temperature_value) if isinstance(temperature_value, Decimal) else temperature_value
+            max_tokens = int(max_tokens_value) if isinstance(max_tokens_value, Decimal) else max_tokens_value
+            
             context_data = {
-                'templateId': template_info.get('templateId', 'unknown'),
-                'templateType': template_info.get('type', 'SEARCH'),
-                'templateVersion': template_info.get('version', '1.0')
+                'promptId': prompt_id,
+                'parameters': parameters
             }
+            
+            openai_response = call_openai_api(
+                prompt=prompt,
+                system_message=system_message,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
         else:
-            if 'metrics' not in event or 'campaignStructure' not in event:
-                raise Exception("metrics e campaignStructure são obrigatórios para execução IMPROVE")
-            metrics = event.get('metrics')
-            campaign_structure = event.get('campaignStructure')
-            campaign_id = event.get('campaignId')
-            prompt = create_improve_prompt(metrics, campaign_structure, campaign_id)
-            context_data = {
-                'campaignId': campaign_id,
-                'metrics_summary': {
-                    'impressions': metrics.get('impressions'),
-                    'clicks': metrics.get('clicks'),
-                    'ctr': metrics.get('ctr'),
-                    'conversions': metrics.get('conversions'),
-                    'roas': metrics.get('roas')
+            if run_type == 'FIRST_RUN':
+                if 'templateData' not in event:
+                    raise Exception("templateData é obrigatório para execução FIRST_RUN")
+                template_data = event.get('templateData')
+                template_info = event.get('templateInfo', {})
+                prompt = create_first_run_prompt(template_data, template_info)
+                context_data = {
+                    'templateId': template_info.get('templateId', 'unknown'),
+                    'templateType': template_info.get('type', 'SEARCH'),
+                    'templateVersion': template_info.get('version', '1.0')
                 }
-            }
-        openai_response = call_openai_api(prompt, model=OPENAI_MODEL)
+            else:
+                if 'metrics' not in event or 'campaignStructure' not in event:
+                    raise Exception("metrics e campaignStructure são obrigatórios para execução IMPROVE")
+                metrics = event.get('metrics')
+                campaign_structure = event.get('campaignStructure')
+                campaign_id = event.get('campaignId')
+                prompt = create_improve_prompt(metrics, campaign_structure, campaign_id)
+                context_data = {
+                    'campaignId': campaign_id,
+                    'metrics_summary': {
+                        'impressions': metrics.get('impressions'),
+                        'clicks': metrics.get('clicks'),
+                        'ctr': metrics.get('ctr'),
+                        'conversions': metrics.get('conversions'),
+                        'roas': metrics.get('roas')
+                    }
+                }
+            openai_response = call_openai_api(prompt, model=OPENAI_MODEL)
         if 'choices' not in openai_response or not openai_response['choices']:
             raise Exception("Resposta inválida da OpenAI")
         assistant_response = openai_response['choices'][0]['message']['content']
@@ -60,7 +93,7 @@ def handler(event, context):
             'stage': stage,
             'status': 'COMPLETED',
             'timestamp': timestamp,
-            'costUSD': calculate_cost(openai_response),
+            'costUSD': calculate_cost(openai_response, default_model=OPENAI_MODEL),
             'payload': json.dumps({
                 'context': context_data,
                 'prompt': prompt,
@@ -70,7 +103,8 @@ def handler(event, context):
                     'prompt': openai_response.get('usage', {}).get('prompt_tokens', 0),
                     'completion': openai_response.get('usage', {}).get('completion_tokens', 0),
                     'total': openai_response.get('usage', {}).get('total_tokens', 0)
-                }
+                },
+                'promptId': prompt_id if prompt_id else None
             })
         }
         if 'runType' in event:
@@ -124,42 +158,6 @@ def handler(event, context):
                 logger.error(f"[traceId: {trace_id}] Erro ao registrar falha: {str(inner_e)}")
         raise Exception(f"Erro ao chamar a OpenAI: {error_msg}")
 
-def call_openai_api(prompt, model=OPENAI_MODEL):
-    headers = {
-        'Authorization': f'Bearer {OPENAI_API_KEY}',
-        'Content-Type': 'application/json'
-    }
-    payload = {
-        'model': model,
-        'messages': [
-            {
-                'role': 'system',
-                'content': 'Você é um especialista em marketing digital e otimização de campanhas do Google Ads. Sua tarefa é analisar dados e fornecer recomendações para melhorar o desempenho das campanhas.'
-            },
-            {
-                'role': 'user',
-                'content': prompt
-            }
-        ],
-        'temperature': 0.7,
-        'max_tokens': 1500
-    }
-    response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
-    print("response", response.json())
-    retry_count = 0
-    max_retries = 3
-    while retry_count < max_retries:
-        response = requests.post(OPENAI_API_URL, headers=headers, json=payload)
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 429 or response.status_code >= 500:
-            retry_count += 1
-            wait_time = 2 ** retry_count  # Exponential backoff
-            logger.warning(f"Erro na API da OpenAI (status {response.status_code}). Tentando novamente em {wait_time}s...")
-            time.sleep(wait_time)
-        else:
-            response.raise_for_status()
-    raise Exception(f"Falha ao chamar a API da OpenAI após {max_retries} tentativas. Último status: {response.status_code}")
     
 def create_first_run_prompt(template_data, template_info):
     template_id = template_info.get('templateId', 'default')
@@ -237,17 +235,3 @@ def create_improve_prompt(metrics, campaign_structure, campaign_id):
     """
     return prompt
     
-def calculate_cost(openai_response):
-    model = openai_response.get('model', OPENAI_MODEL)
-    usage = openai_response.get('usage', {})
-    prompt_tokens = usage.get('prompt_tokens', 0)
-    completion_tokens = usage.get('completion_tokens', 0)
-    prices = {
-        'gpt-4': {'prompt': 0.03, 'completion': 0.06},
-        'gpt-4-32k': {'prompt': 0.06, 'completion': 0.12},
-        'gpt-3.5-turbo': {'prompt': 0.0015, 'completion': 0.002}
-    }
-    model_prices = prices.get(model, prices['gpt-3.5-turbo'])
-    prompt_cost = (prompt_tokens / 1000) * model_prices['prompt']
-    completion_cost = (completion_tokens / 1000) * model_prices['completion']
-    return round(prompt_cost + completion_cost, 6) 

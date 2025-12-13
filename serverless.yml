@@ -35,6 +35,7 @@ provider:
     CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
     CLIENTS_TABLE: ${self:custom.resourcePrefix}-clients
     TOKENS_TABLE: ${self:custom.resourcePrefix}-google-ads-tokens
+    PROMPTS_TABLE: ${self:custom.resourcePrefix}-prompts
     BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
     BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
     BASE_ROLE_ARN: arn:aws:iam::${self:custom.awsId}:role/${self:service}-${self:custom.stage}-
@@ -49,6 +50,7 @@ functions:
   - ${file(sls/functions/form_submission/interface.yml)}
   - ${file(sls/functions/create_client/interface.yml)}
   - ${file(sls/functions/scripts/interface.yml)}
+  - ${file(sls/functions/prompts/interface.yml)}
 
 stepFunctions:
   stateMachines:
@@ -66,6 +68,7 @@ resources:
     - ${file(sls/resources/dynamodb/campaign-metadata-table.yml)}
     - ${file(sls/resources/dynamodb/clients-table.yml)}
     - ${file(sls/resources/dynamodb/google-ads-tokens-table.yml)}
+    - ${file(sls/resources/dynamodb/prompts-table.yml)}
 
 plugins:
   - serverless-step-functions
