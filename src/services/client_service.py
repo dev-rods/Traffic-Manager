@@ -5,7 +5,7 @@ import os
 import boto3
 import hashlib
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 
 
 class ClientService:
@@ -160,3 +160,25 @@ class ClientService:
         except Exception as e:
             print(f"Erro ao atualizar cliente {client_id}: {str(e)}")
             return False
+    
+    def list_clients(self, active_only: bool = False) -> Dict[str, Any]:
+        try:
+            response = self.clients_table.scan()
+            clients = response.get("Items", [])
+            
+            if active_only:
+                clients = [client for client in clients if client.get("active", False)]
+            
+            clients_safe = []
+            for client in clients:
+                client_safe = {k: v for k, v in client.items() if k != "apiKey"}
+                clients_safe.append(client_safe)
+                        
+            return {
+                "clients": clients_safe
+            }
+        except Exception as e:
+            print(f"Erro ao listar clientes: {str(e)}")
+            return {
+                "clients": []
+            }
