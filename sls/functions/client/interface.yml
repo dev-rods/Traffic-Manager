@@ -1,7 +1,7 @@
 CreateClient:
   image:
     name: lambdaimage
-    command: ["src.functions.create_client.handler.handler"]
+    command: ["src.functions.client.handler.handler"]
   memorySize: 512
   timeout: 30
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateClient-lambdaRole
