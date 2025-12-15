@@ -127,8 +127,19 @@ def get_campaigns_from_google_ads(client: GoogleAdsClient, customer_id: str, tra
 
 
 def get_campaign_from_google_ads(client: GoogleAdsClient, customer_id: str, campaign_id: int, trace_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Busca uma campanha específica com métricas de CPA e CPC
+    
+    Args:
+        client: Instância do GoogleAdsClient
+        customer_id: ID do cliente do Google Ads (sem hífens)
+        campaign_id: ID da campanha
+        trace_id: ID de rastreamento para logs
+        
+    Returns:
+        Dicionário com informações da campanha incluindo métricas de CPA e CPC
+    """
     print(f"[traceId: {trace_id}] Buscando campanha {campaign_id} para customer: {customer_id}")
-    ## Campaign query builder
     ga_service = client.get_service("GoogleAdsService")
     query = f"""
         SELECT
@@ -137,13 +148,26 @@ def get_campaign_from_google_ads(client: GoogleAdsClient, customer_id: str, camp
           campaign.status,
           campaign.advertising_channel_type,
           campaign.start_date,
-          campaign.end_date
+          campaign.end_date,
+          metrics.cost_per_conversion,
+          metrics.average_cpc
         FROM campaign
         WHERE campaign.id = {campaign_id}"""
     
     stream = ga_service.search_stream(customer_id=customer_id, query=query)
     for batch in stream:
         for row in batch.results:
+            # Converter micros para valores decimais
+            cost_per_conversion = None
+            if hasattr(row, 'metrics') and hasattr(row.metrics, 'cost_per_conversion'):
+                if row.metrics.cost_per_conversion is not None:
+                    cost_per_conversion = float(row.metrics.cost_per_conversion) / 1_000_000
+            
+            average_cpc = None
+            if hasattr(row, 'metrics') and hasattr(row.metrics, 'average_cpc'):
+                if row.metrics.average_cpc is not None:
+                    average_cpc = float(row.metrics.average_cpc) / 1_000_000
+            
             campaign_data = {
                 'id': row.campaign.id,
                 'name': row.campaign.name,
@@ -151,12 +175,69 @@ def get_campaign_from_google_ads(client: GoogleAdsClient, customer_id: str, camp
                 'advertising_channel_type': row.campaign.advertising_channel_type.name if row.campaign.advertising_channel_type else None,
                 'start_date': row.campaign.start_date if hasattr(row.campaign, 'start_date') and row.campaign.start_date else None,
                 'end_date': row.campaign.end_date if hasattr(row.campaign, 'end_date') and row.campaign.end_date else None,
+                'cpa': cost_per_conversion,
+                'cpc': average_cpc,
             }
-            print(f"[traceId: {trace_id}] Campanha encontrada: {campaign_data['name']}")
+            print(f"[traceId: {trace_id}] Campanha encontrada: {campaign_data['name']} - CPA: {cost_per_conversion}, CPC: {average_cpc}")
             return campaign_data
     
     print(f"[traceId: {trace_id}] Campanha {campaign_id} não encontrada")
     return None
+
+
+def get_ad_groups_metrics_from_google_ads(client: GoogleAdsClient, customer_id: str, campaign_id: int, trace_id: str) -> list:
+    """
+    Busca métricas de CPA e CPC de todos os grupos de anúncios de uma campanha
+    
+    Args:
+        client: Instância do GoogleAdsClient
+        customer_id: ID do cliente do Google Ads (sem hífens)
+        campaign_id: ID da campanha
+        trace_id: ID de rastreamento para logs
+        
+    Returns:
+        Lista de dicionários com informações dos grupos de anúncios incluindo métricas de CPA e CPC
+    """
+    print(f"[traceId: {trace_id}] Buscando métricas de grupos de anúncios para campanha {campaign_id}")
+    ga_service = client.get_service("GoogleAdsService")
+    query = f"""
+        SELECT
+          ad_group.id,
+          ad_group.name,
+          ad_group.status,
+          metrics.cost_per_conversion,
+          metrics.average_cpc
+        FROM ad_group
+        WHERE campaign.id = {campaign_id}
+          AND ad_group.status != 'REMOVED'
+        ORDER BY ad_group.id"""
+    
+    stream = ga_service.search_stream(customer_id=customer_id, query=query)
+    ad_groups = []
+    for batch in stream:
+        for row in batch.results:
+            # Converter micros para valores decimais
+            cost_per_conversion = None
+            if hasattr(row, 'metrics') and hasattr(row.metrics, 'cost_per_conversion'):
+                if row.metrics.cost_per_conversion is not None:
+                    cost_per_conversion = float(row.metrics.cost_per_conversion) / 1_000_000
+            
+            average_cpc = None
+            if hasattr(row, 'metrics') and hasattr(row.metrics, 'average_cpc'):
+                if row.metrics.average_cpc is not None:
+                    average_cpc = float(row.metrics.average_cpc) / 1_000_000
+            
+            ad_group_data = {
+                'id': row.ad_group.id,
+                'name': row.ad_group.name,
+                'status': row.ad_group.status.name if row.ad_group.status else None,
+                'cpa': cost_per_conversion,
+                'cpc': average_cpc,
+            }
+            ad_groups.append(ad_group_data)
+    
+    print(f"[traceId: {trace_id}] Total de grupos de anúncios encontrados: {len(ad_groups)}")
+    return ad_groups
 
 
 def extract_client_id(event: Dict[str, Any], body: Optional[Dict[str, Any]] = None) -> Optional[str]:

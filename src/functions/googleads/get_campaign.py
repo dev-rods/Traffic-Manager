@@ -4,7 +4,7 @@ import boto3
 from datetime import datetime
 from typing import Dict, Any, Optional
 from google.ads.googleads.errors import GoogleAdsException
-from src.functions.googleads.utils import validate_client, create_google_ads_client, get_campaign_from_google_ads, extract_client_id
+from src.functions.googleads.utils import validate_client, create_google_ads_client, get_campaign_from_google_ads, get_ad_groups_metrics_from_google_ads, extract_client_id
 from src.utils.http import require_api_key,parse_body, extract_path_param, extract_query_param, http_response
 
 
@@ -46,11 +46,17 @@ def handler(event, context) -> Dict[str, Any]:
         # Criar cliente do Google Ads
         googleads_client = create_google_ads_client()
         
-        # Buscar campanha específica
+        # Buscar campanha específica com métricas
         campaign = get_campaign_from_google_ads(googleads_client, google_ads_customer_id, campaign_id_int, trace_id)
         
         if not campaign:
             raise ValueError(f"Campanha {campaign_id} não encontrada para o cliente {client_id}")
+        
+        # Buscar métricas dos grupos de anúncios
+        ad_groups_metrics = get_ad_groups_metrics_from_google_ads(googleads_client, google_ads_customer_id, campaign_id_int, trace_id)
+        
+        # Adicionar grupos de anúncios com métricas à resposta da campanha
+        campaign['ad_groups'] = ad_groups_metrics
         
         # Registrar execução no histórico
         execution_record = {
@@ -68,7 +74,7 @@ def handler(event, context) -> Dict[str, Any]:
         }
         execution_history_table.put_item(Item=execution_record)
         
-        print(f"[traceId: {trace_id}] Campanha recuperada com sucesso: {campaign['name']}")
+        print(f"[traceId: {trace_id}] Campanha recuperada com sucesso: {campaign['name']} - {len(ad_groups_metrics)} grupos de anúncios")
         
         # Retornar resposta HTTP
         return http_response(200, {
