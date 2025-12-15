@@ -62,3 +62,36 @@ MccStatusChecker:
         enabled: true
         input:
           source: "scheduled_check"
+
+DailyOptimizer:
+  image:
+    name: lambdaimage
+    command: ["src.functions.campaign.daily_optimizer.handler"]
+  memorySize: 1024
+  timeout: 900
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DailyOptimizer-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - schedule:
+        # 6h UTC-3 = 9h UTC
+        rate: cron(0 9 * * ? *)
+        enabled: true
+        input:
+          source: "daily_optimization"
+    - http:
+        path: optimizer
+        method: post
+        cors: true

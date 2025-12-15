@@ -8,6 +8,70 @@ from datetime import datetime
 from typing import Dict, Optional, Any, List
 
 
+DEFAULT_OPTIMIZATION_CONFIG = {
+    # Valores padrão baseados no racional fornecido
+    # Ticket médio (R$)
+    "average_ticket": 270.0,
+    # LTV em meses
+    "ltv_months": 6.0,
+    # Margem líquida (0–1)
+    "net_margin": 0.60,
+    # Taxa de conversão de lead em venda (0–1)
+    "lead_to_sale_conversion_rate": 0.20,
+    # Fator de segurança (0–1)
+    "safety_factor": 0.70,
+}
+
+
+def build_optimization_config_from_payload(payload: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Constrói um bloco de configuração de otimização a partir de um payload
+    (body da API ou formData), aplicando defaults quando necessário.
+    """
+    def _get_num(keys: List[str], default: float) -> float:
+        for key in keys:
+            if key in payload and payload[key] not in (None, ""):
+                try:
+                    return float(payload[key])
+                except (TypeError, ValueError):
+                    continue
+        return default
+
+    cfg = {
+        "average_ticket": _get_num(
+            ["average_ticket", "averageTicket", "ticket_medio"], DEFAULT_OPTIMIZATION_CONFIG["average_ticket"]
+        ),
+        "ltv_months": _get_num(
+            ["ltv_months", "ltvMonths", "ltv"], DEFAULT_OPTIMIZATION_CONFIG["ltv_months"]
+        ),
+        "net_margin": _get_num(
+            ["net_margin", "netMargin", "margem_liquida"], DEFAULT_OPTIMIZATION_CONFIG["net_margin"]
+        ),
+        "lead_to_sale_conversion_rate": _get_num(
+            [
+                "lead_to_sale_conversion_rate",
+                "leadToSaleConversionRate",
+                "taxa_conversao_lead",
+            ],
+            DEFAULT_OPTIMIZATION_CONFIG["lead_to_sale_conversion_rate"],
+        ),
+        "safety_factor": _get_num(
+            ["safety_factor", "safetyFactor", "fator_seguranca"],
+            DEFAULT_OPTIMIZATION_CONFIG["safety_factor"],
+        ),
+    }
+
+    # Receita líquida = Ticket médio x LTV x Margem líquida
+    revenue = cfg["average_ticket"] * cfg["ltv_months"] * cfg["net_margin"]
+    # CPA máximo = Receita líquida x Taxa de conversão lead→venda
+    cpa_max = revenue * cfg["lead_to_sale_conversion_rate"]
+    # CPA saudável = CPA máximo x Fator de segurança
+    healthy_cpa = cpa_max * cfg["safety_factor"]
+
+    cfg["healthy_cpa"] = healthy_cpa
+    return cfg
+
+
 class ClientService:
     """Serviço para criar e gerenciar clientes"""
     
@@ -110,6 +174,15 @@ class ClientService:
                     'brand_perception': form_data.get('brand_perception', ''),
                     'customer_behavior': form_data.get('customer_behavior', '')
                 }
+
+                # Se houver dados econômicos no formulário, usar como base
+                optimization_source = {**body, **form_data}
+            else:
+                optimization_source = body
+
+            # Bloco de configuração econômica por cliente para otimizações
+            optimization_config = build_optimization_config_from_payload(optimization_source or {})
+            client_data["optimizationConfig"] = optimization_config
             
             self.clients_table.put_item(Item=client_data)
             print(f"Novo cliente criado: {client_id} ({company_name}) com Google Ads ID: {google_ads_customer_id}")
@@ -120,21 +193,7 @@ class ClientService:
             print(f"Erro ao criar/obter cliente: {str(e)}")
             return None
     
-    def update_client(
-        self,
-        client_id: str,
-        updates: Dict[str, Any]
-    ) -> bool:
-        """
-        Atualiza dados de um cliente
-        
-        Args:
-            client_id (str): ID do cliente
-            updates (dict): Dicionário com os campos a atualizar
-            
-        Returns:
-            bool: True se atualizado com sucesso, False caso contrário
-        """
+    def update_client(self, client_id: str, updates: Dict[str, Any]) -> bool:
         try:
             update_expression_parts = []
             expression_attribute_values = {}
