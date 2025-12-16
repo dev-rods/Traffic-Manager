@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from google.ads.googleads.errors import GoogleAdsException
 from src.functions.googleads.utils import validate_client, create_google_ads_client, get_campaign_from_google_ads, get_ad_groups_metrics_from_google_ads, extract_client_id
-from src.utils.http import require_api_key,parse_body, extract_path_param, extract_query_param, http_response
+from src.utils.http import require_api_key, parse_body, extract_path_param, extract_query_param, http_response
 
 
 dynamodb = boto3.resource("dynamodb")

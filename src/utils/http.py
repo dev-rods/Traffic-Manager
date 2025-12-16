@@ -4,6 +4,7 @@ Utilitários para processamento de eventos HTTP e respostas padronizadas
 import json
 from typing import Dict, Any, Optional, Tuple
 from src.utils.auth import ClientAuth
+from src.utils.decimal_utils import convert_decimal_to_json_serializable
 
 
 def extract_api_key(event: Dict[str, Any], body: Optional[Dict[str, Any]] = None) -> Optional[str]:
@@ -168,12 +169,15 @@ def http_response(status_code: int, body: Any, headers: Optional[Dict[str, str]]
         default_headers.update(headers)
     
     # Converter body para JSON se necessário
+    # Converter Decimal para float antes de serializar
     if isinstance(body, dict):
-        body_str = json.dumps(body)
+        body_serializable = convert_decimal_to_json_serializable(body)
+        body_str = json.dumps(body_serializable)
     elif isinstance(body, str):
         body_str = json.dumps({"message": body})
     else:
-        body_str = json.dumps({"message": str(body)})
+        body_serializable = convert_decimal_to_json_serializable(body)
+        body_str = json.dumps({"message": str(body_serializable)})
     
     return {
         'statusCode': status_code,

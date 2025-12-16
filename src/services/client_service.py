@@ -5,34 +5,38 @@ import os
 import boto3
 import hashlib
 from datetime import datetime
+from decimal import Decimal
 from typing import Dict, Optional, Any, List
+
+from src.utils.decimal_utils import convert_to_decimal, convert_dict_to_decimal
 
 
 DEFAULT_OPTIMIZATION_CONFIG = {
     # Valores padrão baseados no racional fornecido
     # Ticket médio (R$)
-    "average_ticket": 270.0,
+    "average_ticket": Decimal("270.0"),
     # LTV em meses
-    "ltv_months": 6.0,
+    "ltv_months": Decimal("6.0"),
     # Margem líquida (0–1)
-    "net_margin": 0.60,
+    "net_margin": Decimal("0.60"),
     # Taxa de conversão de lead em venda (0–1)
-    "lead_to_sale_conversion_rate": 0.20,
+    "lead_to_sale_conversion_rate": Decimal("0.20"),
     # Fator de segurança (0–1)
-    "safety_factor": 0.70,
+    "safety_factor": Decimal("0.70"),
 }
 
 
-def build_optimization_config_from_payload(payload: Dict[str, Any]) -> Dict[str, float]:
+def build_optimization_config_from_payload(payload: Dict[str, Any]) -> Dict[str, Decimal]:
     """
     Constrói um bloco de configuração de otimização a partir de um payload
     (body da API ou formData), aplicando defaults quando necessário.
+    Retorna valores como Decimal para compatibilidade com DynamoDB.
     """
-    def _get_num(keys: List[str], default: float) -> float:
+    def _get_num(keys: List[str], default: Decimal) -> Decimal:
         for key in keys:
             if key in payload and payload[key] not in (None, ""):
                 try:
-                    return float(payload[key])
+                    return convert_to_decimal(payload[key])
                 except (TypeError, ValueError):
                     continue
         return default
@@ -198,7 +202,9 @@ class ClientService:
             update_expression_parts = []
             expression_attribute_values = {}
             
-            for key, value in updates.items():
+            updates_converted = convert_dict_to_decimal(updates)
+            
+            for key, value in updates_converted.items():
                 update_expression_parts.append(f"{key} = :{key}")
                 expression_attribute_values[f":{key}"] = value
             

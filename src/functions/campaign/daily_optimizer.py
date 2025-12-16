@@ -176,7 +176,10 @@ def handler(event, context):
 
         try:
             optimization_cfg = _ensure_optimization_config(client)
-            healthy_cpa = optimization_cfg.get("healthy_cpa", 0)
+            healthy_cpa_value = optimization_cfg.get("healthy_cpa", 0)
+            # Converter Decimal para float para cálculos
+            from decimal import Decimal
+            healthy_cpa = float(healthy_cpa_value) if isinstance(healthy_cpa_value, Decimal) else healthy_cpa_value
 
             try:
                 client_info = validate_client(client_id)

@@ -43,7 +43,6 @@ provider:
 functions:
   - ${file(sls/functions/campaign/interface.yml)}
   - ${file(sls/functions/templates/interface.yml)}
-  - ${file(sls/functions/metrics/interface.yml)}
   - ${file(sls/functions/openai/interface.yml)}
   - ${file(sls/functions/parser/interface.yml)}
   - ${file(sls/functions/googleads/interface.yml)}

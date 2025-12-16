@@ -53,3 +53,29 @@ ListClients:
         path: clients
         method: get
         cors: true
+
+EditClient:
+  image:
+    name: lambdaimage
+    command: ["src.functions.client.edit.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-EditClient-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:UpdateItem
+      Resource: 
+        - !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clients/{clientId}
+        method: patch
+        cors: true
