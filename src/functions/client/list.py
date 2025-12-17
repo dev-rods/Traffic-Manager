@@ -1,6 +1,7 @@
 import json
 from src.utils.auth import ClientAuth
 from src.services.client_service import ClientService
+from src.utils.decimal_utils import convert_decimal_to_json_serializable
 
 
 def handler(event, context):
@@ -35,6 +36,9 @@ def handler(event, context):
         # Listar clientes
         client_service = ClientService()
         result = client_service.list_clients(active_only=active_only)
+        
+        # Converter valores Decimal para float (serializável em JSON)
+        result = convert_decimal_to_json_serializable(result)
         
         return response(200, result)
         
