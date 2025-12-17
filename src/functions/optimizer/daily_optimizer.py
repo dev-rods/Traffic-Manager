@@ -1,21 +1,15 @@
 import json
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, Any, List, Optional
-
+from decimal import Decimal
 import boto3
-
 from src.services.client_service import ClientService, build_optimization_config_from_payload
 from src.functions.googleads.get_campaign import extract_campaign_params
-from src.functions.googleads.utils import (
-    validate_client,
-    create_google_ads_client,
-    get_campaigns_from_google_ads,
-    get_campaign_from_google_ads,
-    get_ad_groups_metrics_from_google_ads,
-)
+from src.functions.googleads.utils import validate_client, create_google_ads_client, get_campaigns_from_google_ads, get_campaign_from_google_ads, get_ad_groups_metrics_from_google_ads
 from src.utils.http import require_api_key, parse_body, http_response
+from src.utils.decimal_utils import convert_dict_to_decimal, convert_to_decimal
 
 
 logger = logging.getLogger()
@@ -35,10 +29,7 @@ def _get_clients_to_optimize() -> List[Dict[str, Any]]:
     clients = result.get("clients", [])
 
     # Por enquanto, qualquer cliente ativo com Google Ads configurado
-    eligible = [
-        c for c in clients
-        if c.get("googleAdsCustomerId")
-    ]
+    eligible = [ c for c in clients if c.get("googleAdsCustomerId") ]
 
     logger.info(f"Clientes elegíveis para otimização: {len(eligible)}")
     return eligible
@@ -101,15 +92,21 @@ def _store_recommendation(
     healthy_cpa = optimization_config.get("healthy_cpa")
     current_cpa = metrics.get("cost_per_conversion")
 
+    # Converter valores numéricos para Decimal (requisito do DynamoDB)
+    optimization_config_decimal = convert_dict_to_decimal(optimization_config)
+    metrics_decimal = convert_dict_to_decimal(metrics)
+    healthy_cpa_decimal = convert_to_decimal(healthy_cpa) if healthy_cpa is not None else None
+    current_cpa_decimal = convert_to_decimal(current_cpa) if current_cpa is not None else None
+
     item = {
         "googleCampaignId": str(campaign_id),
         "clientId": client_id,
         "campaignName": campaign_name,
         "createdAt": timestamp,
-        "optimizationConfig": optimization_config,
-        "metrics": metrics,
-        "healthyCpa": healthy_cpa,
-        "currentCpa": current_cpa,
+        "optimizationConfig": optimization_config_decimal,
+        "metrics": metrics_decimal,
+        "healthyCpa": healthy_cpa_decimal,
+        "currentCpa": current_cpa_decimal,
         "action": action,
         "period": {
             "days": 30,
@@ -178,7 +175,6 @@ def handler(event, context):
             optimization_cfg = _ensure_optimization_config(client)
             healthy_cpa_value = optimization_cfg.get("healthy_cpa", 0)
             # Converter Decimal para float para cálculos
-            from decimal import Decimal
             healthy_cpa = float(healthy_cpa_value) if isinstance(healthy_cpa_value, Decimal) else healthy_cpa_value
 
             try:

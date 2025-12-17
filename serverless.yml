@@ -50,6 +50,7 @@ functions:
   - ${file(sls/functions/client/interface.yml)}
   - ${file(sls/functions/scripts/interface.yml)}
   - ${file(sls/functions/prompts/interface.yml)}
+  - ${file(sls/functions/optimizer/interface.yml)}
 
 stepFunctions:
   stateMachines:
