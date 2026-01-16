@@ -1,0 +1,71 @@
+# Exemplo de configuração usando provider.ecr.images do Serverless Framework
+# Isso faz build e push automaticamente - só precisa do Docker, não precisa AWS CLI
+
+service: traffic-manager-infra
+
+frameworkVersion: "3"
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  resourcePrefix: ${self:service}-${self:custom.stage}
+  accountId: "796000356030"
+  awsId: "796000356030"
+
+provider:
+  name: aws
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  
+  # Configuração ECR para build automático
+  ecr:
+    images:
+      lambdaImage:
+        path: .
+        # O Serverless Framework criará o repositório automaticamente
+  
+  environment:
+    STAGE: ${self:custom.stage}
+    ACCOUNT_ID: ${self:custom.accountId}
+    OPENAI_API_KEY: ${ssm:/${self:custom.stage}/OPENAI_API_KEY}
+    GOOGLE_ADS_DEVELOPER_TOKEN: ${ssm:/${self:custom.stage}/MCC_DEVELOPER_TOKEN}
+    OAUTH2_CLIENT_ID: ${ssm:/${self:custom.stage}/OAUTH2_CLIENT_ID}
+    OAUTH2_CLIENT_SECRET: ${ssm:/${self:custom.stage}/OAUTH2_CLIENT_SECRET}
+    MCC_CUSTOMER_ID: ${ssm:/${self:custom.stage}/MCC_ACCOUNT_ID}
+    FORM_SUBMISSION_X_API_KEY: ${ssm:/${self:custom.stage}/FORM_SUBMISSION_X_API_KEY}
+    CAMPAIGN_TEMPLATES_TABLE: ${self:custom.resourcePrefix}-campaign-templates
+    EXECUTION_HISTORY_TABLE: ${self:custom.resourcePrefix}-execution-history
+    CAMPAIGN_METADATA_TABLE: ${self:custom.resourcePrefix}-campaign-metadata
+    CLIENTS_TABLE: ${self:custom.resourcePrefix}-clients
+    TOKENS_TABLE: ${self:custom.resourcePrefix}-google-ads-tokens
+    BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
+    BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
+    BASE_ROLE_ARN: arn:aws:iam::${self:custom.awsId}:role/${self:service}-${self:custom.stage}-
+
+functions:
+  - ${file(sls/functions/campaign/interface.yml)}
+  - ${file(sls/functions/templates/interface.yml)}
+  - ${file(sls/functions/metrics/interface.yml)}
+  - ${file(sls/functions/openai/interface.yml)}
+  - ${file(sls/functions/parser/interface.yml)}
+  - ${file(sls/functions/googleads/interface.yml)}
+  - ${file(sls/functions/form_submission/interface.yml)}
+  - ${file(sls/functions/scripts/interface.yml)}
+
+stepFunctions:
+  stateMachines:
+    CampaignOptimizationFlow: ${file(sls/resources/stepfunctions/campaign-optimization-flow.yml)}
+
+resources:
+    # IAM Roles
+    - ${file(sls/resources/iam/state-machine-role.yml)}
+    # Tabelas DynamoDB - uma tabela por arquivo
+    - ${file(sls/resources/dynamodb/campaign-templates-table.yml)}
+    - ${file(sls/resources/dynamodb/execution-history-table.yml)}
+    - ${file(sls/resources/dynamodb/campaign-metadata-table.yml)}
+    - ${file(sls/resources/dynamodb/clients-table.yml)}
+    - ${file(sls/resources/dynamodb/google-ads-tokens-table.yml)}
+    # NOTA: Não precisa definir ECR aqui - o Serverless Framework cria automaticamente
+
+plugins:
+  - serverless-step-functions
+  - serverless-iam-roles-per-function

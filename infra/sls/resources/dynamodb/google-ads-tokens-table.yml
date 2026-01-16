@@ -1,0 +1,23 @@
+# Schema da Tabela GoogleAdsTokens:
+# - customer_id (String): Identificador único do cliente no Google Ads (Chave Primária)
+# - token_type (String): Tipo de token (Chave Secundária)
+# - token (String): Token do Google Ads
+# - createdAt (String): Data/hora de criação do registro
+# - expiresAt (String): Data/hora de expiração do token
+
+Resources:
+  GoogleAdsTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-google-ads-tokens
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: customer_id
+          AttributeType: S
+        - AttributeName: token_type
+          AttributeType: S
+      KeySchema:
+        - AttributeName: customer_id
+          KeyType: HASH
+        - AttributeName: token_type
+          KeyType: RANGE

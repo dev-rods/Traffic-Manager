@@ -1,0 +1,32 @@
+ScriptManager:
+  image:
+    name: lambdaimage
+    command: ["src.functions.scripts.manager.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ScriptManager-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:Query
+        - dynamodb:Scan
+      Resource:
+        - !GetAtt ClientsTable.Arn
+        - !Sub "${ClientsTable.Arn}/index/*"
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+        - ssm:PutParameter
+        - ssm:DeleteParameter
+      Resource: 
+        - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/traffic-manager/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*" 

@@ -1,0 +1,15 @@
+{
+    "command": "create_client",
+    "params": {
+        "name": "Empresa Rods",
+        "email": "rodsebaiano@gmail.com",
+        "google_ads_config": {
+            "developerId": "1234567890",
+            "clientId": "123456789.apps.googleusercontent.com",
+            "clientSecret": "GOCSPX-exemplo_client_secret_aqui",
+            "refreshToken": "1//exemplo_refresh_token_aqui",
+            "developerToken": "exemplo_developer_token_aqui"
+        },
+        "validate_google_ads": false
+    }
+} 

@@ -1,0 +1,31 @@
+# Schema da Tabela Clients:
+# - clientId (String): Identificador único do cliente (Chave Primária)
+# - isActive (Boolean): Indica se o cliente está ativo
+# - customerId (String): ID do cliente no sistema
+# - createdAt (String): Data/hora de criação do registro
+# - email (String): Email do cliente
+# - googleAdsCustomerId (String): ID do cliente no Google Ads
+# - name (String): Nome do cliente
+# - apiKey (String): Chave de API para autenticação (Índice Global Secundário)
+
+Resources:
+  ClientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-clients
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: clientId
+          AttributeType: S
+        - AttributeName: apiKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: clientId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: apiKey-index
+          KeySchema:
+            - AttributeName: apiKey
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL 

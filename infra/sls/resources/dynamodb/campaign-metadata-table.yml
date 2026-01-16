@@ -1,0 +1,13 @@
+# Tabela DynamoDB para armazenar metadados das campanhas
+Resources:
+  CampaignMetadataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-dynamodb-campaign-metadata
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: googleCampaignId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: googleCampaignId
+          KeyType: HASH

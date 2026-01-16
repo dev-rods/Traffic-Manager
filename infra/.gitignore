@@ -1,0 +1,48 @@
+# Distribution / packaging
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+node_modules/
+# Serverless directories
+.serverless
+*.pycache*
+*.__pycache__*
+
+*.pyc
+
+
+# Environment variables and secrets
+.env
+.env.local
+.env.prod
+
+# AWS credentials
+.aws/
+
+# Logs
+*.log
+logs/
+
+# Google Ads sensitive files
+*service_account*.json
+*google_ads_service_account_config*.txt
+google-ads.yaml
+*auth_codes*.txt
+*tokens*.json
+
+# Mac/Windows
+.DS_Store
+Thumbs.db

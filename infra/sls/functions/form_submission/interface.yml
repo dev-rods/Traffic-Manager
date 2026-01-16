@@ -1,0 +1,30 @@
+FormSubmissionHandler:
+  image:
+    name: lambdaimage
+    command: ["src.functions.form_submission.handler.handler"]
+  memorySize: 512
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-FormSubmissionHandler-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - states:StartExecution
+      Resource: "arn:aws:states:${self:provider.region}:${self:custom.awsId}:stateMachine:${self:provider.environment.BASE_STATE_MACHINE_NAME}*"
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:Query
+      Resource: 
+        - !GetAtt ClientsTable.Arn
+        - !GetAtt ExecutionHistoryTable.Arn
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: webhook/campaign
+        method: post
+        cors: true 

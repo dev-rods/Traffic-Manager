@@ -1,0 +1,17 @@
+GoogleAdsApiClient:
+  image:
+    name: lambdaimage
+    command: ["src.functions.googleads.action.handler"]
+  memorySize: 512
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GoogleAdsApiClient-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:*
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
