@@ -2,19 +2,30 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Workflow de Desenvolvimento (Research → Spec → Code)
+## Workflow de Desenvolvimento (Research → Spec → Code → Test → Document)
 
-Siga este processo em **3 etapas** para novas features, refatorações e remoção de código.
+Siga este processo em **5 etapas** para novas features, refatorações e remoção de código.
 
 | Fase | Input do usuário | Ação do Claude | Output |
 |------|------------------|----------------|--------|
 | **1. Pesquisa** | "Preciso implementar X" / "Refatorar Y" / "Eliminar código Z" | Pesquisar codebase (`infra/src/`, `infra/sls/`, `infra/docs/`), padrões em `CLAUDE.md`, dependências | `docs/work/prd/XXX-nome.md` (PRD) |
 | **2. Spec** | "Leia `docs/work/prd/XXX-nome.md` e gere uma spec" | Ler o PRD e detalhar arquivos a criar/modificar/remover, alterações por arquivo, ordem de implementação | `docs/work/spec/XXX-nome.md` (Spec) |
 | **3. Code** | "Implemente `docs/work/spec/XXX-nome.md`" | Implementar seguindo a Spec; respeitar `CLAUDE.md` (logging, naming, secrets) | Código no repositório |
+| **4. Test** | "Teste os endpoints" | Executar testes manuais via curl (usando API_KEY do `.env`), verificar respostas | Testes passando |
+| **5. Document** | "Crie a documentação" | Criar docs de integração e Postman request list | `tests/integration/{feature}.md`, `tests/postman/{feature}.postman_requests.json` |
 
 - **Artefatos:** PRDs em `docs/work/prd/`, Specs em `docs/work/spec/`. Templates em `docs/work/_templates/`.
 - **Nomes:** use ID único por task (ex: `001-refator-auth`, `002-remove-legacy`). Mesmo ID no PRD e na Spec.
 - **Documentação pós-task:** atualizar o PRD com Status (Spec gerada, data de implementação) e registrar em `TASKS_LOG.md`.
+
+### Pós-implementação (obrigatório)
+
+Após implementar o código, sempre:
+
+1. **Testar endpoints** - Executar curl commands usando `API_KEY` do arquivo `.env`
+2. **Criar mocks** - Adicionar arquivos JSON em `tests/mocks/{domain}/` para testes locais
+3. **Documentar testes** - Criar `tests/integration/{feature}.md` com casos de teste
+4. **Criar Postman requests** - Criar `tests/postman/{feature}.postman_requests.json` seguindo o padrão em `tests/postman/CLAUDE.md`
 
 Detalhes: `docs/work/README.md`.
 

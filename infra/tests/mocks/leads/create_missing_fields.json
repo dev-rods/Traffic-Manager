@@ -1,0 +1,13 @@
+{
+  "httpMethod": "POST",
+  "path": "/leads",
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "body": "{\"name\": \"Test Lead\"}",
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

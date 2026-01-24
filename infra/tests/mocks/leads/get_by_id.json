@@ -1,0 +1,15 @@
+{
+  "httpMethod": "GET",
+  "path": "/leads/6140ecf2-2ef1-49e0-884e-2762f6c019da",
+  "pathParameters": {
+    "leadId": "6140ecf2-2ef1-49e0-884e-2762f6c019da"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

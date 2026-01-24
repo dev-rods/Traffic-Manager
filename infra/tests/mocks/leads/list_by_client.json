@@ -1,0 +1,15 @@
+{
+  "httpMethod": "GET",
+  "path": "/leads",
+  "queryStringParameters": {
+    "clientId": "empresarodsteste-bd5f23"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

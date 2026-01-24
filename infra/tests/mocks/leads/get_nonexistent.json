@@ -1,0 +1,15 @@
+{
+  "httpMethod": "GET",
+  "path": "/leads/non-existent-id",
+  "pathParameters": {
+    "leadId": "non-existent-id"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

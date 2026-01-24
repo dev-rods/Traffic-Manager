@@ -1,31 +1,27 @@
-# CLAUDE.md - Postman Collection Standards
+# CLAUDE.md - Postman Request List Standards
 
-This file provides guidance for creating and maintaining Postman collections for the Traffic Manager API.
+This file provides guidance for creating and maintaining Postman request lists for the Traffic Manager API.
 
-## When to Create Postman Collections
+## Important: Request Lists, Not Collections
 
-Create or update Postman collections after:
+We create **request lists** that can be imported into an existing Postman collection, NOT standalone collections. This allows us to maintain a single organized collection with all Traffic Manager endpoints.
+
+## When to Create Postman Request Lists
+
+Create or update request lists after:
 1. Implementing new API endpoints
 2. Completing integration testing
 3. Changing endpoint contracts (request/response formats)
 
-## Collection Structure
+## File Structure
 
-Each feature should have its own collection file: `{feature}.postman_collection.json`
+Each feature should have its own request list file: `{feature}.postman_requests.json`
 
 ### Required Elements
 
 ```
-Collection
-├── info
-│   ├── name: "Traffic Manager - {Feature}"
-│   ├── description: Overview of endpoints
-│   └── schema: Postman 2.1.0
-├── variable (collection variables)
-│   ├── baseUrl
-│   ├── apiKey
-│   └── {feature-specific variables}
-└── item (requests)
+Request List (item array)
+└── item[] (array of requests)
     └── {Request}
         ├── name
         ├── request (method, headers, body, url)
@@ -33,20 +29,34 @@ Collection
         └── response (example responses)
 ```
 
-## Collection Variables
+## Base URL Format
 
-Always define these base variables:
+**IMPORTANT:** All URLs must use the format `{{BASE_URL}}/{{ENVIRONMENT}}/endpoint`
+
+- `{{BASE_URL}}`: The API Gateway base URL (e.g., `https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com`)
+- `{{ENVIRONMENT}}`: The deployment stage (e.g., `dev`, `prod`)
+
+These variables are defined at the collection level, not in each request list.
+
+## Collection Variables (defined at collection level)
+
+The main collection defines these variables:
 
 ```json
 {
   "variable": [
     {
-      "key": "baseUrl",
-      "value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com/dev",
+      "key": "BASE_URL",
+      "value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com",
       "type": "string"
     },
     {
-      "key": "apiKey",
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
       "value": "YOUR_API_KEY_HERE",
       "type": "string"
     }
@@ -54,9 +64,33 @@ Always define these base variables:
 }
 ```
 
-Add feature-specific variables as needed (clientId, campaignId, etc.).
+Feature-specific variables (clientId, leadId, etc.) should also be added to the main collection.
 
 ## Request Structure
+
+### URL Format
+
+All URLs must follow this pattern:
+```json
+{
+  "url": {
+    "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/endpoint",
+    "host": ["{{BASE_URL}}"],
+    "path": ["{{ENVIRONMENT}}", "endpoint"]
+  }
+}
+```
+
+For endpoints with path parameters:
+```json
+{
+  "url": {
+    "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/leads/{{leadId}}",
+    "host": ["{{BASE_URL}}"],
+    "path": ["{{ENVIRONMENT}}", "leads", "{{leadId}}"]
+  }
+}
+```
 
 ### Headers
 
@@ -66,7 +100,7 @@ All authenticated requests must include:
   "header": [
     {
       "key": "x-api-key",
-      "value": "{{apiKey}}",
+      "value": "{{API_KEY}}",
       "type": "text"
     },
     {
@@ -115,10 +149,9 @@ Always include example responses for:
 
 | Element | Convention | Example |
 |---------|------------|---------|
-| Collection file | `{feature}.postman_collection.json` | `recommendations.postman_collection.json` |
-| Collection name | `Traffic Manager - {Feature}` | `Traffic Manager - Recommendations` |
-| Request name | Action + Resource | `List Recommendations`, `Apply Recommendation` |
-| Test case requests | Action + (Error Case) | `Apply Recommendation (Not Found)` |
+| Request list file | `{feature}.postman_requests.json` | `leads.postman_requests.json` |
+| Request name | Action + Resource | `List Leads`, `Create Lead` |
+| Test case requests | Action + (Error Case) | `Create Lead (Missing Fields)` |
 
 ## Request Organization
 
@@ -135,81 +168,137 @@ Organize requests in logical order:
    - Run integration tests (see `tests/integration/{feature}.md`)
    - Document all test cases
 
-2. **Create Postman collection:**
+2. **Create Postman request list:**
    ```bash
-   # Create collection file
-   tests/postman/{feature}.postman_collection.json
+   # Create request list file
+   tests/postman/{feature}.postman_requests.json
    ```
 
-3. **Include in collection:**
+3. **Include in request list:**
    - All CRUD operations
    - Query parameter variations
    - Error cases (validation, not found, conflicts)
    - Example responses from actual tests
 
-4. **Test the collection:**
-   - Import into Postman
-   - Run collection runner
+4. **Import into Postman:**
+   - Open the main Traffic Manager collection
+   - Right-click and select "Import"
+   - Select the `.postman_requests.json` file
+   - Requests will be added to the collection
+
+5. **Test the requests:**
+   - Run each request manually or use collection runner
    - Verify all tests pass
 
-5. **Commit with feature:**
+6. **Commit with feature:**
    ```bash
-   git add tests/postman/{feature}.postman_collection.json
+   git add tests/postman/{feature}.postman_requests.json
    ```
 
-## Importing Collections
+## Importing Request Lists
 
-To import into Postman:
+To import requests into the main collection:
 1. Open Postman
-2. Click "Import" button
-3. Select the `.postman_collection.json` file
-4. Update `apiKey` variable with your actual API key
+2. Open the "Traffic Manager" collection
+3. Click "Import" button
+4. Select the `.postman_requests.json` file
+5. Requests will be added to the collection
 
-## Environment Variables
+## Environment Setup
 
-For team sharing, create a separate environment file:
+The main collection uses these variables (set at collection level):
 
-```json
-{
-  "name": "Traffic Manager - Dev",
-  "values": [
-    {
-      "key": "baseUrl",
-      "value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com/dev",
-      "enabled": true
-    },
-    {
-      "key": "apiKey",
-      "value": "",
-      "enabled": true,
-      "type": "secret"
-    }
-  ]
-}
-```
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `BASE_URL` | API Gateway URL (without stage) | `https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com` |
+| `ENVIRONMENT` | Deployment stage | `dev` or `prod` |
+| `API_KEY` | Your API key | (from .env file) |
 
-## Example Collection Template
+To switch environments, simply change the `ENVIRONMENT` variable value.
+
+## Example Request List Template
 
 ```json
 {
-  "info": {
-    "_postman_id": "{feature}-collection",
-    "name": "Traffic Manager - {Feature}",
-    "description": "Description of the feature endpoints.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "variable": [
-    {"key": "baseUrl", "value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com/dev"},
-    {"key": "apiKey", "value": "YOUR_API_KEY_HERE"}
-  ],
   "item": [
     {
-      "name": "Request Name",
-      "event": [{"listen": "test", "script": {"exec": ["// tests"], "type": "text/javascript"}}],
+      "name": "Create Lead",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Response has leadId\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+              "    pm.expect(jsonData).to.have.property('leadId');",
+              "});",
+              "",
+              "// Save leadId for next requests",
+              "var jsonData = pm.response.json();",
+              "if (jsonData.leadId) {",
+              "    pm.collectionVariables.set(\"leadId\", jsonData.leadId);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"},
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"name\": \"Test Lead\",\n    \"email\": \"test@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/leads",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "leads"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "List Leads",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has leads array\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.leads).to.be.an('array');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "request": {
         "method": "GET",
-        "header": [{"key": "x-api-key", "value": "{{apiKey}}"}],
-        "url": {"raw": "{{baseUrl}}/endpoint", "host": ["{{baseUrl}}"], "path": ["endpoint"]}
+        "header": [
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/leads?clientId={{clientId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "leads"],
+          "query": [
+            {"key": "clientId", "value": "{{clientId}}"}
+          ]
+        }
       },
       "response": []
     }
@@ -219,10 +308,11 @@ For team sharing, create a separate environment file:
 
 ## Checklist Before Committing
 
-- [ ] Collection file follows naming convention
+- [ ] Request list file follows naming convention (`{feature}.postman_requests.json`)
 - [ ] All endpoints are documented
+- [ ] URLs use `{{BASE_URL}}/{{ENVIRONMENT}}/...` format
+- [ ] Headers use `{{API_KEY}}` (not hardcoded)
 - [ ] Test scripts validate responses
 - [ ] Example responses included
-- [ ] Variables use placeholders (no real API keys)
 - [ ] Error cases are covered
-- [ ] Collection imports successfully into Postman
+- [ ] Requests import successfully into Postman collection
