@@ -1,0 +1,16 @@
+{
+  "httpMethod": "POST",
+  "path": "/optimizer/apply/123456789",
+  "pathParameters": {
+    "googleCampaignId": "123456789"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer test-api-key"
+  },
+  "body": "{\"dryRun\": false}",
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

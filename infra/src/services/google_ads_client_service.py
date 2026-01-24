@@ -309,31 +309,31 @@ class GoogleAdsClientService:
     def get_keywords(self, client_id: str, ad_group_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Obtém palavras-chave do cliente
-        
+
         Args:
             client_id (str): ID do cliente no sistema
             ad_group_id (str, opcional): ID do grupo de anúncios específico
             limit (int): Limite de palavras-chave a retornar
-            
+
         Returns:
             list: Lista de palavras-chave
         """
         try:
             google_ads_client, customer_id = self.get_client_for_customer(client_id)
-            
+
             if not google_ads_client:
                 logger.error(f"Cliente {client_id} não configurado para Google Ads")
                 return []
-            
+
             ga_service = google_ads_client.get_service("GoogleAdsService")
-            
+
             # Construir query com filtro opcional de grupo de anúncios
             where_clause = "WHERE ad_group_criterion.status != 'REMOVED' AND ad_group_criterion.type = 'KEYWORD'"
             if ad_group_id:
                 where_clause += f" AND ad_group.id = {ad_group_id}"
-            
+
             query = f"""
-                SELECT 
+                SELECT
                     ad_group_criterion.criterion_id,
                     ad_group_criterion.keyword.text,
                     ad_group_criterion.keyword.match_type,
@@ -346,14 +346,14 @@ class GoogleAdsClientService:
                     metrics.impressions,
                     metrics.clicks,
                     metrics.cost_micros
-                FROM keyword_view 
+                FROM keyword_view
                 {where_clause}
                 ORDER BY ad_group_criterion.criterion_id
                 LIMIT {limit}
             """
-            
+
             stream = ga_service.search_stream(customer_id=customer_id, query=query)
-            
+
             keywords = []
             for batch in stream:
                 for row in batch.results:
@@ -372,7 +372,7 @@ class GoogleAdsClientService:
                             'name': row.campaign.name
                         }
                     }
-                    
+
                     # Adicionar métricas se disponíveis
                     if hasattr(row, 'metrics'):
                         keyword_data['metrics'] = {
@@ -380,16 +380,181 @@ class GoogleAdsClientService:
                             'clicks': row.metrics.clicks,
                             'cost': row.metrics.cost_micros / 1000000
                         }
-                    
+
                     keywords.append(keyword_data)
-            
+
             logger.info(f"Encontradas {len(keywords)} palavras-chave para cliente {client_id}")
             return keywords
-            
+
         except Exception as e:
             logger.error(f"Erro ao buscar palavras-chave para cliente {client_id}: {str(e)}")
             return []
-    
+
+    def pause_campaign(self, client_id: str, campaign_id: str) -> Dict[str, Any]:
+        """
+        Pausa uma campanha no Google Ads
+
+        Args:
+            client_id: ID do cliente no sistema
+            campaign_id: ID da campanha no Google Ads
+
+        Returns:
+            dict: Resultado da operação com campos:
+                - success (bool): Se a operação foi bem sucedida
+                - campaign_id (str): ID da campanha
+                - previous_status (str): Status anterior
+                - new_status (str): Novo status (PAUSED)
+                - error (str): Mensagem de erro se falhou
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+
+            if not google_ads_client:
+                return {
+                    'success': False,
+                    'campaign_id': campaign_id,
+                    'error': f'Cliente {client_id} não configurado para Google Ads'
+                }
+
+            campaign_service = google_ads_client.get_service("CampaignService")
+
+            # Construir resource name da campanha
+            campaign_resource_name = f"customers/{customer_id}/campaigns/{campaign_id}"
+
+            # Criar operação de mutação
+            campaign_operation = google_ads_client.get_type("CampaignOperation")
+            campaign = campaign_operation.update
+            campaign.resource_name = campaign_resource_name
+            campaign.status = google_ads_client.enums.CampaignStatusEnum.PAUSED
+
+            # Definir field mask para atualizar apenas o status
+            google_ads_client.copy_from(
+                campaign_operation.update_mask,
+                google_ads_client.get_type("FieldMask")(paths=["status"])
+            )
+
+            # Executar mutação
+            response = campaign_service.mutate_campaigns(
+                customer_id=customer_id,
+                operations=[campaign_operation]
+            )
+
+            logger.info(f"Campanha {campaign_id} pausada com sucesso para cliente {client_id}")
+
+            return {
+                'success': True,
+                'campaign_id': campaign_id,
+                'resource_name': response.results[0].resource_name,
+                'new_status': 'PAUSED'
+            }
+
+        except GoogleAdsException as ex:
+            error_msg = f"Erro da API do Google Ads: {ex.error.code().name}"
+            if ex.error.message:
+                error_msg += f" - {ex.error.message}"
+
+            logger.error(f"Erro ao pausar campanha {campaign_id} para cliente {client_id}: {error_msg}")
+
+            return {
+                'success': False,
+                'campaign_id': campaign_id,
+                'error': error_msg
+            }
+
+        except Exception as e:
+            logger.error(f"Erro ao pausar campanha {campaign_id} para cliente {client_id}: {str(e)}")
+            return {
+                'success': False,
+                'campaign_id': campaign_id,
+                'error': str(e)
+            }
+
+    def update_ad_group_cpc(self, client_id: str, ad_group_id: str, new_cpc_micros: int) -> Dict[str, Any]:
+        """
+        Atualiza o CPC de um grupo de anúncios
+
+        Args:
+            client_id: ID do cliente no sistema
+            ad_group_id: ID do grupo de anúncios
+            new_cpc_micros: Novo valor de CPC em micros (1 unidade = 1.000.000 micros)
+
+        Returns:
+            dict: Resultado da operação com campos:
+                - success (bool): Se a operação foi bem sucedida
+                - ad_group_id (str): ID do grupo de anúncios
+                - new_cpc_micros (int): Novo CPC em micros
+                - error (str): Mensagem de erro se falhou
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+
+            if not google_ads_client:
+                return {
+                    'success': False,
+                    'ad_group_id': ad_group_id,
+                    'error': f'Cliente {client_id} não configurado para Google Ads'
+                }
+
+            ad_group_service = google_ads_client.get_service("AdGroupService")
+
+            # Construir resource name do ad group
+            ad_group_resource_name = f"customers/{customer_id}/adGroups/{ad_group_id}"
+
+            # Criar operação de mutação
+            ad_group_operation = google_ads_client.get_type("AdGroupOperation")
+            ad_group = ad_group_operation.update
+            ad_group.resource_name = ad_group_resource_name
+            ad_group.cpc_bid_micros = new_cpc_micros
+
+            # Definir field mask para atualizar apenas o CPC
+            google_ads_client.copy_from(
+                ad_group_operation.update_mask,
+                google_ads_client.get_type("FieldMask")(paths=["cpc_bid_micros"])
+            )
+
+            # Executar mutação
+            response = ad_group_service.mutate_ad_groups(
+                customer_id=customer_id,
+                operations=[ad_group_operation]
+            )
+
+            logger.info(
+                f"CPC do ad group {ad_group_id} atualizado para {new_cpc_micros} micros "
+                f"para cliente {client_id}"
+            )
+
+            return {
+                'success': True,
+                'ad_group_id': ad_group_id,
+                'resource_name': response.results[0].resource_name,
+                'new_cpc_micros': new_cpc_micros
+            }
+
+        except GoogleAdsException as ex:
+            error_msg = f"Erro da API do Google Ads: {ex.error.code().name}"
+            if ex.error.message:
+                error_msg += f" - {ex.error.message}"
+
+            logger.error(
+                f"Erro ao atualizar CPC do ad group {ad_group_id} para cliente {client_id}: {error_msg}"
+            )
+
+            return {
+                'success': False,
+                'ad_group_id': ad_group_id,
+                'error': error_msg
+            }
+
+        except Exception as e:
+            logger.error(
+                f"Erro ao atualizar CPC do ad group {ad_group_id} para cliente {client_id}: {str(e)}"
+            )
+            return {
+                'success': False,
+                'ad_group_id': ad_group_id,
+                'error': str(e)
+            }
+
     def clear_cache(self, client_id: Optional[str] = None):
         """
         Limpa o cache de clientes
