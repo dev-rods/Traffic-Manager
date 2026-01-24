@@ -1,0 +1,73 @@
+CreateLead:
+  image:
+    name: lambdaimage
+    command: ["src.functions.leads.create.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateLead-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource: !GetAtt LeadsTable.Arn
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: leads
+        method: post
+        cors: true
+
+ListLeads:
+  image:
+    name: lambdaimage
+    command: ["src.functions.leads.list.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListLeads-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+      Resource:
+        - !GetAtt LeadsTable.Arn
+        - !Sub "${LeadsTable.Arn}/index/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: leads
+        method: get
+        cors: true
+
+GetLead:
+  image:
+    name: lambdaimage
+    command: ["src.functions.leads.get.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetLead-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+      Resource: !GetAtt LeadsTable.Arn
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: leads/{leadId}
+        method: get
+        cors: true

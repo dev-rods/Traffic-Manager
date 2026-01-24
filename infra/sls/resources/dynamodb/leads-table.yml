@@ -1,0 +1,40 @@
+# Schema da Tabela Leads:
+# - leadId (String): UUID unico do lead (PK)
+# - clientId (String): ID do cliente que capturou o lead
+# - name (String): Nome do lead
+# - email (String): Email do lead
+# - phone (String): Telefone do lead
+# - location (String): Localizacao do lead
+# - source (String): Origem do lead (web-form, landing-page, etc.)
+# - createdAt (String): ISO timestamp da captura
+# - metadata (Map): Dados adicionais opcionais
+#
+# GSI: clientId-createdAt-index
+#   - PK: clientId
+#   - SK: createdAt
+
+Resources:
+  LeadsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-leads
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: leadId
+          AttributeType: S
+        - AttributeName: clientId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: leadId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: clientId-createdAt-index
+          KeySchema:
+            - AttributeName: clientId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL

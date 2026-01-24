@@ -37,6 +37,7 @@ provider:
     TOKENS_TABLE: ${self:custom.resourcePrefix}-google-ads-tokens
     PROMPTS_TABLE: ${self:custom.resourcePrefix}-prompts
     RECOMMENDATIONS_TABLE: ${self:custom.resourcePrefix}-recommendations
+    LEADS_TABLE: ${self:custom.resourcePrefix}-leads
     BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
     BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
     BASE_ROLE_ARN: arn:aws:iam::${self:custom.awsId}:role/${self:service}-${self:custom.stage}-
@@ -53,6 +54,7 @@ functions:
   - ${file(sls/functions/prompts/interface.yml)}
   - ${file(sls/functions/optimizer/interface.yml)}
   - ${file(sls/functions/recommendations/interface.yml)}
+  - ${file(sls/functions/leads/interface.yml)}
 
 stepFunctions:
   stateMachines:
@@ -72,6 +74,7 @@ resources:
     - ${file(sls/resources/dynamodb/google-ads-tokens-table.yml)}
     - ${file(sls/resources/dynamodb/prompts-table.yml)}
     - ${file(sls/resources/dynamodb/recommendations-table.yml)}
+    - ${file(sls/resources/dynamodb/leads-table.yml)}
 
 plugins:
   - serverless-step-functions

@@ -106,6 +106,9 @@ client = GoogleAdsClient.load_from_dict(google_ads_config)
 ### Secrets management
 - Secrets stored in AWS Systems Manager (SSM) under `/${stage}/KEY_NAME`
 - Client credentials encrypted with Fernet in DynamoDB
+- **NEVER hardcode API keys** in code, documentation, or markdown files
+- Use `.env` file for local testing (already in `.gitignore`)
+- In bash tests, load API key from `.env`: `source .env && curl -H "x-api-key: $API_KEY" ...`
 
 ## Naming Conventions
 - Client IDs: lowercase kebab-case (e.g., `empresarods-abc123`)
