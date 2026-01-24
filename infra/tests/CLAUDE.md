@@ -24,6 +24,9 @@ tests/
 │   └── ...
 ├── integration/           # Integration test documentation
 │   └── {feature}.md       # Test cases and curl commands
+├── postman/               # Postman collections for API testing
+│   ├── CLAUDE.md          # Postman collection standards
+│   └── {feature}.postman_collection.json
 └── unit/                  # Python unit tests (future)
 ```
 
@@ -140,3 +143,11 @@ Before creating a PR, ensure:
 1. All integration tests pass in dev
 2. Mock files are created for new endpoints
 3. Integration documentation is complete
+4. Postman collection is created/updated (see `tests/postman/CLAUDE.md`)
+
+## Postman Collections
+
+After thorough testing, create a Postman collection for the feature:
+- Location: `tests/postman/{feature}.postman_collection.json`
+- Standards: See `tests/postman/CLAUDE.md`
+- Include: All endpoints, test scripts, example responses

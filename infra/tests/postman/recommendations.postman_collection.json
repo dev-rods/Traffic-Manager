@@ -1,0 +1,662 @@
+{
+	"info": {
+		"_postman_id": "recommendations-collection",
+		"name": "Traffic Manager - Recommendations",
+		"description": "Endpoints for managing optimization recommendations.\n\n## Endpoints\n- POST /optimizer - Generate recommendations\n- GET /recommendations - List recommendations\n- POST /recommendations/{id}/apply - Apply a recommendation\n\n## Authentication\nAll requests require an API key via `x-api-key` header.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com/dev",
+			"type": "string"
+		},
+		{
+			"key": "apiKey",
+			"value": "YOUR_API_KEY_HERE",
+			"type": "string"
+		},
+		{
+			"key": "clientId",
+			"value": "empresarodsteste-bd5f23",
+			"type": "string"
+		},
+		{
+			"key": "campaignId",
+			"value": "22656250465",
+			"type": "string"
+		},
+		{
+			"key": "recommendationId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Generate Recommendations",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has recommendations\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+							"    pm.expect(jsonData.recommendations).to.be.an('array');",
+							"});",
+							"",
+							"// Save first recommendationId for next requests",
+							"var jsonData = pm.response.json();",
+							"if (jsonData.recommendations && jsonData.recommendations.length > 0) {",
+							"    pm.collectionVariables.set(\"recommendationId\", jsonData.recommendations[0].recommendationId);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/optimizer",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"optimizer"
+					]
+				},
+				"description": "Generate optimization recommendations for a client's campaigns.\n\n**Request Body:**\n- `clientId` (optional): Filter to specific client\n- `campaignId` (optional): Filter to specific campaign\n\n**Response:**\n- `recommendationId`: UUID for each recommendation\n- `action`: Recommended action (INCREASE_CPC_10, REDUCE_CPC_15, PAUSE_CAMPAIGN, etc.)\n- `currentCpa`: Current CPA value\n- `healthyCpa`: Target CPA value"
+			},
+			"response": [
+				{
+					"name": "Success",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"clientId\": \"empresarodsteste-bd5f23\",\n    \"campaignId\": \"22656250465\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/optimizer",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"optimizer"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"SUCCESS\",\n    \"timestamp\": \"2026-01-24T19:17:53.061016\",\n    \"totalRecommendations\": 1,\n    \"recommendations\": [\n        {\n            \"recommendationId\": \"865016fd-dd1f-4710-914a-59e50df48a88\",\n            \"clientId\": \"empresarodsteste-bd5f23\",\n            \"campaignId\": \"22656250465\",\n            \"campaignName\": \"Campaign #1\",\n            \"action\": \"NO_DATA\",\n            \"currentCpa\": 0.0,\n            \"healthyCpa\": 136.08\n        }\n    ]\n}"
+				}
+			]
+		},
+		{
+			"name": "List Recommendations",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has recommendations array\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+							"    pm.expect(jsonData.recommendations).to.be.an('array');",
+							"    pm.expect(jsonData).to.have.property('count');",
+							"});",
+							"",
+							"// Save first recommendationId if available",
+							"var jsonData = pm.response.json();",
+							"if (jsonData.recommendations && jsonData.recommendations.length > 0) {",
+							"    pm.collectionVariables.set(\"recommendationId\", jsonData.recommendations[0].recommendationId);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/recommendations?clientId={{clientId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"recommendations"
+					],
+					"query": [
+						{
+							"key": "clientId",
+							"value": "{{clientId}}",
+							"description": "(Required) Client ID to filter recommendations"
+						},
+						{
+							"key": "campaignId",
+							"value": "{{campaignId}}",
+							"description": "(Optional) Filter by specific campaign",
+							"disabled": true
+						},
+						{
+							"key": "status",
+							"value": "PENDING",
+							"description": "(Optional) Filter by status: PENDING, APPLIED, SKIPPED",
+							"disabled": true
+						}
+					]
+				},
+				"description": "List all recommendations for a client.\n\n**Query Parameters:**\n- `clientId` (required): Client ID\n- `campaignId` (optional): Filter by campaign\n- `status` (optional): Filter by status (PENDING, APPLIED, SKIPPED)\n\n**Response:**\n- `recommendations`: Array of recommendation objects\n- `count`: Total number of recommendations returned"
+			},
+			"response": [
+				{
+					"name": "Success",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/recommendations?clientId={{clientId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"recommendations"
+							],
+							"query": [
+								{
+									"key": "clientId",
+									"value": "{{clientId}}"
+								}
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"SUCCESS\",\n    \"recommendations\": [\n        {\n            \"recommendationId\": \"865016fd-dd1f-4710-914a-59e50df48a88\",\n            \"clientId\": \"empresarodsteste-bd5f23\",\n            \"campaignId\": \"22656250465\",\n            \"status\": \"PENDING\",\n            \"action\": \"NO_DATA\",\n            \"campaignName\": \"Campaign #1\",\n            \"createdAt\": \"2026-01-24T19:17:53.021838\",\n            \"currentCpa\": 0.0,\n            \"healthyCpa\": 136.08\n        }\n    ],\n    \"count\": 1\n}"
+				},
+				{
+					"name": "Missing clientId",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/recommendations",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"recommendations"
+							]
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"ERROR\",\n    \"message\": \"clientId e obrigatorio como query parameter\"\n}"
+				}
+			]
+		},
+		{
+			"name": "List Recommendations (by Campaign)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response filtered by campaign\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/recommendations?clientId={{clientId}}&campaignId={{campaignId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"recommendations"
+					],
+					"query": [
+						{
+							"key": "clientId",
+							"value": "{{clientId}}"
+						},
+						{
+							"key": "campaignId",
+							"value": "{{campaignId}}"
+						}
+					]
+				},
+				"description": "List recommendations filtered by both client and campaign."
+			},
+			"response": []
+		},
+		{
+			"name": "List Recommendations (by Status)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"All recommendations have PENDING status\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    jsonData.recommendations.forEach(function(rec) {",
+							"        pm.expect(rec.status).to.eql(\"PENDING\");",
+							"    });",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/recommendations?clientId={{clientId}}&status=PENDING",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"recommendations"
+					],
+					"query": [
+						{
+							"key": "clientId",
+							"value": "{{clientId}}"
+						},
+						{
+							"key": "status",
+							"value": "PENDING"
+						}
+					]
+				},
+				"description": "List recommendations filtered by status (PENDING, APPLIED, SKIPPED)."
+			},
+			"response": []
+		},
+		{
+			"name": "Apply Recommendation (Dry Run)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 or 400\", function () {",
+							"    pm.expect(pm.response.code).to.be.oneOf([200, 400]);",
+							"});",
+							"",
+							"pm.test(\"Response has expected structure\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('status');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"dryRun\": true\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/recommendations/{{recommendationId}}/apply",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"recommendations",
+						"{{recommendationId}}",
+						"apply"
+					]
+				},
+				"description": "Apply a recommendation in dry run mode (no actual changes).\n\n**Path Parameters:**\n- `recommendationId`: UUID of the recommendation\n\n**Request Body:**\n- `clientId` (required): Must match recommendation's clientId\n- `campaignId` (required): Must match recommendation's campaignId\n- `dryRun` (optional): Set to true for simulation\n\n**Validations:**\n- 400 if clientId/campaignId mismatch\n- 404 if recommendation not found\n- 409 if already applied"
+			},
+			"response": [
+				{
+					"name": "Dry Run Success",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"dryRun\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/recommendations/{{recommendationId}}/apply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"recommendations",
+								"{{recommendationId}}",
+								"apply"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"SUCCESS\",\n    \"timestamp\": \"2026-01-24T19:30:00.000000\",\n    \"recommendationId\": \"865016fd-dd1f-4710-914a-59e50df48a88\",\n    \"clientId\": \"empresarodsteste-bd5f23\",\n    \"campaignId\": \"22656250465\",\n    \"campaignName\": \"Campaign #1\",\n    \"action\": \"INCREASE_CPC_10\",\n    \"dryRun\": true,\n    \"operations\": [\n        {\n            \"type\": \"UPDATE_CPC\",\n            \"success\": true,\n            \"dryRun\": true,\n            \"details\": {\n                \"message\": \"CPC seria atualizado (dry run)\"\n            }\n        }\n    ]\n}"
+				}
+			]
+		},
+		{
+			"name": "Apply Recommendation",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 or 400 or 409\", function () {",
+							"    pm.expect(pm.response.code).to.be.oneOf([200, 400, 409]);",
+							"});",
+							"",
+							"pm.test(\"Response has status\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('status');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/recommendations/{{recommendationId}}/apply",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"recommendations",
+						"{{recommendationId}}",
+						"apply"
+					]
+				},
+				"description": "Apply a recommendation (real execution).\n\n**Warning:** This will make actual changes to Google Ads campaigns."
+			},
+			"response": [
+				{
+					"name": "Already Applied",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/recommendations/{{recommendationId}}/apply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"recommendations",
+								"{{recommendationId}}",
+								"apply"
+							]
+						}
+					},
+					"status": "Conflict",
+					"code": 409,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"ALREADY_APPLIED\",\n    \"recommendationId\": \"865016fd-dd1f-4710-914a-59e50df48a88\",\n    \"appliedAt\": \"2026-01-24T19:30:00.000000\",\n    \"message\": \"Esta recomendacao ja foi aplicada\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Apply Recommendation (Not Found)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 404\", function () {",
+							"    pm.response.to.have.status(404);",
+							"});",
+							"",
+							"pm.test(\"Response has NOT_FOUND status\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"NOT_FOUND\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/recommendations/non-existent-id/apply",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"recommendations",
+						"non-existent-id",
+						"apply"
+					]
+				},
+				"description": "Test case: Apply with non-existent recommendation ID."
+			},
+			"response": [
+				{
+					"name": "Not Found",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/recommendations/non-existent-id/apply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"recommendations",
+								"non-existent-id",
+								"apply"
+							]
+						}
+					},
+					"status": "Not Found",
+					"code": 404,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"NOT_FOUND\",\n    \"recommendationId\": \"non-existent-id\",\n    \"message\": \"Recomendacao nao encontrada\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Apply Recommendation (Wrong Client)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 400\", function () {",
+							"    pm.response.to.have.status(400);",
+							"});",
+							"",
+							"pm.test(\"Response has MISMATCH status\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"MISMATCH\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clientId\": \"wrong-client-id\",\n    \"campaignId\": \"{{campaignId}}\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/recommendations/{{recommendationId}}/apply",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"recommendations",
+						"{{recommendationId}}",
+						"apply"
+					]
+				},
+				"description": "Test case: Apply with mismatched clientId."
+			},
+			"response": [
+				{
+					"name": "Mismatch",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"clientId\": \"wrong-client-id\",\n    \"campaignId\": \"{{campaignId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/recommendations/{{recommendationId}}/apply",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"recommendations",
+								"{{recommendationId}}",
+								"apply"
+							]
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"MISMATCH\",\n    \"message\": \"clientId ou campaignId nao correspondem a recomendacao\"\n}"
+				}
+			]
+		}
+	]
+}
