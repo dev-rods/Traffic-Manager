@@ -1,0 +1,89 @@
+CreatePrompt:
+  image:
+    name: lambdaimage
+    command: ["src.functions.prompts.create.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreatePrompt-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+      Resource: 
+        - !GetAtt PromptsTable.Arn
+        - !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: prompts
+        method: post
+        cors: true
+
+ExecutePrompt:
+  image:
+    name: lambdaimage
+    command: ["src.functions.prompts.execute.handler"]
+  memorySize: 512
+  timeout: 60
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ExecutePrompt-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:Query
+      Resource: 
+        - !GetAtt PromptsTable.Arn
+        - !GetAtt ExecutionHistoryTable.Arn
+        - !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: prompts/execute
+        method: post
+        cors: true
+
+RetrievePrompts:
+  image:
+    name: lambdaimage
+    command: ["src.functions.prompts.retrieve.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-RetrievePrompts-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:Scan
+        - dynamodb:Query
+      Resource: 
+        - !GetAtt PromptsTable.Arn
+        - !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: prompts
+        method: get
+        cors: true
+    - http:
+        path: prompts/{promptId}
+        method: get
+        cors: true
+
