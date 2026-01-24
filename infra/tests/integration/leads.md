@@ -27,8 +27,8 @@ BASE_URL="https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com/dev"
 | 2 | Create without body | - | 400 | `{"status": "ERROR", "message": "Request body e obrigatorio"}` |
 | 3 | Create without clientId | Missing clientId | 400 | `{"status": "ERROR", "message": "Campos obrigatorios ausentes: clientId"}` |
 | 4 | Create without name | Missing name | 400 | `{"status": "ERROR", "message": "Campos obrigatorios ausentes: name"}` |
-| 5 | Create without email | Missing email | 400 | `{"status": "ERROR", "message": "Campos obrigatorios ausentes: email"}` |
-| 6 | Create valid lead | All required fields | 201 | `{"status": "SUCCESS", "leadId": "uuid", ...}` |
+| 5 | Create without phone | Missing phone | 400 | `{"status": "ERROR", "message": "Campos obrigatorios ausentes: phone"}` |
+| 6 | Create valid lead | All required fields (clientId, name, phone) | 201 | `{"status": "SUCCESS", "leadId": "uuid", ...}` |
 | 7 | Create with all fields | All fields including optional | 201 | Full lead object returned |
 
 ### GET /leads
@@ -73,7 +73,7 @@ BASE_URL="https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com/dev"
 ```bash
 curl -s -X POST "$BASE_URL/leads" \
   -H "Content-Type: application/json" \
-  -d '{"clientId": "test", "name": "Test", "email": "test@example.com"}'
+  -d '{"clientId": "test", "name": "Test", "phone": "+55 11 99999-0000"}'
 ```
 
 Expected: `{"message": "API key nao fornecida"}`
@@ -101,7 +101,7 @@ curl -s -X POST "$BASE_URL/leads" \
   -d '{"name": "Test"}'
 ```
 
-Expected: `{"status": "ERROR", "message": "Campos obrigatorios ausentes: clientId, email"}`
+Expected: `{"status": "ERROR", "message": "Campos obrigatorios ausentes: clientId, phone"}`
 
 ---
 
@@ -111,7 +111,7 @@ Expected: `{"status": "ERROR", "message": "Campos obrigatorios ausentes: clientI
 curl -s -X POST "$BASE_URL/leads" \
   -H "x-api-key: $API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{\"clientId\": \"$CLIENT_ID\", \"name\": \"Test Lead\", \"email\": \"test@example.com\"}"
+  -d "{\"clientId\": \"$CLIENT_ID\", \"name\": \"Test Lead\", \"phone\": \"+55 11 99999-0000\"}"
 ```
 
 Expected:
@@ -124,8 +124,8 @@ Expected:
     "leadId": "uuid-here",
     "clientId": "empresarodsteste-bd5f23",
     "name": "Test Lead",
-    "email": "test@example.com",
-    "phone": "",
+    "phone": "+55 11 99999-0000",
+    "email": "",
     "location": "",
     "source": "web-form",
     "createdAt": "2026-01-24T...",
@@ -145,15 +145,15 @@ curl -s -X POST "$BASE_URL/leads" \
   -d "{
     \"clientId\": \"$CLIENT_ID\",
     \"name\": \"John Doe\",
-    \"email\": \"john@example.com\",
     \"phone\": \"+55 11 99999-9999\",
+    \"email\": \"john@example.com\",
     \"location\": \"Sao Paulo, SP\",
     \"source\": \"landing-page\",
     \"metadata\": {\"campaign\": \"google-ads\"}
   }"
 ```
 
-Expected: 201 with full lead object
+Expected: 201 with full lead object (phone required; email, location, source, metadata optional)
 
 ---
 

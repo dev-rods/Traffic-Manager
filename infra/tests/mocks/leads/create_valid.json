@@ -5,7 +5,7 @@
     "Content-Type": "application/json",
     "x-api-key": "test-api-key"
   },
-  "body": "{\"clientId\": \"empresarodsteste-bd5f23\", \"name\": \"John Doe\", \"email\": \"john@example.com\", \"phone\": \"+55 11 99999-9999\", \"location\": \"Sao Paulo\"}",
+  "body": "{\"clientId\": \"empresarodsteste-bd5f23\", \"name\": \"John Doe\", \"phone\": \"+55 11 99999-9999\", \"email\": \"john@example.com\", \"location\": \"Sao Paulo\"}",
   "requestContext": {
     "stage": "dev",
     "requestId": "test-request-id"

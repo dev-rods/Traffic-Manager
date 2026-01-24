@@ -1,0 +1,491 @@
+{
+	"info": {
+		"_postman_id": "leads-collection",
+		"name": "Traffic Manager - Leads",
+		"description": "Endpoints for managing leads.\n\n## Endpoints\n- POST /leads - Create a lead\n- GET /leads - List leads (requires clientId)\n- GET /leads/{leadId} - Get a lead by ID\n\n## Authentication\nAll requests require an API key via `x-api-key` header.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com/dev",
+			"type": "string"
+		},
+		{
+			"key": "apiKey",
+			"value": "YOUR_API_KEY_HERE",
+			"type": "string"
+		},
+		{
+			"key": "clientId",
+			"value": "empresarodsteste-bd5f23",
+			"type": "string"
+		},
+		{
+			"key": "leadId",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Create Lead",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 201\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"",
+							"pm.test(\"Response has SUCCESS status\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+							"    pm.expect(jsonData).to.have.property('leadId');",
+							"    pm.expect(jsonData).to.have.property('lead');",
+							"});",
+							"",
+							"// Save leadId for next requests",
+							"var jsonData = pm.response.json();",
+							"if (jsonData.leadId) {",
+							"    pm.collectionVariables.set(\"leadId\", jsonData.leadId);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"+55 11 99999-9999\",\n    \"location\": \"Sao Paulo, SP\",\n    \"source\": \"landing-page\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/leads",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"leads"
+					]
+				},
+				"description": "Create a new lead.\n\n**Required fields:**\n- `clientId`: Client identifier\n- `name`: Lead name\n- `phone`: Lead phone\n\n**Optional fields:**\n- `email`: Email address\n- `location`: Location\n- `source`: Lead source (default: web-form)\n- `metadata`: Additional data object"
+			},
+			"response": [
+				{
+					"name": "Success",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"+55 11 99999-9999\",\n    \"location\": \"Sao Paulo, SP\",\n    \"source\": \"landing-page\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/leads",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads"
+							]
+						}
+					},
+					"status": "Created",
+					"code": 201,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"SUCCESS\",\n    \"message\": \"Lead registrado com sucesso\",\n    \"leadId\": \"6140ecf2-2ef1-49e0-884e-2762f6c019da\",\n    \"lead\": {\n        \"leadId\": \"6140ecf2-2ef1-49e0-884e-2762f6c019da\",\n        \"clientId\": \"empresarodsteste-bd5f23\",\n        \"name\": \"John Doe\",\n        \"email\": \"john@example.com\",\n        \"phone\": \"+55 11 99999-9999\",\n        \"location\": \"Sao Paulo, SP\",\n        \"source\": \"landing-page\",\n        \"createdAt\": \"2026-01-24T19:47:53.815692\",\n        \"metadata\": {}\n    }\n}"
+				}
+			]
+		},
+		{
+			"name": "Create Lead (Missing Fields)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 400\", function () {",
+							"    pm.response.to.have.status(400);",
+							"});",
+							"",
+							"pm.test(\"Response has ERROR status\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+							"    pm.expect(jsonData.message).to.include(\"Campos obrigatorios ausentes\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"name\": \"Test Lead\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/leads",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"leads"
+					]
+				},
+				"description": "Test case: Create lead with missing required fields."
+			},
+			"response": [
+				{
+					"name": "Missing Fields",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Test Lead\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/leads",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads"
+							]
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"ERROR\",\n    \"message\": \"Campos obrigatorios ausentes: clientId, phone\"\n}"
+				}
+			]
+		},
+		{
+			"name": "List Leads",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has leads array\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+							"    pm.expect(jsonData.leads).to.be.an('array');",
+							"    pm.expect(jsonData).to.have.property('count');",
+							"});",
+							"",
+							"// Save first leadId if available",
+							"var jsonData = pm.response.json();",
+							"if (jsonData.leads && jsonData.leads.length > 0) {",
+							"    pm.collectionVariables.set(\"leadId\", jsonData.leads[0].leadId);",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/leads?clientId={{clientId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"leads"
+					],
+					"query": [
+						{
+							"key": "clientId",
+							"value": "{{clientId}}",
+							"description": "(Required) Client ID"
+						},
+						{
+							"key": "limit",
+							"value": "100",
+							"description": "(Optional) Max results",
+							"disabled": true
+						},
+						{
+							"key": "startDate",
+							"value": "2026-01-01T00:00:00",
+							"description": "(Optional) Filter from date",
+							"disabled": true
+						},
+						{
+							"key": "endDate",
+							"value": "2026-12-31T23:59:59",
+							"description": "(Optional) Filter to date",
+							"disabled": true
+						}
+					]
+				},
+				"description": "List all leads for a client.\n\n**Query Parameters:**\n- `clientId` (required): Client ID\n- `limit` (optional): Max results (default: 100, max: 1000)\n- `startDate` (optional): Filter from date (ISO format)\n- `endDate` (optional): Filter to date (ISO format)"
+			},
+			"response": [
+				{
+					"name": "Success",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/leads?clientId={{clientId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads"
+							],
+							"query": [
+								{
+									"key": "clientId",
+									"value": "{{clientId}}"
+								}
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"SUCCESS\",\n    \"leads\": [\n        {\n            \"leadId\": \"6140ecf2-2ef1-49e0-884e-2762f6c019da\",\n            \"clientId\": \"empresarodsteste-bd5f23\",\n            \"name\": \"John Doe\",\n            \"email\": \"john@example.com\",\n            \"phone\": \"+55 11 99999-9999\",\n            \"location\": \"Sao Paulo\",\n            \"source\": \"web-form\",\n            \"createdAt\": \"2026-01-24T19:47:53.815692\"\n        }\n    ],\n    \"count\": 1,\n    \"clientId\": \"empresarodsteste-bd5f23\"\n}"
+				}
+			]
+		},
+		{
+			"name": "List Leads (Missing clientId)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 400\", function () {",
+							"    pm.response.to.have.status(400);",
+							"});",
+							"",
+							"pm.test(\"Response has ERROR status\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+							"    pm.expect(jsonData.message).to.include(\"clientId\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/leads",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"leads"
+					]
+				},
+				"description": "Test case: List leads without clientId parameter."
+			},
+			"response": [
+				{
+					"name": "Missing clientId",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/leads",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads"
+							]
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"ERROR\",\n    \"message\": \"clientId e obrigatorio como query parameter\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Get Lead",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response has lead object\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+							"    pm.expect(jsonData).to.have.property('lead');",
+							"    pm.expect(jsonData.lead).to.have.property('leadId');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/leads/{{leadId}}",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"leads",
+						"{{leadId}}"
+					]
+				},
+				"description": "Get a specific lead by ID.\n\n**Path Parameters:**\n- `leadId`: UUID of the lead"
+			},
+			"response": [
+				{
+					"name": "Success",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/leads/{{leadId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"{{leadId}}"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"SUCCESS\",\n    \"lead\": {\n        \"leadId\": \"6140ecf2-2ef1-49e0-884e-2762f6c019da\",\n        \"clientId\": \"empresarodsteste-bd5f23\",\n        \"name\": \"John Doe\",\n        \"email\": \"john@example.com\",\n        \"phone\": \"+55 11 99999-9999\",\n        \"location\": \"Sao Paulo\",\n        \"source\": \"web-form\",\n        \"createdAt\": \"2026-01-24T19:47:53.815692\",\n        \"metadata\": {}\n    }\n}"
+				}
+			]
+		},
+		{
+			"name": "Get Lead (Not Found)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 404\", function () {",
+							"    pm.response.to.have.status(404);",
+							"});",
+							"",
+							"pm.test(\"Response has NOT_FOUND status\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql(\"NOT_FOUND\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{apiKey}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{baseUrl}}/leads/non-existent-id",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"leads",
+						"non-existent-id"
+					]
+				},
+				"description": "Test case: Get lead with non-existent ID."
+			},
+			"response": [
+				{
+					"name": "Not Found",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/leads/non-existent-id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"leads",
+								"non-existent-id"
+							]
+						}
+					},
+					"status": "Not Found",
+					"code": 404,
+					"_postman_previewlanguage": "json",
+					"body": "{\n    \"status\": \"NOT_FOUND\",\n    \"message\": \"Lead nao encontrado\",\n    \"leadId\": \"non-existent-id\"\n}"
+				}
+			]
+		}
+	]
+}

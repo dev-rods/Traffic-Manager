@@ -5,8 +5,8 @@ Endpoint: POST /leads
 Body: {
     "clientId": "string (required)",
     "name": "string (required)",
-    "email": "string (required)",
-    "phone": "string (optional)",
+    "phone": "string (required)",
+    "email": "string (optional)",
     "location": "string (optional)",
     "source": "string (optional, default: 'web-form')",
     "metadata": {} (optional)
@@ -21,7 +21,7 @@ from typing import Dict, Any
 
 import boto3
 
-from src.utils.http import require_api_key, parse_body, http_response
+from src.utils.http import parse_body, http_response
 
 
 logger = logging.getLogger()
@@ -34,7 +34,7 @@ leads_table = dynamodb.Table(os.environ.get("LEADS_TABLE"))
 
 def _validate_required_fields(body: Dict[str, Any]) -> tuple[bool, str]:
     """Valida campos obrigatorios do lead."""
-    required_fields = ["clientId", "name", "email"]
+    required_fields = ["clientId", "name", "phone"]
     missing = [field for field in required_fields if not body.get(field)]
 
     if missing:
@@ -54,9 +54,6 @@ def handler(event, context):
 
     # Validar API key
     body = parse_body(event)
-    _, error_response = require_api_key(event, body)
-    if error_response:
-        return error_response
 
     if not body:
         return http_response(400, {
@@ -82,8 +79,8 @@ def handler(event, context):
             "leadId": lead_id,
             "clientId": body["clientId"],
             "name": body["name"],
-            "email": body["email"],
-            "phone": body.get("phone", ""),
+            "phone": body["phone"],
+            "email": body.get("email", ""),
             "location": body.get("location", ""),
             "source": body.get("source", "web-form"),
             "createdAt": created_at,

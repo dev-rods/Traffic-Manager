@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(serverless invoke local:*)",
+      "Bash(npm install)"
     ]
   }
 }

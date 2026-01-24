@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(serverless deploy:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
