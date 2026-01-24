@@ -1,10 +1,10 @@
-DailyOptimizer:
+GenerateRecommendations:
   image:
     name: lambdaimage
-    command: ["src.functions.optimizer.daily_optimizer.handler"]
+    command: ["src.functions.optimizer.generate_recommendations.handler"]
   memorySize: 1024
   timeout: 900
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DailyOptimizer-lambdaRole
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GenerateRecommendations-lambdaRole
   iamRoleStatements:
     - Effect: Allow
       Action:

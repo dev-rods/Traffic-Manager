@@ -2,7 +2,8 @@
   "httpMethod": "POST",
   "path": "/optimizer/apply/123456789",
   "pathParameters": {
-    "googleCampaignId": "123456789"
+    "clientId": "empresarodsteste-bd5f23",
+    "campaignId": "22656250465"
   },
   "headers": {
     "Content-Type": "application/json",

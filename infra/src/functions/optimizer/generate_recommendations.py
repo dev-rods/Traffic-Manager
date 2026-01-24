@@ -153,7 +153,7 @@ def handler(event, context):
     Ela apenas calcula o desvio de CPA x meta e grava a recomendação
     na tabela de metadados de campanha.
     """
-    logger.info(f"Iniciando DailyOptimizer com evento: {json.dumps(event)}")
+    logger.info(f"Iniciando GenerateRecommendations com evento: {json.dumps(event)}")
 
     target_client_id, target_campaign_id, is_api_call = _resolve_targets_from_event(event or {})
 
@@ -246,11 +246,9 @@ def handler(event, context):
                     "campaign_name": campaign_name,
                 }
 
-
+                print(f"[traceId: {trace_id}] Métricas: {metrics}", "current_cpa: {current_cpa}", "healthy_cpa: {healthy_cpa}")
                 action = _decide_action(current_cpa, healthy_cpa)
-
-                if action == "NO_DATA":
-                    continue
+                print(f"[traceId: {trace_id}] Ação: {action}")
 
                 _store_recommendation(
                     client_id=client_id,
@@ -278,7 +276,7 @@ def handler(event, context):
                 exc_info=True,
             )
 
-    logger.info("Execução do DailyOptimizer concluída com sucesso.")
+    logger.info("Execução do GenerateRecommendations concluída com sucesso.")
 
     if is_api_call:
         return http_response(

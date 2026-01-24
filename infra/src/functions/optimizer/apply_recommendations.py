@@ -1,7 +1,7 @@
 """
 Lambda handler para aplicar recomendacoes de otimizacao no Google Ads
 
-Este endpoint aplica as recomendacoes geradas pelo daily_optimizer.py,
+Este endpoint aplica as recomendacoes geradas pelo generate_recommendations.py,
 executando acoes como pausar campanhas ou ajustar CPC de ad groups.
 """
 import json
