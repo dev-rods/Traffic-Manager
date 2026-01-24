@@ -1,8 +1,8 @@
 """
-Lambda handler para aplicar recomendacoes de otimizacao no Google Ads
+Lambda handler para aplicar uma recomendacao de otimizacao.
 
-Este endpoint aplica as recomendacoes geradas pelo generate_recommendations.py,
-executando acoes como pausar campanhas ou ajustar CPC de ad groups.
+Endpoint: POST /recommendations/{recommendationId}/apply
+Body: { "clientId": "string", "campaignId": "string" }
 """
 import json
 import logging
@@ -14,6 +14,7 @@ import boto3
 
 from src.services.google_ads_client_service import GoogleAdsClientService
 from src.utils.http import require_api_key, parse_body, http_response, extract_path_param
+from src.utils.decimal_utils import convert_decimal_to_json_serializable
 
 
 logger = logging.getLogger()
@@ -21,7 +22,7 @@ logger.setLevel(logging.INFO)
 
 
 dynamodb = boto3.resource("dynamodb")
-campaign_metadata_table = dynamodb.Table(os.environ.get("CAMPAIGN_METADATA_TABLE"))
+recommendations_table = dynamodb.Table(os.environ.get("RECOMMENDATIONS_TABLE"))
 execution_history_table = dynamodb.Table(os.environ.get("EXECUTION_HISTORY_TABLE"))
 
 
@@ -34,69 +35,52 @@ ACTION_CPC_MULTIPLIERS = {
 }
 
 
-def _get_recommendation(google_campaign_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Busca a recomendacao de otimizacao para uma campanha.
-
-    Args:
-        google_campaign_id: ID da campanha no Google Ads
-
-    Returns:
-        dict: Dados da recomendacao ou None se nao encontrada
-    """
+def _get_recommendation(recommendation_id: str) -> Optional[Dict[str, Any]]:
+    """Busca recomendacao por ID."""
     try:
-        response = campaign_metadata_table.get_item(
-            Key={"googleCampaignId": str(google_campaign_id)}
+        response = recommendations_table.get_item(
+            Key={"recommendationId": recommendation_id}
         )
         return response.get("Item")
     except Exception as e:
-        logger.error(f"Erro ao buscar recomendacao para campanha {google_campaign_id}: {str(e)}")
+        logger.error(f"Erro ao buscar recomendacao {recommendation_id}: {str(e)}")
         return None
 
 
-def _mark_recommendation_as_applied(google_campaign_id: str, operations: List[Dict]) -> None:
-    """
-    Marca a recomendacao como aplicada no DynamoDB.
-
-    Args:
-        google_campaign_id: ID da campanha no Google Ads
-        operations: Lista de operacoes realizadas
-    """
+def _update_recommendation_status(
+    recommendation_id: str,
+    status: str,
+    application_result: Dict[str, Any]
+) -> None:
+    """Atualiza status da recomendacao apos aplicacao."""
     try:
-        campaign_metadata_table.update_item(
-            Key={"googleCampaignId": str(google_campaign_id)},
-            UpdateExpression="SET appliedAt = :appliedAt, appliedOperations = :operations",
+        update_expr = "SET #status = :status, appliedAt = :appliedAt, applicationResult = :result"
+        recommendations_table.update_item(
+            Key={"recommendationId": recommendation_id},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames={"#status": "status"},
             ExpressionAttributeValues={
+                ":status": status,
                 ":appliedAt": datetime.utcnow().isoformat(),
-                ":operations": operations
+                ":result": application_result
             }
         )
-        logger.info(f"Recomendacao para campanha {google_campaign_id} marcada como aplicada")
+        logger.info(f"Recomendacao {recommendation_id} atualizada para status {status}")
     except Exception as e:
-        logger.error(f"Erro ao marcar recomendacao como aplicada: {str(e)}")
+        logger.error(f"Erro ao atualizar recomendacao: {str(e)}")
 
 
 def _log_execution(
     trace_id: str,
     client_id: str,
     campaign_id: str,
+    recommendation_id: str,
     action: str,
     operations: List[Dict],
     dry_run: bool,
     status: str
 ) -> None:
-    """
-    Registra a execucao na tabela de historico.
-
-    Args:
-        trace_id: ID de rastreamento
-        client_id: ID do cliente
-        campaign_id: ID da campanha
-        action: Acao recomendada
-        operations: Operacoes realizadas
-        dry_run: Se foi execucao de teste
-        status: Status da execucao (SUCCESS, ERROR)
-    """
+    """Registra a execucao na tabela de historico."""
     try:
         timestamp = datetime.utcnow().isoformat()
         execution_record = {
@@ -108,6 +92,7 @@ def _log_execution(
             "clientId": client_id,
             "campaignId": campaign_id,
             "payload": json.dumps({
+                "recommendationId": recommendation_id,
                 "action": action,
                 "operations": operations,
                 "dryRun": dry_run
@@ -125,18 +110,7 @@ def _apply_pause_campaign(
     campaign_id: str,
     dry_run: bool
 ) -> Dict[str, Any]:
-    """
-    Aplica acao de pausar campanha.
-
-    Args:
-        service: Instancia do GoogleAdsClientService
-        client_id: ID do cliente
-        campaign_id: ID da campanha
-        dry_run: Se deve simular sem executar
-
-    Returns:
-        dict: Resultado da operacao
-    """
+    """Aplica acao de pausar campanha."""
     if dry_run:
         return {
             "type": "PAUSE_CAMPAIGN",
@@ -149,7 +123,6 @@ def _apply_pause_campaign(
         }
 
     result = service.pause_campaign(client_id, campaign_id)
-
     return {
         "type": "PAUSE_CAMPAIGN",
         "success": result.get("success", False),
@@ -165,19 +138,7 @@ def _apply_cpc_update(
     multiplier: float,
     dry_run: bool
 ) -> List[Dict[str, Any]]:
-    """
-    Aplica ajuste de CPC em todos os ad groups.
-
-    Args:
-        service: Instancia do GoogleAdsClientService
-        client_id: ID do cliente
-        ad_groups: Lista de ad groups com metricas
-        multiplier: Multiplicador de CPC (ex: 1.15 para +15%)
-        dry_run: Se deve simular sem executar
-
-    Returns:
-        list: Lista de resultados das operacoes
-    """
+    """Aplica ajuste de CPC em todos os ad groups."""
     operations = []
 
     for ad_group in ad_groups:
@@ -187,7 +148,6 @@ def _apply_cpc_update(
         if not ad_group_id:
             continue
 
-        # Converter Decimal para int se necessario
         if isinstance(current_cpc, Decimal):
             current_cpc = int(current_cpc)
 
@@ -224,18 +184,12 @@ def _apply_cpc_update(
 
 def handler(event, context):
     """
-    Lambda handler para aplicar recomendacoes de otimizacao.
+    Lambda handler para aplicar uma recomendacao especifica.
 
-    Endpoint: POST /optimizer/apply/{googleCampaignId}
-
-    Args:
-        event: Evento HTTP do API Gateway
-        context: Contexto Lambda
-
-    Returns:
-        dict: Resposta HTTP com resultado da aplicacao
+    Endpoint: POST /recommendations/{recommendationId}/apply
+    Body: { "clientId": "string", "campaignId": "string", "dryRun": bool }
     """
-    logger.info(f"Iniciando ApplyRecommendations com evento: {json.dumps(event)}")
+    logger.info(f"Iniciando ApplyRecommendation com evento: {json.dumps(event)}")
 
     # Validar API key
     body = parse_body(event)
@@ -244,52 +198,56 @@ def handler(event, context):
         return error_response
 
     # Extrair parametros
-    google_campaign_id = extract_path_param(event, "googleCampaignId")
-    if not google_campaign_id:
+    recommendation_id = extract_path_param(event, "recommendationId")
+    if not recommendation_id:
         return http_response(400, {
             "status": "ERROR",
-            "message": "googleCampaignId e obrigatorio no path"
+            "message": "recommendationId e obrigatorio no path"
         })
 
+    request_client_id = (body or {}).get("clientId")
+    request_campaign_id = (body or {}).get("campaignId")
     dry_run = (body or {}).get("dryRun", False)
 
-    # Gerar trace ID
-    trace_id = f"apply-rec-{google_campaign_id}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
-    logger.info(f"[traceId: {trace_id}] Processando campanha {google_campaign_id}, dryRun={dry_run}")
+    if not request_client_id or not request_campaign_id:
+        return http_response(400, {
+            "status": "ERROR",
+            "message": "clientId e campaignId sao obrigatorios no body"
+        })
 
     # Buscar recomendacao
-    recommendation = _get_recommendation(google_campaign_id)
+    recommendation = _get_recommendation(recommendation_id)
     if not recommendation:
-        logger.warning(f"[traceId: {trace_id}] Recomendacao nao encontrada para campanha {google_campaign_id}")
         return http_response(404, {
             "status": "NOT_FOUND",
-            "timestamp": datetime.utcnow().isoformat(),
-            "googleCampaignId": google_campaign_id,
-            "message": "Recomendacao nao encontrada para esta campanha"
+            "recommendationId": recommendation_id,
+            "message": "Recomendacao nao encontrada"
+        })
+
+    # Validar que clientId e campaignId correspondem
+    rec_client_id = recommendation.get("clientId")
+    rec_campaign_id = recommendation.get("campaignId")
+
+    if rec_client_id != request_client_id or rec_campaign_id != request_campaign_id:
+        return http_response(400, {
+            "status": "MISMATCH",
+            "message": "clientId ou campaignId nao correspondem a recomendacao"
         })
 
     # Verificar se ja foi aplicada
-    if recommendation.get("appliedAt") and not dry_run:
-        logger.info(f"[traceId: {trace_id}] Recomendacao ja aplicada em {recommendation.get('appliedAt')}")
-        return http_response(400, {
+    if recommendation.get("status") == "APPLIED" and not dry_run:
+        return http_response(409, {
             "status": "ALREADY_APPLIED",
-            "timestamp": datetime.utcnow().isoformat(),
-            "googleCampaignId": google_campaign_id,
+            "recommendationId": recommendation_id,
             "appliedAt": recommendation.get("appliedAt"),
             "message": "Esta recomendacao ja foi aplicada"
         })
 
-    client_id = recommendation.get("clientId")
-    campaign_name = recommendation.get("campaignName", "")
+    # Extrair dados da recomendacao
     action = recommendation.get("action")
     metrics = recommendation.get("metrics", {})
     ad_groups = metrics.get("ad_groups", [])
-
-    if not client_id:
-        return http_response(400, {
-            "status": "ERROR",
-            "message": "clientId nao encontrado na recomendacao"
-        })
+    campaign_name = recommendation.get("campaignName", "")
 
     if not action:
         return http_response(400, {
@@ -297,7 +255,9 @@ def handler(event, context):
             "message": "action nao encontrada na recomendacao"
         })
 
-    logger.info(f"[traceId: {trace_id}] Acao a aplicar: {action} para cliente {client_id}")
+    # Gerar trace ID
+    trace_id = f"apply-rec-{recommendation_id[:8]}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    logger.info(f"[traceId: {trace_id}] Aplicando recomendacao {recommendation_id}, acao={action}, dryRun={dry_run}")
 
     # Inicializar servico do Google Ads
     service = GoogleAdsClientService()
@@ -305,34 +265,28 @@ def handler(event, context):
 
     try:
         if action == "PAUSE_CAMPAIGN":
-            # Pausar campanha
             operation_result = _apply_pause_campaign(
-                service, client_id, google_campaign_id, dry_run
+                service, rec_client_id, rec_campaign_id, dry_run
             )
             operations.append(operation_result)
 
         elif action == "KEEP_CPC":
-            # Nenhuma acao necessaria
             operations.append({
                 "type": "KEEP_CPC",
                 "success": True,
                 "dryRun": dry_run,
-                "details": {
-                    "message": "CPC mantido conforme recomendacao"
-                }
+                "details": {"message": "CPC mantido conforme recomendacao"}
             })
 
         elif action in ACTION_CPC_MULTIPLIERS:
-            # Ajustar CPC dos ad groups
             multiplier = ACTION_CPC_MULTIPLIERS[action]
 
             if not ad_groups:
-                # Buscar ad groups se nao estiverem na recomendacao
-                ad_groups = service.get_ad_groups(client_id, campaign_id=google_campaign_id)
+                ad_groups = service.get_ad_groups(rec_client_id, campaign_id=rec_campaign_id)
 
             if ad_groups:
                 cpc_operations = _apply_cpc_update(
-                    service, client_id, ad_groups, multiplier, dry_run
+                    service, rec_client_id, ad_groups, multiplier, dry_run
                 )
                 operations.extend(cpc_operations)
             else:
@@ -340,9 +294,7 @@ def handler(event, context):
                     "type": "UPDATE_CPC",
                     "success": False,
                     "dryRun": dry_run,
-                    "details": {
-                        "message": "Nenhum ad group encontrado para atualizar CPC"
-                    }
+                    "details": {"message": "Nenhum ad group encontrado para atualizar CPC"}
                 })
 
         else:
@@ -351,19 +303,24 @@ def handler(event, context):
                 "message": f"Acao desconhecida: {action}"
             })
 
-        # Verificar se todas operacoes foram bem sucedidas
+        # Verificar sucesso
         all_success = all(op.get("success", False) for op in operations)
         status = "SUCCESS" if all_success else "PARTIAL_SUCCESS"
 
-        # Marcar como aplicada (apenas se nao for dry run e teve sucesso)
+        # Atualizar status da recomendacao (se nao for dry run)
         if not dry_run and all_success:
-            _mark_recommendation_as_applied(google_campaign_id, operations)
+            _update_recommendation_status(
+                recommendation_id,
+                "APPLIED",
+                {"operations": operations, "traceId": trace_id}
+            )
 
         # Registrar execucao
         _log_execution(
             trace_id=trace_id,
-            client_id=client_id,
-            campaign_id=google_campaign_id,
+            client_id=rec_client_id,
+            campaign_id=rec_campaign_id,
+            recommendation_id=recommendation_id,
             action=action,
             operations=operations,
             dry_run=dry_run,
@@ -373,8 +330,9 @@ def handler(event, context):
         response_data = {
             "status": status,
             "timestamp": datetime.utcnow().isoformat(),
-            "googleCampaignId": google_campaign_id,
-            "clientId": client_id,
+            "recommendationId": recommendation_id,
+            "clientId": rec_client_id,
+            "campaignId": rec_campaign_id,
             "campaignName": campaign_name,
             "action": action,
             "dryRun": dry_run,
@@ -388,11 +346,11 @@ def handler(event, context):
         error_msg = str(e)
         logger.error(f"[traceId: {trace_id}] Erro ao aplicar recomendacao: {error_msg}", exc_info=True)
 
-        # Registrar erro
         _log_execution(
             trace_id=trace_id,
-            client_id=client_id,
-            campaign_id=google_campaign_id,
+            client_id=rec_client_id,
+            campaign_id=rec_campaign_id,
+            recommendation_id=recommendation_id,
             action=action,
             operations=operations,
             dry_run=dry_run,
@@ -401,7 +359,6 @@ def handler(event, context):
 
         return http_response(500, {
             "status": "ERROR",
-            "timestamp": datetime.utcnow().isoformat(),
-            "googleCampaignId": google_campaign_id,
+            "recommendationId": recommendation_id,
             "message": f"Erro ao aplicar recomendacao: {error_msg}"
         })

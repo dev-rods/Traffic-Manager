@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from decimal import Decimal
@@ -17,7 +18,7 @@ logger.setLevel(logging.INFO)
 
 
 dynamodb = boto3.resource("dynamodb")
-campaign_metadata_table = dynamodb.Table(os.environ.get("CAMPAIGN_METADATA_TABLE"))
+recommendations_table = dynamodb.Table(os.environ.get("RECOMMENDATIONS_TABLE"))
 
 
 def _get_clients_to_optimize() -> List[Dict[str, Any]]:
@@ -84,23 +85,30 @@ def _store_recommendation(
     optimization_config: Dict[str, Any],
     metrics: Dict[str, Any],
     action: str,
-) -> None:
+) -> str:
     """
-    Salva no DynamoDB a recomendação de otimização para a campanha.
+    Salva recomendacao na tabela Recommendations com ID unico.
+
+    Returns:
+        str: recommendationId gerado
     """
+    recommendation_id = str(uuid.uuid4())
     timestamp = datetime.utcnow().isoformat()
     healthy_cpa = optimization_config.get("healthy_cpa")
     current_cpa = metrics.get("cost_per_conversion")
 
-    # Converter valores numéricos para Decimal (requisito do DynamoDB)
+    # Converter valores numericos para Decimal (requisito do DynamoDB)
     optimization_config_decimal = convert_dict_to_decimal(optimization_config)
     metrics_decimal = convert_dict_to_decimal(metrics)
     healthy_cpa_decimal = convert_to_decimal(healthy_cpa) if healthy_cpa is not None else None
     current_cpa_decimal = convert_to_decimal(current_cpa) if current_cpa is not None else None
 
     item = {
-        "googleCampaignId": str(campaign_id),
+        "recommendationId": recommendation_id,
         "clientId": client_id,
+        "campaignId": str(campaign_id),
+        "campaignIdCreatedAt": f"{campaign_id}#{timestamp}",  # Sort key para GSI
+        "status": "PENDING",
         "campaignName": campaign_name,
         "createdAt": timestamp,
         "optimizationConfig": optimization_config_decimal,
@@ -108,17 +116,16 @@ def _store_recommendation(
         "healthyCpa": healthy_cpa_decimal,
         "currentCpa": current_cpa_decimal,
         "action": action,
-        "period": {
-            "days": 30,
-        },
+        "period": {"days": 30},
     }
 
     logger.info(
-        f"[clientId={client_id}][campaignId={campaign_id}] "
-        f"Ação recomendada: {action} | CPA atual={current_cpa} | CPA saudável={healthy_cpa}"
+        f"[clientId={client_id}][campaignId={campaign_id}][recommendationId={recommendation_id}] "
+        f"Acao recomendada: {action} | CPA atual={current_cpa} | CPA saudavel={healthy_cpa}"
     )
 
-    campaign_metadata_table.put_item(Item=item)
+    recommendations_table.put_item(Item=item)
+    return recommendation_id
 
 
 def _resolve_targets_from_event(event: Dict[str, Any]) -> (Optional[str], Optional[str], bool):
@@ -250,7 +257,7 @@ def handler(event, context):
                 action = _decide_action(current_cpa, healthy_cpa)
                 print(f"[traceId: {trace_id}] Ação: {action}")
 
-                _store_recommendation(
+                recommendation_id = _store_recommendation(
                     client_id=client_id,
                     campaign_id=campaign_id,
                     campaign_name=campaign_name,
@@ -261,6 +268,7 @@ def handler(event, context):
 
                 recommendations.append(
                     {
+                        "recommendationId": recommendation_id,
                         "clientId": client_id,
                         "campaignId": str(campaign_id),
                         "campaignName": campaign_name,

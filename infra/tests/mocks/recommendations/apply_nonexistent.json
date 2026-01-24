@@ -1,0 +1,16 @@
+{
+  "httpMethod": "POST",
+  "path": "/recommendations/non-existent-recommendation-id/apply",
+  "pathParameters": {
+    "recommendationId": "non-existent-recommendation-id"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "body": "{\"clientId\": \"empresarodsteste-bd5f23\", \"campaignId\": \"22656250465\"}",
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

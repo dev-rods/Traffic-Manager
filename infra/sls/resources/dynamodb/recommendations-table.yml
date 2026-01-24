@@ -1,0 +1,41 @@
+# Schema da Tabela Recommendations:
+# - recommendationId (String): UUID unico da recomendacao (PK)
+# - clientId (String): ID do cliente
+# - campaignId (String): ID da campanha Google Ads
+# - status (String): PENDING, APPLIED, SKIPPED
+# - action (String): Acao recomendada (INCREASE_CPC_10, etc.)
+# - metrics (Map): Metricas no momento da geracao
+# - payload (Map): Payload completo da recomendacao
+# - createdAt (String): ISO timestamp da criacao
+# - appliedAt (String): ISO timestamp da aplicacao
+# - applicationResult (Map): Resultado da aplicacao
+#
+# GSI: clientId-campaignId-index
+#   - PK: clientId
+#   - SK: campaignIdCreatedAt (composto: campaignId#createdAt)
+
+Resources:
+  RecommendationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-recommendations
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: recommendationId
+          AttributeType: S
+        - AttributeName: clientId
+          AttributeType: S
+        - AttributeName: campaignIdCreatedAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: recommendationId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: clientId-campaignId-index
+          KeySchema:
+            - AttributeName: clientId
+              KeyType: HASH
+            - AttributeName: campaignIdCreatedAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL

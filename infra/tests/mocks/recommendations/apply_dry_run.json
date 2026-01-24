@@ -1,0 +1,16 @@
+{
+  "httpMethod": "POST",
+  "path": "/recommendations/865016fd-dd1f-4710-914a-59e50df48a88/apply",
+  "pathParameters": {
+    "recommendationId": "865016fd-dd1f-4710-914a-59e50df48a88"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "body": "{\"clientId\": \"empresarodsteste-bd5f23\", \"campaignId\": \"22656250465\", \"dryRun\": true}",
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

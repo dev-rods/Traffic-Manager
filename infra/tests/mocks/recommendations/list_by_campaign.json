@@ -1,0 +1,16 @@
+{
+  "httpMethod": "GET",
+  "path": "/recommendations",
+  "queryStringParameters": {
+    "clientId": "empresarodsteste-bd5f23",
+    "campaignId": "22656250465"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

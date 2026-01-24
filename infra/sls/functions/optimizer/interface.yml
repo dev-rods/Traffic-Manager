@@ -31,28 +31,3 @@ GenerateRecommendations:
         method: post
         cors: true
 
-ApplyRecommendations:
-  image:
-    name: lambdaimage
-    command: ["src.functions.optimizer.apply_recommendations.handler"]
-  memorySize: 1024
-  timeout: 300
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ApplyRecommendations-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - dynamodb:GetItem
-        - dynamodb:PutItem
-        - dynamodb:UpdateItem
-      Resource: "*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
-  events:
-    - http:
-        path: optimizer/apply/{googleCampaignId}
-        method: post
-        cors: true

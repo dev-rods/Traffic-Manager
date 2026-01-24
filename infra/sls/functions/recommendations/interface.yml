@@ -1,0 +1,58 @@
+ListRecommendations:
+  image:
+    name: lambdaimage
+    command: ["src.functions.recommendations.list_recommendations.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListRecommendations-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+      Resource:
+        - !GetAtt RecommendationsTable.Arn
+        - !Sub "${RecommendationsTable.Arn}/index/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: recommendations
+        method: get
+        cors: true
+
+ApplyRecommendation:
+  image:
+    name: lambdaimage
+    command: ["src.functions.recommendations.apply_recommendation.handler"]
+  memorySize: 1024
+  timeout: 300
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ApplyRecommendation-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:UpdateItem
+      Resource: !GetAtt RecommendationsTable.Arn
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource: !GetAtt ExecutionHistoryTable.Arn
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+      Resource: !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: recommendations/{recommendationId}/apply
+        method: post
+        cors: true
