@@ -137,7 +137,7 @@ def get_client_info(client_id: str) -> Optional[str]:
 def create_google_ads_client(google_ads_customer_id: str) -> GoogleAdsClient:
     print(f"Criando Google Ads Client para cliente: {google_ads_customer_id}")
     ads_config = GoogleAdsConfig()
-    config = ads_config.get_google_ads_config(google_ads_customer_id)
+    config = ads_config.get_google_ads_config()
     try:
         googleads_client = GoogleAdsClient.load_from_dict(config, version="v20")
         

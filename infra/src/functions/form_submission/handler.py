@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from src.utils.auth import ClientAuth
 from src.services.google_ads_mcc_service import GoogleAdsMCCService
-import hashlib
+from src.services.client_service import ClientService
 
 
 step_functions = boto3.client('stepfunctions')
@@ -135,63 +135,31 @@ def record_execution_start(trace_id, client_id, payload):
         print(f"Erro ao registrar início da execução: {str(e)}")
 
 def create_or_get_client_from_form_data(form_data):
+    """
+    Cria ou obtém cliente a partir dos dados do formulário
+    Utiliza o ClientService para reutilização de código
+    """
     try:
         company_name = form_data.get('company_name', '')
         google_ads_customer_id = form_data.get('google_ads_customer_id', '')
+        
         if not company_name:
             print("Nome da empresa não fornecido no formulário")
             return None
         if not google_ads_customer_id:
             print("Google Ads Customer ID não fornecido no formulário")
             return None
-        base = "".join(e for e in company_name if e.isalnum()).lower()
-        hash_suffix = hashlib.md5(company_name.encode()).hexdigest()[:6]
-        client_id = f"{base}-{hash_suffix}"
-        clients_table = dynamodb.Table(os.environ.get('CLIENTS_TABLE'))
-        try:
-            response = clients_table.get_item(Key={'clientId': client_id})
-            if 'Item' in response:
-                print(f"Cliente existente encontrado: {client_id}")
-                existing_client = response['Item']
-                if not existing_client.get('googleAdsCustomerId'):
-                    clients_table.update_item(
-                        Key={'clientId': client_id},
-                        UpdateExpression="SET googleAdsCustomerId = :customer_id",
-                        ExpressionAttributeValues={':customer_id': google_ads_customer_id}
-                    )
-                    existing_client['googleAdsCustomerId'] = google_ads_customer_id
-                return existing_client
-        except Exception as e:
-            print(f"Erro ao verificar cliente existente: {str(e)}")        
-        client_data = {
-            'clientId': client_id,
-            'name': company_name,
-            'email': '',
-            'active': True,
-            'createdAt': datetime.utcnow().isoformat(),
-            'source': 'google_sheets_form',
-            'googleAdsCustomerId': google_ads_customer_id,
-            'mccStatus': 'NOT_LINKED',
-            'formData': {
-                'business_niche': form_data.get('business_niche', ''),
-                'industry': form_data.get('industry', ''),
-                'address': form_data.get('address', ''),
-                'objectives': form_data.get('objectives', ''),
-                'budget': form_data.get('budget', ''),
-                'target_audience': form_data.get('target_audience', ''),
-                'competitive_advantage': form_data.get('competitive_advantage', ''),
-                'customer_benefit': form_data.get('customer_benefit', ''),
-                'customer_desires': form_data.get('customer_desires', ''),
-                'customer_pains': form_data.get('customer_pains', ''),
-                'cost_per_result': form_data.get('cost_per_result', ''),
-                'average_ticket': form_data.get('average_ticket', ''),
-                'brand_perception': form_data.get('brand_perception', ''),
-                'customer_behavior': form_data.get('customer_behavior', '')
-            }
-        }        
-        clients_table.put_item(Item=client_data)
-        print(f"Novo cliente criado: {client_id} ({company_name}) com Google Ads ID: {google_ads_customer_id}")
-        return client_data
+        
+        client_service = ClientService()
+        client = client_service.create_or_get_client(
+            company_name=company_name,
+            google_ads_customer_id=google_ads_customer_id,
+            email='',
+            source='google_sheets_form',
+            form_data=form_data
+        )
+        
+        return client
         
     except Exception as e:
         print(f"Erro ao criar/obter cliente: {str(e)}")

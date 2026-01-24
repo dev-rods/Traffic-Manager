@@ -1,0 +1,26 @@
+# Schema da Tabela Prompts:
+# - promptId (String): Identificador único do prompt (Chave Primária)
+# - prompt (String): Template do prompt com placeholders para parâmetros
+# - description (String): Descrição do prompt
+# - parameters (List): Lista de parâmetros esperados pelo prompt
+# - systemMessage (String, opcional): Mensagem do sistema para a OpenAI
+# - model (String, opcional): Modelo OpenAI a ser usado (padrão: gpt-4.1)
+# - temperature (Number, opcional): Temperatura para a chamada (padrão: 0.7)
+# - maxTokens (Number, opcional): Máximo de tokens (padrão: 1500)
+# - createdAt (String): Data/hora de criação do registro
+# - updatedAt (String): Data/hora de última atualização
+# - isActive (Boolean): Indica se o prompt está ativo
+
+Resources:
+  PromptsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-prompts
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: promptId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: promptId
+          KeyType: HASH
+

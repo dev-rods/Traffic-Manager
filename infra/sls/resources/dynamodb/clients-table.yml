@@ -17,15 +17,6 @@ Resources:
       AttributeDefinitions:
         - AttributeName: clientId
           AttributeType: S
-        - AttributeName: apiKey
-          AttributeType: S
       KeySchema:
         - AttributeName: clientId
           KeyType: HASH
-      GlobalSecondaryIndexes:
-        - IndexName: apiKey-index
-          KeySchema:
-            - AttributeName: apiKey
-              KeyType: HASH
-          Projection:
-            ProjectionType: ALL 
