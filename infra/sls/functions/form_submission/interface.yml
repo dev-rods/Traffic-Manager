@@ -7,10 +7,6 @@ FormSubmissionHandler:
   iamRoleStatements:
     - Effect: Allow
       Action:
-        - states:StartExecution
-      Resource: "arn:aws:states:${self:provider.region}:${self:custom.awsId}:stateMachine:${self:provider.environment.BASE_STATE_MACHINE_NAME}*"
-    - Effect: Allow
-      Action:
         - dynamodb:GetItem
         - dynamodb:PutItem
         - dynamodb:Query

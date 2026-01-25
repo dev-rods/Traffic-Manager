@@ -39,7 +39,6 @@ provider:
     RECOMMENDATIONS_TABLE: ${self:custom.resourcePrefix}-recommendations
     LEADS_TABLE: ${self:custom.resourcePrefix}-leads
     BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
-    BASE_STATE_MACHINE_NAME: ${self:service}-${self:custom.stage}-statemachine-
     BASE_ROLE_ARN: arn:aws:iam::${self:custom.awsId}:role/${self:service}-${self:custom.stage}-
 
 functions:
@@ -56,16 +55,10 @@ functions:
   - ${file(sls/functions/recommendations/interface.yml)}
   - ${file(sls/functions/leads/interface.yml)}
 
-stepFunctions:
-  stateMachines:
-    CampaignOptimizationFlow: ${file(sls/resources/stepfunctions/campaign-optimization-flow.yml)}
-
 resources:
     # ECR Repository (comentado - Serverless Framework gerencia automaticamente via provider.ecr.images)
     # Mantido como backup caso precise de controle manual do repositório
     # - ${file(sls/resources/ecr/lambda-repository.yml)}
-    # IAM Roles
-    - ${file(sls/resources/iam/state-machine-role.yml)}
     # Tabelas DynamoDB - uma tabela por arquivo
     - ${file(sls/resources/dynamodb/campaign-templates-table.yml)}
     - ${file(sls/resources/dynamodb/execution-history-table.yml)}
@@ -77,6 +70,5 @@ resources:
     - ${file(sls/resources/dynamodb/leads-table.yml)}
 
 plugins:
-  - serverless-step-functions
   - serverless-iam-roles-per-function
   

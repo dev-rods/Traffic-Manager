@@ -33,7 +33,7 @@ Detalhes: `docs/work/README.md`.
 
 ## Project Overview
 
-Traffic Manager is an AWS Lambda-based system for automated Google Ads campaign optimization using AI. It orchestrates campaign creation (FIRST_RUN) and ongoing optimization (IMPROVE) through Step Functions workflows.
+Traffic Manager is an AWS Lambda-based system for automated Google Ads campaign optimization using AI. It provides Lambda functions for campaign management, client management, and AI-powered optimization recommendations.
 
 ## Build & Deploy Commands
 
@@ -68,19 +68,11 @@ python src/scripts/manage_mcc_links.py
 
 ## Architecture
 
-### Execution Flow (Step Functions)
-1. **CampaignOrchestrator** - Determines FIRST_RUN vs IMPROVE, validates client access
-2. **FetchCampaignTemplate** (FIRST_RUN) or **FetchCampaignMetrics** (IMPROVE) - Gets template/metrics
-3. **CallOpenAI** - Sends to OpenAI for AI optimization recommendations
-4. **ParseOpenAIResponse** - Transforms AI output to Google Ads payload
-5. **ApplyGoogleAdsChanges** - Applies mutations via Google Ads API
-6. **CampaignRecorder** - Records final execution state
-
 ### Key Directories
 - `infra/src/functions/` - Lambda handlers organized by domain (campaign, googleads, openai, etc.)
 - `infra/src/services/` - Business logic (Google Ads client management, token management)
 - `infra/src/utils/` - Utilities (encryption, auth, logging)
-- `infra/sls/resources/` - CloudFormation resources (DynamoDB tables, Step Functions, IAM)
+- `infra/sls/resources/` - CloudFormation resources (DynamoDB tables)
 - `infra/tests/mocks/` - Mock payloads for local testing
 
 ### Data Stores (DynamoDB)
