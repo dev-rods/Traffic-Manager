@@ -1,0 +1,61 @@
+# RDS PostgreSQL Database Configuration
+# Instance: db.t3.micro (free tier eligible - 750 hours/month for 12 months)
+# Storage: 20GB gp2 (free tier eligible)
+# Access: Public with SSL + Security Group
+
+Resources:
+  # Security Group for RDS PostgreSQL
+  PostgresSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: ${self:custom.resourcePrefix}-postgres-sg
+      GroupDescription: Security group for RDS PostgreSQL access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+          Description: Allow PostgreSQL connections from anywhere (protected by SSL + credentials)
+      Tags:
+        - Key: Name
+          Value: ${self:custom.resourcePrefix}-postgres-sg
+        - Key: Stage
+          Value: ${self:custom.stage}
+
+  # RDS PostgreSQL Instance
+  PostgresDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: ${self:custom.resourcePrefix}-postgres
+      DBInstanceClass: db.t3.micro
+      Engine: postgres
+      EngineVersion: "15"
+      MasterUsername: ${ssm:/${self:custom.stage}/RDS_MASTER_USERNAME}
+      MasterUserPassword: ${ssm:/${self:custom.stage}/RDS_MASTER_PASSWORD}
+      DBName: trafficmanager
+      AllocatedStorage: 20
+      StorageType: gp2
+      PubliclyAccessible: true
+      VPCSecurityGroups:
+        - !GetAtt PostgresSecurityGroup.GroupId
+      BackupRetentionPeriod: 7
+      DeletionProtection: false
+      StorageEncrypted: true
+      Tags:
+        - Key: Name
+          Value: ${self:custom.resourcePrefix}-postgres
+        - Key: Stage
+          Value: ${self:custom.stage}
+
+Outputs:
+  PostgresEndpoint:
+    Description: PostgreSQL RDS Endpoint
+    Value: !GetAtt PostgresDatabase.Endpoint.Address
+    Export:
+      Name: ${self:custom.resourcePrefix}-postgres-endpoint
+
+  PostgresPort:
+    Description: PostgreSQL RDS Port
+    Value: !GetAtt PostgresDatabase.Endpoint.Port
+    Export:
+      Name: ${self:custom.resourcePrefix}-postgres-port
