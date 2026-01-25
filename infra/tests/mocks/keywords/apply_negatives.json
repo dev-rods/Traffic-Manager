@@ -1,0 +1,10 @@
+{
+  "body": "{\"clientId\":\"test-client-001\",\"campaignId\":\"123456789\",\"negativeKeywords\":[{\"text\":\"gratuito\",\"matchType\":\"BROAD\"},{\"text\":\"advogado rio de janeiro\",\"matchType\":\"PHRASE\"}]}",
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "requestContext": {
+    "requestId": "test-trace-004"
+  }
+}

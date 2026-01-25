@@ -1,0 +1,119 @@
+ListSearchTerms:
+  image:
+    name: lambdaimage
+    command: ["src.functions.keywords.list_search_terms.handler"]
+  memorySize: 1024
+  timeout: 60
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListSearchTerms-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+      Resource: !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: keywords/search-terms
+        method: get
+        cors: true
+
+ListNegativeKeywords:
+  image:
+    name: lambdaimage
+    command: ["src.functions.keywords.list_negatives.handler"]
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListNegativeKeywords-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+      Resource: !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: keywords/negatives
+        method: get
+        cors: true
+
+AnalyzeNegativeKeywords:
+  image:
+    name: lambdaimage
+    command: ["src.functions.keywords.analyze_negatives.handler"]
+  memorySize: 1024
+  timeout: 120
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-AnalyzeNegativeKeywords-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+      Resource: !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource: !GetAtt ExecutionHistoryTable.Arn
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: keywords/analyze-negatives
+        method: post
+        cors: true
+
+ApplyNegativeKeywords:
+  image:
+    name: lambdaimage
+    command: ["src.functions.keywords.apply_negatives.handler"]
+  memorySize: 1024
+  timeout: 60
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ApplyNegativeKeywords-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+      Resource: !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource: !GetAtt ExecutionHistoryTable.Arn
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: keywords/apply-negatives
+        method: post
+        cors: true

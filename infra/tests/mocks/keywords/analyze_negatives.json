@@ -1,0 +1,10 @@
+{
+  "body": "{\"clientId\":\"test-client-001\",\"campaignId\":\"123456789\",\"context\":{\"businessType\":\"Escritorio de advocacia trabalhista\",\"targetLocation\":\"Sao Paulo, SP\",\"excludePatterns\":[\"gratis\",\"gratuito\",\"free\"]}}",
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "requestContext": {
+    "requestId": "test-trace-003"
+  }
+}

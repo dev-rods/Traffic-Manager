@@ -1,0 +1,14 @@
+{
+  "queryStringParameters": {
+    "clientId": "test-client-001",
+    "campaignId": "123456789",
+    "minImpressions": "10",
+    "days": "30"
+  },
+  "headers": {
+    "x-api-key": "test-api-key"
+  },
+  "requestContext": {
+    "requestId": "test-trace-001"
+  }
+}

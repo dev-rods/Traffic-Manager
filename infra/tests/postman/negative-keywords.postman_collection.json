@@ -1,0 +1,505 @@
+{
+  "info": {
+    "_postman_id": "negative-keywords-collection",
+    "name": "Traffic Manager - Negative Keywords",
+    "description": "Endpoints para deteccao e gerenciamento de palavras-chave negativas no Google Ads. Inclui analise via LLM para sugerir termos a negativar.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "YOUR_CLIENT_ID",
+      "type": "string"
+    },
+    {
+      "key": "campaignId",
+      "value": "YOUR_CAMPAIGN_ID",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "List Search Terms",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has expected structure\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+              "    pm.expect(jsonData).to.have.property('searchTerms');",
+              "    pm.expect(jsonData).to.have.property('count');",
+              "});",
+              "",
+              "pm.test(\"Search terms have metrics\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    if (jsonData.searchTerms.length > 0) {",
+              "        var term = jsonData.searchTerms[0];",
+              "        pm.expect(term).to.have.property('search_term');",
+              "        pm.expect(term).to.have.property('impressions');",
+              "        pm.expect(term).to.have.property('clicks');",
+              "        pm.expect(term).to.have.property('conversions');",
+              "    }",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/search-terms?clientId={{clientId}}&campaignId={{campaignId}}&minImpressions=10&days=30",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "search-terms"],
+          "query": [
+            {
+              "key": "clientId",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "campaignId",
+              "value": "{{campaignId}}"
+            },
+            {
+              "key": "minImpressions",
+              "value": "10"
+            },
+            {
+              "key": "days",
+              "value": "30"
+            }
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "GET",
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/search-terms?clientId={{clientId}}&campaignId={{campaignId}}"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"searchTerms\": [\n    {\n      \"search_term\": \"advogado trabalhista sp\",\n      \"status\": \"NONE\",\n      \"impressions\": 1500,\n      \"clicks\": 45,\n      \"conversions\": 3,\n      \"cost\": 89.50,\n      \"ctr\": 3.0,\n      \"cpc\": 1.99,\n      \"cpa\": 29.83\n    }\n  ],\n  \"count\": 1,\n  \"filters\": {\n    \"clientId\": \"meu-cliente\",\n    \"campaignId\": \"123456789\",\n    \"minImpressions\": 10,\n    \"days\": 30\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "List Search Terms (Missing clientId)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates missing clientId\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"clientId\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/search-terms?campaignId={{campaignId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "search-terms"],
+          "query": [
+            {
+              "key": "campaignId",
+              "value": "{{campaignId}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "List Negative Keywords",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has expected structure\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+              "    pm.expect(jsonData).to.have.property('negativeKeywords');",
+              "    pm.expect(jsonData).to.have.property('count');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/negatives?clientId={{clientId}}&campaignId={{campaignId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "negatives"],
+          "query": [
+            {
+              "key": "clientId",
+              "value": "{{clientId}}"
+            },
+            {
+              "key": "campaignId",
+              "value": "{{campaignId}}"
+            }
+          ]
+        }
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "GET",
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/negatives?clientId={{clientId}}&campaignId={{campaignId}}"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"negativeKeywords\": [\n    {\n      \"id\": 111222333,\n      \"text\": \"gratis\",\n      \"match_type\": \"BROAD\",\n      \"level\": \"campaign\",\n      \"campaign\": {\"id\": 123456789, \"name\": \"Campanha Principal\"}\n    }\n  ],\n  \"count\": 1,\n  \"filters\": {\n    \"clientId\": \"meu-cliente\",\n    \"campaignId\": \"123456789\",\n    \"adGroupId\": null\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Analyze Negative Keywords",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has expected structure\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+              "    pm.expect(jsonData).to.have.property('analysis');",
+              "    pm.expect(jsonData).to.have.property('suggestions');",
+              "    pm.expect(jsonData).to.have.property('existingNegatives');",
+              "    pm.expect(jsonData).to.have.property('recommendedActions');",
+              "});",
+              "",
+              "pm.test(\"Analysis has metrics\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.analysis).to.have.property('totalSearchTerms');",
+              "    pm.expect(jsonData.analysis).to.have.property('potentialNegatives');",
+              "    pm.expect(jsonData.analysis).to.have.property('estimatedWastedSpend');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"context\": {\n        \"businessType\": \"Escritorio de advocacia trabalhista\",\n        \"targetLocation\": \"Sao Paulo, SP\",\n        \"excludePatterns\": [\"gratis\", \"gratuito\", \"free\"]\n    }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/analyze-negatives",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "analyze-negatives"]
+        }
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/analyze-negatives"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"traceId\": \"abc-123\",\n  \"analysis\": {\n    \"totalSearchTerms\": 150,\n    \"potentialNegatives\": 8,\n    \"estimatedWastedSpend\": 156.50\n  },\n  \"suggestions\": [\n    {\n      \"term\": \"advogado gratuito\",\n      \"reason\": \"Indica busca por servico gratuito - escritorio cobra honorarios\",\n      \"metrics\": {\n        \"impressions\": 800,\n        \"clicks\": 12,\n        \"conversions\": 0,\n        \"cost\": 24.00\n      },\n      \"priority\": \"HIGH\",\n      \"matchType\": \"BROAD\"\n    }\n  ],\n  \"existingNegatives\": [\"gratis\", \"de graca\"],\n  \"recommendedActions\": [\n    \"Adicionar 'gratuito' como BROAD match negative\",\n    \"Adicionar termos de outras cidades como PHRASE match negative\"\n  ]\n}"
+        }
+      ]
+    },
+    {
+      "name": "Analyze Negative Keywords (Missing campaignId)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates missing campaignId\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"campaignId\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/analyze-negatives",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "analyze-negatives"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Apply Negative Keywords",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has expected structure\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+              "    pm.expect(jsonData).to.have.property('applied');",
+              "    pm.expect(jsonData).to.have.property('level');",
+              "});",
+              "",
+              "pm.test(\"Keywords were applied\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.applied.length).to.be.greaterThan(0);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"negativeKeywords\": [\n        {\"text\": \"gratuito\", \"matchType\": \"BROAD\"},\n        {\"text\": \"advogado rio de janeiro\", \"matchType\": \"PHRASE\"}\n    ]\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-negatives",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "apply-negatives"]
+        }
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-negatives"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"traceId\": \"def-456\",\n  \"message\": \"2 negative keywords aplicadas com sucesso\",\n  \"applied\": [\n    \"customers/1234567890/campaignCriteria/123~456\",\n    \"customers/1234567890/campaignCriteria/123~457\"\n  ],\n  \"level\": \"campaign\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Apply Negative Keywords (Empty List)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates empty list\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"negativeKeywords\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"negativeKeywords\": []\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-negatives",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "apply-negatives"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Apply Negative Keywords (Invalid matchType)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates invalid matchType\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"matchType\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"negativeKeywords\": [\n        {\"text\": \"teste\", \"matchType\": \"INVALID\"}\n    ]\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-negatives",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "apply-negatives"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

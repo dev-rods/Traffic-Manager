@@ -40,6 +40,12 @@ provider:
     LEADS_TABLE: ${self:custom.resourcePrefix}-leads
     BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
     BASE_ROLE_ARN: arn:aws:iam::${self:custom.awsId}:role/${self:service}-${self:custom.stage}-
+    # RDS PostgreSQL
+    RDS_HOST: !GetAtt PostgresDatabase.Endpoint.Address
+    RDS_PORT: !GetAtt PostgresDatabase.Endpoint.Port
+    RDS_DATABASE: trafficmanager
+    RDS_USERNAME: ${ssm:/${self:custom.stage}/RDS_MASTER_USERNAME}
+    RDS_PASSWORD: ${ssm:/${self:custom.stage}/RDS_MASTER_PASSWORD}
 
 functions:
   - ${file(sls/functions/campaign/interface.yml)}
@@ -54,6 +60,7 @@ functions:
   - ${file(sls/functions/optimizer/interface.yml)}
   - ${file(sls/functions/recommendations/interface.yml)}
   - ${file(sls/functions/leads/interface.yml)}
+  - ${file(sls/functions/keywords/interface.yml)}
 
 resources:
     # ECR Repository (comentado - Serverless Framework gerencia automaticamente via provider.ecr.images)
@@ -68,6 +75,8 @@ resources:
     - ${file(sls/resources/dynamodb/prompts-table.yml)}
     - ${file(sls/resources/dynamodb/recommendations-table.yml)}
     - ${file(sls/resources/dynamodb/leads-table.yml)}
+    # RDS PostgreSQL
+    - ${file(sls/resources/rds/postgres-database.yml)}
 
 plugins:
   - serverless-iam-roles-per-function

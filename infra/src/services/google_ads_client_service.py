@@ -390,6 +390,351 @@ class GoogleAdsClientService:
             logger.error(f"Erro ao buscar palavras-chave para cliente {client_id}: {str(e)}")
             return []
 
+    def get_search_terms(
+        self,
+        client_id: str,
+        campaign_id: str,
+        ad_group_id: Optional[str] = None,
+        days: int = 30,
+        min_impressions: int = 10,
+        limit: int = 500
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtem termos de pesquisa com metricas dos ultimos N dias.
+
+        Args:
+            client_id: ID do cliente no sistema
+            campaign_id: ID da campanha
+            ad_group_id: ID do grupo de anuncios (opcional)
+            days: Periodo em dias (default: 30)
+            min_impressions: Minimo de impressoes para filtrar (default: 10)
+            limit: Limite de resultados (default: 500)
+
+        Returns:
+            list: Lista de termos de pesquisa com metricas
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+
+            if not google_ads_client:
+                logger.error(f"Cliente {client_id} nao configurado para Google Ads")
+                return []
+
+            ga_service = google_ads_client.get_service("GoogleAdsService")
+
+            # Construir filtro de ad_group se especificado
+            ad_group_filter = ""
+            if ad_group_id:
+                ad_group_filter = f"AND ad_group.id = {ad_group_id}"
+
+            # Query para search terms - usando LAST_30_DAYS ou periodo customizado
+            date_range = f"LAST_{days}_DAYS" if days in [7, 14, 30, 90] else "LAST_30_DAYS"
+
+            query = f"""
+                SELECT
+                    search_term_view.search_term,
+                    search_term_view.status,
+                    campaign.id,
+                    campaign.name,
+                    ad_group.id,
+                    ad_group.name,
+                    metrics.impressions,
+                    metrics.clicks,
+                    metrics.conversions,
+                    metrics.cost_micros,
+                    metrics.ctr,
+                    metrics.average_cpc
+                FROM search_term_view
+                WHERE campaign.id = {campaign_id}
+                    AND segments.date DURING {date_range}
+                    AND metrics.impressions >= {min_impressions}
+                    {ad_group_filter}
+                ORDER BY metrics.impressions DESC
+                LIMIT {limit}
+            """
+
+            stream = ga_service.search_stream(customer_id=customer_id, query=query)
+
+            search_terms = []
+            for batch in stream:
+                for row in batch.results:
+                    cost = row.metrics.cost_micros / 1000000 if row.metrics.cost_micros else 0
+                    conversions = row.metrics.conversions if row.metrics.conversions else 0
+
+                    term_data = {
+                        'search_term': row.search_term_view.search_term,
+                        'status': row.search_term_view.status.name,
+                        'campaign': {
+                            'id': row.campaign.id,
+                            'name': row.campaign.name
+                        },
+                        'ad_group': {
+                            'id': row.ad_group.id,
+                            'name': row.ad_group.name
+                        },
+                        'impressions': row.metrics.impressions,
+                        'clicks': row.metrics.clicks,
+                        'conversions': conversions,
+                        'cost': cost,
+                        'ctr': round(row.metrics.ctr * 100, 2) if row.metrics.ctr else 0,
+                        'cpc': row.metrics.average_cpc / 1000000 if row.metrics.average_cpc else 0,
+                        'cpa': round(cost / conversions, 2) if conversions > 0 else None
+                    }
+                    search_terms.append(term_data)
+
+            logger.info(f"Encontrados {len(search_terms)} termos de pesquisa para cliente {client_id}")
+            return search_terms
+
+        except GoogleAdsException as ex:
+            logger.error(f"Erro da API do Google Ads ao buscar search terms: {ex.error.code().name}")
+            return []
+        except Exception as e:
+            logger.error(f"Erro ao buscar search terms para cliente {client_id}: {str(e)}")
+            return []
+
+    def get_negative_keywords(
+        self,
+        client_id: str,
+        campaign_id: str,
+        ad_group_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtem negative keywords existentes de uma campanha ou ad group.
+
+        Args:
+            client_id: ID do cliente no sistema
+            campaign_id: ID da campanha
+            ad_group_id: ID do grupo de anuncios (opcional)
+
+        Returns:
+            list: Lista de negative keywords
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+
+            if not google_ads_client:
+                logger.error(f"Cliente {client_id} nao configurado para Google Ads")
+                return []
+
+            ga_service = google_ads_client.get_service("GoogleAdsService")
+
+            negative_keywords = []
+
+            # 1. Buscar negative keywords a nivel de campanha
+            campaign_query = f"""
+                SELECT
+                    campaign_criterion.criterion_id,
+                    campaign_criterion.keyword.text,
+                    campaign_criterion.keyword.match_type,
+                    campaign_criterion.negative,
+                    campaign.id,
+                    campaign.name
+                FROM campaign_criterion
+                WHERE campaign.id = {campaign_id}
+                    AND campaign_criterion.type = 'KEYWORD'
+                    AND campaign_criterion.negative = TRUE
+            """
+
+            stream = ga_service.search_stream(customer_id=customer_id, query=campaign_query)
+
+            for batch in stream:
+                for row in batch.results:
+                    negative_keywords.append({
+                        'id': row.campaign_criterion.criterion_id,
+                        'text': row.campaign_criterion.keyword.text,
+                        'match_type': row.campaign_criterion.keyword.match_type.name,
+                        'level': 'campaign',
+                        'campaign': {
+                            'id': row.campaign.id,
+                            'name': row.campaign.name
+                        }
+                    })
+
+            # 2. Buscar negative keywords a nivel de ad group (se especificado)
+            if ad_group_id:
+                ad_group_query = f"""
+                    SELECT
+                        ad_group_criterion.criterion_id,
+                        ad_group_criterion.keyword.text,
+                        ad_group_criterion.keyword.match_type,
+                        ad_group_criterion.negative,
+                        ad_group.id,
+                        ad_group.name,
+                        campaign.id,
+                        campaign.name
+                    FROM ad_group_criterion
+                    WHERE ad_group.id = {ad_group_id}
+                        AND ad_group_criterion.type = 'KEYWORD'
+                        AND ad_group_criterion.negative = TRUE
+                """
+
+                stream = ga_service.search_stream(customer_id=customer_id, query=ad_group_query)
+
+                for batch in stream:
+                    for row in batch.results:
+                        negative_keywords.append({
+                            'id': row.ad_group_criterion.criterion_id,
+                            'text': row.ad_group_criterion.keyword.text,
+                            'match_type': row.ad_group_criterion.keyword.match_type.name,
+                            'level': 'ad_group',
+                            'ad_group': {
+                                'id': row.ad_group.id,
+                                'name': row.ad_group.name
+                            },
+                            'campaign': {
+                                'id': row.campaign.id,
+                                'name': row.campaign.name
+                            }
+                        })
+
+            logger.info(f"Encontradas {len(negative_keywords)} negative keywords para cliente {client_id}")
+            return negative_keywords
+
+        except GoogleAdsException as ex:
+            logger.error(f"Erro da API do Google Ads ao buscar negative keywords: {ex.error.code().name}")
+            return []
+        except Exception as e:
+            logger.error(f"Erro ao buscar negative keywords para cliente {client_id}: {str(e)}")
+            return []
+
+    def add_negative_keywords(
+        self,
+        client_id: str,
+        campaign_id: str,
+        negative_keywords: List[Dict[str, str]],
+        ad_group_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Adiciona negative keywords a uma campanha ou ad group.
+
+        Args:
+            client_id: ID do cliente no sistema
+            campaign_id: ID da campanha
+            negative_keywords: Lista de keywords [{text: str, matchType: BROAD|PHRASE|EXACT}]
+            ad_group_id: ID do grupo de anuncios (opcional, se omitido aplica a nivel de campanha)
+
+        Returns:
+            dict: Resultado da operacao
+                - success (bool)
+                - applied (list): Keywords aplicadas com sucesso
+                - errors (list): Erros por keyword
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+
+            if not google_ads_client:
+                return {
+                    'success': False,
+                    'error': f'Cliente {client_id} nao configurado para Google Ads'
+                }
+
+            applied = []
+            errors = []
+
+            # Mapear match types
+            match_type_enum = google_ads_client.enums.KeywordMatchTypeEnum
+            match_type_map = {
+                'BROAD': match_type_enum.BROAD,
+                'PHRASE': match_type_enum.PHRASE,
+                'EXACT': match_type_enum.EXACT
+            }
+
+            if ad_group_id:
+                # Aplicar a nivel de ad group
+                ad_group_criterion_service = google_ads_client.get_service("AdGroupCriterionService")
+                operations = []
+
+                for kw in negative_keywords:
+                    try:
+                        operation = google_ads_client.get_type("AdGroupCriterionOperation")
+                        criterion = operation.create
+
+                        criterion.ad_group = f"customers/{customer_id}/adGroups/{ad_group_id}"
+                        criterion.negative = True
+                        criterion.keyword.text = kw.get("text")
+                        criterion.keyword.match_type = match_type_map.get(
+                            kw.get("matchType", "BROAD").upper(),
+                            match_type_enum.BROAD
+                        )
+
+                        operations.append(operation)
+                    except Exception as e:
+                        errors.append({
+                            'keyword': kw.get("text"),
+                            'error': str(e)
+                        })
+
+                if operations:
+                    response = ad_group_criterion_service.mutate_ad_group_criteria(
+                        customer_id=customer_id,
+                        operations=operations
+                    )
+
+                    for result in response.results:
+                        applied.append(result.resource_name)
+            else:
+                # Aplicar a nivel de campanha
+                campaign_criterion_service = google_ads_client.get_service("CampaignCriterionService")
+                operations = []
+
+                for kw in negative_keywords:
+                    try:
+                        operation = google_ads_client.get_type("CampaignCriterionOperation")
+                        criterion = operation.create
+
+                        criterion.campaign = f"customers/{customer_id}/campaigns/{campaign_id}"
+                        criterion.negative = True
+                        criterion.keyword.text = kw.get("text")
+                        criterion.keyword.match_type = match_type_map.get(
+                            kw.get("matchType", "BROAD").upper(),
+                            match_type_enum.BROAD
+                        )
+
+                        operations.append(operation)
+                    except Exception as e:
+                        errors.append({
+                            'keyword': kw.get("text"),
+                            'error': str(e)
+                        })
+
+                if operations:
+                    response = campaign_criterion_service.mutate_campaign_criteria(
+                        customer_id=customer_id,
+                        operations=operations
+                    )
+
+                    for result in response.results:
+                        applied.append(result.resource_name)
+
+            logger.info(
+                f"Negative keywords aplicadas para cliente {client_id}: "
+                f"{len(applied)} sucesso, {len(errors)} erros"
+            )
+
+            return {
+                'success': len(errors) == 0,
+                'applied': applied,
+                'errors': errors if errors else None
+            }
+
+        except GoogleAdsException as ex:
+            error_msg = f"Erro da API do Google Ads: {ex.error.code().name}"
+            if ex.error.message:
+                error_msg += f" - {ex.error.message}"
+
+            logger.error(f"Erro ao adicionar negative keywords para cliente {client_id}: {error_msg}")
+
+            return {
+                'success': False,
+                'error': error_msg
+            }
+        except Exception as e:
+            logger.error(f"Erro ao adicionar negative keywords para cliente {client_id}: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
     def pause_campaign(self, client_id: str, campaign_id: str) -> Dict[str, Any]:
         """
         Pausa uma campanha no Google Ads
