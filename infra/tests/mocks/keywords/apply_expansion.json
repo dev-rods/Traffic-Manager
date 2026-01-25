@@ -1,0 +1,11 @@
+{
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "body": "{\"clientId\": \"1234567890\", \"campaignId\": \"11111111111\", \"adGroupId\": \"22222222222\", \"keywords\": [{\"text\": \"advogado trabalhista zona sul\", \"matchType\": \"PHRASE\"}, {\"text\": \"advogado CLT\", \"matchType\": \"EXACT\"}, {\"text\": \"consulta direito trabalho\", \"matchType\": \"BROAD\"}]}",
+  "requestContext": {
+    "requestId": "test-trace-id-apply-expansion-001"
+  }
+}

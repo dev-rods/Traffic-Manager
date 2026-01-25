@@ -1,0 +1,473 @@
+{
+  "info": {
+    "_postman_id": "keyword-expansion-collection",
+    "name": "Traffic Manager - Keyword Expansion",
+    "description": "Endpoints para analise e expansao de palavras-chave no Google Ads. Usa LLM para identificar termos de pesquisa com bom desempenho que devem virar keywords.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "YOUR_CLIENT_ID",
+      "type": "string"
+    },
+    {
+      "key": "campaignId",
+      "value": "YOUR_CAMPAIGN_ID",
+      "type": "string"
+    },
+    {
+      "key": "adGroupId",
+      "value": "YOUR_AD_GROUP_ID",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Analyze Keyword Expansion",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has expected structure\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+              "    pm.expect(jsonData).to.have.property('analysis');",
+              "    pm.expect(jsonData).to.have.property('suggestions');",
+              "    pm.expect(jsonData).to.have.property('existingKeywords');",
+              "    pm.expect(jsonData).to.have.property('recommendedActions');",
+              "});",
+              "",
+              "pm.test(\"Analysis has metrics\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.analysis).to.have.property('totalSearchTerms');",
+              "    pm.expect(jsonData.analysis).to.have.property('highPerformingTerms');",
+              "    pm.expect(jsonData.analysis).to.have.property('suggestedKeywords');",
+              "});",
+              "",
+              "pm.test(\"Suggestions have required fields\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    if (jsonData.suggestions.length > 0) {",
+              "        var suggestion = jsonData.suggestions[0];",
+              "        pm.expect(suggestion).to.have.property('term');",
+              "        pm.expect(suggestion).to.have.property('reason');",
+              "        pm.expect(suggestion).to.have.property('suggestedMatchType');",
+              "        pm.expect(suggestion).to.have.property('priority');",
+              "    }",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"adGroupId\": \"{{adGroupId}}\",\n    \"context\": {\n        \"businessType\": \"Escritorio de advocacia trabalhista\",\n        \"targetLocation\": \"Sao Paulo, SP\",\n        \"minCtr\": 2.0,\n        \"minConversions\": 1\n    }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/analyze-expansion",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "analyze-expansion"]
+        }
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/analyze-expansion"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"traceId\": \"abc-123\",\n  \"analysis\": {\n    \"totalSearchTerms\": 150,\n    \"highPerformingTerms\": 25,\n    \"suggestedKeywords\": 8\n  },\n  \"suggestions\": [\n    {\n      \"term\": \"advogado trabalhista zona sul\",\n      \"reason\": \"Alto CTR (4.5%) e 3 conversoes - variante geografica relevante\",\n      \"currentMetrics\": {\n        \"impressions\": 500,\n        \"clicks\": 23,\n        \"conversions\": 3,\n        \"ctr\": 4.5,\n        \"cost\": 45.00\n      },\n      \"historicalMetrics\": {\n        \"avgMonthlySearches\": 720,\n        \"competition\": \"MEDIUM\",\n        \"competitionIndex\": 45,\n        \"lowTopOfPageBid\": 1.50,\n        \"highTopOfPageBid\": 4.20\n      },\n      \"suggestedMatchType\": \"PHRASE\",\n      \"matchTypeReason\": \"Termo especifico geografico, PHRASE captura variantes\",\n      \"priority\": \"HIGH\"\n    }\n  ],\n  \"existingKeywords\": [\"advogado trabalhista\", \"advogado sp\"],\n  \"recommendedActions\": [\n    \"Adicionar 'advogado trabalhista zona sul' como PHRASE match\",\n    \"Considerar 'advogado CLT' com alto volume de busca\"\n  ],\n  \"selectionRules\": {\n    \"min_monthly_searches\": 100,\n    \"max_competition_index\": 80\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Analyze Keyword Expansion (Missing clientId)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates missing clientId\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"clientId\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"campaignId\": \"{{campaignId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/analyze-expansion",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "analyze-expansion"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Analyze Keyword Expansion (Missing campaignId)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates missing campaignId\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"campaignId\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/analyze-expansion",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "analyze-expansion"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Apply Keyword Expansion",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has expected structure\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+              "    pm.expect(jsonData).to.have.property('added');",
+              "    pm.expect(jsonData).to.have.property('adGroupId');",
+              "});",
+              "",
+              "pm.test(\"Keywords were added\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.message).to.include('keywords adicionadas');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"adGroupId\": \"{{adGroupId}}\",\n    \"keywords\": [\n        {\"text\": \"advogado trabalhista zona sul\", \"matchType\": \"PHRASE\"},\n        {\"text\": \"advogado CLT\", \"matchType\": \"EXACT\"},\n        {\"text\": \"consulta direito trabalho\", \"matchType\": \"BROAD\"}\n    ]\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-expansion",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "apply-expansion"]
+        }
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "POST",
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-expansion"
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"traceId\": \"def-456\",\n  \"message\": \"3 keywords adicionadas com sucesso\",\n  \"added\": [\n    \"customers/1234567890/adGroupCriteria/123~456\",\n    \"customers/1234567890/adGroupCriteria/123~457\",\n    \"customers/1234567890/adGroupCriteria/123~458\"\n  ],\n  \"adGroupId\": \"22222222222\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Apply Keyword Expansion (Missing adGroupId)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates missing adGroupId\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"adGroupId\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"keywords\": [\n        {\"text\": \"advogado trabalhista\", \"matchType\": \"EXACT\"}\n    ]\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-expansion",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "apply-expansion"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Apply Keyword Expansion (Empty Keywords List)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates empty keywords\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"keywords\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"adGroupId\": \"{{adGroupId}}\",\n    \"keywords\": []\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-expansion",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "apply-expansion"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Apply Keyword Expansion (Invalid matchType)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates invalid matchType\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"matchType\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"adGroupId\": \"{{adGroupId}}\",\n    \"keywords\": [\n        {\"text\": \"teste\", \"matchType\": \"INVALID_TYPE\"}\n    ]\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-expansion",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "apply-expansion"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Apply Keyword Expansion (Missing text)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 400\", function () {",
+              "    pm.response.to.have.status(400);",
+              "});",
+              "",
+              "pm.test(\"Error message indicates missing text\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+              "    pm.expect(jsonData.message).to.include(\"text\");",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"campaignId\": \"{{campaignId}}\",\n    \"adGroupId\": \"{{adGroupId}}\",\n    \"keywords\": [\n        {\"matchType\": \"EXACT\"}\n    ]\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/keywords/apply-expansion",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "keywords", "apply-expansion"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

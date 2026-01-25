@@ -117,3 +117,67 @@ ApplyNegativeKeywords:
         path: keywords/apply-negatives
         method: post
         cors: true
+
+AnalyzeKeywordExpansion:
+  image:
+    name: lambdaimage
+    command: ["src.functions.keywords.analyze_expansion.handler"]
+  memorySize: 1024
+  timeout: 120
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-AnalyzeKeywordExpansion-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+      Resource: !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource: !GetAtt ExecutionHistoryTable.Arn
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: keywords/analyze-expansion
+        method: post
+        cors: true
+
+ApplyKeywordExpansion:
+  image:
+    name: lambdaimage
+    command: ["src.functions.keywords.apply_expansion.handler"]
+  memorySize: 1024
+  timeout: 60
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ApplyKeywordExpansion-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+      Resource: !GetAtt ClientsTable.Arn
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource: !GetAtt ExecutionHistoryTable.Arn
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: keywords/apply-expansion
+        method: post
+        cors: true

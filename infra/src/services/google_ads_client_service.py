@@ -735,6 +735,188 @@ class GoogleAdsClientService:
                 'error': str(e)
             }
 
+    def get_keyword_historical_metrics(
+        self,
+        client_id: str,
+        keywords: List[str],
+        location_ids: Optional[List[str]] = None,
+        language_id: str = "1014"  # Portuguese
+    ) -> List[Dict[str, Any]]:
+        """
+        Obtem metricas historicas para uma lista de keywords usando KeywordPlanIdeaService.
+
+        Args:
+            client_id: ID do cliente no sistema
+            keywords: Lista de keywords para buscar metricas
+            location_ids: IDs de localizacao (default: Brasil = 2076)
+            language_id: ID do idioma (default: 1014 = Portugues)
+
+        Returns:
+            list: Lista de metricas por keyword
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+
+            if not google_ads_client:
+                logger.error(f"Cliente {client_id} nao configurado para Google Ads")
+                return []
+
+            keyword_plan_idea_service = google_ads_client.get_service("KeywordPlanIdeaService")
+
+            # Configurar request
+            request = google_ads_client.get_type("GenerateKeywordHistoricalMetricsRequest")
+            request.customer_id = customer_id
+
+            # Adicionar keywords
+            for kw in keywords:
+                request.keywords.append(kw)
+
+            # Configurar localizacao (default: Brasil)
+            if not location_ids:
+                location_ids = ["2076"]  # Brasil
+
+            for loc_id in location_ids:
+                request.geo_target_constants.append(f"geoTargetConstants/{loc_id}")
+
+            # Configurar idioma
+            request.language = f"languageConstants/{language_id}"
+
+            # Executar request
+            response = keyword_plan_idea_service.generate_keyword_historical_metrics(request=request)
+
+            results = []
+            for result in response.results:
+                metrics = result.keyword_metrics
+
+                # Mapear competition enum
+                competition_map = {
+                    0: "UNSPECIFIED",
+                    1: "UNKNOWN",
+                    2: "LOW",
+                    3: "MEDIUM",
+                    4: "HIGH"
+                }
+                competition = competition_map.get(metrics.competition, "UNKNOWN")
+
+                results.append({
+                    'keyword': result.text,
+                    'avg_monthly_searches': metrics.avg_monthly_searches if metrics.avg_monthly_searches else 0,
+                    'competition': competition,
+                    'competition_index': metrics.competition_index if metrics.competition_index else 0,
+                    'low_top_of_page_bid_micros': metrics.low_top_of_page_bid_micros if metrics.low_top_of_page_bid_micros else 0,
+                    'high_top_of_page_bid_micros': metrics.high_top_of_page_bid_micros if metrics.high_top_of_page_bid_micros else 0,
+                    'low_top_of_page_bid': metrics.low_top_of_page_bid_micros / 1000000 if metrics.low_top_of_page_bid_micros else 0,
+                    'high_top_of_page_bid': metrics.high_top_of_page_bid_micros / 1000000 if metrics.high_top_of_page_bid_micros else 0
+                })
+
+            logger.info(f"Obtidas metricas historicas para {len(results)} keywords")
+            return results
+
+        except GoogleAdsException as ex:
+            logger.error(f"Erro da API do Google Ads ao buscar metricas historicas: {ex.error.code().name}")
+            return []
+        except Exception as e:
+            logger.error(f"Erro ao buscar metricas historicas para cliente {client_id}: {str(e)}")
+            return []
+
+    def add_keywords(
+        self,
+        client_id: str,
+        ad_group_id: str,
+        keywords: List[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """
+        Adiciona keywords a um ad group.
+
+        Args:
+            client_id: ID do cliente no sistema
+            ad_group_id: ID do grupo de anuncios
+            keywords: Lista de keywords [{text: str, matchType: EXACT|PHRASE|BROAD}]
+
+        Returns:
+            dict: Resultado da operacao
+        """
+        try:
+            google_ads_client, customer_id = self.get_client_for_customer(client_id)
+
+            if not google_ads_client:
+                return {
+                    'success': False,
+                    'error': f'Cliente {client_id} nao configurado para Google Ads'
+                }
+
+            ad_group_criterion_service = google_ads_client.get_service("AdGroupCriterionService")
+
+            # Mapear match types
+            match_type_enum = google_ads_client.enums.KeywordMatchTypeEnum
+            match_type_map = {
+                'EXACT': match_type_enum.EXACT,
+                'PHRASE': match_type_enum.PHRASE,
+                'BROAD': match_type_enum.BROAD
+            }
+
+            operations = []
+            added = []
+            errors = []
+
+            for kw in keywords:
+                try:
+                    operation = google_ads_client.get_type("AdGroupCriterionOperation")
+                    criterion = operation.create
+
+                    criterion.ad_group = f"customers/{customer_id}/adGroups/{ad_group_id}"
+                    criterion.status = google_ads_client.enums.AdGroupCriterionStatusEnum.ENABLED
+                    criterion.keyword.text = kw.get("text")
+                    criterion.keyword.match_type = match_type_map.get(
+                        kw.get("matchType", "PHRASE").upper(),
+                        match_type_enum.PHRASE
+                    )
+
+                    operations.append(operation)
+                except Exception as e:
+                    errors.append({
+                        'keyword': kw.get("text"),
+                        'error': str(e)
+                    })
+
+            if operations:
+                response = ad_group_criterion_service.mutate_ad_group_criteria(
+                    customer_id=customer_id,
+                    operations=operations
+                )
+
+                for result in response.results:
+                    added.append(result.resource_name)
+
+            logger.info(
+                f"Keywords adicionadas para cliente {client_id}: "
+                f"{len(added)} sucesso, {len(errors)} erros"
+            )
+
+            return {
+                'success': len(errors) == 0,
+                'added': added,
+                'errors': errors if errors else None
+            }
+
+        except GoogleAdsException as ex:
+            error_msg = f"Erro da API do Google Ads: {ex.error.code().name}"
+            if ex.error.message:
+                error_msg += f" - {ex.error.message}"
+
+            logger.error(f"Erro ao adicionar keywords para cliente {client_id}: {error_msg}")
+
+            return {
+                'success': False,
+                'error': error_msg
+            }
+        except Exception as e:
+            logger.error(f"Erro ao adicionar keywords para cliente {client_id}: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
     def pause_campaign(self, client_id: str, campaign_id: str) -> Dict[str, Any]:
         """
         Pausa uma campanha no Google Ads

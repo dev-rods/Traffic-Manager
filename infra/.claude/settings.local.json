@@ -5,7 +5,12 @@
       "Bash(python:*)",
       "Bash(git add:*)",
       "Bash(serverless deploy:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(aws ssm put-parameter:*)",
+      "Bash(powershell -Command \"aws ssm put-parameter --name ''/dev/RDS_MASTER_USERNAME'' --value ''trafficmanager_admin'' --type ''SecureString'' --profile traffic-manager\")",
+      "Bash(powershell -Command \"aws ssm put-parameter --name ''/dev/RDS_MASTER_PASSWORD'' --value ''TrMgr2024Pg!Secure'' --type ''SecureString'' --profile traffic-manager\")",
+      "Bash(powershell -Command:*)"
     ]
   }
 }
