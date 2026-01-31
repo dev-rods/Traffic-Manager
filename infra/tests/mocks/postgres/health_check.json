@@ -1,3 +1,4 @@
 {
-  "action": "health_check"
+  "action": "health_check",
+  "command": "test_postgres"
 }

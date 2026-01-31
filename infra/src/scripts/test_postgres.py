@@ -26,6 +26,19 @@ load_dotenv()
 
 from src.services.postgres_service import PostgresService
 
+def execute(params):
+    try:
+        main()
+        return {
+            "status": "success",
+            "message": "PostgreSQL connectivity test passed"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 
 def main():
     print("Testing PostgreSQL connectivity...\n")
