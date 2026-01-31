@@ -1,0 +1,109 @@
+CreateAvailabilityRule:
+  handler: src.functions.availability.rules.create_handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateAvailabilityRule-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/availability-rules
+        method: post
+        cors: true
+
+ListAvailabilityRules:
+  handler: src.functions.availability.rules.list_handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListAvailabilityRules-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/availability-rules
+        method: get
+        cors: true
+
+CreateAvailabilityException:
+  handler: src.functions.availability.exceptions.create_handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateAvailExcept-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/availability-exceptions
+        method: post
+        cors: true
+
+ListAvailabilityExceptions:
+  handler: src.functions.availability.exceptions.list_handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListAvailExcepts-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/availability-exceptions
+        method: get
+        cors: true
+
+GetAvailableSlots:
+  handler: src.functions.availability.slots.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetAvailableSlots-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/available-slots
+        method: get
+        cors: true

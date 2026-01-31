@@ -1,0 +1,10 @@
+{
+  "name": "clinic-scheduler-infra",
+  "version": "1.0.0",
+  "description": "Clinic Scheduler - WhatsApp appointment scheduling system",
+  "private": true,
+  "devDependencies": {
+    "serverless-iam-roles-per-function": "^3.2.0",
+    "serverless-python-requirements": "^6.1.2"
+  }
+}

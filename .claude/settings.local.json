@@ -5,7 +5,8 @@
       "Bash(find:*)",
       "Bash(python -m py_compile:*)",
       "Bash(serverless invoke local:*)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "WebFetch(domain:developer.z-api.io)"
     ]
   }
 }

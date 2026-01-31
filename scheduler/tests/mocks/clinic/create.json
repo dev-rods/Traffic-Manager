@@ -1,0 +1,4 @@
+{
+  "body": "{\"name\":\"Laser Beauty SP\",\"phone\":\"5511988880000\",\"address\":\"Rua Exemplo, 123 - SP\",\"business_hours\":{\"mon\":{\"start\":\"09:00\",\"end\":\"18:00\"},\"tue\":{\"start\":\"09:00\",\"end\":\"18:00\"},\"wed\":{\"start\":\"09:00\",\"end\":\"18:00\"},\"thu\":{\"start\":\"09:00\",\"end\":\"18:00\"},\"fri\":{\"start\":\"09:00\",\"end\":\"18:00\"}},\"buffer_minutes\":10}",
+  "headers": {"x-api-key": "test-api-key"}
+}

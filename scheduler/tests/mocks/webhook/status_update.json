@@ -1,0 +1,3 @@
+{
+  "body": "{\"type\":\"MessageStatusCallback\",\"status\":\"READ\",\"ids\":[\"MSG001\"],\"momment\":1706745800000,\"phone\":\"5511999990000\",\"instanceId\":\"instance-123\"}"
+}

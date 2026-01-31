@@ -118,3 +118,43 @@ client = GoogleAdsClient.load_from_dict(google_ads_config)
 - Lambda functions: PascalCase in serverless.yml (e.g., `CampaignOrchestrator`)
 - Handlers: Python module paths (e.g., `src.functions.campaign.orchestrator.handler`)
 - DynamoDB tables: `${resourcePrefix}-${tableName}` prefix
+
+---
+
+## Scheduler Project
+
+WhatsApp-based clinic appointment scheduling system. Located in `scheduler/` directory (separate project in monorepo).
+
+### Build & Deploy
+
+```bash
+cd scheduler && npm install && pip install -r requirements.txt
+cd scheduler && serverless deploy --stage dev --aws-profile traffic-manager
+cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
+```
+
+### Key Directories
+- `scheduler/src/functions/` - Lambda handlers by domain (webhook, send, clinic, service, professional, availability, appointment, template, faq, reminder, report)
+- `scheduler/src/services/` - Business logic (conversation_engine, availability_engine, appointment_service, message_tracker, reminder_service, sheets_sync, template_service)
+- `scheduler/src/providers/` - WhatsApp provider abstraction (z-api implementation)
+- `scheduler/src/utils/` - Utilities (http, auth, logging, phone, decimal)
+- `scheduler/sls/functions/` - Serverless function interface files
+- `scheduler/sls/resources/` - DynamoDB table definitions
+- `scheduler/tests/mocks/` - Mock payloads for local testing
+- `scheduler/tests/postman/` - Postman collections for API documentation
+
+### Data Stores
+- **DynamoDB**: ConversationSessions (TTL 30min), MessageEvents (3 GSIs, TTL 90d), ScheduledReminders (1 GSI, TTL 48h)
+- **PostgreSQL RDS** (shared instance, schema `scheduler`): clinics, services, professionals, availability_rules, availability_exceptions, patients, appointments, message_templates, faq_items
+
+### External Integrations
+- z-api (WhatsApp messaging)
+- Google Sheets API (appointment sync)
+
+### Scheduler Naming Conventions
+- clinic_id: lowercase kebab-case (e.g., `laser-beauty-sp-abc123`)
+- Lambda functions: PascalCase in interface.yml (e.g., `WhatsAppWebhook`, `CreateClinic`)
+- Handlers: `src.functions.{domain}.{module}.handler`
+- DynamoDB tables: `clinic-scheduler-infra-{stage}-{table-name}`
+- RDS tables: `scheduler.{table_name}` (schema-qualified)
+- Secrets: SSM `/${stage}/KEY_NAME` (SCHEDULER_API_KEY, ZAPI_CLIENT_TOKEN, RDS_*, GOOGLE_SHEETS_SERVICE_ACCOUNT)

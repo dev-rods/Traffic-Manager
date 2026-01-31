@@ -1,0 +1,300 @@
+import logging
+from datetime import datetime, date, timedelta
+from typing import Any, Dict, Optional
+
+from src.services.db.postgres import PostgresService
+
+logger = logging.getLogger(__name__)
+
+
+class ConflictError(Exception):
+    pass
+
+
+class NotFoundError(Exception):
+    pass
+
+
+class OptimisticLockError(Exception):
+    pass
+
+
+class AppointmentService:
+
+    def __init__(self, db: PostgresService, reminder_service=None, sheets_sync=None):
+        self.db = db
+        self.reminder_service = reminder_service
+        self.sheets_sync = sheets_sync
+
+    def create_appointment(
+        self,
+        clinic_id: str,
+        phone: str,
+        service_id: str,
+        date: str,
+        time: str,
+        areas: str = "",
+        professional_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        # 1. Get or create patient
+        patient = self._get_or_create_patient(clinic_id, phone)
+        patient_id = str(patient["id"])
+
+        # 2. Get service for duration calculation
+        services = self.db.execute_query(
+            "SELECT id, duration_minutes, name FROM scheduler.services WHERE id = %s::uuid AND active = TRUE",
+            (service_id,),
+        )
+        if not services:
+            raise NotFoundError(f"Servico {service_id} nao encontrado")
+
+        duration_minutes = services[0]["duration_minutes"]
+
+        # 3. Calculate end_time
+        start_parts = time.split(":")
+        start_hour, start_min = int(start_parts[0]), int(start_parts[1])
+        total_minutes = start_hour * 60 + start_min + duration_minutes
+        end_hour, end_min = total_minutes // 60, total_minutes % 60
+        end_time = f"{end_hour:02d}:{end_min:02d}"
+
+        # 4. Check for conflicts
+        conflicts = self.db.execute_query(
+            """
+            SELECT id FROM scheduler.appointments
+            WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
+            AND (
+                (start_time < %s::time AND end_time > %s::time)
+                OR (start_time < %s::time AND end_time > %s::time)
+                OR (start_time >= %s::time AND end_time <= %s::time)
+            )
+            """,
+            (clinic_id, date, end_time, time, end_time, time, time, end_time),
+        )
+
+        if conflicts:
+            raise ConflictError(f"Conflito de horario: ja existe agendamento para {date} {time}-{end_time}")
+
+        # 5. Resolve professional
+        prof_id_param = None
+        if professional_id:
+            prof_id_param = professional_id
+        else:
+            professionals = self.db.execute_query(
+                "SELECT id FROM scheduler.professionals WHERE clinic_id = %s AND active = TRUE LIMIT 1",
+                (clinic_id,),
+            )
+            if professionals:
+                prof_id_param = str(professionals[0]["id"])
+
+        # 6. Insert appointment
+        result = self.db.execute_write_returning(
+            """
+            INSERT INTO scheduler.appointments (
+                clinic_id, patient_id, professional_id, service_id,
+                appointment_date, start_time, end_time, areas,
+                status, created_at, updated_at, version
+            ) VALUES (
+                %s, %s::uuid, %s::uuid, %s::uuid,
+                %s, %s::time, %s::time, %s,
+                'CONFIRMED', NOW(), NOW(), 1
+            )
+            RETURNING *
+            """,
+            (clinic_id, patient_id, prof_id_param, service_id, date, time, end_time, areas),
+        )
+
+        if not result:
+            raise Exception("Erro ao criar agendamento")
+
+        logger.info(
+            f"[AppointmentService] Agendamento criado: id={result['id']} "
+            f"clinic={clinic_id} date={date} time={time}"
+        )
+
+        # 7. Schedule reminder (if available)
+        if self.reminder_service:
+            try:
+                self.reminder_service.schedule_reminder(result)
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao agendar lembrete: {e}")
+
+        # 8. Sync to Google Sheets (if available)
+        if self.sheets_sync:
+            try:
+                self.sheets_sync.sync_appointment(result, "CREATED")
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao sincronizar com Sheets: {e}")
+
+        return result
+
+    def reschedule_appointment(
+        self, appointment_id: str, new_date: str, new_time: str
+    ) -> Dict[str, Any]:
+        # 1. Fetch with optimistic lock
+        appointments = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
+            (appointment_id,),
+        )
+
+        if not appointments:
+            raise NotFoundError(f"Agendamento {appointment_id} nao encontrado ou nao confirmado")
+
+        appointment = appointments[0]
+        current_version = appointment.get("version", 1)
+        clinic_id = appointment["clinic_id"]
+
+        # 2. Get service duration
+        services = self.db.execute_query(
+            "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid",
+            (str(appointment["service_id"]),),
+        )
+        duration_minutes = services[0]["duration_minutes"] if services else 60
+
+        # 3. Calculate new end_time
+        start_parts = new_time.split(":")
+        start_hour, start_min = int(start_parts[0]), int(start_parts[1])
+        total_minutes = start_hour * 60 + start_min + duration_minutes
+        end_hour, end_min = total_minutes // 60, total_minutes % 60
+        new_end_time = f"{end_hour:02d}:{end_min:02d}"
+
+        # 4. Check conflicts in new slot
+        conflicts = self.db.execute_query(
+            """
+            SELECT id FROM scheduler.appointments
+            WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
+            AND id != %s::uuid
+            AND (
+                (start_time < %s::time AND end_time > %s::time)
+                OR (start_time < %s::time AND end_time > %s::time)
+                OR (start_time >= %s::time AND end_time <= %s::time)
+            )
+            """,
+            (clinic_id, new_date, appointment_id, new_end_time, new_time, new_end_time, new_time, new_time, new_end_time),
+        )
+
+        if conflicts:
+            raise ConflictError(f"Conflito de horario no novo slot: {new_date} {new_time}-{new_end_time}")
+
+        # 5. Update with optimistic lock
+        updated_rows = self.db.execute_write(
+            """
+            UPDATE scheduler.appointments
+            SET appointment_date = %s, start_time = %s::time, end_time = %s::time,
+                version = version + 1, updated_at = NOW()
+            WHERE id = %s::uuid AND version = %s
+            """,
+            (new_date, new_time, new_end_time, appointment_id, current_version),
+        )
+
+        if updated_rows == 0:
+            raise OptimisticLockError("Agendamento foi modificado por outro processo")
+
+        # 6. Cancel old reminder and schedule new
+        if self.reminder_service:
+            try:
+                self.reminder_service.cancel_reminder(appointment_id)
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao cancelar lembrete antigo: {e}")
+
+        result = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid",
+            (appointment_id,),
+        )
+        updated_appointment = result[0] if result else appointment
+
+        if self.reminder_service:
+            try:
+                self.reminder_service.schedule_reminder(updated_appointment)
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao agendar novo lembrete: {e}")
+
+        # 7. Sync to Sheets
+        if self.sheets_sync:
+            try:
+                self.sheets_sync.sync_appointment(updated_appointment, "RESCHEDULED")
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao sincronizar remarcacao: {e}")
+
+        logger.info(
+            f"[AppointmentService] Agendamento remarcado: id={appointment_id} "
+            f"newDate={new_date} newTime={new_time}"
+        )
+
+        return updated_appointment
+
+    def cancel_appointment(self, appointment_id: str) -> Dict[str, Any]:
+        result = self.db.execute_write_returning(
+            """
+            UPDATE scheduler.appointments
+            SET status = 'CANCELLED', updated_at = NOW(), version = version + 1
+            WHERE id = %s::uuid AND status = 'CONFIRMED'
+            RETURNING *
+            """,
+            (appointment_id,),
+        )
+
+        if not result:
+            raise NotFoundError(f"Agendamento {appointment_id} nao encontrado ou ja cancelado")
+
+        if self.reminder_service:
+            try:
+                self.reminder_service.cancel_reminder(appointment_id)
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao cancelar lembrete: {e}")
+
+        if self.sheets_sync:
+            try:
+                self.sheets_sync.sync_appointment(result, "CANCELLED")
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao sincronizar cancelamento: {e}")
+
+        logger.info(f"[AppointmentService] Agendamento cancelado: id={appointment_id}")
+        return result
+
+    def get_active_appointment_by_phone(
+        self, clinic_id: str, phone: str
+    ) -> Optional[Dict[str, Any]]:
+        patients = self.db.execute_query(
+            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
+            (clinic_id, phone),
+        )
+
+        if not patients:
+            return None
+
+        patient_id = str(patients[0]["id"])
+
+        appointments = self.db.execute_query(
+            """
+            SELECT a.*, s.name as service_name
+            FROM scheduler.appointments a
+            LEFT JOIN scheduler.services s ON a.service_id = s.id
+            WHERE a.patient_id = %s::uuid AND a.status = 'CONFIRMED'
+            AND a.appointment_date >= CURRENT_DATE
+            ORDER BY a.appointment_date ASC, a.start_time ASC
+            LIMIT 1
+            """,
+            (patient_id,),
+        )
+
+        return appointments[0] if appointments else None
+
+    def _get_or_create_patient(self, clinic_id: str, phone: str) -> Dict[str, Any]:
+        patients = self.db.execute_query(
+            "SELECT * FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
+            (clinic_id, phone),
+        )
+
+        if patients:
+            return patients[0]
+
+        result = self.db.execute_write_returning(
+            """
+            INSERT INTO scheduler.patients (clinic_id, phone, created_at, updated_at)
+            VALUES (%s, %s, NOW(), NOW())
+            RETURNING *
+            """,
+            (clinic_id, phone),
+        )
+
+        return result

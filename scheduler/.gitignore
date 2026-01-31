@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Serverless
+.serverless/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.prod
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Service account credentials
+*service_account*.json

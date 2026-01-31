@@ -1,0 +1,63 @@
+service: clinic-scheduler-infra
+
+frameworkVersion: "3"
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  resourcePrefix: ${self:service}-${self:custom.stage}
+  accountId: "796000356030"
+  pythonRequirements:
+    slim: true
+    slimPatternsAppendDefaults: false
+    slimPatterns:
+      - "**/*.pyc"
+      - "**/__pycache__"
+      - "**/*.pyo"
+
+provider:
+  name: aws
+  runtime: python3.9
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+
+  environment:
+    STAGE: ${self:custom.stage}
+    ACCOUNT_ID: ${self:custom.accountId}
+    # DynamoDB Tables
+    CONVERSATION_SESSIONS_TABLE: ${self:custom.resourcePrefix}-conversation-sessions
+    MESSAGE_EVENTS_TABLE: ${self:custom.resourcePrefix}-message-events
+    SCHEDULED_REMINDERS_TABLE: ${self:custom.resourcePrefix}-scheduled-reminders
+    # RDS PostgreSQL (shared instance with infra, schema: scheduler)
+    RDS_HOST: ${cf:traffic-manager-infra-${self:custom.stage}.PostgresEndpoint}
+    RDS_PORT: ${cf:traffic-manager-infra-${self:custom.stage}.PostgresPort}
+    RDS_DATABASE: trafficmanager
+    RDS_USERNAME: ${ssm:/${self:custom.stage}/RDS_MASTER_USERNAME}
+    RDS_PASSWORD: ${ssm:/${self:custom.stage}/RDS_MASTER_PASSWORD}
+    # Auth
+    SCHEDULER_API_KEY: ${ssm:/${self:custom.stage}/SCHEDULER_API_KEY}
+    # Google Sheets
+    GOOGLE_SHEETS_SERVICE_ACCOUNT: ${ssm:/${self:custom.stage}/GOOGLE_SHEETS_SERVICE_ACCOUNT}
+    # z-api (client token shared across instances)
+    ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
+
+functions:
+  - ${file(sls/functions/webhook/interface.yml)}
+  - ${file(sls/functions/send/interface.yml)}
+  - ${file(sls/functions/clinic/interface.yml)}
+  - ${file(sls/functions/service/interface.yml)}
+  - ${file(sls/functions/professional/interface.yml)}
+  - ${file(sls/functions/availability/interface.yml)}
+  - ${file(sls/functions/appointment/interface.yml)}
+  - ${file(sls/functions/template/interface.yml)}
+  - ${file(sls/functions/faq/interface.yml)}
+  - ${file(sls/functions/reminder/interface.yml)}
+  - ${file(sls/functions/report/interface.yml)}
+
+resources:
+  - ${file(sls/resources/dynamodb/conversation-sessions-table.yml)}
+  - ${file(sls/resources/dynamodb/message-events-table.yml)}
+  - ${file(sls/resources/dynamodb/scheduled-reminders-table.yml)}
+
+plugins:
+  - serverless-python-requirements
+  - serverless-iam-roles-per-function

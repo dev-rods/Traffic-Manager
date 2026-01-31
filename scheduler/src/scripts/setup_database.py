@@ -1,0 +1,194 @@
+"""
+Script para criar o schema e tabelas do scheduler no PostgreSQL.
+Executar localmente: python -m src.scripts.setup_database
+"""
+import os
+import sys
+import psycopg2
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SQL_STATEMENTS = [
+    # Schema
+    "CREATE SCHEMA IF NOT EXISTS scheduler",
+
+    # Clínicas (tenants)
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.clinics (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        phone VARCHAR(20),
+        address TEXT,
+        timezone VARCHAR(50) DEFAULT 'America/Sao_Paulo',
+        business_hours JSONB NOT NULL,
+        buffer_minutes INTEGER DEFAULT 10,
+        welcome_message TEXT,
+        pre_session_instructions TEXT,
+        zapi_instance_id VARCHAR(255),
+        zapi_instance_token VARCHAR(255),
+        google_spreadsheet_id VARCHAR(255),
+        google_sheet_name VARCHAR(100) DEFAULT 'Agenda',
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    )
+    """,
+
+    # Serviços
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.services (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        name VARCHAR(255) NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        price_cents INTEGER,
+        description TEXT,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+    )
+    """,
+
+    # Profissionais
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.professionals (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        name VARCHAR(255) NOT NULL,
+        role VARCHAR(100),
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW()
+    )
+    """,
+
+    # Regras de disponibilidade
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.availability_rules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        professional_id UUID REFERENCES scheduler.professionals(id),
+        day_of_week INTEGER NOT NULL,
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW()
+    )
+    """,
+
+    # Exceções de disponibilidade
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.availability_exceptions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        exception_date DATE NOT NULL,
+        exception_type VARCHAR(20) NOT NULL,
+        start_time TIME,
+        end_time TIME,
+        reason VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW()
+    )
+    """,
+
+    # Pacientes
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.patients (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        phone VARCHAR(20) NOT NULL,
+        name VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(clinic_id, phone)
+    )
+    """,
+
+    # Agendamentos
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.appointments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        patient_id UUID REFERENCES scheduler.patients(id),
+        professional_id UUID REFERENCES scheduler.professionals(id),
+        service_id UUID REFERENCES scheduler.services(id),
+        appointment_date DATE NOT NULL,
+        start_time TIME NOT NULL,
+        end_time TIME NOT NULL,
+        areas TEXT,
+        status VARCHAR(20) DEFAULT 'CONFIRMED',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        version INTEGER DEFAULT 1
+    )
+    """,
+
+    # Templates de mensagem
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.message_templates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        template_key VARCHAR(100) NOT NULL,
+        content TEXT NOT NULL,
+        buttons JSONB,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(clinic_id, template_key)
+    )
+    """,
+
+    # FAQ
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.faq_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        question_key VARCHAR(100) NOT NULL,
+        question_label VARCHAR(255) NOT NULL,
+        answer TEXT NOT NULL,
+        display_order INTEGER DEFAULT 0,
+        active BOOLEAN DEFAULT TRUE,
+        UNIQUE(clinic_id, question_key)
+    )
+    """,
+
+    # Índices
+    "CREATE INDEX IF NOT EXISTS idx_appointments_clinic_date ON scheduler.appointments(clinic_id, appointment_date)",
+    "CREATE INDEX IF NOT EXISTS idx_appointments_patient ON scheduler.appointments(patient_id)",
+    "CREATE INDEX IF NOT EXISTS idx_appointments_status ON scheduler.appointments(clinic_id, status)",
+    "CREATE INDEX IF NOT EXISTS idx_patients_phone ON scheduler.patients(clinic_id, phone)",
+    "CREATE INDEX IF NOT EXISTS idx_availability_rules_clinic ON scheduler.availability_rules(clinic_id, day_of_week)",
+    "CREATE INDEX IF NOT EXISTS idx_availability_exceptions_clinic ON scheduler.availability_exceptions(clinic_id, exception_date)",
+]
+
+
+def main():
+    conn = psycopg2.connect(
+        host=os.environ.get("RDS_HOST"),
+        port=int(os.environ.get("RDS_PORT", "5432")),
+        dbname=os.environ.get("RDS_DATABASE"),
+        user=os.environ.get("RDS_USERNAME"),
+        password=os.environ.get("RDS_PASSWORD"),
+    )
+
+    cursor = conn.cursor()
+
+    for i, sql in enumerate(SQL_STATEMENTS):
+        try:
+            cursor.execute(sql)
+            conn.commit()
+            label = sql.strip().split('\n')[0][:80]
+            print(f"[{i+1}/{len(SQL_STATEMENTS)}] OK: {label}")
+        except Exception as e:
+            conn.rollback()
+            label = sql.strip().split('\n')[0][:80]
+            print(f"[{i+1}/{len(SQL_STATEMENTS)}] ERRO: {label} -> {e}")
+
+    cursor.close()
+    conn.close()
+    print("\nSetup concluído.")
+
+
+if __name__ == "__main__":
+    main()

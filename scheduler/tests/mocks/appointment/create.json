@@ -1,0 +1,4 @@
+{
+  "body": "{\"clinicId\":\"laser-beauty-sp\",\"phone\":\"5511999990000\",\"serviceId\":\"uuid-service-1\",\"date\":\"2026-02-15\",\"time\":\"09:00\",\"areas\":\"Pernas e axilas\"}",
+  "headers": {"x-api-key": "test-api-key"}
+}
