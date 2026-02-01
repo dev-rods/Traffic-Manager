@@ -25,3 +25,30 @@ SendMessage:
         path: send
         method: post
         cors: true
+
+GetMessageQueue:
+  handler: src.functions.send.queue.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetMessageQueue-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/queue
+        method: get
+        cors: true
+    - http:
+        path: clinics/{clinicId}/queue/count
+        method: get
+        cors: true

@@ -30,4 +30,4 @@ ReminderProcessor:
   events:
     - schedule:
         rate: rate(15 minutes)
-        enabled: true
+        enabled: false

@@ -122,6 +122,147 @@
       ]
     },
     {
+      "name": "Get Message Queue",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/queue?page=1&pageSize=100",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "queue"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "pageSize",
+              "value": "100"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Response has SUCCESS status\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "});",
+              "pm.test(\"Response has data field\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('data');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\"status\":\"SUCCESS\",\"data\":[{\"messageId\":\"MSG-001\",\"phone\":\"5511999990000\",\"status\":\"queue\"}]}"
+        },
+        {
+          "name": "Clinic not found",
+          "status": "Not Found",
+          "code": 404,
+          "body": "{\"status\":\"ERROR\",\"message\":\"Clinica 'invalid-id' nao encontrada\"}"
+        }
+      ]
+    },
+    {
+      "name": "Get Message Queue Count",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/queue/count",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "queue",
+            "count"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test(\"Response has SUCCESS status\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "});",
+              "pm.test(\"Response has data field\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('data');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "Success",
+          "status": "OK",
+          "code": 200,
+          "body": "{\"status\":\"SUCCESS\",\"data\":{\"count\":5}}"
+        },
+        {
+          "name": "Clinic without z-api",
+          "status": "Bad Request",
+          "code": 400,
+          "body": "{\"status\":\"ERROR\",\"message\":\"Clinica nao possui z-api configurado\"}"
+        }
+      ]
+    },
+    {
       "name": "Simulate Incoming Text (webhook test)",
       "request": {
         "method": "POST",
