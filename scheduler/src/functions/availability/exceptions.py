@@ -38,7 +38,6 @@ def create_handler(event, context):
         exception_type = body.get("exception_type")
         start_time = body.get("start_time")
         end_time = body.get("end_time")
-        professional_id = body.get("professional_id")
         reason = body.get("reason")
 
         if not exception_date or not exception_type:
@@ -63,12 +62,12 @@ def create_handler(event, context):
         result = db.execute_write_returning(
             """
             INSERT INTO scheduler.availability_exceptions
-                (id, clinic_id, exception_date, exception_type, start_time, end_time, professional_id, reason)
+                (id, clinic_id, exception_date, exception_type, start_time, end_time, reason)
             VALUES
-                (gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s)
+                (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (clinic_id, exception_date, exception_type, start_time, end_time, professional_id, reason)
+            (clinic_id, exception_date, exception_type, start_time, end_time, reason)
         )
 
         logger.info(f"[clinicId: {clinic_id}] Availability exception created: {result.get('id') if result else 'unknown'}")
