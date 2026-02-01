@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime, date, time
+from psycopg2 import errors as pg_errors
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 
@@ -68,6 +69,13 @@ def create_handler(event, context):
             "data": _serialize_row(result) if result else None
         })
 
+    except pg_errors.UniqueViolation:
+        DAY_NAMES = ["Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"]
+        day_name = DAY_NAMES[day_of_week] if 0 <= day_of_week <= 6 else str(day_of_week)
+        return http_response(409, {
+            "status": "ERROR",
+            "message": f"Ja existe uma regra de disponibilidade para {day_name} nesta clinica"
+        })
     except Exception as e:
         logger.error(f"Error creating availability rule: {str(e)}")
         return http_response(500, {"status": "ERROR", "message": str(e)})

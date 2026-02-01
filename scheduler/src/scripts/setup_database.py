@@ -153,6 +153,19 @@ SQL_STATEMENTS = [
     )
     """,
 
+    # Unique constraints
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'uq_availability_rules_clinic_day'
+        ) THEN
+            ALTER TABLE scheduler.availability_rules
+            ADD CONSTRAINT uq_availability_rules_clinic_day UNIQUE (clinic_id, day_of_week);
+        END IF;
+    END $$
+    """,
+
     # Índices
     "CREATE INDEX IF NOT EXISTS idx_appointments_clinic_date ON scheduler.appointments(clinic_id, appointment_date)",
     "CREATE INDEX IF NOT EXISTS idx_appointments_patient ON scheduler.appointments(patient_id)",
