@@ -1,7 +1,7 @@
 import json
 import logging
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, time
 
 from src.utils.http import parse_body, http_response, require_api_key
 from src.utils.auth import SchedulerAuth
@@ -14,7 +14,7 @@ logger.setLevel(logging.INFO)
 def _serialize_row(row):
     result = {}
     for key, value in row.items():
-        if isinstance(value, (datetime, date)):
+        if isinstance(value, (datetime, date, time)):
             result[key] = value.isoformat()
         else:
             result[key] = value

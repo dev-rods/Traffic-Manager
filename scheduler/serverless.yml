@@ -7,18 +7,27 @@ custom:
   resourcePrefix: ${self:service}-${self:custom.stage}
   accountId: "796000356030"
   pythonRequirements:
+    dockerizePip: false
+    pythonBin: py -3.8
+    layer: true
+    useStaticCache: false
+    useDownloadCache: false
     slim: true
-    slimPatternsAppendDefaults: false
+    strip: false
     slimPatterns:
+      - "**/*.egg-info"
       - "**/*.pyc"
       - "**/__pycache__"
       - "**/*.pyo"
 
 provider:
   name: aws
-  runtime: python3.9
+  runtime: python3.8
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-east-1'}
+  layers:
+    - { Ref: PythonRequirementsLambdaLayer }
+    - arn:aws:lambda:us-east-1:796000356030:layer:db-communication:1
 
   environment:
     STAGE: ${self:custom.stage}

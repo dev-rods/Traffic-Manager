@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, time
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 def _serialize_row(row):
     result = {}
     for key, value in row.items():
-        if isinstance(value, (datetime, date)):
+        if isinstance(value, (datetime, date, time)):
             result[key] = value.isoformat()
         else:
             result[key] = value

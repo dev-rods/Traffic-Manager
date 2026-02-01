@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, time
 
 from psycopg2.extras import Json
 
@@ -17,7 +17,7 @@ JSONB_FIELDS = {"buttons"}
 def _serialize_row(row):
     result = {}
     for key, value in row.items():
-        if isinstance(value, (datetime, date)):
+        if isinstance(value, (datetime, date, time)):
             result[key] = value.isoformat()
         else:
             result[key] = value
