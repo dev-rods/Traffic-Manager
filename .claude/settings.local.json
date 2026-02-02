@@ -6,7 +6,10 @@
       "Bash(python -m py_compile:*)",
       "Bash(serverless invoke local:*)",
       "Bash(npm install)",
-      "WebFetch(domain:developer.z-api.io)"
+      "WebFetch(domain:developer.z-api.io)",
+      "Bash(npx serverless:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: add z-api message queue endpoint and disable reminder cron\n\nAdd GET /clinics/{clinicId}/queue and /queue/count endpoints to query\nz-api message queue status. Disable reminder cron until ready for testing.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
