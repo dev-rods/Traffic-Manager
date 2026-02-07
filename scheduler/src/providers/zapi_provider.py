@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -8,6 +8,7 @@ from src.providers.whatsapp_provider import (
     ProviderResponse,
     IncomingMessage,
     MessageStatusUpdate,
+    is_phone_allowed,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,7 +26,22 @@ class ZApiProvider(WhatsAppProvider):
             "Content-Type": "application/json",
         }
 
+    def _check_allowlist(self, phone: str) -> Optional[ProviderResponse]:
+        if not is_phone_allowed(phone):
+            masked = phone[-4:] if len(phone) >= 4 else phone
+            logger.warning(f"Message blocked by allowlist — phone ending in ***{masked}")
+            return ProviderResponse(
+                success=True,
+                provider_message_id="blocked-by-allowlist",
+                raw_response={"blocked": True, "reason": "phone_not_in_allowlist"},
+            )
+        return None
+
     def send_text(self, phone: str, message: str) -> ProviderResponse:
+        blocked = self._check_allowlist(phone)
+        if blocked:
+            return blocked
+
         url = f"{self.base_url}/send-text"
         payload = {"phone": phone, "message": message}
 
@@ -50,6 +66,10 @@ class ZApiProvider(WhatsAppProvider):
             return ProviderResponse(success=False, error=str(e))
 
     def send_buttons(self, phone: str, message: str, buttons: List[Dict[str, str]]) -> ProviderResponse:
+        blocked = self._check_allowlist(phone)
+        if blocked:
+            return blocked
+
         url = f"{self.base_url}/send-button-list"
         payload = {
             "phone": phone,
@@ -77,6 +97,10 @@ class ZApiProvider(WhatsAppProvider):
             return self._send_numbered_fallback(phone, message, buttons)
 
     def send_list(self, phone: str, message: str, button_text: str, sections: List[Dict]) -> ProviderResponse:
+        blocked = self._check_allowlist(phone)
+        if blocked:
+            return blocked
+
         # z-api list support can be unstable, use numbered fallback
         lines = [message, ""]
         idx = 1

@@ -1,6 +1,12 @@
+import logging
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from src.utils.phone import normalize_phone
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -55,6 +61,18 @@ class WhatsAppProvider(ABC):
     @abstractmethod
     def parse_status_update(self, raw_payload: Dict[str, Any]) -> MessageStatusUpdate:
         ...
+
+
+def is_phone_allowed(phone: str) -> bool:
+    allowed_raw = os.environ.get("ALLOWED_PHONES", "").strip()
+    if not allowed_raw:
+        return False
+
+    if allowed_raw == "*":
+        return True
+
+    allowed_phones = {normalize_phone(p) for p in allowed_raw.split(",") if p.strip()}
+    return normalize_phone(phone) in allowed_phones
 
 
 def get_provider(clinic: Dict[str, Any]) -> WhatsAppProvider:

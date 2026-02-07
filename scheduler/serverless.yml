@@ -48,6 +48,8 @@ provider:
     GOOGLE_SHEETS_SERVICE_ACCOUNT: ${ssm:/${self:custom.stage}/GOOGLE_SHEETS_SERVICE_ACCOUNT}
     # z-api (client token shared across instances)
     ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
+    # Message allowlist (comma-separated phones, empty = allow all)
+    ALLOWED_PHONES: ${env:ALLOWED_PHONES, ''}
 
 functions:
   - ${file(sls/functions/webhook/interface.yml)}
