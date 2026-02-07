@@ -71,4 +71,4 @@ Os dados internos (session, btn_id, chamadas de API) devem continuar usando YYYY
 - [x] Pendente
 - [x] Spec gerada: `spec/003-date-format-br.md`
 - [x] Implementado em: 2026-02-07
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Registrado em `TASKS_LOG.md`

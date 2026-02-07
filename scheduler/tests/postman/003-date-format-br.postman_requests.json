@@ -1,0 +1,405 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 003 Date Format BR (DD/MM/YYYY)",
+    "description": "Test requests for verifying date formatting in Brazilian DD/MM/YYYY format across scheduling and rescheduling flows",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "API_KEY", "value": "YOUR_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "serviceId", "value": "", "type": "string" },
+    { "key": "instanceId", "value": "", "type": "string" },
+    { "key": "phone", "value": "5511999990000", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Test 1a - Start conversation (Ola)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-001\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900000000,\"text\":{\"message\":\"Ola\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 1b - Click Agendar sessao",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-002\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900100000,\"buttonsResponseMessage\":{\"buttonId\":\"schedule\",\"message\":\"Agendar sessao\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 1c - Click Agendar agora (verify DD/MM/YYYY in days)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Dates in DD/MM/YYYY format', () => {",
+              "  const body = pm.response.text();",
+              "  // Should NOT contain YYYY-MM-DD pattern in visible text",
+              "  pm.expect(body).to.not.match(/\\d{4}-\\d{2}-\\d{2}/);",
+              "  // Should contain DD/MM/YYYY pattern",
+              "  pm.expect(body).to.match(/\\d{2}\\/\\d{2}\\/\\d{4}/);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-003\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900200000,\"buttonsResponseMessage\":{\"buttonId\":\"schedule_now\",\"message\":\"Agendar agora\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 2 - Click date button (verify DD/MM/YYYY in time selection)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Date header in DD/MM/YYYY', () => {",
+              "  const body = pm.response.text();",
+              "  pm.expect(body).to.include('09/02/2026');",
+              "  pm.expect(body).to.not.include('2026-02-09');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-004\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900300000,\"buttonsResponseMessage\":{\"buttonId\":\"day_2026-02-09\",\"message\":\"09/02/2026\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 3a - Click time button",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-005\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900400000,\"buttonsResponseMessage\":{\"buttonId\":\"time_09:00\",\"message\":\"09:00\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 3b - Enter areas (verify DD/MM/YYYY in confirmation)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Confirmation date in DD/MM/YYYY', () => {",
+              "  const body = pm.response.text();",
+              "  pm.expect(body).to.include('09/02/2026');",
+              "  pm.expect(body).to.not.include('2026-02-09');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-006\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900500000,\"text\":{\"message\":\"Pernas e axilas\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 4 - Confirm booking (verify DD/MM/YYYY in booked message)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Booked date in DD/MM/YYYY', () => {",
+              "  const body = pm.response.text();",
+              "  pm.expect(body).to.include('09/02/2026');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-007\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900600000,\"buttonsResponseMessage\":{\"buttonId\":\"confirm\",\"message\":\"Confirmar\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 5a - Reschedule: Start conversation",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-R01\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738901000000,\"text\":{\"message\":\"Ola\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 5b - Reschedule: Click Remarcar (verify DD/MM/YYYY)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Current appointment date in DD/MM/YYYY', () => {",
+              "  const body = pm.response.text();",
+              "  // Should contain DD/MM/YYYY for current appointment date",
+              "  pm.expect(body).to.match(/\\d{2}\\/\\d{2}\\/\\d{4}/);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-R02\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738901100000,\"buttonsResponseMessage\":{\"buttonId\":\"reschedule\",\"message\":\"Remarcar sessao\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 5c - Reschedule: Select new date (verify DD/MM/YYYY in time header)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('New date header in DD/MM/YYYY', () => {",
+              "  const body = pm.response.text();",
+              "  pm.expect(body).to.include('10/02/2026');",
+              "  pm.expect(body).to.not.include('2026-02-10');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-R03\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738901200000,\"buttonsResponseMessage\":{\"buttonId\":\"newday_2026-02-10\",\"message\":\"10/02/2026\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 5d - Reschedule: Select new time (verify DD/MM/YYYY in confirm)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Confirm reschedule date in DD/MM/YYYY', () => {",
+              "  const body = pm.response.text();",
+              "  pm.expect(body).to.include('10/02/2026');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-R04\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738901300000,\"buttonsResponseMessage\":{\"buttonId\":\"newtime_15:00\",\"message\":\"15:00\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 5e - Reschedule: Confirm (verify DD/MM/YYYY in rescheduled msg)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Rescheduled date in DD/MM/YYYY', () => {",
+              "  const body = pm.response.text();",
+              "  pm.expect(body).to.include('10/02/2026');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-D3-R05\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738901400000,\"buttonsResponseMessage\":{\"buttonId\":\"confirm\",\"message\":\"Confirmar\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    }
+  ]
+}
