@@ -1,0 +1,235 @@
+{
+  "info": {
+    "_postman_id": "lead-whatsapp-welcome-collection",
+    "name": "Traffic Manager - Lead WhatsApp Welcome",
+    "description": "Test collection for the WhatsApp welcome message sent on lead creation when clinicId is provided.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://nk0mrwvhca.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "empresarodsteste-bd5f23",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "laser-beauty-sp-abc123",
+      "type": "string"
+    },
+    {
+      "key": "leadId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Lead without WhatsApp",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Response has SUCCESS status', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "    pm.expect(jsonData).to.have.property('leadId');",
+              "    pm.expect(jsonData.lead).to.not.have.property('whatsappStatus');",
+              "});",
+              "",
+              "var jsonData = pm.response.json();",
+              "if (jsonData.leadId) {",
+              "    pm.collectionVariables.set('leadId', jsonData.leadId);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"name\": \"Joao Teste\",\n    \"phone\": \"5511999999999\",\n    \"email\": \"joao@example.com\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/leads",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "leads"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Lead with WhatsApp Welcome",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Response has SUCCESS status and whatsapp fields', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "    pm.expect(jsonData).to.have.property('leadId');",
+              "    pm.expect(jsonData.lead).to.have.property('whatsappStatus');",
+              "    pm.expect(jsonData.lead).to.have.property('clinicId');",
+              "});",
+              "",
+              "var jsonData = pm.response.json();",
+              "if (jsonData.leadId) {",
+              "    pm.collectionVariables.set('leadId', jsonData.leadId);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"name\": \"Maria Silva\",\n    \"phone\": \"5511999999999\",\n    \"email\": \"maria@example.com\",\n    \"clinicId\": \"{{clinicId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/leads",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "leads"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Create Lead with Invalid clinicId (WhatsApp Fails)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 201 (lead created despite WhatsApp failure)', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('WhatsApp status is FAILED', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "    pm.expect(jsonData.lead.whatsappStatus).to.eql('FAILED');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"clientId\": \"{{clientId}}\",\n    \"name\": \"Carlos Erro\",\n    \"phone\": \"5511999999999\",\n    \"email\": \"carlos@example.com\",\n    \"clinicId\": \"clinica-inexistente\"\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/leads",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "leads"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Verify Lead with WhatsApp Fields (GET)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Lead has whatsapp tracking fields', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "    pm.expect(jsonData.lead).to.have.property('whatsappStatus');",
+              "    pm.expect(jsonData.lead).to.have.property('whatsappSentAt');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/leads/{{leadId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "leads", "{{leadId}}"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

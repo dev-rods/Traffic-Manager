@@ -4,12 +4,23 @@ CreateLead:
     command: ["src.functions.leads.create.handler"]
   memorySize: 512
   timeout: 30
+  environment:
+    SCHEDULER_SEND_FUNCTION: clinic-scheduler-infra-${self:custom.stage}-SendMessage
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateLead-lambdaRole
   iamRoleStatements:
     - Effect: Allow
       Action:
         - dynamodb:PutItem
+        - dynamodb:UpdateItem
       Resource: !GetAtt LeadsTable.Arn
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+      Resource: arn:aws:lambda:${self:provider.region}:${self:custom.accountId}:function:clinic-scheduler-infra-${self:custom.stage}-SendMessage
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/SCHEDULER_API_KEY
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
