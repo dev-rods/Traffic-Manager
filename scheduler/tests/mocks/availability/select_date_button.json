@@ -1,0 +1,3 @@
+{
+  "body": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-AVAIL-001\",\"phone\":\"5511999990000\",\"fromMe\":false,\"momment\":1706745800000,\"chatName\":\"Maria Silva\",\"senderName\":\"Maria Silva\",\"isGroup\":false,\"referenceMessageId\":\"MSG-DAYS-001\",\"buttonsResponseMessage\":{\"buttonId\":\"day_2026-02-09\",\"message\":\"2026-02-09\"}}"
+}

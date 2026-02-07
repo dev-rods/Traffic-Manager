@@ -1,0 +1,219 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 002 Fix Availability Bugs",
+    "description": "Test requests for verifying availability bugfixes: session value extraction and day_of_week Sunday mismatch",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "API_KEY", "value": "YOUR_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "serviceId", "value": "", "type": "string" },
+    { "key": "instanceId", "value": "", "type": "string" },
+    { "key": "phone", "value": "5511999990000", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Test 1 - List Availability Rules (verify day_of_week values)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Has rules', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.status).to.eql('SUCCESS');",
+              "  pm.expect(body.data.length).to.be.above(0);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/availability-rules",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "availability-rules"]
+        }
+      }
+    },
+    {
+      "name": "Test 2a - Create Sunday Rule (day_of_week=0)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201 or 409', () => {",
+              "  pm.expect([201, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "x-api-key", "value": "{{API_KEY}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"day_of_week\": 0, \"start_time\": \"09:00\", \"end_time\": \"17:00\"}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/availability-rules",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "availability-rules"]
+        }
+      }
+    },
+    {
+      "name": "Test 2b - Get Sunday Slots (was broken before fix)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Has slots for Sunday', () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.status).to.eql('SUCCESS');",
+              "  pm.expect(body.data.length).to.be.above(0);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/available-slots?date=2026-02-08&serviceId={{serviceId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "available-slots"],
+          "query": [
+            { "key": "date", "value": "2026-02-08" },
+            { "key": "serviceId", "value": "{{serviceId}}" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Test 3a - Webhook: Start conversation (Ola)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-T3-001\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900000000,\"text\":{\"message\":\"Ola\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 3b - Webhook: Click Agendar sessao",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-T3-002\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900100000,\"buttonsResponseMessage\":{\"buttonId\":\"schedule\",\"message\":\"Agendar sessao\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 3c - Webhook: Click Ver dias disponiveis",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-T3-003\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900200000,\"buttonsResponseMessage\":{\"buttonId\":\"schedule_now\",\"message\":\"Ver dias disponiveis\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 3d - Webhook: Click date button (KEY TEST)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Response does NOT contain Nenhum horario', () => {",
+              "  const body = pm.response.text();",
+              "  pm.expect(body).to.not.include('Nenhum horario disponivel');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-T3-004\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900300000,\"buttonsResponseMessage\":{\"buttonId\":\"day_2026-02-09\",\"message\":\"2026-02-09\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    },
+    {
+      "name": "Test 4 - Webhook: Click time button",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"{{instanceId}}\",\"messageId\":\"MSG-T4-001\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1738900400000,\"buttonsResponseMessage\":{\"buttonId\":\"time_09:00\",\"message\":\"09:00\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      }
+    }
+  ]
+}

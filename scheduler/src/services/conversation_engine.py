@@ -2,6 +2,7 @@ import os
 import time
 import uuid
 import logging
+from datetime import date, datetime
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -249,8 +250,7 @@ class ConversationEngine:
 
     def process_message(self, clinic_id: str, incoming: IncomingMessage) -> List[OutgoingMessage]:
         phone = incoming.phone
-        conversation_id = f"{clinic_id}#{phone}"
-
+        
         # 1. Load or create session
         session = self._load_session(clinic_id, phone)
         current_state = ConversationState(session.get("state", ConversationState.WELCOME))
@@ -276,6 +276,9 @@ class ConversationEngine:
         logger.info(
             f"[ConversationEngine] Transition: {current_state} -> {next_state} (input='{user_input}')"
         )
+
+        # 3.5 Extract values from dynamic button IDs into session
+        self._extract_dynamic_selection(user_input, session)
 
         # 4. Execute on_enter and build response
         session["previousState"] = current_state.value
@@ -326,6 +329,12 @@ class ConversationEngine:
             idx = int(text) - 1
             if 0 <= idx < len(buttons):
                 return buttons[idx]["id"]
+
+        # Fuzzy label matching — LIKE '%text%' against button labels
+        if buttons and text:
+            matches = [btn for btn in buttons if text in btn.get("label", "").lower()]
+            if len(matches) == 1:
+                return matches[0]["id"]
 
         # Free text input — return as-is for states that accept it
         return text
@@ -497,7 +506,7 @@ class ConversationEngine:
         if days:
             for i, day in enumerate(days):
                 btn_id = f"day_{day}"
-                dynamic_buttons.append({"id": btn_id, "label": day})
+                dynamic_buttons.append({"id": btn_id, "label": self._format_date_br(day)})
                 dynamic_transitions[btn_id] = ConversationState.SELECT_TIME.value
         else:
             dynamic_buttons = [{"id": "back", "label": "Voltar"}]
@@ -505,7 +514,7 @@ class ConversationEngine:
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
 
-        days_list = "\n".join([f"{i+1} - {d}" for i, d in enumerate(days)]) if days else "Nenhum dia disponivel no momento."
+        days_list = "\n".join([f"{i+1} - {self._format_date_br(d)}" for i, d in enumerate(days)]) if days else "Nenhum dia disponivel no momento."
         variables = {"days_list": days_list}
         return variables, dynamic_buttons
 
@@ -531,7 +540,7 @@ class ConversationEngine:
         session["dynamic_transitions"] = dynamic_transitions
 
         times_list = "\n".join([f"{i+1} - {t}" for i, t in enumerate(slots)]) if slots else "Nenhum horario disponivel."
-        variables = {"date": selected_date, "times_list": times_list}
+        variables = {"date": self._format_date_br(selected_date), "times_list": times_list}
         return variables, dynamic_buttons
 
     def _on_enter_confirm_booking(self, clinic_id: str, session: dict) -> dict:
@@ -539,7 +548,7 @@ class ConversationEngine:
         service = self._get_service(session.get("service_id"))
 
         variables = {
-            "date": session.get("selected_date", ""),
+            "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
             "service": service.get("name", "") if service else "",
             "areas": session.get("areas", ""),
@@ -567,7 +576,7 @@ class ConversationEngine:
 
         clinic = self._get_clinic(clinic_id)
         variables = {
-            "date": session.get("selected_date", ""),
+            "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
             "pre_session_instructions": clinic.get("pre_session_instructions", "") if clinic else "",
         }
@@ -585,7 +594,7 @@ class ConversationEngine:
             session["state"] = ConversationState.SHOW_CURRENT_APPOINTMENT.value
 
             variables = {
-                "date": str(appointment.get("appointment_date", "")),
+                "date": self._format_date_br(appointment.get("appointment_date", "")),
                 "time": str(appointment.get("start_time", "")),
                 "service": appointment.get("service_name", ""),
             }
@@ -602,7 +611,7 @@ class ConversationEngine:
             dynamic_transitions = {}
             for day in days:
                 btn_id = f"newday_{day}"
-                dynamic_buttons.append({"id": btn_id, "label": day})
+                dynamic_buttons.append({"id": btn_id, "label": self._format_date_br(day)})
                 dynamic_transitions[btn_id] = ConversationState.SELECT_NEW_TIME.value
 
             if not dynamic_buttons:
@@ -643,13 +652,13 @@ class ConversationEngine:
         session["dynamic_transitions"] = dynamic_transitions
 
         times_list = "\n".join([f"{i+1} - {t}" for i, t in enumerate(slots)]) if slots else "Nenhum horario disponivel."
-        variables = {"date": selected_date, "times_list": times_list}
+        variables = {"date": self._format_date_br(selected_date), "times_list": times_list}
         return variables, dynamic_buttons
 
     def _on_enter_confirm_reschedule(self, clinic_id: str, session: dict) -> dict:
         clinic = self._get_clinic(clinic_id)
         return {
-            "date": session.get("selected_new_date", ""),
+            "date": self._format_date_br(session.get("selected_new_date", "")),
             "time": session.get("selected_new_time", ""),
             "service": "",
             "areas": "",
@@ -670,7 +679,7 @@ class ConversationEngine:
                 return {}, "Desculpe, ocorreu um erro ao remarcar. Tente novamente."
 
         variables = {
-            "date": session.get("selected_new_date", ""),
+            "date": self._format_date_br(session.get("selected_new_date", "")),
             "time": session.get("selected_new_time", ""),
         }
         content = self.template_service.get_and_render(clinic_id, "RESCHEDULED", variables)
@@ -761,6 +770,17 @@ class ConversationEngine:
         )
         return results[0] if results else None
 
+    @staticmethod
+    def _format_date_br(date_value) -> str:
+        if isinstance(date_value, date):
+            return date_value.strftime("%d/%m/%Y")
+        if isinstance(date_value, str) and date_value:
+            try:
+                return datetime.strptime(date_value, "%Y-%m-%d").strftime("%d/%m/%Y")
+            except ValueError:
+                return date_value
+        return str(date_value)
+
     def _build_messages(
         self,
         state: ConversationState,
@@ -801,7 +821,19 @@ class ConversationEngine:
                 )
             ]
 
-    def _extract_selection_from_input(self, user_input: str, prefix: str) -> str:
-        if user_input.startswith(prefix):
-            return user_input[len(prefix):]
-        return user_input
+    def _extract_dynamic_selection(self, user_input: str, session: dict) -> None:
+        """Extract values from dynamic button IDs and store in session."""
+        PREFIX_TO_KEY = {
+            "day_": "selected_date",
+            "time_": "selected_time",
+            "newday_": "selected_new_date",
+            "newtime_": "selected_new_time",
+            "faq_": "selected_faq_key",
+        }
+        for prefix, session_key in PREFIX_TO_KEY.items():
+            if user_input.startswith(prefix):
+                session[session_key] = user_input[len(prefix):]
+                logger.info(
+                    f"[ConversationEngine] Extracted {session_key}='{session[session_key]}' from input '{user_input}'"
+                )
+                return

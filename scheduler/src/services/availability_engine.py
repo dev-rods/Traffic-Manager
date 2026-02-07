@@ -31,10 +31,9 @@ class AvailabilityEngine:
             )
             buffer_minutes = clinics[0]["buffer_minutes"] if clinics else 10
 
-            # 3. Parse date and get day_of_week (0=Monday in Python, but DB stores 0=Sunday or ISO)
+            # 3. Parse date and get day_of_week (DB stores 0=Sunday, 1=Monday, ..., 6=Saturday)
             dt = datetime.strptime(target_date, "%Y-%m-%d").date()
-            # Python: Monday=0, Sunday=6. Store as ISO: Monday=1, Sunday=7
-            day_of_week = dt.isoweekday()  # 1=Monday, 7=Sunday
+            day_of_week = dt.isoweekday() % 7  # 0=Sunday, 1=Monday, ..., 6=Saturday
 
             # 4. Fetch availability rules for this day
             rules = self.db.execute_query(
@@ -151,7 +150,7 @@ class AvailabilityEngine:
 
             # Get rules for the day
             dt = datetime.strptime(target_date, "%Y-%m-%d").date()
-            day_of_week = dt.isoweekday()
+            day_of_week = dt.isoweekday() % 7  # 0=Sunday, 1=Monday, ..., 6=Saturday
 
             rules = self.db.execute_query(
                 """
