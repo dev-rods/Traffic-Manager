@@ -1,11 +1,15 @@
 import json
+import os
+import time
 import uuid
 import logging
+
+import boto3
 
 from src.utils.http import parse_body, http_response
 from src.services.db.postgres import PostgresService
 from src.services.template_service import TemplateService
-from src.services.conversation_engine import ConversationEngine
+from src.services.conversation_engine import ConversationEngine, ConversationState
 from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import get_provider
 
@@ -29,10 +33,6 @@ def handler(event, context):
         logger.info(f"[Webhook] Payload recebido: {json.dumps(body)[:500]}")
 
         # 1. Validate callback type
-        if body.get("fromMe", False):
-            logger.info("[Webhook] Ignorando mensagem propria (fromMe=true)")
-            return http_response(200, {"status": "OK"})
-
         if body.get("isGroup", False):
             logger.info("[Webhook] Ignorando mensagem de grupo")
             return http_response(200, {"status": "OK"})
@@ -41,6 +41,21 @@ def handler(event, context):
         instance_id = body.get("instanceId", "")
         if not instance_id:
             logger.warning("[Webhook] Payload sem instanceId")
+            return http_response(200, {"status": "OK"})
+
+        # 1b. Handle fromMe (attendant messages)
+        if body.get("fromMe", False):
+            phone = body.get("phone", "")
+            if phone and instance_id:
+                content = _extract_text_content(body)
+                db = PostgresService()
+                clinic_id = _resolve_clinic_id(db, instance_id)
+                if clinic_id:
+                    if content and content.strip().lower() in ("#encerrar", "#fim"):
+                        _deactivate_attendant_mode(clinic_id, phone)
+                    else:
+                        _activate_attendant_mode(clinic_id, phone)
+            logger.info("[Webhook] Mensagem propria processada (fromMe=true)")
             return http_response(200, {"status": "OK"})
 
         db = PostgresService()
@@ -166,3 +181,80 @@ def _get_appointment_service(db):
     except ImportError:
         logger.info("[Webhook] AppointmentService nao disponivel (Phase 8)")
         return None
+
+
+ATTENDANT_TTL_SECONDS = 2 * 60 * 60  # 2 hours
+
+
+def _resolve_clinic_id(db: PostgresService, instance_id: str):
+    clinics = db.execute_query(
+        "SELECT clinic_id FROM scheduler.clinics WHERE zapi_instance_id = %s AND active = TRUE",
+        (instance_id,),
+    )
+    return clinics[0]["clinic_id"] if clinics else None
+
+
+def _get_sessions_table():
+    dynamodb = boto3.resource("dynamodb")
+    return dynamodb.Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
+
+
+def _load_session(table, clinic_id: str, phone: str) -> dict:
+    try:
+        response = table.get_item(
+            Key={"pk": f"CLINIC#{clinic_id}", "sk": f"PHONE#{phone}"}
+        )
+        item = response.get("Item")
+        if item:
+            return item.get("session", {})
+    except Exception as e:
+        logger.error(f"[Webhook] Error loading session: {e}")
+    return {}
+
+
+def _save_session(table, clinic_id: str, phone: str, session: dict) -> None:
+    try:
+        now = int(time.time())
+        table.put_item(
+            Item={
+                "pk": f"CLINIC#{clinic_id}",
+                "sk": f"PHONE#{phone}",
+                "session": session,
+                "clinicId": clinic_id,
+                "phone": phone,
+                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+            }
+        )
+    except Exception as e:
+        logger.error(f"[Webhook] Error saving session: {e}")
+
+
+def _extract_text_content(body: dict) -> str:
+    if "text" in body:
+        return body["text"].get("message", "")
+    return ""
+
+
+def _activate_attendant_mode(clinic_id: str, phone: str) -> None:
+    table = _get_sessions_table()
+    session = _load_session(table, clinic_id, phone)
+    state = session.get("state", "")
+
+    if state in (ConversationState.HUMAN_HANDOFF.value, ConversationState.HUMAN_ATTENDANT_ACTIVE.value):
+        session["state"] = ConversationState.HUMAN_ATTENDANT_ACTIVE.value
+        session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+        _save_session(table, clinic_id, phone, session)
+        logger.info(f"[Webhook] Modo atendente ativado/renovado para {phone} (TTL 2h)")
+
+
+def _deactivate_attendant_mode(clinic_id: str, phone: str) -> None:
+    table = _get_sessions_table()
+    session = _load_session(table, clinic_id, phone)
+    state = session.get("state", "")
+
+    if state in (ConversationState.HUMAN_HANDOFF.value, ConversationState.HUMAN_ATTENDANT_ACTIVE.value):
+        session["state"] = ConversationState.WELCOME.value
+        session.pop("attendant_active_until", None)
+        session.pop("human_handoff_requested_at", None)
+        _save_session(table, clinic_id, phone, session)
+        logger.info(f"[Webhook] Modo atendente encerrado para {phone}")

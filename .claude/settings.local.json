@@ -9,7 +9,20 @@
       "WebFetch(domain:developer.z-api.io)",
       "Bash(npx serverless:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: add z-api message queue endpoint and disable reminder cron\n\nAdd GET /clinics/{clinicId}/queue and /queue/count endpoints to query\nz-api message queue status. Disable reminder cron until ready for testing.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: add z-api message queue endpoint and disable reminder cron\n\nAdd GET /clinics/{clinicId}/queue and /queue/count endpoints to query\nz-api message queue status. Disable reminder cron until ready for testing.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(wc:*)",
+      "Bash(git checkout:*)",
+      "Bash(python -m pytest tests/unit/test_conversation_engine.py -v)",
+      "Bash(python -m unittest:*)",
+      "Bash(py -3.8 -c:*)",
+      "Bash(py -3.8:*)",
+      "Bash(git commit:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\ndocs: add PRD, integration tests, and Postman collection for 003 date format BR\n\nDocumentation for the DD/MM/YYYY date formatting feature across\nscheduling and rescheduling flows.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(del \"C:\\\\Users\\\\Rodri\\\\Documents\\\\dev-rods\\\\Traffic-Manager\\\\scheduler\\\\src\\\\functions\\\\service\\\\areas_create.py\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: improve FAQ fuzzy matching with text normalization and word overlap\n\nAdd _normalize_text\\(\\) to strip accents/diacritics and punctuation before\nmatching. Replace simple substring check with 2-pass approach: normalized\nsubstring then word-overlap scoring. Rename faq_menu button to go_faq_menu\nto avoid prefix collision with faq_ extraction.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git reset:*)",
+      "Bash(git stash:*)",
+      "Bash(git push:*)"
     ]
   }
 }

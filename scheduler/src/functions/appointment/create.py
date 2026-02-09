@@ -28,11 +28,12 @@ def handler(event, context):
     {
         "clinicId": "laser-beauty-sp-abc123",
         "phone": "5511999999999",
-        "serviceId": "uuid",
+        "serviceId": "uuid",            // single service (backwards compat)
+        "serviceIds": ["uuid", "uuid"],  // multiple services (preferred)
         "date": "2026-02-10",
         "time": "10:00",
-        "areas": "Pernas e axilas",
-        "professionalId": "uuid"  (opcional)
+        "areas": "Pernas e axilas",      // optional, auto-derived from services
+        "professionalId": "uuid"         // optional
     }
     """
     try:
@@ -47,14 +48,28 @@ def handler(event, context):
         clinic_id = body.get("clinicId")
         phone = body.get("phone")
         service_id = body.get("serviceId")
+        service_ids = body.get("serviceIds")
         appt_date = body.get("date")
         appt_time = body.get("time")
 
-        if not all([clinic_id, phone, service_id, appt_date, appt_time]):
+        # Accept either serviceId (string) or serviceIds (array)
+        if not service_id and not service_ids:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Campos obrigatorios: clinicId, phone, serviceId, date, time"
+                "message": "Campos obrigatorios: clinicId, phone, serviceId ou serviceIds, date, time"
             })
+
+        if not all([clinic_id, phone, appt_date, appt_time]):
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "Campos obrigatorios: clinicId, phone, serviceId ou serviceIds, date, time"
+            })
+
+        # Normalize: if serviceIds provided, use it; otherwise wrap serviceId
+        if not service_ids:
+            service_ids = [service_id]
+        if not service_id:
+            service_id = service_ids[0]
 
         db = PostgresService()
         service = AppointmentService(db)
@@ -67,6 +82,7 @@ def handler(event, context):
             time=appt_time,
             areas=body.get("areas", ""),
             professional_id=body.get("professionalId"),
+            service_ids=service_ids,
         )
 
         appointment = _serialize_row(result)

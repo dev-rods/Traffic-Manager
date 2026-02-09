@@ -153,6 +153,23 @@ SQL_STATEMENTS = [
     )
     """,
 
+    # Appointment-services junction table (multi-service per appointment)
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.appointment_services (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        appointment_id UUID NOT NULL REFERENCES scheduler.appointments(id) ON DELETE CASCADE,
+        service_id UUID NOT NULL REFERENCES scheduler.services(id),
+        service_name VARCHAR(255) NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        price_cents INTEGER,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(appointment_id, service_id)
+    )
+    """,
+
+    # Add total_duration_minutes to appointments
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER",
+
     # Unique constraints
     """
     DO $$
@@ -173,6 +190,7 @@ SQL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_patients_phone ON scheduler.patients(clinic_id, phone)",
     "CREATE INDEX IF NOT EXISTS idx_availability_rules_clinic ON scheduler.availability_rules(clinic_id, day_of_week)",
     "CREATE INDEX IF NOT EXISTS idx_availability_exceptions_clinic ON scheduler.availability_exceptions(clinic_id, exception_date)",
+    "CREATE INDEX IF NOT EXISTS idx_appointment_services_appointment ON scheduler.appointment_services(appointment_id)",
 ]
 
 

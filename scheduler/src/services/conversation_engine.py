@@ -3,7 +3,8 @@ import time
 import uuid
 import unicodedata
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, time as dt_time, timedelta
+from decimal import Decimal
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -23,13 +24,14 @@ class ConversationState(str, Enum):
     MAIN_MENU = "MAIN_MENU"
     SCHEDULE_MENU = "SCHEDULE_MENU"
     PRICE_TABLE = "PRICE_TABLE"
+    SELECT_SERVICES = "SELECT_SERVICES"
     AVAILABLE_DAYS = "AVAILABLE_DAYS"
     SELECT_DATE = "SELECT_DATE"
     SELECT_TIME = "SELECT_TIME"
-    INPUT_AREAS = "INPUT_AREAS"
     CONFIRM_BOOKING = "CONFIRM_BOOKING"
     BOOKED = "BOOKED"
     RESCHEDULE_LOOKUP = "RESCHEDULE_LOOKUP"
+    SELECT_APPOINTMENT = "SELECT_APPOINTMENT"
     SHOW_CURRENT_APPOINTMENT = "SHOW_CURRENT_APPOINTMENT"
     SELECT_NEW_DATE = "SELECT_NEW_DATE"
     SELECT_NEW_TIME = "SELECT_NEW_TIME"
@@ -37,7 +39,12 @@ class ConversationState(str, Enum):
     RESCHEDULED = "RESCHEDULED"
     FAQ_MENU = "FAQ_MENU"
     FAQ_ANSWER = "FAQ_ANSWER"
+    CANCEL_LOOKUP = "CANCEL_LOOKUP"
+    SELECT_CANCEL_APPOINTMENT = "SELECT_CANCEL_APPOINTMENT"
+    CONFIRM_CANCEL = "CONFIRM_CANCEL"
+    CANCELLED = "CANCELLED"
     HUMAN_HANDOFF = "HUMAN_HANDOFF"
+    HUMAN_ATTENDANT_ACTIVE = "HUMAN_ATTENDANT_ACTIVE"
     UNRECOGNIZED = "UNRECOGNIZED"
 
 
@@ -57,11 +64,13 @@ STATE_CONFIG = {
         "buttons": [
             {"id": "schedule", "label": "Agendar sessao"},
             {"id": "reschedule", "label": "Remarcar sessao"},
+            {"id": "cancel_session", "label": "Cancelar sessao"},
             {"id": "faq", "label": "Duvidas sobre sessao"},
         ],
         "transitions": {
             "schedule": ConversationState.SCHEDULE_MENU,
             "reschedule": ConversationState.RESCHEDULE_LOOKUP,
+            "cancel_session": ConversationState.CANCEL_LOOKUP,
             "faq": ConversationState.FAQ_MENU,
             "human": ConversationState.HUMAN_HANDOFF,
         },
@@ -76,7 +85,7 @@ STATE_CONFIG = {
         ],
         "transitions": {
             "price_table": ConversationState.PRICE_TABLE,
-            "schedule_now": ConversationState.AVAILABLE_DAYS,
+            "schedule_now": ConversationState.SELECT_SERVICES,
         },
         "fallback": ConversationState.UNRECOGNIZED,
         "previous": ConversationState.MAIN_MENU,
@@ -88,17 +97,25 @@ STATE_CONFIG = {
             {"id": "back", "label": "Voltar"},
         ],
         "transitions": {
-            "schedule_now": ConversationState.AVAILABLE_DAYS,
+            "schedule_now": ConversationState.SELECT_SERVICES,
         },
         "fallback": ConversationState.UNRECOGNIZED,
         "previous": ConversationState.SCHEDULE_MENU,
+    },
+    ConversationState.SELECT_SERVICES: {
+        "template_key": "SELECT_SERVICES",
+        "buttons": [],  # Dynamic — populated by on_enter
+        "transitions": {},  # Dynamic — service selection
+        "fallback": ConversationState.UNRECOGNIZED,
+        "previous": ConversationState.SCHEDULE_MENU,
+        "input_type": "dynamic_selection",
     },
     ConversationState.AVAILABLE_DAYS: {
         "template_key": "AVAILABLE_DAYS",
         "buttons": [],  # Dynamic — populated by on_enter
         "transitions": {},  # Dynamic — date selection
         "fallback": ConversationState.UNRECOGNIZED,
-        "previous": ConversationState.SCHEDULE_MENU,
+        "previous": ConversationState.SELECT_SERVICES,
         "input_type": "dynamic_selection",
     },
     ConversationState.SELECT_TIME: {
@@ -108,14 +125,6 @@ STATE_CONFIG = {
         "fallback": ConversationState.UNRECOGNIZED,
         "previous": ConversationState.AVAILABLE_DAYS,
         "input_type": "dynamic_selection",
-    },
-    ConversationState.INPUT_AREAS: {
-        "template_key": "INPUT_AREAS",
-        "buttons": [],
-        "transitions": {},
-        "fallback": ConversationState.UNRECOGNIZED,
-        "previous": ConversationState.SELECT_TIME,
-        "input_type": "free_text",
     },
     ConversationState.CONFIRM_BOOKING: {
         "template_key": "CONFIRM_BOOKING",
@@ -127,7 +136,7 @@ STATE_CONFIG = {
             "confirm": ConversationState.BOOKED,
         },
         "fallback": ConversationState.UNRECOGNIZED,
-        "previous": ConversationState.INPUT_AREAS,
+        "previous": ConversationState.SELECT_TIME,
     },
     ConversationState.BOOKED: {
         "template_key": "BOOKED",
@@ -146,6 +155,15 @@ STATE_CONFIG = {
         "transitions": {},
         "fallback": ConversationState.UNRECOGNIZED,
         "previous": ConversationState.MAIN_MENU,
+        "input_type": "dynamic_selection",
+    },
+    ConversationState.SELECT_APPOINTMENT: {
+        "template_key": "RESCHEDULE_SELECT_APPOINTMENT",
+        "buttons": [],  # Dynamic — appointment list
+        "transitions": {},  # Dynamic
+        "fallback": ConversationState.UNRECOGNIZED,
+        "previous": ConversationState.MAIN_MENU,
+        "input_type": "dynamic_selection",
     },
     ConversationState.SHOW_CURRENT_APPOINTMENT: {
         "template_key": "RESCHEDULE_FOUND",
@@ -207,6 +225,45 @@ STATE_CONFIG = {
         "fallback": ConversationState.UNRECOGNIZED,
         "previous": ConversationState.FAQ_MENU,
     },
+    ConversationState.CANCEL_LOOKUP: {
+        "template_key": None,  # Determined by on_enter
+        "buttons": [],
+        "transitions": {},
+        "fallback": ConversationState.UNRECOGNIZED,
+        "previous": ConversationState.MAIN_MENU,
+        "input_type": "dynamic_selection",
+    },
+    ConversationState.SELECT_CANCEL_APPOINTMENT: {
+        "template_key": "CANCEL_SELECT_APPOINTMENT",
+        "buttons": [],  # Dynamic — appointment list
+        "transitions": {},  # Dynamic
+        "fallback": ConversationState.UNRECOGNIZED,
+        "previous": ConversationState.MAIN_MENU,
+        "input_type": "dynamic_selection",
+    },
+    ConversationState.CONFIRM_CANCEL: {
+        "template_key": "CONFIRM_CANCEL",
+        "buttons": [
+            {"id": "confirm_cancel", "label": "Confirmar cancelamento"},
+            {"id": "back", "label": "Voltar"},
+        ],
+        "transitions": {
+            "confirm_cancel": ConversationState.CANCELLED,
+        },
+        "fallback": ConversationState.UNRECOGNIZED,
+        "previous": ConversationState.MAIN_MENU,
+    },
+    ConversationState.CANCELLED: {
+        "template_key": "CANCELLED",
+        "buttons": [
+            {"id": "main_menu", "label": "Menu principal"},
+        ],
+        "transitions": {
+            "main_menu": ConversationState.MAIN_MENU,
+        },
+        "fallback": ConversationState.MAIN_MENU,
+        "previous": None,
+    },
     ConversationState.HUMAN_HANDOFF: {
         "template_key": "HUMAN_HANDOFF",
         "buttons": [
@@ -218,6 +275,13 @@ STATE_CONFIG = {
         "fallback": ConversationState.MAIN_MENU,
         "previous": None,
     },
+    ConversationState.HUMAN_ATTENDANT_ACTIVE: {
+        "template_key": None,
+        "buttons": [],
+        "transitions": {},
+        "fallback": ConversationState.HUMAN_ATTENDANT_ACTIVE,
+        "previous": None,
+    },
     ConversationState.UNRECOGNIZED: {
         "template_key": "UNRECOGNIZED",
         "buttons": [],  # Repeat previous state's buttons
@@ -226,6 +290,17 @@ STATE_CONFIG = {
         "previous": None,
     },
 }
+
+
+FLOW_SESSION_KEYS = [
+    "selected_service_ids", "total_duration_minutes",
+    "selected_date", "selected_time",
+    "service_id", "selected_new_date", "selected_new_time",
+    "reschedule_appointment_id", "reschedule_service_id",
+    "dynamic_buttons", "dynamic_transitions",
+    "selected_faq_key", "appointment_id", "faq_items",
+    "cancel_appointment_id", "_appointments_cache", "_cancel_appointments_cache",
+]
 
 
 class ConversationEngine:
@@ -261,6 +336,20 @@ class ConversationEngine:
             f"currentState={current_state} | content='{incoming.content[:50]}'"
         )
 
+        # 1.5 Check if human attendant mode is active
+        if current_state == ConversationState.HUMAN_ATTENDANT_ACTIVE:
+            attendant_until = session.get("attendant_active_until", 0)
+            if time.time() < attendant_until:
+                logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone}")
+                return []
+            else:
+                logger.info(f"[ConversationEngine] TTL atendimento expirado para {phone}, resetando")
+                session["state"] = ConversationState.WELCOME.value
+                session.pop("attendant_active_until", None)
+                session.pop("human_handoff_requested_at", None)
+                self._save_session(clinic_id, phone, session)
+                current_state = ConversationState.WELCOME
+
         # 2. Identify input
         user_input = self._identify_input(incoming, session)
 
@@ -271,6 +360,12 @@ class ConversationEngine:
             config = STATE_CONFIG.get(current_state, {})
             previous = config.get("previous")
             next_state = previous if previous else ConversationState.MAIN_MENU
+            # Clear service selection when navigating back from or through SELECT_SERVICES
+            if current_state == ConversationState.SELECT_SERVICES or next_state == ConversationState.SELECT_SERVICES:
+                session.pop("selected_service_ids", None)
+                session.pop("total_duration_minutes", None)
+        elif user_input == "human":
+            next_state = ConversationState.HUMAN_HANDOFF
         else:
             next_state = self._resolve_transition(current_state, user_input, session)
 
@@ -393,10 +488,6 @@ class ConversationEngine:
     def _get_free_text_next_state(
         self, current_state: ConversationState, user_input: str, session: dict
     ) -> ConversationState:
-        if current_state == ConversationState.INPUT_AREAS:
-            session["areas"] = user_input
-            return ConversationState.CONFIRM_BOOKING
-
         return ConversationState.UNRECOGNIZED
 
     def _on_enter(
@@ -413,10 +504,14 @@ class ConversationEngine:
 
         try:
             if state == ConversationState.WELCOME or state == ConversationState.MAIN_MENU:
+                self._clear_flow_session_keys(session)
                 template_vars, override_content = self._on_enter_welcome(clinic_id, phone, session)
 
             elif state == ConversationState.PRICE_TABLE:
                 template_vars, override_content = self._on_enter_price_table(clinic_id)
+
+            elif state == ConversationState.SELECT_SERVICES:
+                template_vars, dynamic_buttons = self._on_enter_select_services(clinic_id, session)
 
             elif state == ConversationState.AVAILABLE_DAYS:
                 template_vars, dynamic_buttons = self._on_enter_available_days(clinic_id, session)
@@ -428,16 +523,19 @@ class ConversationEngine:
                 template_vars = self._on_enter_confirm_booking(clinic_id, session)
 
             elif state == ConversationState.BOOKED:
-                template_vars, override_content = self._on_enter_booked(clinic_id, session)
+                template_vars, override_content = self._on_enter_booked(clinic_id, phone, session)
 
             elif state == ConversationState.RESCHEDULE_LOOKUP:
                 template_vars, dynamic_buttons, override_content = self._on_enter_reschedule_lookup(
                     clinic_id, phone, session
                 )
 
+            elif state == ConversationState.SELECT_APPOINTMENT:
+                dynamic_buttons = session.get("dynamic_buttons")
+
             elif state == ConversationState.SHOW_CURRENT_APPOINTMENT:
                 template_vars, dynamic_buttons = self._on_enter_show_current_appointment(
-                    clinic_id, session
+                    clinic_id, phone, session
                 )
 
             elif state == ConversationState.SELECT_NEW_TIME:
@@ -449,11 +547,28 @@ class ConversationEngine:
             elif state == ConversationState.RESCHEDULED:
                 template_vars, override_content = self._on_enter_rescheduled(clinic_id, session)
 
+            elif state == ConversationState.CANCEL_LOOKUP:
+                template_vars, dynamic_buttons, override_content = self._on_enter_cancel_lookup(
+                    clinic_id, phone, session
+                )
+
+            elif state == ConversationState.SELECT_CANCEL_APPOINTMENT:
+                dynamic_buttons = session.get("dynamic_buttons")
+
+            elif state == ConversationState.CONFIRM_CANCEL:
+                template_vars = self._on_enter_confirm_cancel(clinic_id, session)
+
+            elif state == ConversationState.CANCELLED:
+                template_vars, override_content = self._on_enter_cancelled(clinic_id, session)
+
             elif state == ConversationState.FAQ_MENU:
                 template_vars, dynamic_buttons = self._on_enter_faq_menu(clinic_id, session)
 
             elif state == ConversationState.FAQ_ANSWER:
                 template_vars, override_content = self._on_enter_faq_answer(clinic_id, session)
+
+            elif state == ConversationState.HUMAN_HANDOFF:
+                session["human_handoff_requested_at"] = int(time.time())
 
             elif state == ConversationState.UNRECOGNIZED:
                 # Restore previous state's buttons
@@ -511,32 +626,90 @@ class ConversationEngine:
         content = self.template_service.get_and_render(clinic_id, "PRICE_TABLE", variables)
         return variables, content
 
+    def _on_enter_select_services(self, clinic_id: str, session: dict) -> tuple:
+        # Fetch all active services
+        services = self.db.execute_query(
+            "SELECT id, name, duration_minutes, price_cents FROM scheduler.services WHERE clinic_id = %s AND active = TRUE ORDER BY name",
+            (clinic_id,),
+        )
+
+        selected_ids = session.get("selected_service_ids", [])
+        remaining = [s for s in services if str(s["id"]) not in selected_ids]
+
+        dynamic_buttons = []
+        dynamic_transitions = {}
+
+        # Add remaining service buttons
+        for svc in remaining:
+            btn_id = f"svc_{svc['id']}"
+            price = svc.get("price_cents", 0)
+            price_str = f" - R${price / 100:.2f}" if price else ""
+            dynamic_buttons.append({"id": btn_id, "label": f"{svc['name']}{price_str}"})
+            # Re-enter SELECT_SERVICES after each selection
+            dynamic_transitions[btn_id] = ConversationState.SELECT_SERVICES.value
+
+        # Add "Pronto" button if at least 1 service selected
+        if selected_ids:
+            btn_id = "svc_done"
+            dynamic_buttons.append({"id": btn_id, "label": f"Pronto ({len(selected_ids)} selecionado(s))"})
+            dynamic_transitions[btn_id] = ConversationState.AVAILABLE_DAYS.value
+
+        dynamic_buttons.append({"id": "back", "label": "Voltar"})
+
+        session["dynamic_buttons"] = dynamic_buttons
+        session["dynamic_transitions"] = dynamic_transitions
+
+        # Build selected services display text
+        selected_names = []
+        for sid in selected_ids:
+            for s in services:
+                if str(s["id"]) == sid:
+                    selected_names.append(s["name"])
+                    break
+
+        selected_text = ", ".join(selected_names) if selected_names else "Nenhum"
+        variables = {"selected_services": selected_text}
+        return variables, dynamic_buttons
+
     def _on_enter_available_days(self, clinic_id: str, session: dict) -> tuple:
         days = []
         dynamic_buttons = []
         dynamic_transitions = {}
 
         if self.availability_engine:
-            service_id = session.get("service_id")
-            if not service_id:
+            selected_service_ids = session.get("selected_service_ids", [])
+            if selected_service_ids:
+                # Sum durations of all selected services
+                placeholders = ", ".join(["%s"] * len(selected_service_ids))
                 services = self.db.execute_query(
-                    "SELECT id FROM scheduler.services WHERE clinic_id = %s AND active = TRUE LIMIT 1",
-                    (clinic_id,),
+                    f"SELECT id, duration_minutes FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
+                    tuple(selected_service_ids),
                 )
-                if services:
-                    service_id = str(services[0]["id"])
-                    session["service_id"] = service_id
-
-            if service_id:
-                days = self.availability_engine.get_available_days(clinic_id, service_id)
+                total_duration = sum(s["duration_minutes"] for s in services)
+                session["total_duration_minutes"] = total_duration
+                days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
+            else:
+                # Fallback: single service (legacy compat)
+                service_id = session.get("service_id")
+                if not service_id:
+                    svc_rows = self.db.execute_query(
+                        "SELECT id FROM scheduler.services WHERE clinic_id = %s AND active = TRUE LIMIT 1",
+                        (clinic_id,),
+                    )
+                    if svc_rows:
+                        service_id = str(svc_rows[0]["id"])
+                        session["service_id"] = service_id
+                if service_id:
+                    days = self.availability_engine.get_available_days(clinic_id, service_id)
 
         if days:
             for i, day in enumerate(days):
                 btn_id = f"day_{day}"
                 dynamic_buttons.append({"id": btn_id, "label": self._format_date_br(day)})
                 dynamic_transitions[btn_id] = ConversationState.SELECT_TIME.value
-        else:
-            dynamic_buttons = [{"id": "back", "label": "Voltar"}]
+
+        dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
+        dynamic_buttons.append({"id": "back", "label": "Voltar"})
 
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
@@ -552,16 +725,21 @@ class ConversationEngine:
         dynamic_transitions = {}
 
         if self.availability_engine and selected_date:
-            service_id = session.get("service_id", "")
-            slots = self.availability_engine.get_available_slots(clinic_id, selected_date, service_id)
+            total_duration = session.get("total_duration_minutes")
+            if total_duration:
+                slots = self.availability_engine.get_available_slots_multi(clinic_id, selected_date, total_duration)
+            else:
+                service_id = session.get("service_id", "")
+                slots = self.availability_engine.get_available_slots(clinic_id, selected_date, service_id)
 
         if slots:
             for i, slot_time in enumerate(slots):
                 btn_id = f"time_{slot_time}"
                 dynamic_buttons.append({"id": btn_id, "label": slot_time})
-                dynamic_transitions[btn_id] = ConversationState.INPUT_AREAS.value
-        else:
-            dynamic_buttons = [{"id": "back", "label": "Voltar"}]
+                dynamic_transitions[btn_id] = ConversationState.CONFIRM_BOOKING.value
+
+        dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
+        dynamic_buttons.append({"id": "back", "label": "Voltar"})
 
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
@@ -572,29 +750,45 @@ class ConversationEngine:
 
     def _on_enter_confirm_booking(self, clinic_id: str, session: dict) -> dict:
         clinic = self._get_clinic(clinic_id)
-        service = self._get_service(session.get("service_id"))
+
+        # Build service display from selected services
+        selected_ids = session.get("selected_service_ids", [])
+        if selected_ids:
+            placeholders = ", ".join(["%s"] * len(selected_ids))
+            services = self.db.execute_query(
+                f"SELECT id, name FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
+                tuple(selected_ids),
+            )
+            svc_lookup = {str(s["id"]): s["name"] for s in services}
+            service_names = [svc_lookup[sid] for sid in selected_ids if sid in svc_lookup]
+            service_display = ", ".join(service_names)
+        else:
+            service = self._get_service(session.get("service_id"))
+            service_display = service.get("name", "") if service else ""
 
         variables = {
             "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
-            "service": service.get("name", "") if service else "",
-            "areas": session.get("areas", ""),
+            "service": service_display,
             "clinic_name": clinic.get("name", "") if clinic else "",
             "address": clinic.get("address", "") if clinic else "",
         }
         return variables
 
-    def _on_enter_booked(self, clinic_id: str, session: dict) -> tuple:
+    def _on_enter_booked(self, clinic_id: str, phone: str, session: dict) -> tuple:
         result = None
         if self.appointment_service:
             try:
+                selected_ids = session.get("selected_service_ids", [])
+                primary_service_id = selected_ids[0] if selected_ids else session.get("service_id")
                 result = self.appointment_service.create_appointment(
                     clinic_id=clinic_id,
-                    phone=session.get("phone", ""),
-                    service_id=session.get("service_id"),
+                    phone=phone,
+                    service_id=primary_service_id,
                     date=session.get("selected_date"),
                     time=session.get("selected_time"),
-                    areas=session.get("areas", ""),
+                    service_ids=selected_ids if selected_ids else None,
+                    total_duration_minutes=session.get("total_duration_minutes"),
                 )
                 session["appointment_id"] = str(result.get("id", ""))
             except Exception as e:
@@ -611,23 +805,39 @@ class ConversationEngine:
         return variables, content
 
     def _on_enter_reschedule_lookup(self, clinic_id: str, phone: str, session: dict) -> tuple:
-        appointment = None
+        appointments = []
         if self.appointment_service:
-            appointment = self.appointment_service.get_active_appointment_by_phone(clinic_id, phone)
+            appointments = self.appointment_service.get_active_appointments_by_phone(clinic_id, phone)
 
-        if appointment:
-            session["reschedule_appointment_id"] = str(appointment.get("id", ""))
-            session["reschedule_service_id"] = str(appointment.get("service_id", ""))
+        if not appointments:
+            session["state"] = ConversationState.RESCHEDULE_LOOKUP.value
+            content = self.template_service.get_and_render(clinic_id, "RESCHEDULE_NOT_FOUND")
+            dynamic_buttons = [
+                {"id": "main_menu", "label": "Menu principal"},
+                {"id": "human", "label": "Falar com atendente"},
+            ]
+            dynamic_transitions = {
+                "main_menu": ConversationState.MAIN_MENU.value,
+                "human": ConversationState.HUMAN_HANDOFF.value,
+            }
+            session["dynamic_buttons"] = dynamic_buttons
+            session["dynamic_transitions"] = dynamic_transitions
+            return {}, dynamic_buttons, content
+
+        if len(appointments) == 1:
+            # Single appointment — skip picker, go directly to show
+            appt = appointments[0]
+            session["reschedule_appointment_id"] = str(appt.get("id", ""))
+            session["reschedule_service_id"] = str(appt.get("service_id", ""))
             session["state"] = ConversationState.SHOW_CURRENT_APPOINTMENT.value
 
             variables = {
-                "date": self._format_date_br(appointment.get("appointment_date", "")),
-                "time": str(appointment.get("start_time", "")),
-                "service": appointment.get("service_name", ""),
+                "date": self._format_date_br(appt.get("appointment_date", "")),
+                "time": str(appt.get("start_time", "")),
+                "service": appt.get("service_name", ""),
             }
             content = self.template_service.get_and_render(clinic_id, "RESCHEDULE_FOUND", variables)
 
-            # Fetch available days for rescheduling
             days = []
             if self.availability_engine:
                 svc_id = session.get("reschedule_service_id")
@@ -641,21 +851,87 @@ class ConversationEngine:
                 dynamic_buttons.append({"id": btn_id, "label": self._format_date_br(day)})
                 dynamic_transitions[btn_id] = ConversationState.SELECT_NEW_TIME.value
 
-            if not dynamic_buttons:
-                dynamic_buttons = [{"id": "back", "label": "Voltar"}]
+            dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
+            dynamic_buttons.append({"id": "back", "label": "Voltar"})
 
             session["dynamic_buttons"] = dynamic_buttons
             session["dynamic_transitions"] = dynamic_transitions
 
             return variables, dynamic_buttons, content
-        else:
-            session["state"] = ConversationState.MAIN_MENU.value
-            content = self.template_service.get_and_render(clinic_id, "RESCHEDULE_NOT_FOUND")
-            return {}, None, content
 
-    def _on_enter_show_current_appointment(self, clinic_id: str, session: dict) -> tuple:
-        # Already handled in reschedule_lookup; this is for direct navigation
-        return {}, session.get("dynamic_buttons")
+        # Multiple appointments — show picker
+        session["state"] = ConversationState.SELECT_APPOINTMENT.value
+        session["_appointments_cache"] = self._serialize_for_dynamo(
+            {str(a["id"]): a for a in appointments}
+        )
+
+        dynamic_buttons = []
+        dynamic_transitions = {}
+        for appt in appointments:
+            appt_id = str(appt["id"])
+            btn_id = f"appt_{appt_id}"
+            label = f"{self._format_date_br(appt.get('appointment_date', ''))} {appt.get('start_time', '')} - {appt.get('service_name', '')}"
+            dynamic_buttons.append({"id": btn_id, "label": label})
+            dynamic_transitions[btn_id] = ConversationState.SHOW_CURRENT_APPOINTMENT.value
+
+        dynamic_buttons.append({"id": "back", "label": "Voltar"})
+
+        session["dynamic_buttons"] = dynamic_buttons
+        session["dynamic_transitions"] = dynamic_transitions
+
+        content = self.template_service.get_and_render(clinic_id, "RESCHEDULE_SELECT_APPOINTMENT")
+        return {}, dynamic_buttons, content
+
+    def _on_enter_show_current_appointment(self, clinic_id: str, phone: str, session: dict) -> tuple:
+        appt_id = session.get("reschedule_appointment_id")
+        svc_id = session.get("reschedule_service_id")
+
+        # Try to get appointment data from cache (multi-appointment flow)
+        cache = session.get("_appointments_cache", {})
+        appt = cache.get(appt_id) if appt_id else None
+
+        if not appt and appt_id:
+            # Fallback: fetch from DB
+            results = self.db.execute_query(
+                """
+                SELECT a.*, s.name as service_name
+                FROM scheduler.appointments a
+                LEFT JOIN scheduler.services s ON a.service_id = s.id
+                WHERE a.id = %s::uuid AND a.status = 'CONFIRMED'
+                """,
+                (appt_id,),
+            )
+            appt = results[0] if results else None
+
+        if not appt:
+            return {}, None
+
+        variables = {
+            "date": self._format_date_br(appt.get("appointment_date", "")),
+            "time": str(appt.get("start_time", "")),
+            "service": appt.get("service_name", ""),
+        }
+        content = self.template_service.get_and_render(clinic_id, "RESCHEDULE_FOUND", variables)
+
+        # Fetch available days for rescheduling
+        days = []
+        if self.availability_engine and svc_id:
+            days = self.availability_engine.get_available_days(clinic_id, svc_id)
+
+        dynamic_buttons = []
+        dynamic_transitions = {}
+        for day in days:
+            btn_id = f"newday_{day}"
+            dynamic_buttons.append({"id": btn_id, "label": self._format_date_br(day)})
+            dynamic_transitions[btn_id] = ConversationState.SELECT_NEW_TIME.value
+
+        dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
+        dynamic_buttons.append({"id": "back", "label": "Voltar"})
+
+        session["dynamic_buttons"] = dynamic_buttons
+        session["dynamic_transitions"] = dynamic_transitions
+
+        return variables, dynamic_buttons
 
     def _on_enter_select_new_time(self, clinic_id: str, session: dict) -> tuple:
         selected_date = session.get("selected_new_date", "")
@@ -672,8 +948,9 @@ class ConversationEngine:
                 btn_id = f"newtime_{slot_time}"
                 dynamic_buttons.append({"id": btn_id, "label": slot_time})
                 dynamic_transitions[btn_id] = ConversationState.CONFIRM_RESCHEDULE.value
-        else:
-            dynamic_buttons = [{"id": "back", "label": "Voltar"}]
+
+        dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
+        dynamic_buttons.append({"id": "back", "label": "Voltar"})
 
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
@@ -712,6 +989,103 @@ class ConversationEngine:
         content = self.template_service.get_and_render(clinic_id, "RESCHEDULED", variables)
         return variables, content
 
+    def _on_enter_cancel_lookup(self, clinic_id: str, phone: str, session: dict) -> tuple:
+        appointments = []
+        if self.appointment_service:
+            appointments = self.appointment_service.get_active_appointments_by_phone(clinic_id, phone)
+
+        if not appointments:
+            session["state"] = ConversationState.CANCEL_LOOKUP.value
+            content = self.template_service.get_and_render(clinic_id, "CANCEL_NOT_FOUND")
+            dynamic_buttons = [
+                {"id": "main_menu", "label": "Menu principal"},
+                {"id": "human", "label": "Falar com atendente"},
+            ]
+            dynamic_transitions = {
+                "main_menu": ConversationState.MAIN_MENU.value,
+                "human": ConversationState.HUMAN_HANDOFF.value,
+            }
+            session["dynamic_buttons"] = dynamic_buttons
+            session["dynamic_transitions"] = dynamic_transitions
+            return {}, dynamic_buttons, content
+
+        if len(appointments) == 1:
+            # Single appointment — go directly to confirm cancel
+            appt = appointments[0]
+            session["cancel_appointment_id"] = str(appt.get("id", ""))
+            session["state"] = ConversationState.CONFIRM_CANCEL.value
+
+            variables = {
+                "date": self._format_date_br(appt.get("appointment_date", "")),
+                "time": str(appt.get("start_time", "")),
+                "service": appt.get("service_name", ""),
+            }
+            content = self.template_service.get_and_render(clinic_id, "CONFIRM_CANCEL", variables)
+            return variables, None, content
+
+        # Multiple appointments — show picker
+        session["state"] = ConversationState.SELECT_CANCEL_APPOINTMENT.value
+        session["_cancel_appointments_cache"] = self._serialize_for_dynamo(
+            {str(a["id"]): a for a in appointments}
+        )
+
+        dynamic_buttons = []
+        dynamic_transitions = {}
+        for appt in appointments:
+            appt_id = str(appt["id"])
+            btn_id = f"cancelappt_{appt_id}"
+            label = f"{self._format_date_br(appt.get('appointment_date', ''))} {appt.get('start_time', '')} - {appt.get('service_name', '')}"
+            dynamic_buttons.append({"id": btn_id, "label": label})
+            dynamic_transitions[btn_id] = ConversationState.CONFIRM_CANCEL.value
+
+        dynamic_buttons.append({"id": "back", "label": "Voltar"})
+
+        session["dynamic_buttons"] = dynamic_buttons
+        session["dynamic_transitions"] = dynamic_transitions
+
+        content = self.template_service.get_and_render(clinic_id, "CANCEL_SELECT_APPOINTMENT")
+        return {}, dynamic_buttons, content
+
+    def _on_enter_confirm_cancel(self, clinic_id: str, session: dict) -> dict:
+        appt_id = session.get("cancel_appointment_id")
+
+        # Try cache first
+        cache = session.get("_cancel_appointments_cache", {})
+        appt = cache.get(appt_id) if appt_id else None
+
+        if not appt and appt_id:
+            results = self.db.execute_query(
+                """
+                SELECT a.*, s.name as service_name
+                FROM scheduler.appointments a
+                LEFT JOIN scheduler.services s ON a.service_id = s.id
+                WHERE a.id = %s::uuid AND a.status = 'CONFIRMED'
+                """,
+                (appt_id,),
+            )
+            appt = results[0] if results else None
+
+        if not appt:
+            return {}
+
+        return {
+            "date": self._format_date_br(appt.get("appointment_date", "")),
+            "time": str(appt.get("start_time", "")),
+            "service": appt.get("service_name", ""),
+        }
+
+    def _on_enter_cancelled(self, clinic_id: str, session: dict) -> tuple:
+        appt_id = session.get("cancel_appointment_id")
+        if self.appointment_service and appt_id:
+            try:
+                self.appointment_service.cancel_appointment(appt_id)
+            except Exception as e:
+                logger.error(f"[ConversationEngine] Erro ao cancelar: {e}")
+                return {}, "Desculpe, ocorreu um erro ao cancelar. Tente novamente."
+
+        content = self.template_service.get_and_render(clinic_id, "CANCELLED")
+        return {}, content
+
     def _on_enter_faq_menu(self, clinic_id: str, session: dict) -> tuple:
         faqs = self.db.execute_query(
             "SELECT id, question_key, question_label FROM scheduler.faq_items WHERE clinic_id = %s AND active = TRUE ORDER BY display_order",
@@ -724,6 +1098,8 @@ class ConversationEngine:
             btn_id = f"faq_{faq['question_key']}"
             dynamic_buttons.append({"id": btn_id, "label": faq["question_label"]})
             dynamic_transitions[btn_id] = ConversationState.FAQ_ANSWER.value
+
+        dynamic_buttons.append({"id": "back", "label": "Voltar"})
 
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
@@ -748,6 +1124,10 @@ class ConversationEngine:
         return {}, content
 
     # --- Session management ---
+
+    def _clear_flow_session_keys(self, session: dict) -> None:
+        for key in FLOW_SESSION_KEYS:
+            session.pop(key, None)
 
     def _load_session(self, clinic_id: str, phone: str) -> dict:
         try:
@@ -780,6 +1160,28 @@ class ConversationEngine:
             logger.error(f"[ConversationEngine] Error saving session: {e}")
 
     # --- Helpers ---
+
+    @staticmethod
+    def _serialize_for_dynamo(obj):
+        """Convert a dict (or list of dicts) so all values are DynamoDB-safe."""
+        if isinstance(obj, list):
+            return [ConversationEngine._serialize_for_dynamo(item) for item in obj]
+        if isinstance(obj, dict):
+            return {k: ConversationEngine._serialize_for_dynamo(v) for k, v in obj.items()}
+        if isinstance(obj, (date, datetime)):
+            return obj.isoformat()
+        if isinstance(obj, dt_time):
+            return obj.strftime("%H:%M")
+        if isinstance(obj, timedelta):
+            total = int(obj.total_seconds())
+            h, remainder = divmod(total, 3600)
+            m, s = divmod(remainder, 60)
+            return f"{h:02d}:{m:02d}"
+        if isinstance(obj, Decimal):
+            return int(obj) if obj == int(obj) else float(obj)
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        return obj
 
     def _get_clinic(self, clinic_id: str) -> Optional[dict]:
         results = self.db.execute_query(
@@ -860,6 +1262,36 @@ class ConversationEngine:
 
     def _extract_dynamic_selection(self, user_input: str, session: dict) -> None:
         """Extract values from dynamic button IDs and store in session."""
+        # Service selection — append to list instead of overwriting
+        if user_input.startswith("svc_") and user_input != "svc_done":
+            service_id = user_input[len("svc_"):]
+            selected = session.get("selected_service_ids", [])
+            if service_id not in selected:
+                selected.append(service_id)
+            session["selected_service_ids"] = selected
+            logger.info(
+                f"[ConversationEngine] Appended service '{service_id}' to selected_service_ids (total={len(selected)})"
+            )
+            return
+
+        # Appointment selection for reschedule
+        if user_input.startswith("appt_"):
+            appt_id = user_input[len("appt_"):]
+            session["reschedule_appointment_id"] = appt_id
+            cache = session.get("_appointments_cache", {})
+            appt = cache.get(appt_id)
+            if appt:
+                session["reschedule_service_id"] = str(appt.get("service_id", ""))
+            logger.info(f"[ConversationEngine] Selected reschedule appointment: {appt_id}")
+            return
+
+        # Appointment selection for cancellation
+        if user_input.startswith("cancelappt_"):
+            appt_id = user_input[len("cancelappt_"):]
+            session["cancel_appointment_id"] = appt_id
+            logger.info(f"[ConversationEngine] Selected cancel appointment: {appt_id}")
+            return
+
         PREFIX_TO_KEY = {
             "day_": "selected_date",
             "time_": "selected_time",

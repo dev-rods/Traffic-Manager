@@ -65,6 +65,7 @@ class WhatsAppProvider(ABC):
 
 def is_phone_allowed(phone: str) -> bool:
     allowed_raw = os.environ.get("ALLOWED_PHONES", "").strip()
+    logger.info(f"Allowed phones: {allowed_raw}")
     if not allowed_raw:
         return False
 
@@ -72,6 +73,10 @@ def is_phone_allowed(phone: str) -> bool:
         return True
 
     allowed_phones = {normalize_phone(p) for p in allowed_raw.split(",") if p.strip()}
+    normalized_phone = normalize_phone(phone)
+    logger.info(f"Normalized phone: {normalized_phone}")
+    logger.info(f"Allowed phones: {allowed_phones}")
+    logger.info(f"Is phone allowed: {normalized_phone in allowed_phones}")
     return normalize_phone(phone) in allowed_phones
 
 

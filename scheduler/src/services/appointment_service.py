@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, date, timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
 
@@ -35,20 +35,37 @@ class AppointmentService:
         time: str,
         areas: str = "",
         professional_id: Optional[str] = None,
+        service_ids: Optional[List[str]] = None,
+        total_duration_minutes: Optional[int] = None,
     ) -> Dict[str, Any]:
         # 1. Get or create patient
         patient = self._get_or_create_patient(clinic_id, phone)
         patient_id = str(patient["id"])
 
-        # 2. Get service for duration calculation
+        # 2. Resolve service list and duration
+        all_service_ids = service_ids if service_ids else [service_id]
+        primary_service_id = all_service_ids[0]
+
+        # Fetch all selected services
+        placeholders = ", ".join(["%s"] * len(all_service_ids))
         services = self.db.execute_query(
-            "SELECT id, duration_minutes, name FROM scheduler.services WHERE id = %s::uuid AND active = TRUE",
-            (service_id,),
+            f"SELECT id, duration_minutes, name, price_cents FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
+            tuple(all_service_ids),
         )
         if not services:
-            raise NotFoundError(f"Servico {service_id} nao encontrado")
+            raise NotFoundError(f"Servico(s) nao encontrado(s)")
 
-        duration_minutes = services[0]["duration_minutes"]
+        # Build a lookup by id for ordering and data
+        svc_lookup = {str(s["id"]): s for s in services}
+
+        if total_duration_minutes:
+            duration_minutes = int(total_duration_minutes)
+        else:
+            duration_minutes = sum(s["duration_minutes"] for s in services)
+
+        # Derive areas from service names for backwards compat
+        if not areas and len(services) > 0:
+            areas = ", ".join(svc_lookup[sid]["name"] for sid in all_service_ids if sid in svc_lookup)
 
         # 3. Calculate end_time
         start_parts = time.split(":")
@@ -92,33 +109,49 @@ class AppointmentService:
             INSERT INTO scheduler.appointments (
                 clinic_id, patient_id, professional_id, service_id,
                 appointment_date, start_time, end_time, areas,
+                total_duration_minutes,
                 status, created_at, updated_at, version
             ) VALUES (
                 %s, %s::uuid, %s::uuid, %s::uuid,
                 %s, %s::time, %s::time, %s,
+                %s,
                 'CONFIRMED', NOW(), NOW(), 1
             )
             RETURNING *
             """,
-            (clinic_id, patient_id, prof_id_param, service_id, date, time, end_time, areas),
+            (clinic_id, patient_id, prof_id_param, primary_service_id, date, time, end_time, areas, duration_minutes),
         )
 
         if not result:
             raise Exception("Erro ao criar agendamento")
 
+        # 7. Insert into appointment_services junction table
+        appointment_id = str(result["id"])
+        for sid in all_service_ids:
+            svc = svc_lookup.get(sid)
+            if svc:
+                self.db.execute_write(
+                    """
+                    INSERT INTO scheduler.appointment_services
+                        (appointment_id, service_id, service_name, duration_minutes, price_cents)
+                    VALUES (%s::uuid, %s::uuid, %s, %s, %s)
+                    """,
+                    (appointment_id, sid, svc["name"], svc["duration_minutes"], svc.get("price_cents")),
+                )
+
         logger.info(
             f"[AppointmentService] Agendamento criado: id={result['id']} "
-            f"clinic={clinic_id} date={date} time={time}"
+            f"clinic={clinic_id} date={date} time={time} services={len(all_service_ids)}"
         )
 
-        # 7. Schedule reminder (if available)
+        # 8. Schedule reminder (if available)
         if self.reminder_service:
             try:
                 self.reminder_service.schedule_reminder(result)
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao agendar lembrete: {e}")
 
-        # 8. Sync to Google Sheets (if available)
+        # 9. Sync to Google Sheets (if available)
         if self.sheets_sync:
             try:
                 self.sheets_sync.sync_appointment(result, "CREATED")
@@ -143,14 +176,24 @@ class AppointmentService:
         current_version = appointment.get("version", 1)
         clinic_id = appointment["clinic_id"]
 
-        # 2. Get service duration
-        services = self.db.execute_query(
-            "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid",
-            (str(appointment["service_id"]),),
-        )
-        duration_minutes = services[0]["duration_minutes"] if services else 60
+        # 2. Get duration: prefer total_duration_minutes, then junction table sum, then single service
+        duration_minutes = appointment.get("total_duration_minutes")
+        if not duration_minutes:
+            junction = self.db.execute_query(
+                "SELECT SUM(duration_minutes) as total FROM scheduler.appointment_services WHERE appointment_id = %s::uuid",
+                (appointment_id,),
+            )
+            if junction and junction[0].get("total"):
+                duration_minutes = int(junction[0]["total"])
+            else:
+                services = self.db.execute_query(
+                    "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid",
+                    (str(appointment["service_id"]),),
+                )
+                duration_minutes = services[0]["duration_minutes"] if services else 60
 
         # 3. Calculate new end_time
+        duration_minutes = int(duration_minutes)
         start_parts = new_time.split(":")
         start_hour, start_min = int(start_parts[0]), int(start_parts[1])
         total_minutes = start_hour * 60 + start_min + duration_minutes
@@ -278,6 +321,33 @@ class AppointmentService:
         )
 
         return appointments[0] if appointments else None
+
+    def get_active_appointments_by_phone(
+        self, clinic_id: str, phone: str
+    ) -> List[Dict[str, Any]]:
+        patients = self.db.execute_query(
+            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
+            (clinic_id, phone),
+        )
+
+        if not patients:
+            return []
+
+        patient_id = str(patients[0]["id"])
+
+        appointments = self.db.execute_query(
+            """
+            SELECT a.*, s.name as service_name
+            FROM scheduler.appointments a
+            LEFT JOIN scheduler.services s ON a.service_id = s.id
+            WHERE a.patient_id = %s::uuid AND a.status = 'CONFIRMED'
+            AND a.appointment_date >= CURRENT_DATE
+            ORDER BY a.appointment_date ASC, a.start_time ASC
+            """,
+            (patient_id,),
+        )
+
+        return appointments
 
     def _get_or_create_patient(self, clinic_id: str, phone: str) -> Dict[str, Any]:
         patients = self.db.execute_query(
