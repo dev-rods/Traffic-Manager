@@ -176,6 +176,7 @@ SQL_STATEMENTS = [
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         service_id UUID NOT NULL REFERENCES scheduler.services(id) ON DELETE CASCADE,
         area_id UUID NOT NULL REFERENCES scheduler.areas(id) ON DELETE CASCADE,
+        duration_minutes INTEGER,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(service_id, area_id)
@@ -251,6 +252,9 @@ SQL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_availability_rules_clinic ON scheduler.availability_rules(clinic_id, day_of_week)",
     "CREATE INDEX IF NOT EXISTS idx_availability_exceptions_clinic ON scheduler.availability_exceptions(clinic_id, exception_date)",
     "CREATE INDEX IF NOT EXISTS idx_appointment_services_appointment ON scheduler.appointment_services(appointment_id)",
+
+    # Add duration_minutes override to service_areas (nullable, falls back to services.duration_minutes)
+    "ALTER TABLE scheduler.service_areas ADD COLUMN IF NOT EXISTS duration_minutes INTEGER",
 ]
 
 

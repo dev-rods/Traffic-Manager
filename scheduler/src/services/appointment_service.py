@@ -37,6 +37,7 @@ class AppointmentService:
         professional_id: Optional[str] = None,
         service_ids: Optional[List[str]] = None,
         total_duration_minutes: Optional[int] = None,
+        area_ids: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         # 1. Get or create patient
         patient = self._get_or_create_patient(clinic_id, phone)
@@ -46,7 +47,7 @@ class AppointmentService:
         all_service_ids = service_ids if service_ids else [service_id]
         primary_service_id = all_service_ids[0]
 
-        # Fetch all selected services
+        # Fetch base service info
         placeholders = ", ".join(["%s"] * len(all_service_ids))
         services = self.db.execute_query(
             f"SELECT id, duration_minutes, name, price_cents FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
@@ -60,6 +61,19 @@ class AppointmentService:
 
         if total_duration_minutes:
             duration_minutes = int(total_duration_minutes)
+        elif area_ids:
+            # Sum duration for each (service, area) pair with area-specific override
+            area_placeholders = ", ".join(["%s::uuid"] * len(area_ids))
+            params = tuple(all_service_ids) + tuple(area_ids)
+            rows = self.db.execute_query(
+                f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
+                FROM scheduler.services s
+                CROSS JOIN unnest(ARRAY[{area_placeholders}]) AS sel_area(area_id)
+                LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = sel_area.area_id AND sa.active = TRUE
+                WHERE s.id::text IN ({placeholders}) AND s.active = TRUE""",
+                params,
+            )
+            duration_minutes = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else sum(s["duration_minutes"] for s in services)
         else:
             duration_minutes = sum(s["duration_minutes"] for s in services)
 

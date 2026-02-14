@@ -993,24 +993,27 @@ class ConversationEngine:
         if self.availability_engine:
             selected_service_ids = session.get("selected_service_ids", [])
             if selected_service_ids:
-                # Sum durations with area-specific override (fallback to service default)
-                selected_area_id = session.get("selected_area_id")
-                placeholders = ", ".join(["%s"] * len(selected_service_ids))
-                if selected_area_id:
-                    params = tuple(selected_service_ids) + (selected_area_id,)
-                    services = self.db.execute_query(
-                        f"""SELECT s.id, COALESCE(sa.duration_minutes, s.duration_minutes) as duration_minutes
+                # Sum durations: for each (service, area) pair use area-specific override, fallback to service default
+                selected_area_ids = session.get("selected_area_ids", [])
+                svc_placeholders = ", ".join(["%s"] * len(selected_service_ids))
+                if selected_area_ids:
+                    area_placeholders = ", ".join(["%s::uuid"] * len(selected_area_ids))
+                    params = tuple(selected_service_ids) + tuple(selected_area_ids)
+                    rows = self.db.execute_query(
+                        f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
                         FROM scheduler.services s
-                        LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = %s::uuid AND sa.active = TRUE
-                        WHERE s.id::text IN ({placeholders}) AND s.active = TRUE""",
+                        CROSS JOIN unnest(ARRAY[{area_placeholders}]) AS sel_area(area_id)
+                        LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = sel_area.area_id AND sa.active = TRUE
+                        WHERE s.id::text IN ({svc_placeholders}) AND s.active = TRUE""",
                         params,
                     )
+                    total_duration = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else 0
                 else:
                     services = self.db.execute_query(
-                        f"SELECT id, duration_minutes FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
+                        f"SELECT id, duration_minutes FROM scheduler.services WHERE id::text IN ({svc_placeholders}) AND active = TRUE",
                         tuple(selected_service_ids),
                     )
-                total_duration = sum(s["duration_minutes"] for s in services)
+                    total_duration = sum(s["duration_minutes"] for s in services)
                 session["total_duration_minutes"] = total_duration
                 logger.info(f"[ConversationEngine] _on_enter_available_days: multi-service total_duration={total_duration}min, service_ids={selected_service_ids}")
                 days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
@@ -1106,11 +1109,19 @@ class ConversationEngine:
             service = self._get_service(session.get("service_id"))
             service_display = service.get("name", "") if service else ""
 
+        total_min = session.get("total_duration_minutes")
+        if total_min:
+            hours, mins = divmod(int(total_min), 60)
+            duration_str = f"{hours}h{mins:02d}min" if hours else f"{total_min}min"
+        else:
+            duration_str = ""
+
         variables = {
             "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
             "service": service_display,
             "areas": session.get("selected_areas_display", ""),
+            "duration": duration_str,
             "clinic_name": clinic.get("name", "") if clinic else "",
             "address": clinic.get("address", "") if clinic else "",
         }
@@ -1138,6 +1149,7 @@ class ConversationEngine:
                     areas=session.get("selected_areas_display", ""),
                     service_ids=selected_ids if selected_ids else None,
                     total_duration_minutes=session.get("total_duration_minutes"),
+                    area_ids=session.get("selected_area_ids") or None,
                 )
                 session["appointment_id"] = str(result.get("id", ""))
                 logger.info(f"[ConversationEngine] _on_enter_booked: appointment created id={session['appointment_id']}")
@@ -1147,9 +1159,16 @@ class ConversationEngine:
 
         clinic = self._get_clinic(clinic_id)
         pre_instructions = (clinic.get("pre_session_instructions") or "") if clinic else ""
+        total_min = session.get("total_duration_minutes")
+        if total_min:
+            hours, mins = divmod(int(total_min), 60)
+            duration_str = f"{hours}h{mins:02d}min" if hours else f"{total_min}min"
+        else:
+            duration_str = ""
         variables = {
             "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
+            "duration": duration_str,
             "pre_session_instructions": pre_instructions,
         }
         content = self.template_service.get_and_render(clinic_id, "BOOKED", variables)
