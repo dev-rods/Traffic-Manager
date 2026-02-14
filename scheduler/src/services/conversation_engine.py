@@ -1158,7 +1158,32 @@ class ConversationEngine:
                 return {}, "Desculpe, ocorreu um erro ao confirmar seu agendamento. Tente novamente."
 
         clinic = self._get_clinic(clinic_id)
-        pre_instructions = (clinic.get("pre_session_instructions") or "") if clinic else ""
+        clinic_instructions = (clinic.get("pre_session_instructions") or "") if clinic else ""
+
+        # Hierarchical: service_area instructions take priority, then clinic-level
+        sa_instructions = ""
+        selected_service_ids = session.get("selected_service_ids")
+        selected_area_ids = session.get("selected_area_ids")
+        if selected_service_ids and selected_area_ids and self.db:
+            placeholders_svc = ",".join(["%s"] * len(selected_service_ids))
+            placeholders_area = ",".join(["%s"] * len(selected_area_ids))
+            rows = self.db.execute_query(
+                f"""
+                SELECT pre_session_instructions
+                FROM scheduler.service_areas
+                WHERE service_id IN ({placeholders_svc})
+                AND area_id IN ({placeholders_area})
+                AND pre_session_instructions IS NOT NULL
+                AND active = TRUE
+                """,
+                tuple(selected_service_ids) + tuple(selected_area_ids),
+            )
+            sa_parts = [r["pre_session_instructions"] for r in rows if r.get("pre_session_instructions")]
+            sa_instructions = "\n".join(sa_parts)
+
+        parts = [p for p in [sa_instructions, clinic_instructions] if p]
+        pre_instructions = "\n\n".join(parts)
+
         total_min = session.get("total_duration_minutes")
         if total_min:
             hours, mins = divmod(int(total_min), 60)

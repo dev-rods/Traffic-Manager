@@ -49,6 +49,7 @@ def handler(event, context):
                    sa.duration_minutes,
                    s.duration_minutes as service_duration_minutes,
                    COALESCE(sa.duration_minutes, s.duration_minutes) as effective_duration_minutes,
+                   sa.pre_session_instructions,
                    sa.active, sa.created_at
             FROM scheduler.service_areas sa
             JOIN scheduler.areas a ON sa.area_id = a.id

@@ -95,10 +95,12 @@ def handler(event, context):
                 "message": "Campo obrigatorio: area_id ou area_ids"
             })
 
-        # Extract duration_minutes (applies to single area_id or area_ids format)
+        # Extract optional fields (applies to single area_id or area_ids format)
         duration_minutes = None
+        pre_session_instructions = None
         if isinstance(body, dict):
             duration_minutes = body.get("duration_minutes")
+            pre_session_instructions = body.get("pre_session_instructions")
 
         created = []
 
@@ -116,12 +118,15 @@ def handler(event, context):
 
             result = db.execute_write_returning(
                 """
-                INSERT INTO scheduler.service_areas (id, service_id, area_id, duration_minutes)
-                VALUES (gen_random_uuid(), %s::uuid, %s::uuid, %s)
-                ON CONFLICT (service_id, area_id) DO UPDATE SET active = TRUE, duration_minutes = EXCLUDED.duration_minutes
+                INSERT INTO scheduler.service_areas (id, service_id, area_id, duration_minutes, pre_session_instructions)
+                VALUES (gen_random_uuid(), %s::uuid, %s::uuid, %s, %s)
+                ON CONFLICT (service_id, area_id) DO UPDATE SET
+                    active = TRUE,
+                    duration_minutes = EXCLUDED.duration_minutes,
+                    pre_session_instructions = EXCLUDED.pre_session_instructions
                 RETURNING *
                 """,
-                (service_id, area_id, duration_minutes),
+                (service_id, area_id, duration_minutes, pre_session_instructions),
             )
 
             if result:
