@@ -64,7 +64,7 @@ class AppointmentService:
         elif area_ids:
             # Sum duration for each (service, area) pair with area-specific override
             area_placeholders = ", ".join(["%s::uuid"] * len(area_ids))
-            params = tuple(all_service_ids) + tuple(area_ids)
+            params = tuple(area_ids) + tuple(all_service_ids)
             rows = self.db.execute_query(
                 f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
                 FROM scheduler.services s
@@ -140,17 +140,41 @@ class AppointmentService:
             raise Exception("Erro ao criar agendamento")
 
         # 7. Insert into appointment_services junction table
+        # Build area-specific overrides lookup for duration and price
+        sa_overrides = {}
+        if area_ids:
+            area_placeholders = ", ".join(["%s::uuid"] * len(area_ids))
+            sa_rows = self.db.execute_query(
+                f"""SELECT s.id as service_id,
+                       COALESCE(sa.duration_minutes, s.duration_minutes) as duration_minutes,
+                       COALESCE(sa.price_cents, s.price_cents) as price_cents
+                FROM scheduler.services s
+                CROSS JOIN unnest(ARRAY[{area_placeholders}]) AS sel_area(area_id)
+                LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = sel_area.area_id AND sa.active = TRUE
+                WHERE s.id::text IN ({placeholders}) AND s.active = TRUE""",
+                tuple(area_ids) + tuple(all_service_ids),
+            )
+            for row in sa_rows:
+                sid_key = str(row["service_id"])
+                if sid_key not in sa_overrides:
+                    sa_overrides[sid_key] = {"duration_minutes": 0, "price_cents": 0}
+                sa_overrides[sid_key]["duration_minutes"] += row["duration_minutes"] or 0
+                sa_overrides[sid_key]["price_cents"] += row["price_cents"] or 0
+
         appointment_id = str(result["id"])
         for sid in all_service_ids:
             svc = svc_lookup.get(sid)
             if svc:
+                override = sa_overrides.get(sid)
+                svc_duration = override["duration_minutes"] if override else svc["duration_minutes"]
+                svc_price = override["price_cents"] if override else svc.get("price_cents")
                 self.db.execute_write(
                     """
                     INSERT INTO scheduler.appointment_services
                         (appointment_id, service_id, service_name, duration_minutes, price_cents)
                     VALUES (%s::uuid, %s::uuid, %s, %s, %s)
                     """,
-                    (appointment_id, sid, svc["name"], svc["duration_minutes"], svc.get("price_cents")),
+                    (appointment_id, sid, svc["name"], svc_duration, svc_price),
                 )
 
         logger.info(

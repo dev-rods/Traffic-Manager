@@ -177,6 +177,7 @@ SQL_STATEMENTS = [
         service_id UUID NOT NULL REFERENCES scheduler.services(id) ON DELETE CASCADE,
         area_id UUID NOT NULL REFERENCES scheduler.areas(id) ON DELETE CASCADE,
         duration_minutes INTEGER,
+        price_cents INTEGER,
         pre_session_instructions TEXT,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -256,6 +257,9 @@ SQL_STATEMENTS = [
 
     # Add duration_minutes override to service_areas (nullable, falls back to services.duration_minutes)
     "ALTER TABLE scheduler.service_areas ADD COLUMN IF NOT EXISTS duration_minutes INTEGER",
+
+    # Add price_cents override to service_areas (nullable, falls back to services.price_cents)
+    "ALTER TABLE scheduler.service_areas ADD COLUMN IF NOT EXISTS price_cents INTEGER",
 
     # Add pre_session_instructions to service_areas (hierarchical: service_area > clinic)
     "ALTER TABLE scheduler.service_areas ADD COLUMN IF NOT EXISTS pre_session_instructions TEXT",

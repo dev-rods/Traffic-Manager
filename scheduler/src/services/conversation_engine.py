@@ -341,7 +341,7 @@ STATE_CONFIG = {
 
 
 FLOW_SESSION_KEYS = [
-    "selected_service_ids", "selected_services_display", "total_duration_minutes",
+    "selected_service_ids", "selected_services_display", "total_duration_minutes", "total_price_cents",
     "selected_area_ids", "selected_areas_display",
     "selected_date", "selected_time",
     "service_id", "selected_new_date", "selected_new_time",
@@ -419,6 +419,7 @@ class ConversationEngine:
             if current_state == ConversationState.SELECT_SERVICES or next_state == ConversationState.SELECT_SERVICES:
                 session.pop("selected_service_ids", None)
                 session.pop("total_duration_minutes", None)
+                session.pop("total_price_cents", None)
                 session.pop("_available_services", None)
                 session.pop("_services_input", None)
                 logger.info("[ConversationEngine] Back navigation: cleared service selection keys")
@@ -998,9 +999,10 @@ class ConversationEngine:
                 svc_placeholders = ", ".join(["%s"] * len(selected_service_ids))
                 if selected_area_ids:
                     area_placeholders = ", ".join(["%s::uuid"] * len(selected_area_ids))
-                    params = tuple(selected_service_ids) + tuple(selected_area_ids)
+                    params = tuple(selected_area_ids) + tuple(selected_service_ids)
                     rows = self.db.execute_query(
-                        f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
+                        f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration,
+                               SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price_cents
                         FROM scheduler.services s
                         CROSS JOIN unnest(ARRAY[{area_placeholders}]) AS sel_area(area_id)
                         LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = sel_area.area_id AND sa.active = TRUE
@@ -1008,13 +1010,16 @@ class ConversationEngine:
                         params,
                     )
                     total_duration = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else 0
+                    total_price = int(rows[0]["total_price_cents"]) if rows and rows[0]["total_price_cents"] else 0
                 else:
                     services = self.db.execute_query(
-                        f"SELECT id, duration_minutes FROM scheduler.services WHERE id::text IN ({svc_placeholders}) AND active = TRUE",
+                        f"SELECT id, duration_minutes, price_cents FROM scheduler.services WHERE id::text IN ({svc_placeholders}) AND active = TRUE",
                         tuple(selected_service_ids),
                     )
                     total_duration = sum(s["duration_minutes"] for s in services)
+                    total_price = sum(s.get("price_cents") or 0 for s in services)
                 session["total_duration_minutes"] = total_duration
+                session["total_price_cents"] = total_price
                 logger.info(f"[ConversationEngine] _on_enter_available_days: multi-service total_duration={total_duration}min, service_ids={selected_service_ids}")
                 days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
             else:
@@ -1116,12 +1121,15 @@ class ConversationEngine:
         else:
             duration_str = ""
 
+        price_str = self._format_price_brl(session.get("total_price_cents"))
+
         variables = {
             "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
             "service": service_display,
             "areas": session.get("selected_areas_display", ""),
             "duration": duration_str,
+            "price": price_str,
             "clinic_name": clinic.get("name", "") if clinic else "",
             "address": clinic.get("address", "") if clinic else "",
         }
@@ -1190,10 +1198,14 @@ class ConversationEngine:
             duration_str = f"{hours}h{mins:02d}min" if hours else f"{total_min}min"
         else:
             duration_str = ""
+
+        price_str = self._format_price_brl(session.get("total_price_cents"))
+
         variables = {
             "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
             "duration": duration_str,
+            "price": price_str,
             "pre_session_instructions": pre_instructions,
         }
         content = self.template_service.get_and_render(clinic_id, "BOOKED", variables)
@@ -1662,6 +1674,16 @@ class ConversationEngine:
             (service_id,),
         )
         return results[0] if results else None
+
+    @staticmethod
+    @staticmethod
+    def _format_price_brl(price_cents) -> str:
+        """Format price in cents to BRL string: 15000 -> 'R$ 150,00'"""
+        if not price_cents:
+            return ""
+        reais = price_cents // 100
+        centavos = price_cents % 100
+        return f"R$ {reais},{centavos:02d}"
 
     @staticmethod
     def _format_date_br(date_value) -> str:

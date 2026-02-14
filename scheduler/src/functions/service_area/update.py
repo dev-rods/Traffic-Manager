@@ -67,6 +67,10 @@ def handler(event, context):
             updates.append("duration_minutes = %s")
             params.append(body["duration_minutes"])  # can be None to clear
 
+        if "price_cents" in body:
+            updates.append("price_cents = %s")
+            params.append(body["price_cents"])  # can be None to clear
+
         if "pre_session_instructions" in body:
             updates.append("pre_session_instructions = %s")
             params.append(body["pre_session_instructions"])  # can be None to clear
@@ -74,7 +78,7 @@ def handler(event, context):
         if not updates:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Nenhum campo para atualizar. Campos aceitos: duration_minutes, pre_session_instructions"
+                "message": "Nenhum campo para atualizar. Campos aceitos: duration_minutes, price_cents, pre_session_instructions"
             })
 
         params.extend([service_id, area_id])
