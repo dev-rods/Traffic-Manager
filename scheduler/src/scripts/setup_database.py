@@ -227,6 +227,9 @@ SQL_STATEMENTS = [
     # Add max_future_dates to clinics
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS max_future_dates INTEGER DEFAULT 5",
 
+    # Add gender to patients
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS gender VARCHAR(1) CHECK (gender IN ('M', 'F'))",
+
     # Unique constraints
     """
     DO $$
