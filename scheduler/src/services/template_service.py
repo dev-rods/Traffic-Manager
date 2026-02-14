@@ -15,6 +15,7 @@ DEFAULT_TEMPLATES = {
     "AVAILABLE_DAYS": "Dias disponiveis para agendamento:\n{{days_list}}",
     "SELECT_TIME": "Horarios disponiveis para {{date}}:\n{{times_list}}",
     "SELECT_SERVICES": "Selecione o(s) servico(s) desejado(s):\n\nVoce selecionou: {{selected_services}}",
+    "CONFIRM_SERVICES": "Servicos selecionados:\n{{selected_services}}\n\nDeseja confirmar?",
     "SELECT_AREAS": "Selecione as areas de tratamento (digite os numeros separados por virgula):\n\n{{areas_list}}",
     "CONFIRM_AREAS": "Areas selecionadas:\n{{selected_areas}}\n\nDeseja confirmar?",
     "CONFIRM_BOOKING": "Confirme seu agendamento:\n{{date}} as {{time}}\n{{service}}\nAreas: {{areas}}\n{{clinic_name}} - {{address}}",
@@ -51,7 +52,7 @@ class TemplateService:
                 """,
                 (clinic_id, template_key),
             )
-
+            logger.info(f"[TemplateService] get_template results: {results}")
             if results:
                 return results[0]
         except Exception as e:
