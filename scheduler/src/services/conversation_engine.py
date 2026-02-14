@@ -785,19 +785,58 @@ class ConversationEngine:
         return "bem-vindo(a)", "Bem-vindo(a)"
 
     def _on_enter_price_table(self, clinic_id: str) -> tuple:
-        services = self.db.execute_query(
-            "SELECT name, duration_minutes, price_cents FROM scheduler.services WHERE clinic_id = %s AND active = TRUE ORDER BY name",
+        # Fetch services with area-specific overrides
+        rows = self.db.execute_query(
+            """SELECT s.id as service_id, s.name as service_name,
+                      s.duration_minutes as service_duration, s.price_cents as service_price,
+                      a.name as area_name,
+                      COALESCE(sa.duration_minutes, s.duration_minutes) as duration,
+                      COALESCE(sa.price_cents, s.price_cents) as price
+               FROM scheduler.services s
+               LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.active = TRUE
+               LEFT JOIN scheduler.areas a ON sa.area_id = a.id AND a.active = TRUE
+               WHERE s.clinic_id = %s AND s.active = TRUE
+               ORDER BY s.name, a.display_order, a.name""",
             (clinic_id,),
         )
-        logger.info(f"[ConversationEngine] _on_enter_price_table: {len(services)} services found")
+        logger.info(f"[ConversationEngine] _on_enter_price_table: {len(rows)} rows found")
+
+        # Group by service
+        from collections import OrderedDict
+        svc_map = OrderedDict()
+        for row in rows:
+            sid = str(row["service_id"])
+            if sid not in svc_map:
+                svc_map[sid] = {
+                    "name": row["service_name"],
+                    "base_price": row["service_price"],
+                    "base_duration": row["service_duration"],
+                    "areas": [],
+                }
+            if row["area_name"]:
+                svc_map[sid]["areas"].append({
+                    "name": row["area_name"],
+                    "price": row["price"],
+                    "duration": row["duration"],
+                })
 
         lines = []
-        for svc in services:
-            price = svc.get("price_cents", 0)
-            price_str = f"R$ {price / 100:.2f}" if price else "Consultar"
-            lines.append(f"- {svc['name']}: {price_str}")
+        for svc in svc_map.values():
+            lines.append(f"*{svc['name']}*")
+            if svc["areas"]:
+                for area in svc["areas"]:
+                    price_str = self._format_price_brl(area["price"]) if area["price"] else "Consultar"
+                    dur = area["duration"]
+                    dur_str = f"{dur}min" if dur else ""
+                    lines.append(f"  • {area['name']}: {price_str} ({dur_str})")
+            else:
+                price_str = self._format_price_brl(svc["base_price"]) if svc["base_price"] else "Consultar"
+                dur = svc["base_duration"]
+                dur_str = f" ({dur}min)" if dur else ""
+                lines.append(f"  {price_str}{dur_str}")
+            lines.append("")  # blank line between services
 
-        price_table = "\n".join(lines) if lines else "Nenhum serviço cadastrado."
+        price_table = "\n".join(lines).rstrip() if lines else "Nenhum serviço cadastrado."
         variables = {"price_table": price_table}
         content = self.template_service.get_and_render(clinic_id, "PRICE_TABLE", variables)
         return variables, content
@@ -1675,7 +1714,6 @@ class ConversationEngine:
         )
         return results[0] if results else None
 
-    @staticmethod
     @staticmethod
     def _format_price_brl(price_cents) -> str:
         """Format price in cents to BRL string: 15000 -> 'R$ 150,00'"""
