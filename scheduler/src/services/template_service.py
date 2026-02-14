@@ -15,7 +15,9 @@ DEFAULT_TEMPLATES = {
     "AVAILABLE_DAYS": "Dias disponiveis para agendamento:\n{{days_list}}",
     "SELECT_TIME": "Horarios disponiveis para {{date}}:\n{{times_list}}",
     "SELECT_SERVICES": "Selecione o(s) servico(s) desejado(s):\n\nVoce selecionou: {{selected_services}}",
-    "CONFIRM_BOOKING": "Confirme seu agendamento:\n{{date}} as {{time}}\n{{service}}\n{{clinic_name}} - {{address}}",
+    "SELECT_AREAS": "Selecione as areas de tratamento (digite os numeros separados por virgula):\n\n{{areas_list}}",
+    "CONFIRM_AREAS": "Areas selecionadas:\n{{selected_areas}}\n\nDeseja confirmar?",
+    "CONFIRM_BOOKING": "Confirme seu agendamento:\n{{date}} as {{time}}\n{{service}}\nAreas: {{areas}}\n{{clinic_name}} - {{address}}",
     "BOOKED": "Agendamento confirmado!\nTe esperamos no dia {{date}} as {{time}}.\n\n{{pre_session_instructions}}",
     "RESCHEDULE_FOUND": "Encontramos seu agendamento:\n{{date}} as {{time}}\n{{service}}\n\nPara qual dia deseja remarcar?",
     "RESCHEDULE_NOT_FOUND": "Nao encontramos um agendamento ativo para este numero.",
@@ -29,6 +31,7 @@ DEFAULT_TEMPLATES = {
     "CANCEL_SELECT_APPOINTMENT": "Voce possui mais de um agendamento. Qual deseja cancelar?",
     "CONFIRM_CANCEL": "Deseja cancelar este agendamento?\n{{date}} as {{time}}\n{{service}}",
     "CANCELLED": "Agendamento cancelado com sucesso.",
+    "FAREWELL": "Obrigado pelo contato e tenha uma otima semana! Ate a proxima!",
     "REMINDER_24H": "Lembrete: Amanha as {{time}} voce tem sessao na {{clinic_name}}. Responda OK para confirmar.",
 }
 

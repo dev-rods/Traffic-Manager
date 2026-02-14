@@ -154,6 +154,21 @@ SQL_STATEMENTS = [
     )
     """,
 
+    # Areas de tratamento por servico
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.service_areas (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        service_id UUID NOT NULL REFERENCES scheduler.services(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        display_order INTEGER DEFAULT 0,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(service_id, name)
+    )
+    """,
+
+    "CREATE INDEX IF NOT EXISTS idx_service_areas_service ON scheduler.service_areas(service_id)",
+
     # Appointment-services junction table (multi-service per appointment)
     """
     CREATE TABLE IF NOT EXISTS scheduler.appointment_services (
@@ -170,6 +185,31 @@ SQL_STATEMENTS = [
 
     # Add total_duration_minutes to appointments
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER",
+
+    # Add rule_date column to availability_rules (fixed-date rules)
+    "ALTER TABLE scheduler.availability_rules ALTER COLUMN day_of_week DROP NOT NULL",
+    "ALTER TABLE scheduler.availability_rules ADD COLUMN IF NOT EXISTS rule_date DATE",
+
+    # Check constraint: either day_of_week or rule_date, never both
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'chk_rule_type'
+        ) THEN
+            ALTER TABLE scheduler.availability_rules
+            ADD CONSTRAINT chk_rule_type CHECK (
+                (day_of_week IS NOT NULL AND rule_date IS NULL)
+                OR (day_of_week IS NULL AND rule_date IS NOT NULL)
+            );
+        END IF;
+    END $$
+    """,
+
+    "CREATE INDEX IF NOT EXISTS idx_availability_rules_date ON scheduler.availability_rules(clinic_id, rule_date)",
+
+    # Add max_future_dates to clinics
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS max_future_dates INTEGER DEFAULT 5",
 
     # Unique constraints
     """
