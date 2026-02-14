@@ -21,45 +21,46 @@ def _serialize_row(row):
 
 def handler(event, context):
     """
-    Handler para listagem de areas associadas a um servico.
+    Handler para listagem de areas de uma clinica via API.
 
-    GET /services/{serviceId}/areas
-    Retorna todas as areas ativas do servico com JOIN na tabela areas.
+    GET /clinics/{clinicId}/areas
+    Retorna todas as areas ativas da clinica ordenadas por display_order e nome.
     """
     try:
         logger.info(f"Requisicao recebida para listagem de areas: {json.dumps(event)}")
 
+        # 1. Validar API key
         api_key, error_response = require_api_key(event)
         if error_response:
             return error_response
 
-        service_id = extract_path_param(event, "serviceId")
-        if not service_id:
+        # 2. Extrair clinicId do path
+        clinic_id = extract_path_param(event, "clinicId")
+        if not clinic_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "serviceId nao fornecido no path"
+                "message": "clinicId nao fornecido no path"
             })
 
+        logger.info(f"Listando areas da clinica: {clinic_id}")
+
+        # 3. Buscar areas ativas da clinica
         db = PostgresService()
 
-        rows = db.execute_query(
-            """
-            SELECT sa.id as service_area_id, sa.service_id, sa.area_id,
-                   a.name, a.display_order, a.active as area_active,
-                   sa.active, sa.created_at
-            FROM scheduler.service_areas sa
-            JOIN scheduler.areas a ON sa.area_id = a.id
-            WHERE sa.service_id = %s::uuid
-            AND sa.active = TRUE AND a.active = TRUE
-            ORDER BY a.display_order, a.name
-            """,
-            (service_id,),
-        )
+        query = """
+            SELECT * FROM scheduler.areas
+            WHERE clinic_id = %s AND active = TRUE
+            ORDER BY display_order, name
+        """
 
+        rows = db.execute_query(query, (clinic_id,))
+
+        # 4. Serializar campos datetime/date
         areas = [_serialize_row(row) for row in rows]
 
         logger.info(f"Listagem concluida: {len(areas)} area(s) encontrada(s)")
 
+        # 5. Retornar resposta
         return http_response(200, {
             "status": "SUCCESS",
             "areas": areas

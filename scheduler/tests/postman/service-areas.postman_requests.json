@@ -1,0 +1,291 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Service-Areas Association",
+    "description": "API collection for managing associations between services and areas",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "areaId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Associate Area to Service",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"area_ids\":[\"{{areaId}}\"]}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/services/{{serviceId}}/areas",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "services",
+            "{{serviceId}}",
+            "areas"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test(\"Response has status success\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"success\");",
+              "});",
+              "",
+              "pm.test(\"Response data contains associated areas\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data).to.be.an(\"array\");",
+              "    pm.expect(jsonData.data.length).to.be.above(0);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "Associate Area to Service - Success",
+          "status": "Created",
+          "code": 201,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"status\":\"success\",\"data\":[{\"service_id\":\"d4e5f6a7-b8c9-0123-defg-456789012345\",\"area_id\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"created_at\":\"2026-02-14T10:10:00Z\"}]}"
+        },
+        {
+          "name": "Associate Area to Service - Bad Request",
+          "status": "Bad Request",
+          "code": 400,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"status\":\"error\",\"message\":\"Missing required field: area_ids\"}"
+        },
+        {
+          "name": "Associate Area to Service - Conflict",
+          "status": "Conflict",
+          "code": 409,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"status\":\"error\",\"message\":\"Area is already associated with this service\"}"
+        }
+      ]
+    },
+    {
+      "name": "List Service Areas",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/services/{{serviceId}}/areas",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "services",
+            "{{serviceId}}",
+            "areas"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has status success\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"success\");",
+              "});",
+              "",
+              "pm.test(\"Response data is an array\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.data).to.be.an(\"array\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "List Service Areas - Success",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"status\":\"success\",\"data\":[{\"id\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"name\":\"Pernas\",\"display_order\":1,\"active\":true},{\"id\":\"b2c3d4e5-f6a7-8901-bcde-f12345678901\",\"name\":\"Axilas\",\"display_order\":2,\"active\":true}]}"
+        },
+        {
+          "name": "List Service Areas - Not Found",
+          "status": "Not Found",
+          "code": 404,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"status\":\"error\",\"message\":\"Service not found\"}"
+        }
+      ]
+    },
+    {
+      "name": "Remove Area from Service",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/services/{{serviceId}}/areas/{{areaId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "services",
+            "{{serviceId}}",
+            "areas",
+            "{{areaId}}"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has status success\", function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql(\"success\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "Remove Area from Service - Success",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"status\":\"success\",\"message\":\"Area removed from service successfully\"}"
+        },
+        {
+          "name": "Remove Area from Service - Not Found",
+          "status": "Not Found",
+          "code": 404,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"status\":\"error\",\"message\":\"Association not found\"}"
+        }
+      ]
+    }
+  ]
+}

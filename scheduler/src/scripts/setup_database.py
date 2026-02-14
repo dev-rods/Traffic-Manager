@@ -154,20 +154,36 @@ SQL_STATEMENTS = [
     )
     """,
 
-    # Areas de tratamento por servico
+    # Areas de tratamento (independentes, reutilizaveis entre servicos)
     """
-    CREATE TABLE IF NOT EXISTS scheduler.service_areas (
+    CREATE TABLE IF NOT EXISTS scheduler.areas (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        service_id UUID NOT NULL REFERENCES scheduler.services(id) ON DELETE CASCADE,
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
         name VARCHAR(255) NOT NULL,
         display_order INTEGER DEFAULT 0,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
-        UNIQUE(service_id, name)
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(clinic_id, name)
+    )
+    """,
+
+    "CREATE INDEX IF NOT EXISTS idx_areas_clinic ON scheduler.areas(clinic_id)",
+
+    # Junction: servico <-> area
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.service_areas (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        service_id UUID NOT NULL REFERENCES scheduler.services(id) ON DELETE CASCADE,
+        area_id UUID NOT NULL REFERENCES scheduler.areas(id) ON DELETE CASCADE,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(service_id, area_id)
     )
     """,
 
     "CREATE INDEX IF NOT EXISTS idx_service_areas_service ON scheduler.service_areas(service_id)",
+    "CREATE INDEX IF NOT EXISTS idx_service_areas_area ON scheduler.service_areas(area_id)",
 
     # Appointment-services junction table (multi-service per appointment)
     """

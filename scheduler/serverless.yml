@@ -50,6 +50,7 @@ functions:
   - ${file(sls/functions/send/interface.yml)}
   - ${file(sls/functions/clinic/interface.yml)}
   - ${file(sls/functions/service/interface.yml)}
+  - ${file(sls/functions/area/interface.yml)}
   - ${file(sls/functions/service_area/interface.yml)}
   - ${file(sls/functions/professional/interface.yml)}
   - ${file(sls/functions/availability/interface.yml)}

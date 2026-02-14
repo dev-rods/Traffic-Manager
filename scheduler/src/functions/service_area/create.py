@@ -21,23 +21,27 @@ def _serialize_row(row):
 
 def handler(event, context):
     """
-    Handler para criacao de area de tratamento de um servico.
+    Handler para associar areas a um servico.
 
     POST /services/{serviceId}/areas
     Body esperado:
     {
-        "name": "Pernas",
-        "display_order": 1   (opcional, default 0)
+        "area_id": "uuid-da-area"
     }
 
-    Aceita tambem um array para criacao em lote:
+    Aceita tambem um array para associacao em lote:
     [
-        {"name": "Pernas", "display_order": 1},
-        {"name": "Axilas", "display_order": 2}
+        {"area_id": "uuid-1"},
+        {"area_id": "uuid-2"}
     ]
+
+    Ou formato simplificado com array de IDs:
+    {
+        "area_ids": ["uuid-1", "uuid-2"]
+    }
     """
     try:
-        logger.info(f"Requisicao recebida para criacao de area: {json.dumps(event)}")
+        logger.info(f"Requisicao recebida para associacao de area: {json.dumps(event)}")
 
         api_key, error_response = require_api_key(event)
         if error_response:
@@ -70,41 +74,65 @@ def handler(event, context):
                 "message": f"Servico nao encontrado: {service_id}"
             })
 
-        # Support batch creation
-        items = body if isinstance(body, list) else [body]
+        # Support multiple formats:
+        # 1. {"area_ids": ["uuid-1", "uuid-2"]}
+        # 2. [{"area_id": "uuid-1"}, {"area_id": "uuid-2"}]
+        # 3. {"area_id": "uuid-1"}
+        area_ids = []
+        if isinstance(body, list):
+            for item in body:
+                aid = item.get("area_id")
+                if aid:
+                    area_ids.append(aid)
+        elif "area_ids" in body:
+            area_ids = body["area_ids"]
+        elif "area_id" in body:
+            area_ids = [body["area_id"]]
+
+        if not area_ids:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "Campo obrigatorio: area_id ou area_ids"
+            })
+
         created = []
 
-        for item in items:
-            name = item.get("name")
-            if not name:
-                return http_response(400, {
+        for area_id in area_ids:
+            # Verify area exists
+            area_check = db.execute_query(
+                "SELECT 1 FROM scheduler.areas WHERE id = %s::uuid AND active = TRUE",
+                (area_id,)
+            )
+            if not area_check:
+                return http_response(404, {
                     "status": "ERROR",
-                    "message": "Campo obrigatorio: name"
+                    "message": f"Area nao encontrada: {area_id}"
                 })
 
             result = db.execute_write_returning(
                 """
-                INSERT INTO scheduler.service_areas (id, service_id, name, display_order)
-                VALUES (gen_random_uuid(), %s::uuid, %s, %s)
+                INSERT INTO scheduler.service_areas (id, service_id, area_id)
+                VALUES (gen_random_uuid(), %s::uuid, %s::uuid)
+                ON CONFLICT (service_id, area_id) DO UPDATE SET active = TRUE
                 RETURNING *
                 """,
-                (service_id, name, item.get("display_order", 0)),
+                (service_id, area_id),
             )
 
             if result:
                 created.append(_serialize_row(result))
 
-        logger.info(f"{len(created)} area(s) criada(s) para servico {service_id}")
+        logger.info(f"{len(created)} associacao(oes) criada(s) para servico {service_id}")
 
         return http_response(201, {
             "status": "SUCCESS",
-            "message": f"{len(created)} area(s) criada(s) com sucesso",
-            "areas": created
+            "message": f"{len(created)} associacao(oes) criada(s) com sucesso",
+            "service_areas": created
         })
 
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"Erro ao criar area: {error_msg}")
+        logger.error(f"Erro ao associar area: {error_msg}")
         return http_response(500, {
             "status": "ERROR",
             "message": "Erro interno no servidor",

@@ -21,13 +21,12 @@ def _serialize_row(row):
 
 def handler(event, context):
     """
-    Handler para listagem de areas associadas a um servico.
+    Handler para remover associacao entre servico e area (soft delete).
 
-    GET /services/{serviceId}/areas
-    Retorna todas as areas ativas do servico com JOIN na tabela areas.
+    DELETE /services/{serviceId}/areas/{areaId}
     """
     try:
-        logger.info(f"Requisicao recebida para listagem de areas: {json.dumps(event)}")
+        logger.info(f"Requisicao recebida para remocao de associacao: {json.dumps(event)}")
 
         api_key, error_response = require_api_key(event)
         if error_response:
@@ -40,34 +39,42 @@ def handler(event, context):
                 "message": "serviceId nao fornecido no path"
             })
 
+        area_id = extract_path_param(event, "areaId")
+        if not area_id:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "areaId nao fornecido no path"
+            })
+
         db = PostgresService()
 
-        rows = db.execute_query(
+        result = db.execute_write_returning(
             """
-            SELECT sa.id as service_area_id, sa.service_id, sa.area_id,
-                   a.name, a.display_order, a.active as area_active,
-                   sa.active, sa.created_at
-            FROM scheduler.service_areas sa
-            JOIN scheduler.areas a ON sa.area_id = a.id
-            WHERE sa.service_id = %s::uuid
-            AND sa.active = TRUE AND a.active = TRUE
-            ORDER BY a.display_order, a.name
+            UPDATE scheduler.service_areas
+            SET active = FALSE
+            WHERE service_id = %s::uuid AND area_id = %s::uuid
+            RETURNING *
             """,
-            (service_id,),
+            (service_id, area_id),
         )
 
-        areas = [_serialize_row(row) for row in rows]
+        if not result:
+            return http_response(404, {
+                "status": "ERROR",
+                "message": f"Associacao nao encontrada: servico {service_id}, area {area_id}"
+            })
 
-        logger.info(f"Listagem concluida: {len(areas)} area(s) encontrada(s)")
+        logger.info(f"Associacao removida: servico {service_id}, area {area_id}")
 
         return http_response(200, {
             "status": "SUCCESS",
-            "areas": areas
+            "message": "Associacao removida com sucesso",
+            "service_area": _serialize_row(result)
         })
 
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"Erro ao listar areas: {error_msg}")
+        logger.error(f"Erro ao remover associacao: {error_msg}")
         return http_response(500, {
             "status": "ERROR",
             "message": "Erro interno no servidor",

@@ -85,6 +85,7 @@ STATE_CONFIG = {
         "buttons": [
             {"id": "price_table", "label": "Ver tabela de precos"},
             {"id": "schedule_now", "label": "Agendar agora"},
+            {"id": "back", "label": "Voltar"},
         ],
         "transitions": {
             "price_table": ConversationState.PRICE_TABLE,
@@ -396,6 +397,9 @@ class ConversationEngine:
             config = STATE_CONFIG.get(current_state, {})
             previous = config.get("previous")
             next_state = previous if previous else ConversationState.MAIN_MENU
+            # When areas were skipped, back from AVAILABLE_DAYS should go to SELECT_SERVICES
+            if current_state == ConversationState.AVAILABLE_DAYS and session.pop("_skipped_areas", False):
+                next_state = ConversationState.SELECT_SERVICES
             # Clear service selection when navigating back from or through SELECT_SERVICES
             if current_state == ConversationState.SELECT_SERVICES or next_state == ConversationState.SELECT_SERVICES:
                 session.pop("selected_service_ids", None)
@@ -567,6 +571,7 @@ class ConversationEngine:
                 if result is None:
                     # No areas configured — fall through to AVAILABLE_DAYS
                     session["state"] = ConversationState.AVAILABLE_DAYS.value
+                    session["_skipped_areas"] = True
                     template_vars, dynamic_buttons = self._on_enter_available_days(clinic_id, session)
                 else:
                     template_vars, override_content = result
@@ -750,16 +755,17 @@ class ConversationEngine:
         if not selected_service_ids:
             return {}, "Nenhum servico selecionado."
 
-        # Fetch areas for all selected services
+        # Fetch areas for all selected services (JOIN with areas table)
         placeholders = ", ".join(["%s"] * len(selected_service_ids))
         areas = self.db.execute_query(
             f"""
-            SELECT sa.id, sa.name, sa.service_id, s.name as service_name
+            SELECT a.id, a.name, sa.service_id, s.name as service_name
             FROM scheduler.service_areas sa
+            JOIN scheduler.areas a ON sa.area_id = a.id
             JOIN scheduler.services s ON sa.service_id = s.id
             WHERE sa.service_id::text IN ({placeholders})
-            AND sa.active = TRUE
-            ORDER BY sa.display_order, sa.name
+            AND sa.active = TRUE AND a.active = TRUE
+            ORDER BY a.display_order, a.name
             """,
             tuple(selected_service_ids),
         )

@@ -43,3 +43,26 @@ ListServiceAreas:
         path: services/{serviceId}/areas
         method: get
         cors: true
+
+DeleteServiceArea:
+  handler: src.functions.service_area.delete.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DeleteServiceArea-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: services/{serviceId}/areas/{areaId}
+        method: delete
+        cors: true

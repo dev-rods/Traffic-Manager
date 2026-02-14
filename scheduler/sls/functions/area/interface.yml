@@ -1,0 +1,114 @@
+CreateArea:
+  handler: src.functions.area.create.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateArea-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/areas
+        method: post
+        cors: true
+
+ListAreas:
+  handler: src.functions.area.list.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListAreas-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/areas
+        method: get
+        cors: true
+
+GetArea:
+  handler: src.functions.area.get.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetArea-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: areas/{areaId}
+        method: get
+        cors: true
+
+UpdateArea:
+  handler: src.functions.area.update.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-UpdateArea-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: areas/{areaId}
+        method: put
+        cors: true
+
+DeleteArea:
+  handler: src.functions.area.delete.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DeleteArea-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: areas/{areaId}
+        method: delete
+        cors: true
