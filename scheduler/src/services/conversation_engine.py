@@ -65,7 +65,7 @@ STATE_CONFIG = {
             {"id": "schedule", "label": "Agendar sessao"},
             {"id": "reschedule", "label": "Remarcar sessao"},
             {"id": "cancel_session", "label": "Cancelar sessao"},
-            {"id": "faq", "label": "Duvidas sobre sessao"},
+            {"id": "faq", "label": "Saber mais sobre atendimento"},
         ],
         "transitions": {
             "schedule": ConversationState.SCHEDULE_MENU,
@@ -592,21 +592,32 @@ class ConversationEngine:
         clinic_name = clinic.get("name", "") if clinic else ""
 
         patients = self.db.execute_query(
-            "SELECT name FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
+            "SELECT name, gender FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
             (clinic_id, phone),
         )
+
+        gender = patients[0].get("gender") if patients else None
+        bem_vindx, Bem_vindx = self._get_greeting_by_gender(gender)
 
         if patients and patients[0].get("name"):
             patient_name = patients[0]["name"]
             session["patient_name"] = patient_name
             template_key = "WELCOME_RETURNING"
-            variables = {"patient_name": patient_name, "clinic_name": clinic_name}
+            variables = {"patient_name": patient_name, "clinic_name": clinic_name, "bem_vindx": bem_vindx, "Bem_vindx": Bem_vindx}
         else:
             template_key = "WELCOME_NEW"
-            variables = {"clinic_name": clinic_name}
+            variables = {"clinic_name": clinic_name, "bem_vindx": bem_vindx, "Bem_vindx": Bem_vindx}
 
         content = self.template_service.get_and_render(clinic_id, template_key, variables)
         return variables, content
+
+    @staticmethod
+    def _get_greeting_by_gender(gender: Optional[str]) -> tuple:
+        if gender == "M":
+            return "bem-vindo", "Bem-vindo"
+        elif gender == "F":
+            return "bem-vinda", "Bem-vinda"
+        return "bem-vindo(a)", "Bem-vindo(a)"
 
     def _on_enter_price_table(self, clinic_id: str) -> tuple:
         services = self.db.execute_query(
@@ -618,8 +629,7 @@ class ConversationEngine:
         for svc in services:
             price = svc.get("price_cents", 0)
             price_str = f"R$ {price / 100:.2f}" if price else "Consultar"
-            duration = svc.get("duration_minutes", 0)
-            lines.append(f"- {svc['name']} ({duration}min): {price_str}")
+            lines.append(f"- {svc['name']}: {price_str}")
 
         price_table = "\n".join(lines) if lines else "Nenhum servico cadastrado."
         variables = {"price_table": price_table}

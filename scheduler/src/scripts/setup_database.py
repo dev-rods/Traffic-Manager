@@ -98,6 +98,7 @@ SQL_STATEMENTS = [
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
         phone VARCHAR(20) NOT NULL,
         name VARCHAR(255),
+        gender VARCHAR(1) CHECK (gender IN ('M', 'F')),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(clinic_id, phone)
