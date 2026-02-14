@@ -38,7 +38,7 @@ class AvailabilityEngine:
             # 4. Fetch availability rules for this day (recurring + fixed-date)
             rules = self.db.execute_query(
                 """
-                SELECT start_time, end_time FROM scheduler.availability_rules
+                SELECT start_time, end_time, rule_date FROM scheduler.availability_rules
                 WHERE clinic_id = %s AND active = TRUE
                   AND (day_of_week = %s OR rule_date = %s)
                 """,
@@ -46,6 +46,11 @@ class AvailabilityEngine:
             )
             if not rules:
                 return []
+
+            # Fixed-date rules take priority over recurring day_of_week rules
+            fixed_rules = [r for r in rules if r.get("rule_date")]
+            if fixed_rules:
+                rules = fixed_rules
 
             # 5. Check availability exceptions
             exceptions = self.db.execute_query(
@@ -122,7 +127,7 @@ class AvailabilityEngine:
             # 3. Fetch availability rules for this day (recurring + fixed-date)
             rules = self.db.execute_query(
                 """
-                SELECT start_time, end_time FROM scheduler.availability_rules
+                SELECT start_time, end_time, rule_date FROM scheduler.availability_rules
                 WHERE clinic_id = %s AND active = TRUE
                   AND (day_of_week = %s OR rule_date = %s)
                 """,
@@ -130,6 +135,11 @@ class AvailabilityEngine:
             )
             if not rules:
                 return []
+
+            # Fixed-date rules take priority over recurring day_of_week rules
+            fixed_rules = [r for r in rules if r.get("rule_date")]
+            if fixed_rules:
+                rules = fixed_rules
 
             # 4. Check availability exceptions
             exceptions = self.db.execute_query(
@@ -198,7 +208,7 @@ class AvailabilityEngine:
         for appt in appointments:
             appt_start = _time_to_minutes(appt["start_time"])
             appt_end = _time_to_minutes(appt["end_time"])
-            blocked.append((appt_start - buffer_minutes, appt_end + buffer_minutes))
+            blocked.append((max(0, appt_start - buffer_minutes), appt_end + buffer_minutes))
         blocked.sort()
 
         free_windows = []

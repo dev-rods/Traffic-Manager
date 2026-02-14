@@ -58,6 +58,15 @@ def create_handler(event, context):
                 "message": "Either day_of_week or rule_date is required"
             })
 
+        if rule_date is not None:
+            try:
+                datetime.strptime(rule_date, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                return http_response(400, {
+                    "status": "ERROR",
+                    "message": "rule_date must be a valid date in YYYY-MM-DD format"
+                })
+
         if day_of_week is not None:
             if not isinstance(day_of_week, int) or day_of_week < 0 or day_of_week > 6:
                 return http_response(400, {
