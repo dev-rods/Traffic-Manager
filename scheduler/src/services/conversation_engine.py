@@ -414,18 +414,21 @@ class ConversationEngine:
             # When areas were skipped, back from AVAILABLE_DAYS should go to CONFIRM_SERVICES
             if current_state == ConversationState.AVAILABLE_DAYS and session.pop("_skipped_areas", False):
                 next_state = ConversationState.CONFIRM_SERVICES
+                logger.info("[ConversationEngine] Back navigation: skipped areas, redirecting to CONFIRM_SERVICES")
             # Clear service selection when navigating back from or through SELECT_SERVICES
             if current_state == ConversationState.SELECT_SERVICES or next_state == ConversationState.SELECT_SERVICES:
                 session.pop("selected_service_ids", None)
                 session.pop("total_duration_minutes", None)
                 session.pop("_available_services", None)
                 session.pop("_services_input", None)
+                logger.info("[ConversationEngine] Back navigation: cleared service selection keys")
             # Clear area selection when navigating back from or through SELECT_AREAS
             if current_state in (ConversationState.SELECT_AREAS, ConversationState.CONFIRM_AREAS) or next_state == ConversationState.SELECT_AREAS:
                 session.pop("selected_area_ids", None)
                 session.pop("selected_areas_display", None)
                 session.pop("_available_areas", None)
                 session.pop("_areas_input", None)
+                logger.info("[ConversationEngine] Back navigation: cleared area selection keys")
         elif user_input == "human":
             next_state = ConversationState.HUMAN_HANDOFF
         else:
@@ -441,21 +444,34 @@ class ConversationEngine:
         # 3.6 Store raw input for free-text states that need it
         if current_state == ConversationState.SELECT_SERVICES:
             session["_services_input"] = user_input
+            logger.info(f"[ConversationEngine] Stored _services_input='{user_input}'")
         if current_state == ConversationState.SELECT_AREAS:
             session["_areas_input"] = user_input
+            logger.info(f"[ConversationEngine] Stored _areas_input='{user_input}'")
 
         # 4. Execute on_enter and build response
         session["previousState"] = current_state.value
         session["state"] = next_state.value
 
+        logger.info(f"[ConversationEngine] Executing _on_enter for state={next_state}")
         template_vars, dynamic_buttons, override_content = self._on_enter(
             next_state, clinic_id, phone, session
         )
 
         # 5. Build outgoing messages (use effective state — on_enter may redirect)
         effective_state = ConversationState(session["state"])
+        if effective_state != next_state:
+            logger.info(f"[ConversationEngine] on_enter redirected: {next_state} -> {effective_state}")
+
         messages = self._build_messages(
             effective_state, clinic_id, template_vars, dynamic_buttons, override_content, session
+        )
+
+        logger.info(
+            f"[ConversationEngine] Response: {len(messages)} message(s) | "
+            f"effectiveState={effective_state} | "
+            f"hasButtons={bool(dynamic_buttons)} | hasOverride={bool(override_content)} | "
+            f"templateVars={list(template_vars.keys()) if template_vars else []}"
         )
 
         # 6. Save session
@@ -466,23 +482,28 @@ class ConversationEngine:
     def _identify_input(self, incoming: IncomingMessage, session: dict) -> str:
         # Button response
         if incoming.button_id:
+            logger.info(f"[ConversationEngine] _identify_input: button_id='{incoming.button_id}'")
             return incoming.button_id
 
         text = (incoming.content or "").strip().lower()
 
         if not text:
+            logger.info("[ConversationEngine] _identify_input: empty text input")
             return ""
 
         # Check for "voltar" / "back"
         if text in ("voltar", "back", "0"):
+            logger.info(f"[ConversationEngine] _identify_input: matched 'back' from text='{text}'")
             return "back"
 
         # Check for "menu" / "inicio"
         if text in ("menu", "inicio", "oi", "ola", "hi", "hello"):
+            logger.info(f"[ConversationEngine] _identify_input: matched 'main_menu' from text='{text}'")
             return "main_menu"
 
         # Check for "humano" / "atendente"
         if text in ("humano", "atendente", "pessoa", "falar com alguem"):
+            logger.info(f"[ConversationEngine] _identify_input: matched 'human' from text='{text}'")
             return "human"
 
         # Synonym matching for confirm/back intents
@@ -496,16 +517,22 @@ class ConversationEngine:
         if text in CONFIRM_SYNONYMS:
             for btn in buttons:
                 if btn["id"].startswith("confirm"):
+                    logger.info(f"[ConversationEngine] _identify_input: confirm synonym '{text}' -> '{btn['id']}'")
                     return btn["id"]
 
         if text in BACK_SYNONYMS:
+            logger.info(f"[ConversationEngine] _identify_input: back synonym '{text}' -> 'back'")
             return "back"
 
-        # Numeric input — map to button index
-        if text.isdigit():
+        # Numeric input — map to button index (skip for free_text states where numbers are data)
+        input_type = config.get("input_type")
+        if text.isdigit() and input_type != "free_text":
             idx = int(text) - 1
             if 0 <= idx < len(buttons):
+                logger.info(f"[ConversationEngine] _identify_input: numeric '{text}' -> button '{buttons[idx]['id']}'")
                 return buttons[idx]["id"]
+            else:
+                logger.info(f"[ConversationEngine] _identify_input: numeric '{text}' out of range (buttons={len(buttons)})")
 
         # Fuzzy label matching — normalized substring + word overlap
         if buttons and text:
@@ -521,6 +548,7 @@ class ConversationEngine:
                 if normalized_input in norm_label or norm_label in normalized_input
             ]
             if len(substr_matches) == 1:
+                logger.info(f"[ConversationEngine] _identify_input: fuzzy substring match '{text}' -> '{substr_matches[0]['id']}'")
                 return substr_matches[0]["id"]
 
             # 2nd pass: word overlap scoring (>= 50% of input words match)
@@ -537,9 +565,11 @@ class ConversationEngine:
                     if scored:
                         scored.sort(key=lambda x: x[1], reverse=True)
                         if len(scored) == 1 or scored[0][1] > scored[1][1]:
+                            logger.info(f"[ConversationEngine] _identify_input: fuzzy word overlap '{text}' -> '{scored[0][0]['id']}' (score={scored[0][1]:.2f})")
                             return scored[0][0]["id"]
 
         # Free text input — return as-is for states that accept it
+        logger.info(f"[ConversationEngine] _identify_input: free text passthrough '{text}'")
         return text
 
     def _resolve_transition(
@@ -551,20 +581,33 @@ class ConversationEngine:
         # Static transitions
         transitions = config.get("transitions", {})
         if user_input in transitions:
-            return transitions[user_input]
+            next_state = transitions[user_input]
+            logger.info(f"[ConversationEngine] _resolve_transition: static '{user_input}' -> {next_state}")
+            return next_state
 
         # Dynamic selection states — input is stored in session
         if input_type == "dynamic_selection":
             dynamic_transitions = session.get("dynamic_transitions", {})
             if user_input in dynamic_transitions:
-                return ConversationState(dynamic_transitions[user_input])
+                next_state = ConversationState(dynamic_transitions[user_input])
+                logger.info(f"[ConversationEngine] _resolve_transition: dynamic '{user_input}' -> {next_state}")
+                return next_state
+            else:
+                logger.info(
+                    f"[ConversationEngine] _resolve_transition: dynamic_selection but '{user_input}' not in dynamic_transitions "
+                    f"(keys={list(dynamic_transitions.keys())[:5]})"
+                )
 
         # Free text states — always transition to next state
         if input_type == "free_text":
-            return self._get_free_text_next_state(current_state, user_input, session)
+            next_state = self._get_free_text_next_state(current_state, user_input, session)
+            logger.info(f"[ConversationEngine] _resolve_transition: free_text -> {next_state}")
+            return next_state
 
         # Fallback
-        return config.get("fallback", ConversationState.UNRECOGNIZED)
+        fallback = config.get("fallback", ConversationState.UNRECOGNIZED)
+        logger.info(f"[ConversationEngine] _resolve_transition: fallback -> {fallback} (input='{user_input}', input_type={input_type})")
+        return fallback
 
     def _get_free_text_next_state(
         self, current_state: ConversationState, user_input: str, session: dict
@@ -591,6 +634,8 @@ class ConversationEngine:
             if state == ConversationState.WELCOME or state == ConversationState.MAIN_MENU:
                 self._clear_flow_session_keys(session)
                 template_vars, override_content = self._on_enter_welcome(clinic_id, phone, session)
+                # Always land on MAIN_MENU so buttons are included
+                session["state"] = ConversationState.MAIN_MENU.value
 
             elif state == ConversationState.PRICE_TABLE:
                 template_vars, override_content = self._on_enter_price_table(clinic_id)
@@ -669,10 +714,12 @@ class ConversationEngine:
                 template_vars, override_content = self._on_enter_faq_answer(clinic_id, session)
 
             elif state == ConversationState.FAREWELL:
+                logger.info("[ConversationEngine] _on_enter: FAREWELL -> clearing flow session keys")
                 self._clear_flow_session_keys(session)
 
             elif state == ConversationState.HUMAN_HANDOFF:
                 session["human_handoff_requested_at"] = int(time.time())
+                logger.info(f"[ConversationEngine] _on_enter: HUMAN_HANDOFF requested at {session['human_handoff_requested_at']}")
 
             elif state == ConversationState.UNRECOGNIZED:
                 # Restore previous state's buttons + append "Menu principal"
@@ -685,11 +732,17 @@ class ConversationEngine:
                 if not any(b["id"] == "main_menu" for b in buttons):
                     buttons.append({"id": "main_menu", "label": "Menu principal"})
                 dynamic_buttons = buttons if buttons else None
+                logger.info(f"[ConversationEngine] _on_enter: UNRECOGNIZED from prev_state={prev_state} | restoring {len(buttons)} buttons")
 
         except Exception as e:
-            logger.error(f"[ConversationEngine] Error in on_enter for {state}: {e}")
+            logger.error(f"[ConversationEngine] Error in on_enter for {state}: {e}", exc_info=True)
             override_content = "Desculpe, ocorreu um erro. Tente novamente."
             session["state"] = ConversationState.MAIN_MENU.value
+
+        # If on_enter redirected and set dynamic_buttons in session, pick them up
+        effective_state = ConversationState(session.get("state", state.value))
+        if effective_state != state and not dynamic_buttons:
+            dynamic_buttons = session.get("dynamic_buttons")
 
         return template_vars, dynamic_buttons, override_content
 
@@ -698,6 +751,7 @@ class ConversationEngine:
     def _on_enter_welcome(self, clinic_id: str, phone: str, session: dict) -> tuple:
         clinic = self._get_clinic(clinic_id)
         clinic_name = clinic.get("name", "") if clinic else ""
+        logger.info(f"[ConversationEngine] _on_enter_welcome: clinic='{clinic_name}' phone={phone}")
 
         patients = self.db.execute_query(
             "SELECT name, gender FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
@@ -712,9 +766,11 @@ class ConversationEngine:
             session["patient_name"] = patient_name
             template_key = "WELCOME_RETURNING"
             variables = {"patient_name": patient_name, "clinic_name": clinic_name, "bem_vindx": bem_vindx, "Bem_vindx": Bem_vindx}
+            logger.info(f"[ConversationEngine] _on_enter_welcome: returning patient='{patient_name}' gender={gender}")
         else:
             template_key = "WELCOME_NEW"
             variables = {"clinic_name": clinic_name, "bem_vindx": bem_vindx, "Bem_vindx": Bem_vindx}
+            logger.info(f"[ConversationEngine] _on_enter_welcome: new patient (no record found)")
 
         content = self.template_service.get_and_render(clinic_id, template_key, variables)
         return variables, content
@@ -732,6 +788,7 @@ class ConversationEngine:
             "SELECT name, duration_minutes, price_cents FROM scheduler.services WHERE clinic_id = %s AND active = TRUE ORDER BY name",
             (clinic_id,),
         )
+        logger.info(f"[ConversationEngine] _on_enter_price_table: {len(services)} services found")
 
         lines = []
         for svc in services:
@@ -750,8 +807,10 @@ class ConversationEngine:
             "SELECT id, name, duration_minutes, price_cents FROM scheduler.services WHERE clinic_id = %s AND active = TRUE ORDER BY name",
             (clinic_id,),
         )
+        logger.info(f"[ConversationEngine] _on_enter_select_services: {len(services)} active services")
 
         if not services:
+            logger.warning(f"[ConversationEngine] _on_enter_select_services: no services found for clinic={clinic_id}")
             content = "Nenhum servico cadastrado para esta clinica."
             return {}, content, None
 
@@ -782,6 +841,10 @@ class ConversationEngine:
     def _on_enter_confirm_services(self, clinic_id: str, session: dict) -> tuple:
         raw_input = session.pop("_services_input", "")
         available_services = session.get("_available_services", [])
+        logger.info(
+            f"[ConversationEngine] _on_enter_confirm_services: raw_input='{raw_input}' | "
+            f"available_services={len(available_services)}"
+        )
 
         if not available_services:
             return {}, "Nenhum servico disponivel."
@@ -803,6 +866,7 @@ class ConversationEngine:
 
         if not selected_service_ids:
             # Invalid input — go back to SELECT_SERVICES and re-show the list
+            logger.warning(f"[ConversationEngine] _on_enter_confirm_services: no valid services parsed from '{raw_input}' -> redirecting to SELECT_SERVICES")
             session["state"] = ConversationState.SELECT_SERVICES.value
             lines = []
             for i, svc in enumerate(available_services, 1):
@@ -811,18 +875,24 @@ class ConversationEngine:
                 lines.append(f"{i} - {svc['name']}{price_str}")
             services_list = "\n".join(lines)
             content = f"Nenhum servico valido selecionado. Tente novamente.\n\n{services_list}"
+            back_button = [{"id": "back", "label": "Voltar"}]
+            session["dynamic_buttons"] = back_button
             return {}, content
 
         session["selected_service_ids"] = selected_service_ids
         selected_text = ", ".join(selected_service_names)
         session["selected_services_display"] = selected_text
 
+        logger.info(f"[ConversationEngine] _on_enter_confirm_services: selected {len(selected_service_ids)} services: {selected_text}")
+
         content = f"Servicos selecionados:\n{selected_text}\n\nDeseja confirmar?"
         return {}, content
 
     def _on_enter_select_areas(self, clinic_id: str, session: dict) -> tuple:
         selected_service_ids = session.get("selected_service_ids", [])
+        logger.info(f"[ConversationEngine] _on_enter_select_areas: service_ids={selected_service_ids}")
         if not selected_service_ids:
+            logger.warning("[ConversationEngine] _on_enter_select_areas: no services in session")
             return {}, "Nenhum servico selecionado.", None
 
         # Fetch areas for all selected services (JOIN with areas table)
@@ -842,8 +912,11 @@ class ConversationEngine:
 
         if not areas:
             # No areas configured — skip to AVAILABLE_DAYS
+            logger.info(f"[ConversationEngine] _on_enter_select_areas: no areas configured for services -> skipping to AVAILABLE_DAYS")
             session["selected_areas_display"] = ""
             return None
+
+        logger.info(f"[ConversationEngine] _on_enter_select_areas: {len(areas)} areas found")
 
         # Cache areas for later use in CONFIRM_AREAS
         session["_available_areas"] = [
@@ -866,6 +939,10 @@ class ConversationEngine:
     def _on_enter_confirm_areas(self, clinic_id: str, session: dict) -> tuple:
         raw_input = session.pop("_areas_input", "")
         available_areas = session.get("_available_areas", [])
+        logger.info(
+            f"[ConversationEngine] _on_enter_confirm_areas: raw_input='{raw_input}' | "
+            f"available_areas={len(available_areas)}"
+        )
 
         if not available_areas:
             session["selected_areas_display"] = ""
@@ -888,15 +965,20 @@ class ConversationEngine:
 
         if not selected_area_ids:
             # Invalid input — go back to SELECT_AREAS and re-show the list
+            logger.warning(f"[ConversationEngine] _on_enter_confirm_areas: no valid areas parsed from '{raw_input}' -> redirecting to SELECT_AREAS")
             session["state"] = ConversationState.SELECT_AREAS.value
             lines = [f"{i+1} - {a['name']}" for i, a in enumerate(available_areas)]
             areas_list = "\n".join(lines)
             content = f"Nenhuma area valida selecionada. Tente novamente.\n\n{areas_list}"
+            back_button = [{"id": "back", "label": "Voltar"}]
+            session["dynamic_buttons"] = back_button
             return {}, content
 
         session["selected_area_ids"] = selected_area_ids
         areas_display = ", ".join(selected_area_names)
         session["selected_areas_display"] = areas_display
+
+        logger.info(f"[ConversationEngine] _on_enter_confirm_areas: selected {len(selected_area_ids)} areas: {areas_display}")
 
         content = f"Areas selecionadas:\n{areas_display}\n\nDeseja confirmar?"
         return {}, content
@@ -905,6 +987,8 @@ class ConversationEngine:
         days = []
         dynamic_buttons = []
         dynamic_transitions = {}
+
+        logger.info(f"[ConversationEngine] _on_enter_available_days: availability_engine={'yes' if self.availability_engine else 'no'}")
 
         if self.availability_engine:
             selected_service_ids = session.get("selected_service_ids", [])
@@ -917,6 +1001,7 @@ class ConversationEngine:
                 )
                 total_duration = sum(s["duration_minutes"] for s in services)
                 session["total_duration_minutes"] = total_duration
+                logger.info(f"[ConversationEngine] _on_enter_available_days: multi-service total_duration={total_duration}min, service_ids={selected_service_ids}")
                 days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
             else:
                 # Fallback: single service (legacy compat)
@@ -930,8 +1015,10 @@ class ConversationEngine:
                         service_id = str(svc_rows[0]["id"])
                         session["service_id"] = service_id
                 if service_id:
+                    logger.info(f"[ConversationEngine] _on_enter_available_days: single-service service_id={service_id}")
                     days = self.availability_engine.get_available_days(clinic_id, service_id)
 
+        logger.info(f"[ConversationEngine] _on_enter_available_days: {len(days)} available days found")
         if days:
             for i, day in enumerate(days):
                 btn_id = f"day_{day}"
@@ -954,13 +1041,19 @@ class ConversationEngine:
         dynamic_buttons = []
         dynamic_transitions = {}
 
+        logger.info(f"[ConversationEngine] _on_enter_select_time: selected_date='{selected_date}'")
+
         if self.availability_engine and selected_date:
             total_duration = session.get("total_duration_minutes")
             if total_duration:
+                logger.info(f"[ConversationEngine] _on_enter_select_time: multi-service total_duration={total_duration}min")
                 slots = self.availability_engine.get_available_slots_multi(clinic_id, selected_date, total_duration)
             else:
                 service_id = session.get("service_id", "")
+                logger.info(f"[ConversationEngine] _on_enter_select_time: single-service service_id={service_id}")
                 slots = self.availability_engine.get_available_slots(clinic_id, selected_date, service_id)
+
+        logger.info(f"[ConversationEngine] _on_enter_select_time: {len(slots)} time slots found for date={selected_date}")
 
         if slots:
             for i, slot_time in enumerate(slots):
@@ -980,6 +1073,12 @@ class ConversationEngine:
 
     def _on_enter_confirm_booking(self, clinic_id: str, session: dict) -> dict:
         clinic = self._get_clinic(clinic_id)
+
+        logger.info(
+            f"[ConversationEngine] _on_enter_confirm_booking: date={session.get('selected_date')} "
+            f"time={session.get('selected_time')} services={session.get('selected_service_ids')} "
+            f"areas={session.get('selected_areas_display', '')}"
+        )
 
         # Build service display from selected services
         selected_ids = session.get("selected_service_ids", [])
@@ -1012,6 +1111,13 @@ class ConversationEngine:
             try:
                 selected_ids = session.get("selected_service_ids", [])
                 primary_service_id = selected_ids[0] if selected_ids else session.get("service_id")
+                logger.info(
+                    f"[ConversationEngine] _on_enter_booked: creating appointment | "
+                    f"phone={phone} date={session.get('selected_date')} time={session.get('selected_time')} "
+                    f"primary_service_id={primary_service_id} all_service_ids={selected_ids} "
+                    f"areas='{session.get('selected_areas_display', '')}' "
+                    f"total_duration={session.get('total_duration_minutes')}"
+                )
                 result = self.appointment_service.create_appointment(
                     clinic_id=clinic_id,
                     phone=phone,
@@ -1023,8 +1129,9 @@ class ConversationEngine:
                     total_duration_minutes=session.get("total_duration_minutes"),
                 )
                 session["appointment_id"] = str(result.get("id", ""))
+                logger.info(f"[ConversationEngine] _on_enter_booked: appointment created id={session['appointment_id']}")
             except Exception as e:
-                logger.error(f"[ConversationEngine] Erro ao criar agendamento: {e}")
+                logger.error(f"[ConversationEngine] _on_enter_booked: FAILED to create appointment: {e}", exc_info=True)
                 return {}, "Desculpe, ocorreu um erro ao confirmar seu agendamento. Tente novamente."
 
         clinic = self._get_clinic(clinic_id)
@@ -1045,6 +1152,8 @@ class ConversationEngine:
         if self.appointment_service:
             appointments = self.appointment_service.get_active_appointments_by_phone(clinic_id, phone)
 
+        logger.info(f"[ConversationEngine] _on_enter_reschedule_lookup: phone={phone} appointments_found={len(appointments)}")
+
         if not appointments:
             session["state"] = ConversationState.RESCHEDULE_LOOKUP.value
             content = self.template_service.get_and_render(clinic_id, "RESCHEDULE_NOT_FOUND")
@@ -1058,6 +1167,7 @@ class ConversationEngine:
             }
             session["dynamic_buttons"] = dynamic_buttons
             session["dynamic_transitions"] = dynamic_transitions
+            logger.info("[ConversationEngine] _on_enter_reschedule_lookup: no appointments found")
             return {}, dynamic_buttons, content
 
         if len(appointments) == 1:
@@ -1066,6 +1176,10 @@ class ConversationEngine:
             session["reschedule_appointment_id"] = str(appt.get("id", ""))
             session["reschedule_service_id"] = str(appt.get("service_id", ""))
             session["state"] = ConversationState.SHOW_CURRENT_APPOINTMENT.value
+            logger.info(
+                f"[ConversationEngine] _on_enter_reschedule_lookup: single appointment id={session['reschedule_appointment_id']} "
+                f"service_id={session['reschedule_service_id']} -> redirecting to SHOW_CURRENT_APPOINTMENT"
+            )
 
             variables = {
                 "date": self._format_date_br(appt.get("appointment_date", "")),
@@ -1096,6 +1210,7 @@ class ConversationEngine:
             return variables, dynamic_buttons, content
 
         # Multiple appointments — show picker
+        logger.info(f"[ConversationEngine] _on_enter_reschedule_lookup: {len(appointments)} appointments -> showing picker")
         session["state"] = ConversationState.SELECT_APPOINTMENT.value
         session["_appointments_cache"] = self._serialize_for_dynamo(
             {str(a["id"]): a for a in appointments}
@@ -1121,12 +1236,14 @@ class ConversationEngine:
     def _on_enter_show_current_appointment(self, clinic_id: str, phone: str, session: dict) -> tuple:
         appt_id = session.get("reschedule_appointment_id")
         svc_id = session.get("reschedule_service_id")
+        logger.info(f"[ConversationEngine] _on_enter_show_current_appointment: appt_id={appt_id} svc_id={svc_id}")
 
         # Try to get appointment data from cache (multi-appointment flow)
         cache = session.get("_appointments_cache", {})
         appt = cache.get(appt_id) if appt_id else None
 
         if not appt and appt_id:
+            logger.info(f"[ConversationEngine] _on_enter_show_current_appointment: cache miss, fetching from DB")
             # Fallback: fetch from DB
             results = self.db.execute_query(
                 """
@@ -1140,6 +1257,7 @@ class ConversationEngine:
             appt = results[0] if results else None
 
         if not appt:
+            logger.warning(f"[ConversationEngine] _on_enter_show_current_appointment: appointment not found for id={appt_id}")
             return {}, None
 
         variables = {
@@ -1147,12 +1265,14 @@ class ConversationEngine:
             "time": str(appt.get("start_time", "")),
             "service": appt.get("service_name", ""),
         }
+        logger.info(f"[ConversationEngine] _on_enter_show_current_appointment: current appt date={variables['date']} time={variables['time']} service='{variables['service']}'")
         content = self.template_service.get_and_render(clinic_id, "RESCHEDULE_FOUND", variables)
 
         # Fetch available days for rescheduling
         days = []
         if self.availability_engine and svc_id:
             days = self.availability_engine.get_available_days(clinic_id, svc_id)
+            logger.info(f"[ConversationEngine] _on_enter_show_current_appointment: {len(days)} available days for rescheduling")
 
         dynamic_buttons = []
         dynamic_transitions = {}
@@ -1175,9 +1295,13 @@ class ConversationEngine:
         dynamic_buttons = []
         dynamic_transitions = {}
 
+        logger.info(f"[ConversationEngine] _on_enter_select_new_time: selected_new_date='{selected_date}'")
+
         if self.availability_engine and selected_date:
             svc_id = session.get("reschedule_service_id", "")
+            logger.info(f"[ConversationEngine] _on_enter_select_new_time: querying slots for service_id={svc_id}")
             slots = self.availability_engine.get_available_slots(clinic_id, selected_date, svc_id)
+            logger.info(f"[ConversationEngine] _on_enter_select_new_time: {len(slots)} slots found")
 
         if slots:
             for slot_time in slots:
@@ -1197,11 +1321,32 @@ class ConversationEngine:
 
     def _on_enter_confirm_reschedule(self, clinic_id: str, session: dict) -> dict:
         clinic = self._get_clinic(clinic_id)
+        appt_id = session.get("reschedule_appointment_id")
+        logger.info(
+            f"[ConversationEngine] _on_enter_confirm_reschedule: appt_id={appt_id} "
+            f"new_date={session.get('selected_new_date')} new_time={session.get('selected_new_time')}"
+        )
+
+        service_display = ""
+        areas_display = ""
+
+        service = self._get_service(session.get("reschedule_service_id"))
+        if service:
+            service_display = service.get("name", "")
+
+        if appt_id:
+            appts = self.db.execute_query(
+                "SELECT areas FROM scheduler.appointments WHERE id = %s::uuid",
+                (appt_id,),
+            )
+            if appts:
+                areas_display = appts[0].get("areas", "") or ""
+
         return {
             "date": self._format_date_br(session.get("selected_new_date", "")),
             "time": session.get("selected_new_time", ""),
-            "service": "",
-            "areas": "",
+            "service": service_display,
+            "areas": areas_display,
             "clinic_name": clinic.get("name", "") if clinic else "",
             "address": clinic.get("address", "") if clinic else "",
         }
@@ -1209,13 +1354,18 @@ class ConversationEngine:
     def _on_enter_rescheduled(self, clinic_id: str, session: dict) -> tuple:
         if self.appointment_service:
             try:
+                appt_id = session.get("reschedule_appointment_id")
+                new_date = session.get("selected_new_date")
+                new_time = session.get("selected_new_time")
+                logger.info(f"[ConversationEngine] _on_enter_rescheduled: rescheduling appt_id={appt_id} to date={new_date} time={new_time}")
                 self.appointment_service.reschedule_appointment(
-                    appointment_id=session.get("reschedule_appointment_id"),
-                    new_date=session.get("selected_new_date"),
-                    new_time=session.get("selected_new_time"),
+                    appointment_id=appt_id,
+                    new_date=new_date,
+                    new_time=new_time,
                 )
+                logger.info(f"[ConversationEngine] _on_enter_rescheduled: SUCCESS appt_id={appt_id}")
             except Exception as e:
-                logger.error(f"[ConversationEngine] Erro ao remarcar: {e}")
+                logger.error(f"[ConversationEngine] _on_enter_rescheduled: FAILED appt_id={session.get('reschedule_appointment_id')}: {e}", exc_info=True)
                 return {}, "Desculpe, ocorreu um erro ao remarcar. Tente novamente."
 
         variables = {
@@ -1230,6 +1380,8 @@ class ConversationEngine:
         if self.appointment_service:
             appointments = self.appointment_service.get_active_appointments_by_phone(clinic_id, phone)
 
+        logger.info(f"[ConversationEngine] _on_enter_cancel_lookup: phone={phone} appointments_found={len(appointments)}")
+
         if not appointments:
             session["state"] = ConversationState.CANCEL_LOOKUP.value
             content = self.template_service.get_and_render(clinic_id, "CANCEL_NOT_FOUND")
@@ -1243,6 +1395,7 @@ class ConversationEngine:
             }
             session["dynamic_buttons"] = dynamic_buttons
             session["dynamic_transitions"] = dynamic_transitions
+            logger.info("[ConversationEngine] _on_enter_cancel_lookup: no appointments found")
             return {}, dynamic_buttons, content
 
         if len(appointments) == 1:
@@ -1250,6 +1403,7 @@ class ConversationEngine:
             appt = appointments[0]
             session["cancel_appointment_id"] = str(appt.get("id", ""))
             session["state"] = ConversationState.CONFIRM_CANCEL.value
+            logger.info(f"[ConversationEngine] _on_enter_cancel_lookup: single appointment id={session['cancel_appointment_id']} -> redirecting to CONFIRM_CANCEL")
 
             variables = {
                 "date": self._format_date_br(appt.get("appointment_date", "")),
@@ -1260,6 +1414,7 @@ class ConversationEngine:
             return variables, None, content
 
         # Multiple appointments — show picker
+        logger.info(f"[ConversationEngine] _on_enter_cancel_lookup: {len(appointments)} appointments -> showing picker")
         session["state"] = ConversationState.SELECT_CANCEL_APPOINTMENT.value
         session["_cancel_appointments_cache"] = self._serialize_for_dynamo(
             {str(a["id"]): a for a in appointments}
@@ -1284,12 +1439,14 @@ class ConversationEngine:
 
     def _on_enter_confirm_cancel(self, clinic_id: str, session: dict) -> dict:
         appt_id = session.get("cancel_appointment_id")
+        logger.info(f"[ConversationEngine] _on_enter_confirm_cancel: appt_id={appt_id}")
 
         # Try cache first
         cache = session.get("_cancel_appointments_cache", {})
         appt = cache.get(appt_id) if appt_id else None
 
         if not appt and appt_id:
+            logger.info(f"[ConversationEngine] _on_enter_confirm_cancel: cache miss, fetching from DB")
             results = self.db.execute_query(
                 """
                 SELECT a.*, s.name as service_name
@@ -1302,8 +1459,10 @@ class ConversationEngine:
             appt = results[0] if results else None
 
         if not appt:
+            logger.warning(f"[ConversationEngine] _on_enter_confirm_cancel: appointment not found for id={appt_id}")
             return {}
 
+        logger.info(f"[ConversationEngine] _on_enter_confirm_cancel: appt date={appt.get('appointment_date')} time={appt.get('start_time')} service='{appt.get('service_name')}'")
         return {
             "date": self._format_date_br(appt.get("appointment_date", "")),
             "time": str(appt.get("start_time", "")),
@@ -1314,9 +1473,11 @@ class ConversationEngine:
         appt_id = session.get("cancel_appointment_id")
         if self.appointment_service and appt_id:
             try:
+                logger.info(f"[ConversationEngine] _on_enter_cancelled: cancelling appt_id={appt_id}")
                 self.appointment_service.cancel_appointment(appt_id)
+                logger.info(f"[ConversationEngine] _on_enter_cancelled: SUCCESS appt_id={appt_id}")
             except Exception as e:
-                logger.error(f"[ConversationEngine] Erro ao cancelar: {e}")
+                logger.error(f"[ConversationEngine] _on_enter_cancelled: FAILED appt_id={appt_id}: {e}", exc_info=True)
                 return {}, "Desculpe, ocorreu um erro ao cancelar. Tente novamente."
 
         content = self.template_service.get_and_render(clinic_id, "CANCELLED")
@@ -1327,6 +1488,7 @@ class ConversationEngine:
             "SELECT id, question_key, question_label FROM scheduler.faq_items WHERE clinic_id = %s AND active = TRUE ORDER BY display_order",
             (clinic_id,),
         )
+        logger.info(f"[ConversationEngine] _on_enter_faq_menu: {len(faqs)} FAQ items loaded")
 
         dynamic_buttons = []
         dynamic_transitions = {}
@@ -1346,6 +1508,7 @@ class ConversationEngine:
     def _on_enter_faq_answer(self, clinic_id: str, session: dict) -> tuple:
         selected_faq_key = session.get("selected_faq_key", "")
         faq_key = selected_faq_key.replace("faq_", "") if selected_faq_key.startswith("faq_") else selected_faq_key
+        logger.info(f"[ConversationEngine] _on_enter_faq_answer: selected_faq_key='{selected_faq_key}' resolved_key='{faq_key}'")
 
         results = self.db.execute_query(
             "SELECT answer FROM scheduler.faq_items WHERE clinic_id = %s AND question_key = %s AND active = TRUE",
@@ -1354,16 +1517,21 @@ class ConversationEngine:
 
         if results:
             content = results[0]["answer"]
+            logger.info(f"[ConversationEngine] _on_enter_faq_answer: answer found (len={len(content)})")
         else:
             content = "Desculpe, nao encontramos a resposta para essa pergunta."
+            logger.warning(f"[ConversationEngine] _on_enter_faq_answer: no answer found for key='{faq_key}'")
 
         return {}, content
 
     # --- Session management ---
 
     def _clear_flow_session_keys(self, session: dict) -> None:
+        cleared = [key for key in FLOW_SESSION_KEYS if key in session]
         for key in FLOW_SESSION_KEYS:
             session.pop(key, None)
+        if cleared:
+            logger.info(f"[ConversationEngine] _clear_flow_session_keys: cleared {len(cleared)} keys: {cleared}")
 
     def _load_session(self, clinic_id: str, phone: str) -> dict:
         try:
@@ -1373,15 +1541,20 @@ class ConversationEngine:
             item = response.get("Item")
 
             if item:
-                return item.get("session", {"state": ConversationState.WELCOME.value})
+                session = item.get("session", {"state": ConversationState.WELCOME.value})
+                logger.info(f"[ConversationEngine] _load_session: existing session state={session.get('state')} for phone={phone}")
+                return session
+            else:
+                logger.info(f"[ConversationEngine] _load_session: no session found for phone={phone} -> new WELCOME session")
         except Exception as e:
-            logger.error(f"[ConversationEngine] Error loading session: {e}")
+            logger.error(f"[ConversationEngine] _load_session: ERROR loading session for phone={phone}: {e}", exc_info=True)
 
         return {"state": ConversationState.WELCOME.value}
 
     def _save_session(self, clinic_id: str, phone: str, session: dict) -> None:
         try:
             now = int(time.time())
+            logger.info(f"[ConversationEngine] _save_session: state={session.get('state')} phone={phone}")
             self.sessions_table.put_item(
                 Item={
                     "pk": f"CLINIC#{clinic_id}",
@@ -1393,7 +1566,7 @@ class ConversationEngine:
                 }
             )
         except Exception as e:
-            logger.error(f"[ConversationEngine] Error saving session: {e}")
+            logger.error(f"[ConversationEngine] _save_session: ERROR saving session for phone={phone}: {e}", exc_info=True)
 
     # --- Helpers ---
 
@@ -1470,15 +1643,24 @@ class ConversationEngine:
         # Determine content
         if override_content:
             content = override_content
+            content_source = "override"
         elif config.get("template_key"):
             content = self.template_service.get_and_render(
                 clinic_id, config["template_key"], template_vars
             )
+            content_source = f"template:{config['template_key']}"
         else:
             content = ""
+            content_source = "empty"
 
         # Determine buttons
         buttons = dynamic_buttons if dynamic_buttons else config.get("buttons", [])
+
+        logger.info(
+            f"[ConversationEngine] _build_messages: state={state} | content_source={content_source} | "
+            f"content_len={len(content)} | buttons={len(buttons)} | "
+            f"button_ids={[b['id'] for b in buttons[:5]]}{'...' if len(buttons) > 5 else ''}"
+        )
 
         if buttons:
             return [

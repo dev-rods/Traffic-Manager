@@ -22,7 +22,12 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: improve FAQ fuzzy matching with text normalization and word overlap\n\nAdd _normalize_text\\(\\) to strip accents/diacritics and punctuation before\nmatching. Replace simple substring check with 2-pass approach: normalized\nsubstring then word-overlap scoring. Rename faq_menu button to go_faq_menu\nto avoid prefix collision with faq_ extraction.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git reset:*)",
       "Bash(git stash:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "WebSearch",
+      "Bash(uvx:*)",
+      "Bash(uv:*)",
+      "Bash(pip:*)",
+      "Bash(python -c:*)"
     ]
   }
 }
