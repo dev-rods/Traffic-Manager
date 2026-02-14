@@ -35,13 +35,14 @@ class AvailabilityEngine:
             dt = datetime.strptime(target_date, "%Y-%m-%d").date()
             day_of_week = dt.isoweekday() % 7  # 0=Sunday, 1=Monday, ..., 6=Saturday
 
-            # 4. Fetch availability rules for this day
+            # 4. Fetch availability rules for this day (recurring + fixed-date)
             rules = self.db.execute_query(
                 """
                 SELECT start_time, end_time FROM scheduler.availability_rules
-                WHERE clinic_id = %s AND day_of_week = %s AND active = TRUE
+                WHERE clinic_id = %s AND active = TRUE
+                  AND (day_of_week = %s OR rule_date = %s)
                 """,
-                (clinic_id, day_of_week),
+                (clinic_id, day_of_week, target_date),
             )
             if not rules:
                 return []
@@ -61,21 +62,7 @@ class AvailabilityEngine:
                 elif exc["exception_type"] == "SPECIAL_HOURS":
                     rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
 
-            # 6. Calculate slot duration
-            slot_duration = duration_minutes + buffer_minutes
-
-            # 7. Generate all possible slots from rules
-            all_slots = []
-            for rule in rules:
-                rule_start = _time_to_minutes(rule["start_time"])
-                rule_end = _time_to_minutes(rule["end_time"])
-
-                current = rule_start
-                while current + duration_minutes <= rule_end:
-                    all_slots.append(current)
-                    current += slot_duration
-
-            # 8. Fetch existing confirmed appointments for this date
+            # 6. Fetch existing confirmed appointments for this date
             appointments = self.db.execute_query(
                 """
                 SELECT start_time, end_time FROM scheduler.appointments
@@ -84,25 +71,28 @@ class AvailabilityEngine:
                 (clinic_id, target_date),
             )
 
-            # 9. Remove conflicting slots
-            available_slots = []
-            for slot_start in all_slots:
-                slot_end = slot_start + duration_minutes
-                if not self._check_conflict(appointments, slot_start, slot_end):
-                    available_slots.append(_minutes_to_time_str(slot_start))
+            # 7. Calculate free windows and generate slots in gaps
+            free_windows = self._calculate_free_windows(rules, appointments, buffer_minutes)
+            slot_minutes = self._generate_slots_in_windows(free_windows, duration_minutes, buffer_minutes)
 
-            return available_slots
+            return [_minutes_to_time_str(s) for s in slot_minutes]
 
         except Exception as e:
             logger.error(f"[AvailabilityEngine] Erro ao calcular slots: {e}")
             return []
 
-    def get_available_days(self, clinic_id: str, service_id: str, days_ahead: int = 14) -> List[str]:
+    def get_available_days(self, clinic_id: str, service_id: str, max_dates: Optional[int] = None) -> List[str]:
         try:
+            if max_dates is None:
+                max_dates = self._get_max_future_dates(clinic_id)
+
             today = date.today()
             available_days = []
+            max_search = 90
 
-            for i in range(1, days_ahead + 1):
+            for i in range(1, max_search + 1):
+                if len(available_days) >= max_dates:
+                    break
                 target = today + timedelta(days=i)
                 target_str = target.strftime("%Y-%m-%d")
                 slots = self.get_available_slots(clinic_id, target_str, service_id)
@@ -129,13 +119,14 @@ class AvailabilityEngine:
             dt = datetime.strptime(target_date, "%Y-%m-%d").date()
             day_of_week = dt.isoweekday() % 7
 
-            # 3. Fetch availability rules for this day
+            # 3. Fetch availability rules for this day (recurring + fixed-date)
             rules = self.db.execute_query(
                 """
                 SELECT start_time, end_time FROM scheduler.availability_rules
-                WHERE clinic_id = %s AND day_of_week = %s AND active = TRUE
+                WHERE clinic_id = %s AND active = TRUE
+                  AND (day_of_week = %s OR rule_date = %s)
                 """,
-                (clinic_id, day_of_week),
+                (clinic_id, day_of_week, target_date),
             )
             if not rules:
                 return []
@@ -155,21 +146,7 @@ class AvailabilityEngine:
                 elif exc["exception_type"] == "SPECIAL_HOURS":
                     rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
 
-            # 5. Calculate slot duration
-            slot_duration = total_duration + buffer_minutes
-
-            # 6. Generate all possible slots from rules
-            all_slots = []
-            for rule in rules:
-                rule_start = _time_to_minutes(rule["start_time"])
-                rule_end = _time_to_minutes(rule["end_time"])
-
-                current = rule_start
-                while current + total_duration <= rule_end:
-                    all_slots.append(current)
-                    current += slot_duration
-
-            # 7. Fetch existing confirmed appointments for this date
+            # 5. Fetch existing confirmed appointments for this date
             appointments = self.db.execute_query(
                 """
                 SELECT start_time, end_time FROM scheduler.appointments
@@ -178,26 +155,29 @@ class AvailabilityEngine:
                 (clinic_id, target_date),
             )
 
-            # 8. Remove conflicting slots
-            available_slots = []
-            for slot_start in all_slots:
-                slot_end = slot_start + total_duration
-                if not self._check_conflict(appointments, slot_start, slot_end):
-                    available_slots.append(_minutes_to_time_str(slot_start))
+            # 6. Calculate free windows and generate slots in gaps
+            free_windows = self._calculate_free_windows(rules, appointments, buffer_minutes)
+            slot_minutes = self._generate_slots_in_windows(free_windows, total_duration, buffer_minutes)
 
-            return available_slots
+            return [_minutes_to_time_str(s) for s in slot_minutes]
 
         except Exception as e:
             logger.error(f"[AvailabilityEngine] Erro ao calcular slots multi: {e}")
             return []
 
-    def get_available_days_multi(self, clinic_id: str, total_duration: int, days_ahead: int = 14) -> List[str]:
+    def get_available_days_multi(self, clinic_id: str, total_duration: int, max_dates: Optional[int] = None) -> List[str]:
         """Find available days using a direct duration value (sum of selected services)."""
         try:
+            if max_dates is None:
+                max_dates = self._get_max_future_dates(clinic_id)
+
             today = date.today()
             available_days = []
+            max_search = 90
 
-            for i in range(1, days_ahead + 1):
+            for i in range(1, max_search + 1):
+                if len(available_days) >= max_dates:
+                    break
                 target = today + timedelta(days=i)
                 target_str = target.strftime("%Y-%m-%d")
                 slots = self.get_available_slots_multi(clinic_id, target_str, total_duration)
@@ -210,16 +190,57 @@ class AvailabilityEngine:
             logger.error(f"[AvailabilityEngine] Erro ao buscar dias disponiveis multi: {e}")
             return []
 
-    def _check_conflict(self, existing_appointments: list, slot_start: int, slot_end: int) -> bool:
-        for appt in existing_appointments:
+    @staticmethod
+    def _calculate_free_windows(rules: list, appointments: list, buffer_minutes: int) -> List[tuple]:
+        """Calculate free time windows by subtracting appointments (with buffer) from rules."""
+        # Build sorted list of blocked intervals from appointments
+        blocked = []
+        for appt in appointments:
             appt_start = _time_to_minutes(appt["start_time"])
             appt_end = _time_to_minutes(appt["end_time"])
+            blocked.append((appt_start - buffer_minutes, appt_end + buffer_minutes))
+        blocked.sort()
 
-            # Overlap: slot_start < appt_end AND slot_end > appt_start
-            if slot_start < appt_end and slot_end > appt_start:
-                return True
+        free_windows = []
+        for rule in rules:
+            rule_start = _time_to_minutes(rule["start_time"])
+            rule_end = _time_to_minutes(rule["end_time"])
 
-        return False
+            # Subtract each blocked interval from the rule window
+            current_start = rule_start
+            for block_start, block_end in blocked:
+                if block_end <= current_start:
+                    continue
+                if block_start >= rule_end:
+                    break
+                # There's a free gap before this blocked interval
+                if block_start > current_start:
+                    free_windows.append((current_start, min(block_start, rule_end)))
+                current_start = max(current_start, block_end)
+
+            # Remaining window after last blocked interval
+            if current_start < rule_end:
+                free_windows.append((current_start, rule_end))
+
+        return free_windows
+
+    @staticmethod
+    def _generate_slots_in_windows(free_windows: list, duration: int, buffer: int) -> List[int]:
+        """Generate slot start times within each free window."""
+        slots = []
+        for window_start, window_end in free_windows:
+            current = window_start
+            while current + duration <= window_end:
+                slots.append(current)
+                current += duration + buffer
+        return slots
+
+    def _get_max_future_dates(self, clinic_id: str) -> int:
+        clinic = self.db.execute_query(
+            "SELECT max_future_dates FROM scheduler.clinics WHERE clinic_id = %s",
+            (clinic_id,),
+        )
+        return (clinic[0].get("max_future_dates") or 5) if clinic else 5
 
 
 def _time_to_minutes(t) -> int:

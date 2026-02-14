@@ -23,6 +23,7 @@ ALLOWED_FIELDS = {
     "zapi_instance_token",
     "google_spreadsheet_id",
     "google_sheet_name",
+    "max_future_dates",
     "active",
 }
 

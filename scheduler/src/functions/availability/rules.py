@@ -34,32 +34,47 @@ def create_handler(event, context):
             return http_response(400, {"status": "ERROR", "message": "Request body is required"})
 
         day_of_week = body.get("day_of_week")
+        rule_date = body.get("rule_date")
         start_time = body.get("start_time")
         end_time = body.get("end_time")
         professional_id = body.get("professional_id")
 
-        if day_of_week is None or start_time is None or end_time is None:
+        if start_time is None or end_time is None:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "day_of_week, start_time and end_time are required"
+                "message": "start_time and end_time are required"
             })
 
-        if not isinstance(day_of_week, int) or day_of_week < 0 or day_of_week > 6:
+        # Must have day_of_week OR rule_date, never both
+        if day_of_week is not None and rule_date is not None:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "day_of_week must be an integer between 0 and 6"
+                "message": "Provide day_of_week OR rule_date, not both"
             })
+
+        if day_of_week is None and rule_date is None:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "Either day_of_week or rule_date is required"
+            })
+
+        if day_of_week is not None:
+            if not isinstance(day_of_week, int) or day_of_week < 0 or day_of_week > 6:
+                return http_response(400, {
+                    "status": "ERROR",
+                    "message": "day_of_week must be an integer between 0 and 6"
+                })
 
         db = PostgresService()
         result = db.execute_write_returning(
             """
             INSERT INTO scheduler.availability_rules
-                (id, clinic_id, day_of_week, start_time, end_time, professional_id)
+                (id, clinic_id, day_of_week, rule_date, start_time, end_time, professional_id)
             VALUES
-                (gen_random_uuid(), %s, %s, %s, %s, %s)
+                (gen_random_uuid(), %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (clinic_id, day_of_week, start_time, end_time, professional_id)
+            (clinic_id, day_of_week, rule_date, start_time, end_time, professional_id)
         )
 
         logger.info(f"[clinicId: {clinic_id}] Availability rule created: {result.get('id') if result else 'unknown'}")
@@ -96,7 +111,7 @@ def list_handler(event, context):
             """
             SELECT * FROM scheduler.availability_rules
             WHERE clinic_id = %s AND active = true
-            ORDER BY day_of_week, start_time
+            ORDER BY day_of_week NULLS LAST, rule_date, start_time
             """,
             (clinic_id,)
         )
