@@ -39,7 +39,7 @@ def handler(event, context):
         if not area_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "areaId nao fornecido no path"
+                "message": "areaId não fornecido no path"
             })
 
         logger.info(f"Excluindo area (soft delete): {area_id}")
@@ -59,7 +59,7 @@ def handler(event, context):
         if not result:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"Area nao encontrada: {area_id}"
+                "message": f"Area não encontrada: {area_id}"
             })
 
         area = _serialize_row(result)

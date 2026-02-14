@@ -41,7 +41,7 @@ def handler(event, context):
 
         body = parse_body(event)
         if not body:
-            return http_response(400, {"status": "ERROR", "message": "Corpo da requisicao vazio ou invalido"})
+            return http_response(400, {"status": "ERROR", "message": "Corpo da requisição vazio ou inválido"})
 
         db = PostgresService()
         new_status = body.get("status")
@@ -87,7 +87,7 @@ def handler(event, context):
         result = db.execute_write_returning(query, tuple(params))
 
         if not result:
-            return http_response(404, {"status": "ERROR", "message": "Agendamento nao encontrado"})
+            return http_response(404, {"status": "ERROR", "message": "Agendamento não encontrado"})
 
         appointment = _serialize_row(result)
 

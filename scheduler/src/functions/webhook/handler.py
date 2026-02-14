@@ -65,7 +65,7 @@ def handler(event, context):
         )
 
         if not clinics:
-            logger.warning(f"[Webhook] Clinica nao encontrada para instanceId={instance_id}")
+            logger.warning(f"[Webhook] Clinica não encontrada para instanceId={instance_id}")
             return http_response(200, {"status": "OK"})
 
         clinic = clinics[0]

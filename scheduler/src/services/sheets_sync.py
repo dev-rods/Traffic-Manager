@@ -9,8 +9,8 @@ from src.services.db.postgres import PostgresService
 logger = logging.getLogger(__name__)
 
 SHEET_HEADERS = [
-    "Data", "Horario", "Paciente", "Telefone", "Servico",
-    "Areas", "Status", "Observacoes", "AppointmentId", "UltimaAtualizacao"
+    "Data", "Horário", "Paciente", "Telefone", "Serviço",
+    "Áreas", "Status", "Observações", "AppointmentId", "UltimaAtualização"
 ]
 
 

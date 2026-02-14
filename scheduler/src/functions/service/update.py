@@ -54,7 +54,7 @@ def handler(event, context):
         if not body:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Corpo da requisicao vazio ou invalido"
+                "message": "Corpo da requisição vazio ou inválido"
             })
 
         # 3. Extrair serviceId do path
@@ -62,7 +62,7 @@ def handler(event, context):
         if not service_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "serviceId nao fornecido no path"
+                "message": "serviceId não fornecido no path"
             })
 
         logger.info(f"Atualizando servico: {service_id}")
@@ -79,7 +79,7 @@ def handler(event, context):
         if not set_clauses:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Nenhum campo valido fornecido para atualizacao"
+                "message": "Nenhum campo válido fornecido para atualização"
             })
 
         # Sempre atualizar updated_at
@@ -103,7 +103,7 @@ def handler(event, context):
         if not result:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"Servico nao encontrado: {service_id}"
+                "message": f"Servico não encontrado: {service_id}"
             })
 
         service = _serialize_row(result)

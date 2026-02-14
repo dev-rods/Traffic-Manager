@@ -45,7 +45,7 @@ def handler(event, context):
         if not body:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Corpo da requisicao vazio ou invalido"
+                "message": "Corpo da requisição vazio ou inválido"
             })
 
         # 3. Extrair clinicId do path
@@ -53,7 +53,7 @@ def handler(event, context):
         if not clinic_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "clinicId nao fornecido no path"
+                "message": "clinicId não fornecido no path"
             })
 
         # 4. Validar campos obrigatorios
@@ -79,7 +79,7 @@ def handler(event, context):
         if not clinic_check:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"Clinica nao encontrada: {clinic_id}"
+                "message": f"Clinica não encontrada: {clinic_id}"
             })
 
         # 6. Inserir servico no banco de dados
@@ -105,7 +105,7 @@ def handler(event, context):
         if not result:
             return http_response(500, {
                 "status": "ERROR",
-                "message": "Erro ao criar servico"
+                "message": "Erro ao criar serviço"
             })
 
         service = _serialize_row(result)

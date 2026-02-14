@@ -66,9 +66,9 @@ STATE_CONFIG = {
     ConversationState.MAIN_MENU: {
         "template_key": "MAIN_MENU",
         "buttons": [
-            {"id": "schedule", "label": "Agendar sessao"},
-            {"id": "reschedule", "label": "Remarcar sessao"},
-            {"id": "cancel_session", "label": "Cancelar sessao"},
+            {"id": "schedule", "label": "Agendar sessão"},
+            {"id": "reschedule", "label": "Remarcar sessão"},
+            {"id": "cancel_session", "label": "Cancelar sessão"},
             {"id": "faq", "label": "Saber mais sobre atendimento"},
         ],
         "transitions": {
@@ -84,7 +84,7 @@ STATE_CONFIG = {
     ConversationState.SCHEDULE_MENU: {
         "template_key": "SCHEDULE_MENU",
         "buttons": [
-            {"id": "price_table", "label": "Ver tabela de precos"},
+            {"id": "price_table", "label": "Ver tabela de preços"},
             {"id": "schedule_now", "label": "Agendar agora"},
             {"id": "back", "label": "Voltar"},
         ],
@@ -263,7 +263,7 @@ STATE_CONFIG = {
     ConversationState.FAQ_ANSWER: {
         "template_key": None,  # Content from FAQ
         "buttons": [
-            {"id": "go_faq_menu", "label": "Outras duvidas"},
+            {"id": "go_faq_menu", "label": "Outras dúvidas"},
             {"id": "main_menu", "label": "Menu principal"},
         ],
         "transitions": {
@@ -796,7 +796,7 @@ class ConversationEngine:
             price_str = f"R$ {price / 100:.2f}" if price else "Consultar"
             lines.append(f"- {svc['name']}: {price_str}")
 
-        price_table = "\n".join(lines) if lines else "Nenhum servico cadastrado."
+        price_table = "\n".join(lines) if lines else "Nenhum serviço cadastrado."
         variables = {"price_table": price_table}
         content = self.template_service.get_and_render(clinic_id, "PRICE_TABLE", variables)
         return variables, content
@@ -811,7 +811,7 @@ class ConversationEngine:
 
         if not services:
             logger.warning(f"[ConversationEngine] _on_enter_select_services: no services found for clinic={clinic_id}")
-            content = "Nenhum servico cadastrado para esta clinica."
+            content = "Nenhum serviço cadastrado para esta clínica."
             return {}, content, None
 
         # Cache services for later use in CONFIRM_SERVICES
@@ -832,7 +832,7 @@ class ConversationEngine:
             lines.append(f"{i} - {svc['name']}{price_str}")
 
         services_list = "\n".join(lines)
-        content = f"Selecione os servicos (digite os numeros separados por virgula):\n\n{services_list}"
+        content = f"Selecione os serviços (digite os números separados por vírgula):\n\n{services_list}"
 
         back_button = [{"id": "back", "label": "Voltar"}]
         session["dynamic_buttons"] = back_button
@@ -847,7 +847,7 @@ class ConversationEngine:
         )
 
         if not available_services:
-            return {}, "Nenhum servico disponivel."
+            return {}, "Nenhum serviço disponível."
 
         # Parse user input: "1, 3" or "1 3" or "1,3"
         raw_input = raw_input.replace(",", " ")
@@ -874,7 +874,7 @@ class ConversationEngine:
                 price_str = f" - R${price / 100:.2f}" if price else ""
                 lines.append(f"{i} - {svc['name']}{price_str}")
             services_list = "\n".join(lines)
-            content = f"Nenhum servico valido selecionado. Tente novamente.\n\n{services_list}"
+            content = f"Nenhum serviço válido selecionado. Tente novamente.\n\n{services_list}"
             back_button = [{"id": "back", "label": "Voltar"}]
             session["dynamic_buttons"] = back_button
             return {}, content
@@ -885,7 +885,7 @@ class ConversationEngine:
 
         logger.info(f"[ConversationEngine] _on_enter_confirm_services: selected {len(selected_service_ids)} services: {selected_text}")
 
-        content = f"Servicos selecionados:\n{selected_text}\n\nDeseja confirmar?"
+        content = f"Serviços selecionados:\n{selected_text}\n\nDeseja confirmar?"
         return {}, content
 
     def _on_enter_select_areas(self, clinic_id: str, session: dict) -> tuple:
@@ -893,7 +893,7 @@ class ConversationEngine:
         logger.info(f"[ConversationEngine] _on_enter_select_areas: service_ids={selected_service_ids}")
         if not selected_service_ids:
             logger.warning("[ConversationEngine] _on_enter_select_areas: no services in session")
-            return {}, "Nenhum servico selecionado.", None
+            return {}, "Nenhum serviço selecionado.", None
 
         # Fetch areas for all selected services (JOIN with areas table)
         placeholders = ", ".join(["%s"] * len(selected_service_ids))
@@ -930,7 +930,7 @@ class ConversationEngine:
             lines.append(f"{i} - {area['name']}")
 
         areas_list = "\n".join(lines)
-        content = f"Selecione as areas de tratamento (digite os numeros separados por virgula):\n\n{areas_list}"
+        content = f"Selecione as áreas de tratamento (digite os números separados por vírgula):\n\n{areas_list}"
 
         back_button = [{"id": "back", "label": "Voltar"}]
         session["dynamic_buttons"] = back_button
@@ -969,7 +969,7 @@ class ConversationEngine:
             session["state"] = ConversationState.SELECT_AREAS.value
             lines = [f"{i+1} - {a['name']}" for i, a in enumerate(available_areas)]
             areas_list = "\n".join(lines)
-            content = f"Nenhuma area valida selecionada. Tente novamente.\n\n{areas_list}"
+            content = f"Nenhuma área válida selecionada. Tente novamente.\n\n{areas_list}"
             back_button = [{"id": "back", "label": "Voltar"}]
             session["dynamic_buttons"] = back_button
             return {}, content
@@ -980,7 +980,7 @@ class ConversationEngine:
 
         logger.info(f"[ConversationEngine] _on_enter_confirm_areas: selected {len(selected_area_ids)} areas: {areas_display}")
 
-        content = f"Areas selecionadas:\n{areas_display}\n\nDeseja confirmar?"
+        content = f"Áreas selecionadas:\n{areas_display}\n\nDeseja confirmar?"
         return {}, content
 
     def _on_enter_available_days(self, clinic_id: str, session: dict) -> tuple:
@@ -993,12 +993,23 @@ class ConversationEngine:
         if self.availability_engine:
             selected_service_ids = session.get("selected_service_ids", [])
             if selected_service_ids:
-                # Sum durations of all selected services
+                # Sum durations with area-specific override (fallback to service default)
+                selected_area_id = session.get("selected_area_id")
                 placeholders = ", ".join(["%s"] * len(selected_service_ids))
-                services = self.db.execute_query(
-                    f"SELECT id, duration_minutes FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
-                    tuple(selected_service_ids),
-                )
+                if selected_area_id:
+                    params = tuple(selected_service_ids) + (selected_area_id,)
+                    services = self.db.execute_query(
+                        f"""SELECT s.id, COALESCE(sa.duration_minutes, s.duration_minutes) as duration_minutes
+                        FROM scheduler.services s
+                        LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = %s::uuid AND sa.active = TRUE
+                        WHERE s.id::text IN ({placeholders}) AND s.active = TRUE""",
+                        params,
+                    )
+                else:
+                    services = self.db.execute_query(
+                        f"SELECT id, duration_minutes FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
+                        tuple(selected_service_ids),
+                    )
                 total_duration = sum(s["duration_minutes"] for s in services)
                 session["total_duration_minutes"] = total_duration
                 logger.info(f"[ConversationEngine] _on_enter_available_days: multi-service total_duration={total_duration}min, service_ids={selected_service_ids}")
@@ -1031,7 +1042,7 @@ class ConversationEngine:
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
 
-        days_list = "\n".join([f"{i+1} - {self._format_date_br(d)}" for i, d in enumerate(days)]) if days else "Nenhum dia disponivel no momento."
+        days_list = "\n".join([f"{i+1} - {self._format_date_br(d)}" for i, d in enumerate(days)]) if days else "Nenhum dia disponível no momento."
         variables = {"days_list": days_list}
         return variables, dynamic_buttons
 
@@ -1067,7 +1078,7 @@ class ConversationEngine:
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
 
-        times_list = "\n".join([f"{i+1} - {t}" for i, t in enumerate(slots)]) if slots else "Nenhum horario disponivel."
+        times_list = "\n".join([f"{i+1} - {t}" for i, t in enumerate(slots)]) if slots else "Nenhum horário disponível."
         variables = {"date": self._format_date_br(selected_date), "times_list": times_list}
         return variables, dynamic_buttons
 
@@ -1315,7 +1326,7 @@ class ConversationEngine:
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
 
-        times_list = "\n".join([f"{i+1} - {t}" for i, t in enumerate(slots)]) if slots else "Nenhum horario disponivel."
+        times_list = "\n".join([f"{i+1} - {t}" for i, t in enumerate(slots)]) if slots else "Nenhum horário disponível."
         variables = {"date": self._format_date_br(selected_date), "times_list": times_list}
         return variables, dynamic_buttons
 
@@ -1519,7 +1530,7 @@ class ConversationEngine:
             content = results[0]["answer"]
             logger.info(f"[ConversationEngine] _on_enter_faq_answer: answer found (len={len(content)})")
         else:
-            content = "Desculpe, nao encontramos a resposta para essa pergunta."
+            content = "Desculpe, não encontramos a resposta para essa pergunta."
             logger.warning(f"[ConversationEngine] _on_enter_faq_answer: no answer found for key='{faq_key}'")
 
         return {}, content

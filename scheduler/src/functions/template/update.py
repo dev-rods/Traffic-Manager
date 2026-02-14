@@ -49,14 +49,14 @@ def handler(event, context):
         if not body:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Corpo da requisicao vazio ou invalido"
+                "message": "Corpo da requisição vazio ou inválido"
             })
 
         template_id = extract_path_param(event, "templateId")
         if not template_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "templateId nao fornecido no path"
+                "message": "templateId não fornecido no path"
             })
 
         logger.info(f"Atualizando template: {template_id}")
@@ -76,7 +76,7 @@ def handler(event, context):
         if not set_clauses:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Nenhum campo valido fornecido para atualizacao"
+                "message": "Nenhum campo válido fornecido para atualização"
             })
 
         # Sempre atualizar updated_at
@@ -100,7 +100,7 @@ def handler(event, context):
         if not result:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"Template nao encontrado: {template_id}"
+                "message": f"Template não encontrado: {template_id}"
             })
 
         template = _serialize_row(result)

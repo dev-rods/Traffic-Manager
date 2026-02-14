@@ -55,8 +55,8 @@ def handler(event, context):
 
             clinic = clinic_cache[clinic_id]
             if not clinic:
-                logger.warning(f"[traceId: {trace_id}] Clinica {clinic_id} nao encontrada, pulando lembrete {reminder_id}")
-                reminder_service.mark_failed(reminder_id, pk, sk, "Clinica nao encontrada")
+                logger.warning(f"[traceId: {trace_id}] Clinica {clinic_id} não encontrada, pulando lembrete {reminder_id}")
+                reminder_service.mark_failed(reminder_id, pk, sk, "Clinica não encontrada")
                 failed += 1
                 continue
 

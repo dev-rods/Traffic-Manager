@@ -44,7 +44,7 @@ def handler(event, context):
         if not body:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Corpo da requisicao vazio ou invalido"
+                "message": "Corpo da requisição vazio ou inválido"
             })
 
         # 3. Extrair clinicId do path
@@ -52,7 +52,7 @@ def handler(event, context):
         if not clinic_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "clinicId nao fornecido no path"
+                "message": "clinicId não fornecido no path"
             })
 
         logger.info(f"Criando area(s) para clinica: {clinic_id}")
@@ -68,7 +68,7 @@ def handler(event, context):
         if not clinic_check:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"Clinica nao encontrada: {clinic_id}"
+                "message": f"Clinica não encontrada: {clinic_id}"
             })
 
         # 5. Suportar batch (array) ou objeto unico

@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime, date, time
 
-from src.utils.http import http_response, require_api_key, extract_path_param
+from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
 
 logger = logging.getLogger(__name__)
@@ -21,16 +21,27 @@ def _serialize_row(row):
 
 def handler(event, context):
     """
-    Handler para remover associacao entre servico e area (soft delete).
+    Handler para atualizar uma associacao servico-area.
 
-    DELETE /services/{serviceId}/areas/{areaId}
+    PUT /services/{serviceId}/areas/{areaId}
+    Body esperado:
+    {
+        "duration_minutes": 30   // null to clear override
+    }
     """
     try:
-        logger.info(f"Requisicao recebida para remocao de associacao: {json.dumps(event)}")
+        logger.info(f"Requisicao recebida para atualizacao de service_area: {json.dumps(event)}")
 
         api_key, error_response = require_api_key(event)
         if error_response:
             return error_response
+
+        body = parse_body(event)
+        if not body:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "Corpo da requisição vazio ou inválido"
+            })
 
         service_id = extract_path_param(event, "serviceId")
         if not service_id:
@@ -48,14 +59,31 @@ def handler(event, context):
 
         db = PostgresService()
 
+        # Build SET clause dynamically
+        updates = []
+        params = []
+
+        if "duration_minutes" in body:
+            updates.append("duration_minutes = %s")
+            params.append(body["duration_minutes"])  # can be None to clear
+
+        if not updates:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "Nenhum campo para atualizar. Campos aceitos: duration_minutes"
+            })
+
+        params.extend([service_id, area_id])
+        set_clause = ", ".join(updates)
+
         result = db.execute_write_returning(
-            """
+            f"""
             UPDATE scheduler.service_areas
-            SET active = FALSE
-            WHERE service_id = %s::uuid AND area_id = %s::uuid
+            SET {set_clause}
+            WHERE service_id = %s::uuid AND area_id = %s::uuid AND active = TRUE
             RETURNING *
             """,
-            (service_id, area_id),
+            tuple(params),
         )
 
         if not result:
@@ -64,17 +92,17 @@ def handler(event, context):
                 "message": f"Associação não encontrada: serviço {service_id}, área {area_id}"
             })
 
-        logger.info(f"Associacao removida: servico {service_id}, area {area_id}")
+        logger.info(f"Service_area atualizada: servico {service_id}, area {area_id}")
 
         return http_response(200, {
             "status": "SUCCESS",
-            "message": "Associacao removida com sucesso",
+            "message": "Associação atualizada com sucesso",
             "service_area": _serialize_row(result)
         })
 
     except Exception as e:
         error_msg = str(e)
-        logger.error(f"Erro ao remover associacao: {error_msg}")
+        logger.error(f"Erro ao atualizar service_area: {error_msg}")
         return http_response(500, {
             "status": "ERROR",
             "message": "Erro interno no servidor",

@@ -35,7 +35,7 @@ def handler(event, context):
         )
 
         if not clinics:
-            return http_response(404, {"status": "ERROR", "message": f"Clinica '{clinic_id}' nao encontrada"})
+            return http_response(404, {"status": "ERROR", "message": f"Clinica '{clinic_id}' não encontrada"})
 
         clinic = clinics[0]
 
@@ -43,7 +43,7 @@ def handler(event, context):
         instance_token = clinic.get("zapi_instance_token")
 
         if not instance_id or not instance_token:
-            return http_response(400, {"status": "ERROR", "message": "Clinica nao possui z-api configurado"})
+            return http_response(400, {"status": "ERROR", "message": "Clínica não possui z-api configurado"})
 
         # Montar URL do z-api
         base_url = f"https://api.z-api.io/instances/{instance_id}/token/{instance_token}"

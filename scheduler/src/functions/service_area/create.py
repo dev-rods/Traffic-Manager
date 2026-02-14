@@ -51,14 +51,14 @@ def handler(event, context):
         if not body:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Corpo da requisicao vazio ou invalido"
+                "message": "Corpo da requisição vazio ou inválido"
             })
 
         service_id = extract_path_param(event, "serviceId")
         if not service_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "serviceId nao fornecido no path"
+                "message": "serviceId não fornecido no path"
             })
 
         db = PostgresService()
@@ -71,7 +71,7 @@ def handler(event, context):
         if not svc_check:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"Servico nao encontrado: {service_id}"
+                "message": f"Servico não encontrado: {service_id}"
             })
 
         # Support multiple formats:
@@ -95,6 +95,11 @@ def handler(event, context):
                 "message": "Campo obrigatorio: area_id ou area_ids"
             })
 
+        # Extract duration_minutes (applies to single area_id or area_ids format)
+        duration_minutes = None
+        if isinstance(body, dict):
+            duration_minutes = body.get("duration_minutes")
+
         created = []
 
         for area_id in area_ids:
@@ -106,17 +111,17 @@ def handler(event, context):
             if not area_check:
                 return http_response(404, {
                     "status": "ERROR",
-                    "message": f"Area nao encontrada: {area_id}"
+                    "message": f"Area não encontrada: {area_id}"
                 })
 
             result = db.execute_write_returning(
                 """
-                INSERT INTO scheduler.service_areas (id, service_id, area_id)
-                VALUES (gen_random_uuid(), %s::uuid, %s::uuid)
-                ON CONFLICT (service_id, area_id) DO UPDATE SET active = TRUE
+                INSERT INTO scheduler.service_areas (id, service_id, area_id, duration_minutes)
+                VALUES (gen_random_uuid(), %s::uuid, %s::uuid, %s)
+                ON CONFLICT (service_id, area_id) DO UPDATE SET active = TRUE, duration_minutes = EXCLUDED.duration_minutes
                 RETURNING *
                 """,
-                (service_id, area_id),
+                (service_id, area_id, duration_minutes),
             )
 
             if result:

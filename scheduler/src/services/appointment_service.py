@@ -53,7 +53,7 @@ class AppointmentService:
             tuple(all_service_ids),
         )
         if not services:
-            raise NotFoundError(f"Servico(s) nao encontrado(s)")
+            raise NotFoundError(f"Serviço(s) não encontrado(s)")
 
         # Build a lookup by id for ordering and data
         svc_lookup = {str(s["id"]): s for s in services}
@@ -89,7 +89,7 @@ class AppointmentService:
         )
 
         if conflicts:
-            raise ConflictError(f"Conflito de horario: ja existe agendamento para {date} {time}-{end_time}")
+            raise ConflictError(f"Conflito de horário: já existe agendamento para {date} {time}-{end_time}")
 
         # 5. Resolve professional
         prof_id_param = None
@@ -170,7 +170,7 @@ class AppointmentService:
         )
 
         if not appointments:
-            raise NotFoundError(f"Agendamento {appointment_id} nao encontrado ou nao confirmado")
+            raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou não confirmado")
 
         appointment = appointments[0]
         current_version = appointment.get("version", 1)
@@ -216,7 +216,7 @@ class AppointmentService:
         )
 
         if conflicts:
-            raise ConflictError(f"Conflito de horario no novo slot: {new_date} {new_time}-{new_end_time}")
+            raise ConflictError(f"Conflito de horário no novo slot: {new_date} {new_time}-{new_end_time}")
 
         # 5. Update with optimistic lock
         updated_rows = self.db.execute_write(
@@ -277,7 +277,7 @@ class AppointmentService:
         )
 
         if not result:
-            raise NotFoundError(f"Agendamento {appointment_id} nao encontrado ou ja cancelado")
+            raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou já cancelado")
 
         if self.reminder_service:
             try:

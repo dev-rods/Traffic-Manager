@@ -43,7 +43,7 @@ def handler(event, context):
 
         body = parse_body(event)
         if not body:
-            return http_response(400, {"status": "ERROR", "message": "Corpo da requisicao vazio ou invalido"})
+            return http_response(400, {"status": "ERROR", "message": "Corpo da requisição vazio ou inválido"})
 
         clinic_id = body.get("clinicId")
         phone = body.get("phone")

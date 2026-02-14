@@ -39,7 +39,7 @@ def handler(event, context):
         if not clinic_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "clinicId nao fornecido no path"
+                "message": "clinicId não fornecido no path"
             })
 
         # 3. Buscar FAQ items ativos

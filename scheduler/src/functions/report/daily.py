@@ -93,7 +93,7 @@ def handler(event, context):
                 lines.append(" - ".join(parts))
 
             lines.append("")
-            lines.append(f"Total: {len(appointments)} sessao(oes) agendada(s)")
+            lines.append(f"Total: {len(appointments)} sessão(ões) agendada(s)")
 
             report_content = "\n".join(lines)
 

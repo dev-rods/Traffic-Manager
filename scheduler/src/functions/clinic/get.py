@@ -38,7 +38,7 @@ def handler(event, context):
         if not clinic_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "clinicId nao fornecido no path"
+                "message": "clinicId não fornecido no path"
             })
 
         logger.info(f"Buscando clinica: {clinic_id}")
@@ -57,7 +57,7 @@ def handler(event, context):
         if not rows:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"Clinica nao encontrada: {clinic_id}"
+                "message": f"Clinica não encontrada: {clinic_id}"
             })
 
         clinic = _serialize_row(rows[0])

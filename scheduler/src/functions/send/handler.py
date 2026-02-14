@@ -48,7 +48,7 @@ def handler(event, context):
         if not body:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Corpo da requisicao vazio ou invalido"
+                "message": "Corpo da requisição vazio ou inválido"
             })
 
         # 3. Validar campos obrigatorios
@@ -91,7 +91,7 @@ def handler(event, context):
         if not clinics:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"Clinica '{clinic_id}' nao encontrada"
+                "message": f"Clinica '{clinic_id}' não encontrada"
             })
 
         clinic = clinics[0]

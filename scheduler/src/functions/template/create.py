@@ -29,7 +29,7 @@ def handler(event, context):
     Body esperado:
     {
         "template_key": "WELCOME",
-        "content": "Ola! Bem-vindo a {{clinic_name}}.",
+        "content": "Olá! Bem-vindo à {{clinic_name}}.",
         "buttons": [{"id": "1", "label": "Agendar"}]  (opcional)
     }
     """
@@ -46,14 +46,14 @@ def handler(event, context):
         if not body:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Corpo da requisicao vazio ou invalido"
+                "message": "Corpo da requisição vazio ou inválido"
             })
 
         clinic_id = extract_path_param(event, "clinicId")
         if not clinic_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "clinicId nao fornecido no path"
+                "message": "clinicId não fornecido no path"
             })
 
         # 3. Validar campos obrigatorios

@@ -113,32 +113,32 @@ def main():
     faq_items = [
         (
             "EQUIPMENT",
-            "Qual equipamento voces usam?",
-            "Trabalhamos com o Soprano Ice Platinum, uma das tecnologias mais avancadas do mundo em depilacao a laser. Trata-se de um equipamento de ponta, reconhecido pela sua seguranca e eficiencia.",
+            "Qual equipamento vocês usam?",
+            "Trabalhamos com o Soprano Ice Platinum, uma das tecnologias mais avançadas do mundo em depilação a laser. Trata-se de um equipamento de ponta, reconhecido pela sua segurança e eficiência.",
             1,
         ),
         (
             "SESSION_INTERVAL",
-            "Qual o intervalo entre sessoes?",
-            "As sessoes tem intervalo medio de 30 dias, ou seja, voce realiza aproximadamente 1 sessao por mes.",
+            "Qual o intervalo entre sessões?",
+            "As sessões têm intervalo médio de 30 dias, ou seja, você realiza aproximadamente 1 sessão por mês.",
             2,
         ),
         (
             "SCHEDULE_DATES",
             "Como funcionam as datas?",
-            "Nossa clinica disponibiliza o laser em apenas algumas datas especificas por mes. Consulte os dias disponiveis no agendamento.",
+            "Nossa clínica disponibiliza o laser em apenas algumas datas específicas por mês. Consulte os dias disponíveis no agendamento.",
             3,
         ),
         (
             "PAYMENT",
             "Como funciona o pagamento?",
-            "Trabalhamos somente com sessao avulsa, para dar liberdade e flexibilidade. O pagamento e feito presencialmente.",
+            "Trabalhamos somente com sessão avulsa, para dar liberdade e flexibilidade. O pagamento é feito presencialmente.",
             4,
         ),
         (
             "TEAM",
-            "Quem sao os profissionais?",
-            "Nossa equipe de biomedicas estetas e treinada e especializada em atendimento personalizado com a tecnologia Soprano Ice.",
+            "Quem são os profissionais?",
+            "Nossa equipe de biomédicas estetas é treinada e especializada em atendimento personalizado com a tecnologia Soprano Ice.",
             5,
         ),
     ]

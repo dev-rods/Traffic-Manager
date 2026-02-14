@@ -37,7 +37,7 @@ def handler(event, context):
         if not service_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "serviceId nao fornecido no path"
+                "message": "serviceId não fornecido no path"
             })
 
         db = PostgresService()
@@ -46,9 +46,13 @@ def handler(event, context):
             """
             SELECT sa.id as service_area_id, sa.service_id, sa.area_id,
                    a.name, a.display_order, a.active as area_active,
+                   sa.duration_minutes,
+                   s.duration_minutes as service_duration_minutes,
+                   COALESCE(sa.duration_minutes, s.duration_minutes) as effective_duration_minutes,
                    sa.active, sa.created_at
             FROM scheduler.service_areas sa
             JOIN scheduler.areas a ON sa.area_id = a.id
+            JOIN scheduler.services s ON sa.service_id = s.id
             WHERE sa.service_id = %s::uuid
             AND sa.active = TRUE AND a.active = TRUE
             ORDER BY a.display_order, a.name

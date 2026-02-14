@@ -47,14 +47,14 @@ def handler(event, context):
         if not body:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Corpo da requisicao vazio ou invalido"
+                "message": "Corpo da requisição vazio ou inválido"
             })
 
         faq_id = extract_path_param(event, "faqId")
         if not faq_id:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "faqId nao fornecido no path"
+                "message": "faqId não fornecido no path"
             })
 
         logger.info(f"Atualizando FAQ: {faq_id}")
@@ -71,7 +71,7 @@ def handler(event, context):
         if not set_clauses:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Nenhum campo valido fornecido para atualizacao"
+                "message": "Nenhum campo válido fornecido para atualização"
             })
 
         # Adicionar faqId no final dos params para o WHERE
@@ -92,7 +92,7 @@ def handler(event, context):
         if not result:
             return http_response(404, {
                 "status": "ERROR",
-                "message": f"FAQ nao encontrado: {faq_id}"
+                "message": f"FAQ não encontrado: {faq_id}"
             })
 
         faq = _serialize_row(result)
