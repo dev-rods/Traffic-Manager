@@ -151,6 +151,12 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 - z-api (WhatsApp messaging)
 - Google Sheets API (appointment sync)
 
+### Database Migrations
+- Schema changes go in the `MIGRATIONS` list in `scheduler/src/scripts/setup_database.py`
+- **All migrations must be idempotent** — use `ADD COLUMN IF NOT EXISTS`, `DROP COLUMN IF EXISTS`, `CREATE INDEX IF NOT EXISTS`, etc. so the script can be re-run safely
+- For constraints, wrap in `DO $$ ... IF NOT EXISTS ... END $$` blocks
+- When adding a new column to a table, also update the corresponding `CREATE TABLE` statement in the `TABLES` list to keep it in sync
+
 ### Scheduler Naming Conventions
 - clinic_id: lowercase kebab-case (e.g., `laser-beauty-sp-abc123`)
 - Lambda functions: PascalCase in interface.yml (e.g., `WhatsAppWebhook`, `CreateClinic`)
