@@ -44,6 +44,7 @@ provider:
     GOOGLE_SHEETS_SERVICE_ACCOUNT: ${ssm:/${self:custom.stage}/GOOGLE_SHEETS_SERVICE_ACCOUNT}
     ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
     ALLOWED_PHONES: ${ssm:/${self:custom.stage}/ALLOWED_PHONES}
+    SHEETS_WEBHOOK_TOKEN: ${ssm:/${self:custom.stage}/SHEETS_WEBHOOK_TOKEN}
 
 functions:
   - ${file(sls/functions/webhook/interface.yml)}
@@ -59,6 +60,7 @@ functions:
   - ${file(sls/functions/faq/interface.yml)}
   - ${file(sls/functions/reminder/interface.yml)}
   - ${file(sls/functions/report/interface.yml)}
+  - ${file(sls/functions/sheets/interface.yml)}
 
 resources:
   - ${file(sls/resources/dynamodb/conversation-sessions-table.yml)}

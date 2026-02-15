@@ -30,6 +30,7 @@ SQL_STATEMENTS = [
         zapi_instance_token VARCHAR(255),
         google_spreadsheet_id VARCHAR(255),
         google_sheet_name VARCHAR(100) DEFAULT 'Agenda',
+        owner_email VARCHAR(255),
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -116,7 +117,6 @@ SQL_STATEMENTS = [
         appointment_date DATE NOT NULL,
         start_time TIME NOT NULL,
         end_time TIME NOT NULL,
-        areas TEXT,
         status VARCHAR(20) DEFAULT 'CONFIRMED',
         notes TEXT,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -263,6 +263,30 @@ SQL_STATEMENTS = [
 
     # Add pre_session_instructions to service_areas (hierarchical: service_area > clinic)
     "ALTER TABLE scheduler.service_areas ADD COLUMN IF NOT EXISTS pre_session_instructions TEXT",
+
+    # Appointment-service-areas junction table (normalized areas per appointment)
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.appointment_service_areas (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        appointment_id UUID NOT NULL REFERENCES scheduler.appointments(id) ON DELETE CASCADE,
+        service_id UUID NOT NULL REFERENCES scheduler.services(id),
+        area_id UUID NOT NULL REFERENCES scheduler.areas(id),
+        area_name VARCHAR(255) NOT NULL,
+        service_name VARCHAR(255) NOT NULL,
+        duration_minutes INTEGER NOT NULL,
+        price_cents INTEGER,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(appointment_id, service_id, area_id)
+    )
+    """,
+
+    "CREATE INDEX IF NOT EXISTS idx_appt_svc_areas_appointment ON scheduler.appointment_service_areas(appointment_id)",
+
+    # Drop legacy TEXT areas column from appointments
+    "ALTER TABLE scheduler.appointments DROP COLUMN IF EXISTS areas",
+
+    # Add owner_email to clinics
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS owner_email VARCHAR(255)",
 ]
 
 

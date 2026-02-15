@@ -32,7 +32,9 @@ def handler(event, context):
         "serviceIds": ["uuid", "uuid"],  // multiple services (preferred)
         "date": "2026-02-10",
         "time": "10:00",
-        "areas": "Pernas e axilas",      // optional, auto-derived from services
+        "serviceAreaPairs": [            // optional, for services with areas
+            {"serviceId": "uuid", "areaId": "uuid"}
+        ],
         "professionalId": "uuid"         // optional
     }
     """
@@ -72,7 +74,20 @@ def handler(event, context):
             service_id = service_ids[0]
 
         db = PostgresService()
-        service = AppointmentService(db)
+
+        from src.services.sheets_sync import SheetsSync
+        sheets_sync = SheetsSync(db)
+        service = AppointmentService(db, sheets_sync=sheets_sync)
+
+        # Parse serviceAreaPairs from body
+        raw_pairs = body.get("serviceAreaPairs")
+        service_area_pairs = None
+        if raw_pairs and isinstance(raw_pairs, list):
+            service_area_pairs = [
+                {"service_id": p.get("serviceId"), "area_id": p.get("areaId")}
+                for p in raw_pairs
+                if p.get("serviceId") and p.get("areaId")
+            ]
 
         result = service.create_appointment(
             clinic_id=clinic_id,
@@ -80,9 +95,9 @@ def handler(event, context):
             service_id=service_id,
             date=appt_date,
             time=appt_time,
-            areas=body.get("areas", ""),
             professional_id=body.get("professionalId"),
             service_ids=service_ids,
+            service_area_pairs=service_area_pairs if service_area_pairs else None,
         )
 
         appointment = _serialize_row(result)

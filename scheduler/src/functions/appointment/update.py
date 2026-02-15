@@ -49,7 +49,9 @@ def handler(event, context):
 
         # If cancelling, use AppointmentService
         if new_status == "CANCELLED":
-            service = AppointmentService(db)
+            from src.services.sheets_sync import SheetsSync
+            sheets_sync = SheetsSync(db)
+            service = AppointmentService(db, sheets_sync=sheets_sync)
             result = service.cancel_appointment(appointment_id)
             appointment = _serialize_row(result)
 
