@@ -342,7 +342,7 @@ STATE_CONFIG = {
 
 FLOW_SESSION_KEYS = [
     "selected_service_ids", "selected_services_display", "total_duration_minutes", "total_price_cents",
-    "selected_area_ids", "selected_areas_display",
+    "selected_area_ids", "selected_areas_display", "selected_service_area_pairs",
     "selected_date", "selected_time",
     "service_id", "selected_new_date", "selected_new_time",
     "reschedule_appointment_id", "reschedule_service_id",
@@ -427,6 +427,7 @@ class ConversationEngine:
             if current_state in (ConversationState.SELECT_AREAS, ConversationState.CONFIRM_AREAS) or next_state == ConversationState.SELECT_AREAS:
                 session.pop("selected_area_ids", None)
                 session.pop("selected_areas_display", None)
+                session.pop("selected_service_area_pairs", None)
                 session.pop("_available_areas", None)
                 session.pop("_areas_input", None)
                 logger.info("[ConversationEngine] Back navigation: cleared area selection keys")
@@ -928,6 +929,24 @@ class ConversationEngine:
         content = f"Serviços selecionados:\n{selected_text}\n\nDeseja confirmar?"
         return {}, content
 
+    @staticmethod
+    def _build_areas_list(available_areas: list, multi_service: bool) -> str:
+        """Build the numbered areas list, grouped by service when multi_service."""
+        if not multi_service:
+            return "\n".join(f"{i} - {a['name']}" for i, a in enumerate(available_areas, 1))
+
+        lines = []
+        current_service = None
+        for i, area in enumerate(available_areas, 1):
+            svc = area.get("service_name", "")
+            if svc != current_service:
+                if current_service is not None:
+                    lines.append("")  # blank line between groups
+                lines.append(f"📌 {svc}:")
+                current_service = svc
+            lines.append(f"{i} - {area['name']}")
+        return "\n".join(lines)
+
     def _on_enter_select_areas(self, clinic_id: str, session: dict) -> tuple:
         selected_service_ids = session.get("selected_service_ids", [])
         logger.info(f"[ConversationEngine] _on_enter_select_areas: service_ids={selected_service_ids}")
@@ -945,7 +964,7 @@ class ConversationEngine:
             JOIN scheduler.services s ON sa.service_id = s.id
             WHERE sa.service_id::text IN ({placeholders})
             AND sa.active = TRUE AND a.active = TRUE
-            ORDER BY a.display_order, a.name
+            ORDER BY s.name, a.display_order, a.name
             """,
             tuple(selected_service_ids),
         )
@@ -958,18 +977,17 @@ class ConversationEngine:
 
         logger.info(f"[ConversationEngine] _on_enter_select_areas: {len(areas)} areas found")
 
-        # Cache areas for later use in CONFIRM_AREAS
+        # Cache areas for later use in CONFIRM_AREAS (includes service_id for pair tracking)
         session["_available_areas"] = [
-            {"id": str(a["id"]), "name": a["name"], "service_name": a.get("service_name", "")}
+            {"id": str(a["id"]), "name": a["name"], "service_id": str(a["service_id"]), "service_name": a.get("service_name", "")}
             for a in areas
         ]
 
-        # Build numbered list for the user
-        lines = []
-        for i, area in enumerate(areas, 1):
-            lines.append(f"{i} - {area['name']}")
+        # Determine distinct services that have areas
+        service_names = list(dict.fromkeys(a.get("service_name", "") for a in areas))
+        multi_service = len(service_names) > 1
 
-        areas_list = "\n".join(lines)
+        areas_list = self._build_areas_list(session["_available_areas"], multi_service)
         content = f"Selecione as áreas de tratamento (digite os números separados por vírgula):\n\n{areas_list}"
 
         back_button = [{"id": "back", "label": "Voltar"}]
@@ -994,31 +1012,41 @@ class ConversationEngine:
 
         selected_area_ids = []
         selected_area_names = []
+        selected_service_area_pairs = []
+        seen_pairs = set()
         for token in tokens:
             if token.isdigit():
                 idx = int(token) - 1
                 if 0 <= idx < len(available_areas):
                     area = available_areas[idx]
-                    if area["id"] not in selected_area_ids:
-                        selected_area_ids.append(area["id"])
+                    pair_key = (area["service_id"], area["id"])
+                    if pair_key not in seen_pairs:
+                        seen_pairs.add(pair_key)
+                        selected_service_area_pairs.append(
+                            {"service_id": area["service_id"], "area_id": area["id"]}
+                        )
+                        if area["id"] not in selected_area_ids:
+                            selected_area_ids.append(area["id"])
                         selected_area_names.append(area["name"])
 
-        if not selected_area_ids:
+        if not selected_service_area_pairs:
             # Invalid input — go back to SELECT_AREAS and re-show the list
             logger.warning(f"[ConversationEngine] _on_enter_confirm_areas: no valid areas parsed from '{raw_input}' -> redirecting to SELECT_AREAS")
             session["state"] = ConversationState.SELECT_AREAS.value
-            lines = [f"{i+1} - {a['name']}" for i, a in enumerate(available_areas)]
-            areas_list = "\n".join(lines)
+            service_names = list(dict.fromkeys(a.get("service_name", "") for a in available_areas))
+            multi_service = len(service_names) > 1
+            areas_list = self._build_areas_list(available_areas, multi_service)
             content = f"Nenhuma área válida selecionada. Tente novamente.\n\n{areas_list}"
             back_button = [{"id": "back", "label": "Voltar"}]
             session["dynamic_buttons"] = back_button
             return {}, content
 
         session["selected_area_ids"] = selected_area_ids
+        session["selected_service_area_pairs"] = selected_service_area_pairs
         areas_display = ", ".join(selected_area_names)
         session["selected_areas_display"] = areas_display
 
-        logger.info(f"[ConversationEngine] _on_enter_confirm_areas: selected {len(selected_area_ids)} areas: {areas_display}")
+        logger.info(f"[ConversationEngine] _on_enter_confirm_areas: selected {len(selected_service_area_pairs)} service-area pairs: {areas_display}")
 
         content = f"Áreas selecionadas:\n{areas_display}\n\nDeseja confirmar?"
         return {}, content
@@ -1034,18 +1062,20 @@ class ConversationEngine:
             selected_service_ids = session.get("selected_service_ids", [])
             if selected_service_ids:
                 # Sum durations: for each (service, area) pair use area-specific override, fallback to service default
-                selected_area_ids = session.get("selected_area_ids", [])
+                service_area_pairs = session.get("selected_service_area_pairs", [])
                 svc_placeholders = ", ".join(["%s"] * len(selected_service_ids))
-                if selected_area_ids:
-                    area_placeholders = ", ".join(["%s::uuid"] * len(selected_area_ids))
-                    params = tuple(selected_area_ids) + tuple(selected_service_ids)
+                if service_area_pairs:
+                    # Build VALUES list for exact (service_id, area_id) pairs
+                    values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+                    params = ()
+                    for pair in service_area_pairs:
+                        params += (pair["service_id"], pair["area_id"])
                     rows = self.db.execute_query(
                         f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration,
                                SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price_cents
-                        FROM scheduler.services s
-                        CROSS JOIN unnest(ARRAY[{area_placeholders}]) AS sel_area(area_id)
-                        LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = sel_area.area_id AND sa.active = TRUE
-                        WHERE s.id::text IN ({svc_placeholders}) AND s.active = TRUE""",
+                        FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
+                        JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
+                        LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
                         params,
                     )
                     total_duration = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else 0
@@ -1184,7 +1214,7 @@ class ConversationEngine:
                     f"[ConversationEngine] _on_enter_booked: creating appointment | "
                     f"phone={phone} date={session.get('selected_date')} time={session.get('selected_time')} "
                     f"primary_service_id={primary_service_id} all_service_ids={selected_ids} "
-                    f"areas='{session.get('selected_areas_display', '')}' "
+                    f"service_area_pairs={session.get('selected_service_area_pairs')} "
                     f"total_duration={session.get('total_duration_minutes')}"
                 )
                 result = self.appointment_service.create_appointment(
@@ -1193,10 +1223,9 @@ class ConversationEngine:
                     service_id=primary_service_id,
                     date=session.get("selected_date"),
                     time=session.get("selected_time"),
-                    areas=session.get("selected_areas_display", ""),
                     service_ids=selected_ids if selected_ids else None,
                     total_duration_minutes=session.get("total_duration_minutes"),
-                    area_ids=session.get("selected_area_ids") or None,
+                    service_area_pairs=session.get("selected_service_area_pairs") or None,
                 )
                 session["appointment_id"] = str(result.get("id", ""))
                 logger.info(f"[ConversationEngine] _on_enter_booked: appointment created id={session['appointment_id']}")
@@ -1209,21 +1238,21 @@ class ConversationEngine:
 
         # Hierarchical: service_area instructions take priority, then clinic-level
         sa_instructions = ""
-        selected_service_ids = session.get("selected_service_ids")
-        selected_area_ids = session.get("selected_area_ids")
-        if selected_service_ids and selected_area_ids and self.db:
-            placeholders_svc = ",".join(["%s"] * len(selected_service_ids))
-            placeholders_area = ",".join(["%s"] * len(selected_area_ids))
+        service_area_pairs = session.get("selected_service_area_pairs")
+        if service_area_pairs and self.db:
+            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+            params = ()
+            for pair in service_area_pairs:
+                params += (pair["service_id"], pair["area_id"])
             rows = self.db.execute_query(
                 f"""
                 SELECT pre_session_instructions
-                FROM scheduler.service_areas
-                WHERE service_id IN ({placeholders_svc})
-                AND area_id IN ({placeholders_area})
-                AND pre_session_instructions IS NOT NULL
-                AND active = TRUE
+                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
+                JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id
+                WHERE sa.pre_session_instructions IS NOT NULL
+                AND sa.active = TRUE
                 """,
-                tuple(selected_service_ids) + tuple(selected_area_ids),
+                params,
             )
             sa_parts = [r["pre_session_instructions"] for r in rows if r.get("pre_session_instructions")]
             sa_instructions = "\n".join(sa_parts)
@@ -1441,12 +1470,12 @@ class ConversationEngine:
             service_display = service.get("name", "")
 
         if appt_id:
-            appts = self.db.execute_query(
-                "SELECT areas FROM scheduler.appointments WHERE id = %s::uuid",
+            area_rows = self.db.execute_query(
+                "SELECT area_name FROM scheduler.appointment_service_areas WHERE appointment_id = %s::uuid ORDER BY created_at",
                 (appt_id,),
             )
-            if appts:
-                areas_display = appts[0].get("areas", "") or ""
+            if area_rows:
+                areas_display = ", ".join(r["area_name"] for r in area_rows)
 
         return {
             "date": self._format_date_br(session.get("selected_new_date", "")),
@@ -1568,11 +1597,22 @@ class ConversationEngine:
             logger.warning(f"[ConversationEngine] _on_enter_confirm_cancel: appointment not found for id={appt_id}")
             return {}
 
+        areas_display = ""
+        cancel_appt_id = str(appt.get("id", ""))
+        if cancel_appt_id:
+            area_rows = self.db.execute_query(
+                "SELECT area_name FROM scheduler.appointment_service_areas WHERE appointment_id = %s::uuid ORDER BY created_at",
+                (cancel_appt_id,),
+            )
+            if area_rows:
+                areas_display = ", ".join(r["area_name"] for r in area_rows)
+
         logger.info(f"[ConversationEngine] _on_enter_confirm_cancel: appt date={appt.get('appointment_date')} time={appt.get('start_time')} service='{appt.get('service_name')}'")
         return {
             "date": self._format_date_br(appt.get("appointment_date", "")),
             "time": str(appt.get("start_time", "")),
             "service": appt.get("service_name", ""),
+            "areas": areas_display,
         }
 
     def _on_enter_cancelled(self, clinic_id: str, session: dict) -> tuple:

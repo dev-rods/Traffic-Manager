@@ -33,11 +33,10 @@ class AppointmentService:
         service_id: str,
         date: str,
         time: str,
-        areas: str = "",
         professional_id: Optional[str] = None,
         service_ids: Optional[List[str]] = None,
         total_duration_minutes: Optional[int] = None,
-        area_ids: Optional[List[str]] = None,
+        service_area_pairs: Optional[List[Dict[str, str]]] = None,
     ) -> Dict[str, Any]:
         # 1. Get or create patient
         patient = self._get_or_create_patient(clinic_id, phone)
@@ -61,25 +60,22 @@ class AppointmentService:
 
         if total_duration_minutes:
             duration_minutes = int(total_duration_minutes)
-        elif area_ids:
+        elif service_area_pairs:
             # Sum duration for each (service, area) pair with area-specific override
-            area_placeholders = ", ".join(["%s::uuid"] * len(area_ids))
-            params = tuple(area_ids) + tuple(all_service_ids)
+            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+            params = ()
+            for pair in service_area_pairs:
+                params += (pair["service_id"], pair["area_id"])
             rows = self.db.execute_query(
                 f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
-                FROM scheduler.services s
-                CROSS JOIN unnest(ARRAY[{area_placeholders}]) AS sel_area(area_id)
-                LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = sel_area.area_id AND sa.active = TRUE
-                WHERE s.id::text IN ({placeholders}) AND s.active = TRUE""",
+                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
+                JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
+                LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
                 params,
             )
             duration_minutes = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else sum(s["duration_minutes"] for s in services)
         else:
             duration_minutes = sum(s["duration_minutes"] for s in services)
-
-        # Derive areas from service names for backwards compat
-        if not areas and len(services) > 0:
-            areas = ", ".join(svc_lookup[sid]["name"] for sid in all_service_ids if sid in svc_lookup)
 
         # 3. Calculate end_time
         start_parts = time.split(":")
@@ -122,64 +118,73 @@ class AppointmentService:
             """
             INSERT INTO scheduler.appointments (
                 clinic_id, patient_id, professional_id, service_id,
-                appointment_date, start_time, end_time, areas,
+                appointment_date, start_time, end_time,
                 total_duration_minutes,
                 status, created_at, updated_at, version
             ) VALUES (
                 %s, %s::uuid, %s::uuid, %s::uuid,
-                %s, %s::time, %s::time, %s,
+                %s, %s::time, %s::time,
                 %s,
                 'CONFIRMED', NOW(), NOW(), 1
             )
             RETURNING *
             """,
-            (clinic_id, patient_id, prof_id_param, primary_service_id, date, time, end_time, areas, duration_minutes),
+            (clinic_id, patient_id, prof_id_param, primary_service_id, date, time, end_time, duration_minutes),
         )
 
         if not result:
             raise Exception("Erro ao criar agendamento")
 
-        # 7. Insert into appointment_services junction table
-        # Build area-specific overrides lookup for duration and price
-        sa_overrides = {}
-        if area_ids:
-            area_placeholders = ", ".join(["%s::uuid"] * len(area_ids))
-            sa_rows = self.db.execute_query(
-                f"""SELECT s.id as service_id,
+        appointment_id = str(result["id"])
+
+        # 7. Insert into junction tables
+        if service_area_pairs:
+            # Services WITH areas -> appointment_service_areas (1 row per pair)
+            # Fetch info for each pair
+            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+            params = ()
+            for pair in service_area_pairs:
+                params += (pair["service_id"], pair["area_id"])
+            pair_rows = self.db.execute_query(
+                f"""SELECT pairs.service_id, pairs.area_id,
+                       s.name as service_name, a.name as area_name,
                        COALESCE(sa.duration_minutes, s.duration_minutes) as duration_minutes,
                        COALESCE(sa.price_cents, s.price_cents) as price_cents
-                FROM scheduler.services s
-                CROSS JOIN unnest(ARRAY[{area_placeholders}]) AS sel_area(area_id)
-                LEFT JOIN scheduler.service_areas sa ON sa.service_id = s.id AND sa.area_id = sel_area.area_id AND sa.active = TRUE
-                WHERE s.id::text IN ({placeholders}) AND s.active = TRUE""",
-                tuple(area_ids) + tuple(all_service_ids),
+                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
+                JOIN scheduler.services s ON s.id = pairs.service_id
+                JOIN scheduler.areas a ON a.id = pairs.area_id
+                LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
+                params,
             )
-            for row in sa_rows:
-                sid_key = str(row["service_id"])
-                if sid_key not in sa_overrides:
-                    sa_overrides[sid_key] = {"duration_minutes": 0, "price_cents": 0}
-                sa_overrides[sid_key]["duration_minutes"] += row["duration_minutes"] or 0
-                sa_overrides[sid_key]["price_cents"] += row["price_cents"] or 0
-
-        appointment_id = str(result["id"])
-        for sid in all_service_ids:
-            svc = svc_lookup.get(sid)
-            if svc:
-                override = sa_overrides.get(sid)
-                svc_duration = override["duration_minutes"] if override else svc["duration_minutes"]
-                svc_price = override["price_cents"] if override else svc.get("price_cents")
+            for row in pair_rows:
                 self.db.execute_write(
                     """
-                    INSERT INTO scheduler.appointment_services
-                        (appointment_id, service_id, service_name, duration_minutes, price_cents)
-                    VALUES (%s::uuid, %s::uuid, %s, %s, %s)
+                    INSERT INTO scheduler.appointment_service_areas
+                        (appointment_id, service_id, area_id, area_name, service_name, duration_minutes, price_cents)
+                    VALUES (%s::uuid, %s::uuid, %s::uuid, %s, %s, %s, %s)
                     """,
-                    (appointment_id, sid, svc["name"], svc_duration, svc_price),
+                    (appointment_id, str(row["service_id"]), str(row["area_id"]),
+                     row["area_name"], row["service_name"],
+                     row["duration_minutes"], row.get("price_cents")),
                 )
+        else:
+            # Services WITHOUT areas -> appointment_services (as before)
+            for sid in all_service_ids:
+                svc = svc_lookup.get(sid)
+                if svc:
+                    self.db.execute_write(
+                        """
+                        INSERT INTO scheduler.appointment_services
+                            (appointment_id, service_id, service_name, duration_minutes, price_cents)
+                        VALUES (%s::uuid, %s::uuid, %s, %s, %s)
+                        """,
+                        (appointment_id, sid, svc["name"], svc["duration_minutes"], svc.get("price_cents")),
+                    )
 
         logger.info(
             f"[AppointmentService] Agendamento criado: id={result['id']} "
-            f"clinic={clinic_id} date={date} time={time} services={len(all_service_ids)}"
+            f"clinic={clinic_id} date={date} time={time} services={len(all_service_ids)} "
+            f"service_area_pairs={len(service_area_pairs) if service_area_pairs else 0}"
         )
 
         # 8. Schedule reminder (if available)
@@ -214,21 +219,30 @@ class AppointmentService:
         current_version = appointment.get("version", 1)
         clinic_id = appointment["clinic_id"]
 
-        # 2. Get duration: prefer total_duration_minutes, then junction table sum, then single service
+        # 2. Get duration: prefer total_duration_minutes, then appointment_service_areas, then appointment_services, then service default
         duration_minutes = appointment.get("total_duration_minutes")
         if not duration_minutes:
-            junction = self.db.execute_query(
-                "SELECT SUM(duration_minutes) as total FROM scheduler.appointment_services WHERE appointment_id = %s::uuid",
+            # Try appointment_service_areas first (services with areas)
+            asa_junction = self.db.execute_query(
+                "SELECT SUM(duration_minutes) as total FROM scheduler.appointment_service_areas WHERE appointment_id = %s::uuid",
                 (appointment_id,),
             )
-            if junction and junction[0].get("total"):
-                duration_minutes = int(junction[0]["total"])
+            if asa_junction and asa_junction[0].get("total"):
+                duration_minutes = int(asa_junction[0]["total"])
             else:
-                services = self.db.execute_query(
-                    "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid",
-                    (str(appointment["service_id"]),),
+                # Try appointment_services (services without areas)
+                junction = self.db.execute_query(
+                    "SELECT SUM(duration_minutes) as total FROM scheduler.appointment_services WHERE appointment_id = %s::uuid",
+                    (appointment_id,),
                 )
-                duration_minutes = services[0]["duration_minutes"] if services else 60
+                if junction and junction[0].get("total"):
+                    duration_minutes = int(junction[0]["total"])
+                else:
+                    services = self.db.execute_query(
+                        "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid",
+                        (str(appointment["service_id"]),),
+                    )
+                    duration_minutes = services[0]["duration_minutes"] if services else 60
 
         # 3. Calculate new end_time
         duration_minutes = int(duration_minutes)
@@ -347,9 +361,15 @@ class AppointmentService:
 
         appointments = self.db.execute_query(
             """
-            SELECT a.*, s.name as service_name
+            SELECT a.*, s.name as service_name,
+                   areas_q.areas_display
             FROM scheduler.appointments a
             LEFT JOIN scheduler.services s ON a.service_id = s.id
+            LEFT JOIN LATERAL (
+                SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at) as areas_display
+                FROM scheduler.appointment_service_areas asa
+                WHERE asa.appointment_id = a.id
+            ) areas_q ON TRUE
             WHERE a.patient_id = %s::uuid AND a.status = 'CONFIRMED'
             AND a.appointment_date >= CURRENT_DATE
             ORDER BY a.appointment_date ASC, a.start_time ASC
@@ -375,9 +395,15 @@ class AppointmentService:
 
         appointments = self.db.execute_query(
             """
-            SELECT a.*, s.name as service_name
+            SELECT a.*, s.name as service_name,
+                   areas_q.areas_display
             FROM scheduler.appointments a
             LEFT JOIN scheduler.services s ON a.service_id = s.id
+            LEFT JOIN LATERAL (
+                SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at) as areas_display
+                FROM scheduler.appointment_service_areas asa
+                WHERE asa.appointment_id = a.id
+            ) areas_q ON TRUE
             WHERE a.patient_id = %s::uuid AND a.status = 'CONFIRMED'
             AND a.appointment_date >= CURRENT_DATE
             ORDER BY a.appointment_date ASC, a.start_time ASC

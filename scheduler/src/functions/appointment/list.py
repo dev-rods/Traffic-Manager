@@ -43,14 +43,20 @@ def handler(event, context):
         query = """
             SELECT
                 a.id, a.clinic_id, a.appointment_date, a.start_time, a.end_time,
-                a.areas, a.status, a.notes, a.version, a.created_at, a.updated_at,
+                a.status, a.notes, a.version, a.created_at, a.updated_at,
                 p.name as patient_name, p.phone as patient_phone,
                 s.name as service_name, s.duration_minutes,
-                pr.name as professional_name
+                pr.name as professional_name,
+                areas_q.areas_display as areas
             FROM scheduler.appointments a
             LEFT JOIN scheduler.patients p ON a.patient_id = p.id
             LEFT JOIN scheduler.services s ON a.service_id = s.id
             LEFT JOIN scheduler.professionals pr ON a.professional_id = pr.id
+            LEFT JOIN LATERAL (
+                SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at) as areas_display
+                FROM scheduler.appointment_service_areas asa
+                WHERE asa.appointment_id = a.id
+            ) areas_q ON TRUE
             WHERE a.clinic_id = %s
         """
         params = [clinic_id]
