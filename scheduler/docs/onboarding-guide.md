@@ -37,6 +37,13 @@ POST /clinics
   "address": "Rua Exemplo, 123 - Sao Paulo/SP",
   "timezone": "America/Sao_Paulo",
   "buffer_minutes": 10,
+  "business_hours": {
+    "mon": { "start": "09:00", "end": "18:00" },
+    "tue": { "start": "09:00", "end": "18:00" },
+    "wed": { "start": "09:00", "end": "18:00" },
+    "thu": { "start": "09:00", "end": "18:00" },
+    "fri": { "start": "09:00", "end": "18:00" }
+  },
   "welcome_message": "Mensagem personalizada de boas-vindas (opcional)",
   "pre_session_instructions": "Instrucoes pre-sessao enviadas apos confirmacao (opcional)"
 }

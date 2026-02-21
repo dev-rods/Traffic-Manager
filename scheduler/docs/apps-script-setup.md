@@ -24,96 +24,254 @@ var WEBHOOK_URL = "https://SEU-API-GATEWAY.execute-api.us-east-1.amazonaws.com/p
 var WEBHOOK_TOKEN = "SEU_TOKEN_AQUI"; // Mesmo valor do SSM /${stage}/SHEETS_WEBHOOK_TOKEN
 
 // ============================================================
-// TRIGGER - Detecta edições na coluna "Status" (coluna G)
+// Colunas da planilha (1-indexed)
+// A=1 Data, B=2 Horário, C=3 Paciente, D=4 Telefone, E=5 Serviço
+// F=6 Áreas, G=7 Status, H=8 Observações, I=9 AppointmentId, J=10 UltimaAtualização
+// ============================================================
+var COL_DATA = 1;
+var COL_HORARIO = 2;
+var COL_PACIENTE = 3;
+var COL_TELEFONE = 4;
+var COL_SERVICO = 5;
+var COL_AREAS = 6;
+var COL_STATUS = 7;
+var COL_OBSERVACOES = 8;
+var COL_APPOINTMENT_ID = 9;
+var COL_ULTIMA_ATUALIZACAO = 10;
+
+// Colunas que devem ser ignoradas (escritas pelo sistema)
+var IGNORED_COLUMNS = [COL_APPOINTMENT_ID, COL_ULTIMA_ATUALIZACAO];
+
+// ============================================================
+// TRIGGER - Detecta edições e dispara ações
 // ============================================================
 function onEditTrigger(e) {
   try {
     var sheet = e.source.getActiveSheet();
     var range = e.range;
-
-    // Coluna G = 7 (Status)
-    if (range.getColumn() !== 7) return;
-
-    // Ignorar header (row 1)
-    if (range.getRow() <= 1) return;
-
-    var newValue = (range.getValue() || "").toString().toUpperCase().trim();
-
-    // Só dispara para status de bloqueio
-    var blockStatuses = ["BLOQUEADO", "OCUPADO", "BLOCKED"];
-    if (blockStatuses.indexOf(newValue) === -1) return;
-
+    var col = range.getColumn();
     var row = range.getRow();
 
-    // Ler dados da linha: Data (A), Horário (B), Observações (H)
-    var dateValue = sheet.getRange(row, 1).getValue();
-    var timeValue = sheet.getRange(row, 2).getValue();
-    var notes = sheet.getRange(row, 8).getValue() || "Bloqueado via planilha";
+    // Ignorar header (row 1)
+    if (row <= 1) return;
 
-    if (!dateValue || !timeValue) {
-      Logger.log("Data ou horário vazio na linha " + row);
+    // Ignorar edições nas colunas de sistema (I, J)
+    if (IGNORED_COLUMNS.indexOf(col) !== -1) return;
+
+    // Só processar edições nas colunas relevantes
+    var actionColumns = [COL_DATA, COL_HORARIO, COL_AREAS, COL_STATUS];
+    if (actionColumns.indexOf(col) === -1) return;
+
+    var spreadsheetId = e.source.getId();
+    var sheetName = sheet.getName();
+
+    // Ler a row inteira
+    var rowData = sheet.getRange(row, 1, 1, 10).getValues()[0];
+
+    var dateValue = rowData[COL_DATA - 1];
+    var timeValue = rowData[COL_HORARIO - 1];
+    var patientName = rowData[COL_PACIENTE - 1] || "";
+    var phone = rowData[COL_TELEFONE - 1] || "";
+    var serviceName = rowData[COL_SERVICO - 1] || "";
+    var areas = rowData[COL_AREAS - 1] || "";
+    var status = (rowData[COL_STATUS - 1] || "").toString().toUpperCase().trim();
+    var notes = rowData[COL_OBSERVACOES - 1] || "";
+    var appointmentId = (rowData[COL_APPOINTMENT_ID - 1] || "").toString().trim();
+
+    // Formatar data
+    var formattedDate = formatDate(dateValue);
+    var formattedTime = formatTime(timeValue);
+
+    if (!formattedDate || !formattedTime) {
+      Logger.log("Data ou horário vazio/invalido na linha " + row);
       return;
     }
 
-    // Formatar data como YYYY-MM-DD
-    var formattedDate;
-    if (dateValue instanceof Date) {
-      formattedDate = Utilities.formatDate(dateValue, Session.getScriptTimeZone(), "yyyy-MM-dd");
-    } else {
-      formattedDate = dateValue.toString();
+    var payload = null;
+
+    // Dispatch por coluna editada
+    if (col === COL_STATUS) {
+      payload = dispatchByStatus(status, appointmentId, formattedDate, formattedTime, phone, serviceName, areas, notes);
+    } else if (col === COL_DATA || col === COL_HORARIO) {
+      // Mudança de data ou horário = RESCHEDULE
+      if (!appointmentId) {
+        Logger.log("RESCHEDULE ignorado: sem AppointmentId na linha " + row);
+        return;
+      }
+      payload = {
+        action: "RESCHEDULE",
+        appointment_id: appointmentId,
+        date: formattedDate,
+        time: formattedTime
+      };
+    } else if (col === COL_AREAS) {
+      // Mudança de áreas = UPDATE_AREAS
+      if (!appointmentId) {
+        Logger.log("UPDATE_AREAS ignorado: sem AppointmentId na linha " + row);
+        return;
+      }
+      if (!areas) {
+        Logger.log("UPDATE_AREAS ignorado: areas vazio na linha " + row);
+        return;
+      }
+      payload = {
+        action: "UPDATE_AREAS",
+        appointment_id: appointmentId,
+        areas: areas.toString()
+      };
     }
 
-    // Formatar horário como HH:mm
-    var formattedTime;
-    if (timeValue instanceof Date) {
-      formattedTime = Utilities.formatDate(timeValue, Session.getScriptTimeZone(), "HH:mm");
-    } else {
-      formattedTime = timeValue.toString();
-    }
+    if (!payload) return;
 
-    var spreadsheetId = e.source.getId();
+    // Adicionar campos comuns
+    payload.spreadsheet_id = spreadsheetId;
+    payload.sheet_name = sheetName;
+    payload.row_number = row;
+    payload.token = WEBHOOK_TOKEN;
 
-    var payload = {
-      spreadsheet_id: spreadsheetId,
-      action: "BLOCK",
-      date: formattedDate,
-      time: formattedTime,
-      notes: notes.toString(),
-      token: WEBHOOK_TOKEN
-    };
-
-    var options = {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-
-    var response = UrlFetchApp.fetch(WEBHOOK_URL, options);
-    var responseCode = response.getResponseCode();
-
-    if (responseCode === 201) {
-      Logger.log("Bloqueio criado com sucesso: " + formattedDate + " " + formattedTime);
-    } else {
-      Logger.log("Erro ao criar bloqueio: HTTP " + responseCode + " - " + response.getContentText());
-    }
+    sendWebhook(payload, row);
 
   } catch (error) {
     Logger.log("Erro no trigger onEdit: " + error.toString());
+  }
+}
+
+// ============================================================
+// Dispatch por status
+// ============================================================
+function dispatchByStatus(status, appointmentId, date, time, phone, serviceName, areas, notes) {
+  var blockStatuses = ["BLOQUEADO", "OCUPADO", "BLOCKED"];
+  var cancelStatuses = ["CANCELADO", "CANCELLED"];
+  var confirmStatuses = ["CONFIRMADO", "CONFIRMED"];
+
+  if (blockStatuses.indexOf(status) !== -1) {
+    return {
+      action: "BLOCK",
+      date: date,
+      time: time,
+      notes: notes || "Bloqueado via planilha"
+    };
+  }
+
+  if (cancelStatuses.indexOf(status) !== -1) {
+    if (!appointmentId) {
+      Logger.log("CANCEL ignorado: sem AppointmentId");
+      return null;
+    }
+    return {
+      action: "CANCEL",
+      appointment_id: appointmentId
+    };
+  }
+
+  if (confirmStatuses.indexOf(status) !== -1 && !appointmentId) {
+    // Nova row com status CONFIRMADO e sem AppointmentId = CREATE
+    if (!phone || !serviceName) {
+      Logger.log("CREATE ignorado: Telefone e Serviço são obrigatórios");
+      return null;
+    }
+    return {
+      action: "CREATE",
+      date: date,
+      time: time,
+      phone: phone.toString(),
+      service_name: serviceName.toString(),
+      areas: areas ? areas.toString() : "",
+      notes: notes ? notes.toString() : ""
+    };
+  }
+
+  return null;
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+function formatDate(dateValue) {
+  if (!dateValue) return null;
+  if (dateValue instanceof Date) {
+    return Utilities.formatDate(dateValue, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+  return dateValue.toString();
+}
+
+function formatTime(timeValue) {
+  if (!timeValue) return null;
+  if (timeValue instanceof Date) {
+    return Utilities.formatDate(timeValue, Session.getScriptTimeZone(), "HH:mm");
+  }
+  return timeValue.toString();
+}
+
+function sendWebhook(payload, row) {
+  var options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  var response = UrlFetchApp.fetch(WEBHOOK_URL, options);
+  var responseCode = response.getResponseCode();
+  var responseBody = response.getContentText();
+
+  if (responseCode >= 200 && responseCode < 300) {
+    Logger.log("Sucesso [" + payload.action + "] linha " + row + ": HTTP " + responseCode);
+
+    // Se foi CREATE, tentar ler o appointmentId da resposta e escrever na planilha
+    if (payload.action === "CREATE") {
+      try {
+        var data = JSON.parse(responseBody);
+        if (data.appointmentId) {
+          var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+          sheet.getRange(row, COL_APPOINTMENT_ID).setValue(data.appointmentId);
+          sheet.getRange(row, COL_ULTIMA_ATUALIZACAO).setValue(new Date());
+        }
+      } catch (e) {
+        Logger.log("Erro ao parsear resposta CREATE: " + e.toString());
+      }
+    }
+  } else {
+    Logger.log("Erro [" + payload.action + "] linha " + row + ": HTTP " + responseCode + " - " + responseBody);
   }
 }
 ```
 
 ## Como funciona
 
-1. Quando alguém edita a coluna **Status** (G) de uma linha e coloca "Bloqueado", "Ocupado" ou "Blocked"
-2. O Apps Script lê a **Data** (coluna A) e o **Horário** (coluna B) da mesma linha
-3. Envia um POST para o webhook do sistema com esses dados
-4. O sistema cria uma `availability_exception` do tipo `BLOCKED` para aquele horário
-5. O horário não aparecerá mais como disponível no WhatsApp
+### Ações suportadas
+
+| Edição na planilha | Ação enviada | O que acontece no sistema |
+|---|---|---|
+| Status → BLOQUEADO/OCUPADO/BLOCKED | `BLOCK` | Cria `availability_exception` (horário bloqueado no WhatsApp) |
+| Status → CANCELADO/CANCELLED | `CANCEL` | Cancela o agendamento (requer AppointmentId) |
+| Status → CONFIRMADO/CONFIRMED sem AppointmentId | `CREATE` | Cria novo agendamento (requer Telefone, Serviço) |
+| Mudança em Data (A) ou Horário (B) | `RESCHEDULE` | Remarca o agendamento (requer AppointmentId) |
+| Mudança em Áreas (F) | `UPDATE_AREAS` | Atualiza áreas e recalcula duração (requer AppointmentId) |
+
+### Colunas da planilha
+
+| Coluna | Campo | Editável | Descrição |
+|---|---|---|---|
+| A | Data | Sim | Data do agendamento (formato: DD/MM/AAAA ou AAAA-MM-DD) |
+| B | Horário | Sim | Horário de início (formato: HH:MM) |
+| C | Paciente | - | Nome do paciente |
+| D | Telefone | Sim | Telefone com DDD (ex: 5511999999999) |
+| E | Serviço | Sim | Nome do serviço (deve corresponder ao cadastrado) |
+| F | Áreas | Sim | Áreas separadas por vírgula (ex: "Rosto, Tórax") |
+| G | Status | Sim | CONFIRMADO, CANCELADO, BLOQUEADO |
+| H | Observações | - | Notas adicionais |
+| I | AppointmentId | Sistema | Preenchido automaticamente pelo sistema |
+| J | UltimaAtualização | Sistema | Timestamp da última sync |
+
+### Prevenção de loop
+
+- Edições nas colunas I e J (escritas pelo sistema) são ignoradas pelo trigger
+- O webhook instancia `AppointmentService(sheets_sync=None)`, impedindo que a ação do banco dispare outra escrita na planilha
 
 ## Observações
 
 - O token é um shared secret entre o Apps Script e a API. Configure o mesmo valor no SSM (`/${stage}/SHEETS_WEBHOOK_TOKEN`)
 - O trigger `onEdit` só funciona para edições manuais (não para edições via API)
 - Erros são logados no Apps Script (menu: Execuções)
+- Para criar agendamentos pela planilha, preencha Data, Horário, Telefone, Serviço e Áreas, depois mude o Status para CONFIRMADO

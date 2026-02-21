@@ -1,0 +1,851 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Google Sheets Integration",
+    "description": "API endpoints for bidirectional sync between the scheduler and Google Sheets. Includes bulk sync (DB → Sheet) and webhook actions (Sheet → DB).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "WEBHOOK_TOKEN",
+      "value": "YOUR_WEBHOOK_TOKEN_HERE",
+      "type": "string"
+    },
+    {
+      "key": "spreadsheetId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Bulk Sync",
+      "item": [
+        {
+          "name": "Bulk Sync (DB → Sheet)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has status SUCCESS\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has totalSynced\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"totalSynced\");",
+                  "    pm.expect(jsonData).to.have.property(\"monthsProcessed\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/sheets/sync",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "clinics",
+                "{{clinicId}}",
+                "sheets",
+                "sync"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Bulk Sync - Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"SUCCESS\",\"message\":\"Sync completo: 5 agendamentos em 2 mes(es)\",\"clinicId\":\"laser-beauty-sp-abc123\",\"totalSynced\":5,\"monthsProcessed\":2}"
+            },
+            {
+              "name": "Bulk Sync - Clinic Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Clinica nao encontrada\"}"
+            },
+            {
+              "name": "Bulk Sync - No Spreadsheet",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Clinica nao possui planilha configurada\"}"
+            },
+            {
+              "name": "Bulk Sync - Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Não autorizado\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook - BLOCK",
+      "item": [
+        {
+          "name": "Block Time Slot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has status SUCCESS\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has clinicId\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"clinicId\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheet_id\": \"{{spreadsheetId}}\",\n  \"action\": \"BLOCK\",\n  \"date\": \"2026-03-10\",\n  \"time\": \"14:00\",\n  \"end_time\": \"15:00\",\n  \"notes\": \"Bloqueado via planilha - teste\",\n  \"token\": \"{{WEBHOOK_TOKEN}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/sheets/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "sheets",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Block - Success",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"SUCCESS\",\"message\":\"Bloqueio criado com sucesso\",\"clinicId\":\"laser-beauty-sp-abc123\",\"date\":\"2026-03-10\",\"time\":\"14:00\"}"
+            },
+            {
+              "name": "Block - Invalid Token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Token invalido\"}"
+            },
+            {
+              "name": "Block - Clinic Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Clinica nao encontrada para esta planilha\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook - CREATE",
+      "item": [
+        {
+          "name": "Create Appointment from Sheet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has status SUCCESS\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has appointmentId\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"appointmentId\");",
+                  "    pm.collectionVariables.set(\"appointmentId\", jsonData.appointmentId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheet_id\": \"{{spreadsheetId}}\",\n  \"action\": \"CREATE\",\n  \"date\": \"2026-03-12\",\n  \"time\": \"10:00\",\n  \"phone\": \"5511999990000\",\n  \"service_name\": \"Laser\",\n  \"areas\": \"Rosto, Axilas\",\n  \"notes\": \"Agendamento criado via planilha\",\n  \"row_number\": 5,\n  \"sheet_name\": \"Mar 2026\",\n  \"token\": \"{{WEBHOOK_TOKEN}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/sheets/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "sheets",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Create - Success",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"SUCCESS\",\"message\":\"Agendamento criado com sucesso\",\"appointmentId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"clinicId\":\"laser-beauty-sp-abc123\",\"date\":\"2026-03-12\",\"time\":\"10:00\"}"
+            },
+            {
+              "name": "Create - Service Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Serviço 'Laser' nao encontrado\"}"
+            },
+            {
+              "name": "Create - Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Conflito de horário: já existe agendamento para 2026-03-12 10:00-10:30\"}"
+            },
+            {
+              "name": "Create - Missing Fields",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"CREATE requer: phone, service_name, date, time\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook - CANCEL",
+      "item": [
+        {
+          "name": "Cancel Appointment from Sheet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has status SUCCESS\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has appointmentId\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"appointmentId\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheet_id\": \"{{spreadsheetId}}\",\n  \"action\": \"CANCEL\",\n  \"appointment_id\": \"{{appointmentId}}\",\n  \"token\": \"{{WEBHOOK_TOKEN}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/sheets/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "sheets",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Cancel - Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"SUCCESS\",\"message\":\"Agendamento cancelado com sucesso\",\"appointmentId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\"}"
+            },
+            {
+              "name": "Cancel - Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Agendamento a1b2c3d4-e5f6-7890-abcd-ef1234567890 não encontrado ou já cancelado\"}"
+            },
+            {
+              "name": "Cancel - Missing appointment_id",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"CANCEL requer: appointment_id\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook - RESCHEDULE",
+      "item": [
+        {
+          "name": "Reschedule Appointment from Sheet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has status SUCCESS\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has new date and time\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"newDate\");",
+                  "    pm.expect(jsonData).to.have.property(\"newTime\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheet_id\": \"{{spreadsheetId}}\",\n  \"action\": \"RESCHEDULE\",\n  \"appointment_id\": \"{{appointmentId}}\",\n  \"date\": \"2026-03-14\",\n  \"time\": \"11:00\",\n  \"token\": \"{{WEBHOOK_TOKEN}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/sheets/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "sheets",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Reschedule - Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"SUCCESS\",\"message\":\"Agendamento remarcado com sucesso\",\"appointmentId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"newDate\":\"2026-03-14\",\"newTime\":\"11:00\"}"
+            },
+            {
+              "name": "Reschedule - Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Conflito de horário no novo slot: 2026-03-14 11:00-11:30\"}"
+            },
+            {
+              "name": "Reschedule - Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Agendamento a1b2c3d4-e5f6-7890-abcd-ef1234567890 não encontrado ou não confirmado\"}"
+            },
+            {
+              "name": "Reschedule - Missing Fields",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"RESCHEDULE requer: appointment_id, date, time\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook - UPDATE_AREAS",
+      "item": [
+        {
+          "name": "Update Areas from Sheet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has status SUCCESS\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"SUCCESS\");",
+                  "});",
+                  "",
+                  "pm.test(\"Response has totalDuration and newEndTime\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property(\"totalDuration\");",
+                  "    pm.expect(jsonData).to.have.property(\"newEndTime\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheet_id\": \"{{spreadsheetId}}\",\n  \"action\": \"UPDATE_AREAS\",\n  \"appointment_id\": \"{{appointmentId}}\",\n  \"areas\": \"Rosto, Tórax, Axilas\",\n  \"token\": \"{{WEBHOOK_TOKEN}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/sheets/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "sheets",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Update Areas - Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"SUCCESS\",\"message\":\"Areas atualizadas: Rosto, Tórax, Axilas\",\"appointmentId\":\"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\"totalDuration\":45,\"newEndTime\":\"11:45\"}"
+            },
+            {
+              "name": "Update Areas - Area Not Found",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Nenhuma area encontrada no banco\"}"
+            },
+            {
+              "name": "Update Areas - Appointment Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Agendamento a1b2c3d4-e5f6-7890-abcd-ef1234567890 nao encontrado\"}"
+            },
+            {
+              "name": "Update Areas - Missing Fields",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"UPDATE_AREAS requer: appointment_id, areas\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook - Error Cases",
+      "item": [
+        {
+          "name": "Invalid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test(\"Response has error message\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ERROR\");",
+                  "    pm.expect(jsonData.message).to.eql(\"Token invalido\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheet_id\": \"{{spreadsheetId}}\",\n  \"action\": \"BLOCK\",\n  \"date\": \"2026-03-10\",\n  \"time\": \"14:00\",\n  \"token\": \"invalid_token\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/sheets/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "sheets",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Invalid Token",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Token invalido\"}"
+            }
+          ]
+        },
+        {
+          "name": "Unsupported Action",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test(\"Response mentions unsupported action\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include(\"não suportada\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheet_id\": \"{{spreadsheetId}}\",\n  \"action\": \"INVALID_ACTION\",\n  \"date\": \"2026-03-10\",\n  \"time\": \"14:00\",\n  \"token\": \"{{WEBHOOK_TOKEN}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/sheets/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "sheets",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Unsupported Action",
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Ação não suportada: INVALID_ACTION. Suportadas: BLOCK, CANCEL, CREATE, RESCHEDULE, UPDATE_AREAS\"}"
+            }
+          ]
+        },
+        {
+          "name": "Spreadsheet Not Linked to Clinic",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test(\"Response mentions clinic not found\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include(\"Clinica nao encontrada\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"spreadsheet_id\": \"nonexistent_spreadsheet_id\",\n  \"action\": \"BLOCK\",\n  \"date\": \"2026-03-10\",\n  \"time\": \"14:00\",\n  \"token\": \"{{WEBHOOK_TOKEN}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/sheets/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "sheets",
+                "webhook"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Spreadsheet Not Linked",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\"status\":\"ERROR\",\"message\":\"Clinica nao encontrada para esta planilha\"}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

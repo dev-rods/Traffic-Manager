@@ -282,6 +282,80 @@ class SheetsSync:
             logger.warning(f"[SheetsSync] Erro ao sincronizar com Sheets (nao critico): {e}")
 
     # ------------------------------------------------------------------
+    # Bulk sync (DB → Sheet)
+    # ------------------------------------------------------------------
+
+    def bulk_sync_month(
+        self, spreadsheet_id: str, target_date: date, appointments: List[Dict[str, Any]]
+    ) -> int:
+        try:
+            service = self._get_sheets_service()
+            if not service:
+                return 0
+
+            sheet_name = self._ensure_month_tab(spreadsheet_id, target_date)
+
+            # Clear rows 2+ (preserve headers)
+            service.spreadsheets().values().clear(
+                spreadsheetId=spreadsheet_id,
+                range=f"{sheet_name}!A2:J",
+                body={},
+            ).execute()
+
+            if not appointments:
+                logger.info(f"[SheetsSync] bulk_sync_month: aba '{sheet_name}' limpa (0 appointments)")
+                return 0
+
+            # Sort by date ASC, time ASC
+            appointments.sort(key=lambda a: (str(a.get("appointment_date", "")), str(a.get("start_time", ""))))
+
+            rows = []
+            for appt in appointments:
+                rows.append([
+                    str(appt.get("appointment_date", "")),
+                    str(appt.get("start_time", "")),
+                    appt.get("patient_name", ""),
+                    appt.get("patient_phone", ""),
+                    appt.get("service_name", ""),
+                    appt.get("areas", ""),
+                    appt.get("status", ""),
+                    appt.get("notes", "") or "",
+                    str(appt.get("id", "")),
+                    datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                ])
+
+            row_count = len(rows)
+            service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=f"{sheet_name}!A2:J{row_count + 1}",
+                valueInputOption="RAW",
+                body={"values": rows},
+            ).execute()
+
+            logger.info(f"[SheetsSync] bulk_sync_month: {row_count} appointments escritos na aba '{sheet_name}'")
+            return row_count
+
+        except Exception as e:
+            logger.error(f"[SheetsSync] Erro no bulk_sync_month: {e}")
+            return 0
+
+    def update_cell(self, spreadsheet_id: str, sheet_name: str, row_number: int, column: str, value: str) -> None:
+        try:
+            service = self._get_sheets_service()
+            if not service:
+                return
+
+            range_str = f"{sheet_name}!{column}{row_number}"
+            service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=range_str,
+                valueInputOption="RAW",
+                body={"values": [[value]]},
+            ).execute()
+        except Exception as e:
+            logger.warning(f"[SheetsSync] Erro ao atualizar celula {column}{row_number}: {e}")
+
+    # ------------------------------------------------------------------
     # Block creation from sheet edits (bidirectional sync)
     # ------------------------------------------------------------------
 

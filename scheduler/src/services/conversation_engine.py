@@ -1080,6 +1080,19 @@ class ConversationEngine:
                     )
                     total_duration = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else 0
                     total_price = int(rows[0]["total_price_cents"]) if rows and rows[0]["total_price_cents"] else 0
+
+                    # Add duration/price for services without area pairs (no areas configured)
+                    paired_service_ids = {pair["service_id"] for pair in service_area_pairs}
+                    unpaired_service_ids = [sid for sid in selected_service_ids if sid not in paired_service_ids]
+                    if unpaired_service_ids:
+                        unpaired_placeholders = ", ".join(["%s"] * len(unpaired_service_ids))
+                        unpaired_rows = self.db.execute_query(
+                            f"SELECT duration_minutes, price_cents FROM scheduler.services WHERE id::text IN ({unpaired_placeholders}) AND active = TRUE",
+                            tuple(unpaired_service_ids),
+                        )
+                        for row in unpaired_rows:
+                            total_duration += int(row["duration_minutes"] or 0)
+                            total_price += int(row["price_cents"] or 0)
                 else:
                     services = self.db.execute_query(
                         f"SELECT id, duration_minutes, price_cents FROM scheduler.services WHERE id::text IN ({svc_placeholders}) AND active = TRUE",
@@ -1759,6 +1772,7 @@ class ConversationEngine:
         """Format price in cents to BRL string: 15000 -> 'R$ 150,00'"""
         if not price_cents:
             return ""
+        price_cents = int(price_cents)
         reais = price_cents // 100
         centavos = price_cents % 100
         return f"R$ {reais},{centavos:02d}"

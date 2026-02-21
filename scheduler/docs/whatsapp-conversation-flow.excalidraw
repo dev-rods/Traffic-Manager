@@ -1,0 +1,2866 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "AnHZe5d1DQ",
+      "type": "rectangle",
+      "x": 60,
+      "y": 40,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 371442,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "QY7t8aHGby",
+          "type": "text"
+        },
+        {
+          "id": "dGa1MxpSHg",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "QY7t8aHGby",
+      "type": "text",
+      "x": 90,
+      "y": 52,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 952272,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente envia saudação\n+ interesse em depilação laser (virilha)",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "AnHZe5d1DQ",
+      "originalText": "👤 PACIENTE\nPaciente envia saudação\n+ interesse em depilação laser (virilha)",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "DH6xVt8mlz",
+      "type": "rectangle",
+      "x": 60,
+      "y": 186,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#2f9e44",
+      "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 797285,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "x42DQadzbw",
+          "type": "text"
+        },
+        {
+          "id": "dGa1MxpSHg",
+          "type": "arrow"
+        },
+        {
+          "id": "gHd3qnVWAe",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "x42DQadzbw",
+      "type": "text",
+      "x": 90,
+      "y": 198,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 72460,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nClínica saúda\n+ pergunta como está",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "DH6xVt8mlz",
+      "originalText": "🏥 CLÍNICA\nClínica saúda\n+ pergunta como está",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "KKaGrXA4Dg",
+      "type": "rectangle",
+      "x": 60,
+      "y": 332,
+      "width": 380,
+      "height": 144,
+      "angle": 0,
+      "strokeColor": "#7048e8",
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 556835,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "h4MLAjkA8L",
+          "type": "text"
+        },
+        {
+          "id": "gHd3qnVWAe",
+          "type": "arrow"
+        },
+        {
+          "id": "hWH9rNnCbn",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "h4MLAjkA8L",
+      "type": "text",
+      "x": 90,
+      "y": 344,
+      "width": 320,
+      "height": 120,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 551250,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nInfo do Serviço:\nEquipamento (Soprano Ice Platinum)\nIntervalo ~30 dias, 3 datas/mês\nSessão avulsa apenas",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "KKaGrXA4Dg",
+      "originalText": "🏥 CLÍNICA\nInfo do Serviço:\nEquipamento (Soprano Ice Platinum)\nIntervalo ~30 dias, 3 datas/mês\nSessão avulsa apenas",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "dGkA0nzW79",
+      "type": "rectangle",
+      "x": 60,
+      "y": 526,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#e67700",
+      "backgroundColor": "#ffec99",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 987502,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "GjpJgfNuJp",
+          "type": "text"
+        },
+        {
+          "id": "hWH9rNnCbn",
+          "type": "arrow"
+        },
+        {
+          "id": "KSOyn2ICfW",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "GjpJgfNuJp",
+      "type": "text",
+      "x": 90,
+      "y": 538,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 647361,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nPergunta:\n\"Como você nos conheceu?\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "dGkA0nzW79",
+      "originalText": "🏥 CLÍNICA\nPergunta:\n\"Como você nos conheceu?\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "MffxJXEyDd",
+      "type": "rectangle",
+      "x": 60,
+      "y": 672,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 599057,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "RDPkDl6Df8",
+          "type": "text"
+        },
+        {
+          "id": "KSOyn2ICfW",
+          "type": "arrow"
+        },
+        {
+          "id": "YWLNVSHJTT",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "RDPkDl6Df8",
+      "type": "text",
+      "x": 90,
+      "y": 684,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 158958,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente pergunta\ndatas disponíveis",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "MffxJXEyDd",
+      "originalText": "👤 PACIENTE\nPaciente pergunta\ndatas disponíveis",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "heGUB4urWX",
+      "type": "rectangle",
+      "x": 60,
+      "y": 818,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 255452,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "GJMSn1sENk",
+          "type": "text"
+        },
+        {
+          "id": "YWLNVSHJTT",
+          "type": "arrow"
+        },
+        {
+          "id": "jD7UoEzBeo",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "GJMSn1sENk",
+      "type": "text",
+      "x": 90,
+      "y": 830,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 290984,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente responde origem:\n\"através de uma amiga\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "heGUB4urWX",
+      "originalText": "👤 PACIENTE\nPaciente responde origem:\n\"através de uma amiga\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "YQ34ElfC0g",
+      "type": "rectangle",
+      "x": 60,
+      "y": 964,
+      "width": 380,
+      "height": 120,
+      "angle": 0,
+      "strokeColor": "#7048e8",
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 333349,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "5uFh8pCcVJ",
+          "type": "text"
+        },
+        {
+          "id": "jD7UoEzBeo",
+          "type": "arrow"
+        },
+        {
+          "id": "QFGMcBHNWa",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "5uFh8pCcVJ",
+      "type": "text",
+      "x": 90,
+      "y": 976,
+      "width": 320,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 6176,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nClínica informa datas:\n25 e 26/02\n+ tabela de descontos progressivos",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "YQ34ElfC0g",
+      "originalText": "🏥 CLÍNICA\nClínica informa datas:\n25 e 26/02\n+ tabela de descontos progressivos",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "dufLUBzQzC",
+      "type": "rectangle",
+      "x": 60,
+      "y": 1134,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#e67700",
+      "backgroundColor": "#ffec99",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 858373,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "x41M7NR87k",
+          "type": "text"
+        },
+        {
+          "id": "QFGMcBHNWa",
+          "type": "arrow"
+        },
+        {
+          "id": "UKPUEGqxGP",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "x41M7NR87k",
+      "type": "text",
+      "x": 90,
+      "y": 1146,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 453179,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nPergunta:\n\"Quais partes do corpo?\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "dufLUBzQzC",
+      "originalText": "🏥 CLÍNICA\nPergunta:\n\"Quais partes do corpo?\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "WL0s16eCUu",
+      "type": "rectangle",
+      "x": 60,
+      "y": 1280,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 716398,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "DpyNIirjPy",
+          "type": "text"
+        },
+        {
+          "id": "UKPUEGqxGP",
+          "type": "arrow"
+        },
+        {
+          "id": "aJRc8QncGe",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "DpyNIirjPy",
+      "type": "text",
+      "x": 90,
+      "y": 1292,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 167118,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente seleciona área:\n\"virilha cavada\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "WL0s16eCUu",
+      "originalText": "👤 PACIENTE\nPaciente seleciona área:\n\"virilha cavada\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "GZBJSFMdJN",
+      "type": "rectangle",
+      "x": 60,
+      "y": 1426,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 667819,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "Y09ha8qiWH",
+          "type": "text"
+        },
+        {
+          "id": "aJRc8QncGe",
+          "type": "arrow"
+        },
+        {
+          "id": "ncfc2KQFtw",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "Y09ha8qiWH",
+      "type": "text",
+      "x": 90,
+      "y": 1438,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 574456,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente pergunta:\n\"Tem horário no sábado?\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "GZBJSFMdJN",
+      "originalText": "👤 PACIENTE\nPaciente pergunta:\n\"Tem horário no sábado?\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "GUryZ9A9cw",
+      "type": "rectangle",
+      "x": 60,
+      "y": 1572,
+      "width": 380,
+      "height": 120,
+      "angle": 0,
+      "strokeColor": "#7048e8",
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 580480,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "db6YgOOiwL",
+          "type": "text"
+        },
+        {
+          "id": "ncfc2KQFtw",
+          "type": "arrow"
+        },
+        {
+          "id": "eRpAVLqWUA",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "db6YgOOiwL",
+      "type": "text",
+      "x": 90,
+      "y": 1584,
+      "width": 320,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 111470,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nClínica explica:\nSó dias de semana\nHorário estendido 7h10–21h30",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "GUryZ9A9cw",
+      "originalText": "🏥 CLÍNICA\nClínica explica:\nSó dias de semana\nHorário estendido 7h10–21h30",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "ytRlgkmf6Z",
+      "type": "rectangle",
+      "x": 60,
+      "y": 1742,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#e67700",
+      "backgroundColor": "#ffec99",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 268753,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "LHqn5VrnrW",
+          "type": "text"
+        },
+        {
+          "id": "eRpAVLqWUA",
+          "type": "arrow"
+        },
+        {
+          "id": "f8kH1ksFu1",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "LHqn5VrnrW",
+      "type": "text",
+      "x": 90,
+      "y": 1754,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 264918,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nPergunta:\n\"Começo da manhã, almoço ou noite?\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "ytRlgkmf6Z",
+      "originalText": "🏥 CLÍNICA\nPergunta:\n\"Começo da manhã, almoço ou noite?\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "sLk02lJx15",
+      "type": "rectangle",
+      "x": 60,
+      "y": 1888,
+      "width": 380,
+      "height": 120,
+      "angle": 0,
+      "strokeColor": "#7048e8",
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 440575,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "iX7451RQ00",
+          "type": "text"
+        },
+        {
+          "id": "f8kH1ksFu1",
+          "type": "arrow"
+        },
+        {
+          "id": "wQtyZ6ef2d",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "iX7451RQ00",
+      "type": "text",
+      "x": 90,
+      "y": 1900,
+      "width": 320,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 887119,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nInfo duração sessão:\n~15min (normal)\n~40-45min (1ª sessão c/ anamnese)",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "sLk02lJx15",
+      "originalText": "🏥 CLÍNICA\nInfo duração sessão:\n~15min (normal)\n~40-45min (1ª sessão c/ anamnese)",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "OIGaDFhzzL",
+      "type": "rectangle",
+      "x": 60,
+      "y": 2058,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 921684,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "0NWbadzl4n",
+          "type": "text"
+        },
+        {
+          "id": "wQtyZ6ef2d",
+          "type": "arrow"
+        },
+        {
+          "id": "8FVD8Ys6Xr",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "0NWbadzl4n",
+      "type": "text",
+      "x": 90,
+      "y": 2070,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 39602,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente propõe:\n\"dia 25 às 15h20/15h30\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "OIGaDFhzzL",
+      "originalText": "👤 PACIENTE\nPaciente propõe:\n\"dia 25 às 15h20/15h30\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "6ycfu0aGo8",
+      "type": "rectangle",
+      "x": 60,
+      "y": 2204,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 86609,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "wqLzfhN13c",
+          "type": "text"
+        },
+        {
+          "id": "8FVD8Ys6Xr",
+          "type": "arrow"
+        },
+        {
+          "id": "r6XvHbFsG6",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "wqLzfhN13c",
+      "type": "text",
+      "x": 90,
+      "y": 2216,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 362901,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente pergunta:\n\"1ª sessão dura quanto?\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "6ycfu0aGo8",
+      "originalText": "👤 PACIENTE\nPaciente pergunta:\n\"1ª sessão dura quanto?\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "RMxc9wcgSC",
+      "type": "rectangle",
+      "x": 60,
+      "y": 2350,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#2f9e44",
+      "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 606268,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "wxx5o2wW18",
+          "type": "text"
+        },
+        {
+          "id": "r6XvHbFsG6",
+          "type": "arrow"
+        },
+        {
+          "id": "20L2lbWVeA",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "wxx5o2wW18",
+      "type": "text",
+      "x": 90,
+      "y": 2362,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 871992,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nClínica responde:\n\"40-45 minutos\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "RMxc9wcgSC",
+      "originalText": "🏥 CLÍNICA\nClínica responde:\n\"40-45 minutos\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "wpeQKuFjB2",
+      "type": "rectangle",
+      "x": 60,
+      "y": 2496,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1864ab",
+      "backgroundColor": "#74c0fc",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 496762,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "6grNABdrge",
+          "type": "text"
+        },
+        {
+          "id": "20L2lbWVeA",
+          "type": "arrow"
+        },
+        {
+          "id": "EGMx3sCvsr",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "6grNABdrge",
+      "type": "text",
+      "x": 90,
+      "y": 2508,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 578191,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente confirma:\n\"podemos agendar pro dia 25?\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "wpeQKuFjB2",
+      "originalText": "👤 PACIENTE\nPaciente confirma:\n\"podemos agendar pro dia 25?\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "Miz7b4rYtY",
+      "type": "rectangle",
+      "x": 60,
+      "y": 2642,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#7048e8",
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 283271,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "rCQOW5jiCz",
+          "type": "text"
+        },
+        {
+          "id": "EGMx3sCvsr",
+          "type": "arrow"
+        },
+        {
+          "id": "21kehXwBH8",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "rCQOW5jiCz",
+      "type": "text",
+      "x": 90,
+      "y": 2654,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 478217,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nClínica lista horários\ndisponíveis (25 e 26/02)",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "Miz7b4rYtY",
+      "originalText": "🏥 CLÍNICA\nClínica lista horários\ndisponíveis (25 e 26/02)",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "eLs4V950ZA",
+      "type": "rectangle",
+      "x": 60,
+      "y": 2788,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1864ab",
+      "backgroundColor": "#74c0fc",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 566608,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "3YyV8KeKVa",
+          "type": "text"
+        },
+        {
+          "id": "21kehXwBH8",
+          "type": "arrow"
+        },
+        {
+          "id": "G4Z8D51fZA",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "3YyV8KeKVa",
+      "type": "text",
+      "x": 90,
+      "y": 2800,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 318967,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "👤 PACIENTE\nPaciente escolhe:\n\"quarta às 16h\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "eLs4V950ZA",
+      "originalText": "👤 PACIENTE\nPaciente escolhe:\n\"quarta às 16h\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "VJZUUgwIAx",
+      "type": "rectangle",
+      "x": 60,
+      "y": 2934,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#1b7a35",
+      "backgroundColor": "#69db7c",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 165579,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "7e2fV6p0YO",
+          "type": "text"
+        },
+        {
+          "id": "G4Z8D51fZA",
+          "type": "arrow"
+        },
+        {
+          "id": "9zBJGGUnGK",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "7e2fV6p0YO",
+      "type": "text",
+      "x": 90,
+      "y": 2946,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 889913,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nClínica confirma:\n\"Agendado certinho!\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "VJZUUgwIAx",
+      "originalText": "🏥 CLÍNICA\nClínica confirma:\n\"Agendado certinho!\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "hYnE0XMZaD",
+      "type": "rectangle",
+      "x": 60,
+      "y": 3080,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#7048e8",
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 772712,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "G6osSOX0rp",
+          "type": "text"
+        },
+        {
+          "id": "9zBJGGUnGK",
+          "type": "arrow"
+        },
+        {
+          "id": "tnGkETnQW1",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "G6osSOX0rp",
+      "type": "text",
+      "x": 90,
+      "y": 3092,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 624251,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nClínica envia cuidados\npré/pós sessão + contraindicações",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "hYnE0XMZaD",
+      "originalText": "🏥 CLÍNICA\nClínica envia cuidados\npré/pós sessão + contraindicações",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "3g0bY5rIoT",
+      "type": "rectangle",
+      "x": 60,
+      "y": 3226,
+      "width": 380,
+      "height": 96,
+      "angle": 0,
+      "strokeColor": "#2f9e44",
+      "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 502087,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "SpBW5OmphJ",
+          "type": "text"
+        },
+        {
+          "id": "tnGkETnQW1",
+          "type": "arrow"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "SpBW5OmphJ",
+      "type": "text",
+      "x": 90,
+      "y": 3238,
+      "width": 320,
+      "height": 72,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 102201,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🏥 CLÍNICA\nEncerramento:\n\"Obrigada pela confiança!\"",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "3g0bY5rIoT",
+      "originalText": "🏥 CLÍNICA\nEncerramento:\n\"Obrigada pela confiança!\"",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "dGa1MxpSHg",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 136,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 700471,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "AnHZe5d1DQ",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "DH6xVt8mlz",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "gHd3qnVWAe",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 282,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 250799,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "DH6xVt8mlz",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "KKaGrXA4Dg",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "hWH9rNnCbn",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 476,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 88607,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "KKaGrXA4Dg",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "dGkA0nzW79",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "KSOyn2ICfW",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 622,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 851560,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "dGkA0nzW79",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "MffxJXEyDd",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "YWLNVSHJTT",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 768,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 303202,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "MffxJXEyDd",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "heGUB4urWX",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "jD7UoEzBeo",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 914,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 508980,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "heGUB4urWX",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "YQ34ElfC0g",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "QFGMcBHNWa",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 1084,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 116553,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "YQ34ElfC0g",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "dufLUBzQzC",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "UKPUEGqxGP",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 1230,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 802127,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "dufLUBzQzC",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "WL0s16eCUu",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "aJRc8QncGe",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 1376,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 385889,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "WL0s16eCUu",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "GZBJSFMdJN",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "ncfc2KQFtw",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 1522,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 327174,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "GZBJSFMdJN",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "GUryZ9A9cw",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "eRpAVLqWUA",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 1692,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 528935,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "GUryZ9A9cw",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "ytRlgkmf6Z",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "f8kH1ksFu1",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 1838,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 651013,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "ytRlgkmf6Z",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "sLk02lJx15",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "wQtyZ6ef2d",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 2008,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 390719,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "sLk02lJx15",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "OIGaDFhzzL",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "8FVD8Ys6Xr",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 2154,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 197884,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "OIGaDFhzzL",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "6ycfu0aGo8",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "r6XvHbFsG6",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 2300,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 217062,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "6ycfu0aGo8",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "RMxc9wcgSC",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "20L2lbWVeA",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 2446,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 571505,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "RMxc9wcgSC",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "wpeQKuFjB2",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "EGMx3sCvsr",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 2592,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 828115,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "wpeQKuFjB2",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "Miz7b4rYtY",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "21kehXwBH8",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 2738,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 605305,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "Miz7b4rYtY",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "eLs4V950ZA",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "G4Z8D51fZA",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 2884,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 195991,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "eLs4V950ZA",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "VJZUUgwIAx",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "9zBJGGUnGK",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 3030,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 896461,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "VJZUUgwIAx",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "hYnE0XMZaD",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "tnGkETnQW1",
+      "type": "arrow",
+      "x": 250.0,
+      "y": 3176,
+      "width": 0,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#495057",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 548394,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          50
+        ]
+      ],
+      "lastCommittedPoint": null,
+      "startBinding": {
+        "elementId": "hYnE0XMZaD",
+        "focus": 0,
+        "gap": 1
+      },
+      "endBinding": {
+        "elementId": "3g0bY5rIoT",
+        "focus": 0,
+        "gap": 1
+      },
+      "startArrowhead": null,
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "UUC5vSXzPY",
+      "type": "rectangle",
+      "x": 520,
+      "y": 40,
+      "width": 300,
+      "height": 40,
+      "angle": 0,
+      "strokeColor": "#1971c2",
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 656839,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "HImJ2kPy4b",
+          "type": "text"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "HImJ2kPy4b",
+      "type": "text",
+      "x": 530,
+      "y": 48,
+      "width": 280,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 462873,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🔵 Azul = Paciente (ação)",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "UUC5vSXzPY",
+      "originalText": "🔵 Azul = Paciente (ação)",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "l9Q89Kntyx",
+      "type": "rectangle",
+      "x": 520,
+      "y": 95,
+      "width": 300,
+      "height": 40,
+      "angle": 0,
+      "strokeColor": "#e67700",
+      "backgroundColor": "#ffec99",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 945112,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "dKMrAgVGq5",
+          "type": "text"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "dKMrAgVGq5",
+      "type": "text",
+      "x": 530,
+      "y": 103,
+      "width": 280,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 568888,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🟡 Amarelo = Clínica (pergunta)",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "l9Q89Kntyx",
+      "originalText": "🟡 Amarelo = Clínica (pergunta)",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "5kg1H3Zo2x",
+      "type": "rectangle",
+      "x": 520,
+      "y": 150,
+      "width": 300,
+      "height": 40,
+      "angle": 0,
+      "strokeColor": "#7048e8",
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 480838,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "86cuDXNAOo",
+          "type": "text"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "86cuDXNAOo",
+      "type": "text",
+      "x": 530,
+      "y": 158,
+      "width": 280,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 363548,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🟣 Roxo = Clínica (informação)",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "5kg1H3Zo2x",
+      "originalText": "🟣 Roxo = Clínica (informação)",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "V4LTBihKfo",
+      "type": "rectangle",
+      "x": 520,
+      "y": 205,
+      "width": 300,
+      "height": 40,
+      "angle": 0,
+      "strokeColor": "#2f9e44",
+      "backgroundColor": "#b2f2bb",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 242942,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "QfSUEGOJz0",
+          "type": "text"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "QfSUEGOJz0",
+      "type": "text",
+      "x": 530,
+      "y": 213,
+      "width": 280,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 715062,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🟢 Verde = Clínica (ação)",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "V4LTBihKfo",
+      "originalText": "🟢 Verde = Clínica (ação)",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "fDzXPSVZLP",
+      "type": "rectangle",
+      "x": 520,
+      "y": 260,
+      "width": 300,
+      "height": 40,
+      "angle": 0,
+      "strokeColor": "#1b7a35",
+      "backgroundColor": "#69db7c",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 72517,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "TuNWGbIAY1",
+          "type": "text"
+        }
+      ],
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "TuNWGbIAY1",
+      "type": "text",
+      "x": 530,
+      "y": 268,
+      "width": 280,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 508191,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "🟢 Verde escuro = Confirmação",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "fDzXPSVZLP",
+      "originalText": "🟢 Verde escuro = Confirmação",
+      "lineHeight": 1.25
+    },
+    {
+      "id": "c2l0E867g1",
+      "type": "text",
+      "x": 60,
+      "y": -10,
+      "width": 380,
+      "height": 36,
+      "angle": 0,
+      "strokeColor": "#1e1e1e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": null,
+      "seed": 741805,
+      "version": 1,
+      "isDeleted": false,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "text": "Fluxo Real: Conversa WhatsApp (Depilação Laser)",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "containerId": null,
+      "originalText": "Fluxo Real: Conversa WhatsApp (Depilação Laser)",
+      "lineHeight": 1.25
+    }
+  ],
+  "appState": {
+    "gridSize": null,
+    "viewBackgroundColor": "#ffffff"
+  },
+  "files": {}
+}
