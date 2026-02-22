@@ -15,7 +15,8 @@ MONTH_NAMES_PT = {
 
 SHEET_HEADERS = [
     "Data", "Horário", "Paciente", "Telefone", "Serviço",
-    "Áreas", "Status", "Observações", "AppointmentId", "UltimaAtualização"
+    "Áreas", "Desconto", "Valor Original", "Valor Final",
+    "Status", "Observações", "AppointmentId", "UltimaAtualização"
 ]
 
 SCOPES = [
@@ -176,7 +177,7 @@ class SheetsSync:
 
             service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A1:J1",
+                range=f"{sheet_name}!A1:M1",
                 valueInputOption="RAW",
                 body={"values": [SHEET_HEADERS]},
             ).execute()
@@ -252,6 +253,14 @@ class SheetsSync:
                 if services:
                     service_name = services[0].get("name", "")
 
+            # Discount info
+            discount_pct = appointment.get("discount_pct", 0)
+            original_price = appointment.get("original_price_cents")
+            final_price = appointment.get("final_price_cents")
+            discount_str = f"{discount_pct}%" if discount_pct else ""
+            original_str = f"R$ {original_price / 100:.2f}" if original_price else ""
+            final_str = f"R$ {final_price / 100:.2f}" if final_price else ""
+
             row_values = [
                 str(appointment.get("appointment_date", "")),
                 str(appointment.get("start_time", "")),
@@ -259,6 +268,9 @@ class SheetsSync:
                 patient_phone,
                 service_name,
                 areas_display,
+                discount_str,
+                original_str,
+                final_str,
                 appointment.get("status", ""),
                 appointment.get("notes", ""),
                 appointment_id,
@@ -298,7 +310,7 @@ class SheetsSync:
             # Clear rows 2+ (preserve headers)
             service.spreadsheets().values().clear(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A2:J",
+                range=f"{sheet_name}!A2:M",
                 body={},
             ).execute()
 
@@ -311,6 +323,9 @@ class SheetsSync:
 
             rows = []
             for appt in appointments:
+                discount_pct = appt.get("discount_pct", 0)
+                original_price = appt.get("original_price_cents")
+                final_price = appt.get("final_price_cents")
                 rows.append([
                     str(appt.get("appointment_date", "")),
                     str(appt.get("start_time", "")),
@@ -318,6 +333,9 @@ class SheetsSync:
                     appt.get("patient_phone", ""),
                     appt.get("service_name", ""),
                     appt.get("areas", ""),
+                    f"{discount_pct}%" if discount_pct else "",
+                    f"R$ {original_price / 100:.2f}" if original_price else "",
+                    f"R$ {final_price / 100:.2f}" if final_price else "",
                     appt.get("status", ""),
                     appt.get("notes", "") or "",
                     str(appt.get("id", "")),
@@ -327,7 +345,7 @@ class SheetsSync:
             row_count = len(rows)
             service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A2:J{row_count + 1}",
+                range=f"{sheet_name}!A2:M{row_count + 1}",
                 valueInputOption="RAW",
                 body={"values": rows},
             ).execute()
@@ -390,8 +408,8 @@ class SheetsSync:
             if not service:
                 return None
 
-            # AppointmentId is in column I (index 9)
-            range_str = f"{sheet_name}!I:I"
+            # AppointmentId is in column L (index 12)
+            range_str = f"{sheet_name}!L:L"
             result = service.spreadsheets().values().get(
                 spreadsheetId=spreadsheet_id,
                 range=range_str,
@@ -413,7 +431,7 @@ class SheetsSync:
             if not service:
                 return
 
-            range_str = f"{sheet_name}!A:J"
+            range_str = f"{sheet_name}!A:M"
             body = {"values": [values]}
 
             service.spreadsheets().values().append(
@@ -432,7 +450,7 @@ class SheetsSync:
             if not service:
                 return
 
-            range_str = f"{sheet_name}!A{row_number}:J{row_number}"
+            range_str = f"{sheet_name}!A{row_number}:M{row_number}"
             body = {"values": [values]}
 
             service.spreadsheets().values().update(

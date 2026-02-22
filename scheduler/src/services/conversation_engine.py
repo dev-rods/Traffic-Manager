@@ -139,10 +139,12 @@ STATE_CONFIG = {
         "template_key": "CONFIRM_AREAS",
         "buttons": [
             {"id": "confirm_areas", "label": "Confirmar"},
+            {"id": "human", "label": "Falar com atendente"},
             {"id": "back", "label": "Voltar"},
         ],
         "transitions": {
             "confirm_areas": ConversationState.AVAILABLE_DAYS,
+            "human": ConversationState.HUMAN_HANDOFF,
         },
         "fallback": ConversationState.UNRECOGNIZED,
         "previous": ConversationState.SELECT_AREAS,
@@ -186,6 +188,7 @@ STATE_CONFIG = {
             "farewell": ConversationState.FAREWELL,
             "main_menu": ConversationState.MAIN_MENU,
             "human": ConversationState.HUMAN_HANDOFF,
+            "confirm_read": ConversationState.FAREWELL,
         },
         "fallback": ConversationState.MAIN_MENU,
         "previous": None,
@@ -351,6 +354,8 @@ FLOW_SESSION_KEYS = [
     "cancel_appointment_id", "_appointments_cache", "_cancel_appointments_cache",
     "_available_services", "_services_input",
     "_available_areas", "_areas_input",
+    "discount_pct", "discount_reason", "original_price_cents", "discounted_price_cents",
+    "_is_first_session", "_skipped_services", "_welcome_intro", "_prepend_message",
 ]
 
 
@@ -415,6 +420,10 @@ class ConversationEngine:
             if current_state == ConversationState.AVAILABLE_DAYS and session.pop("_skipped_areas", False):
                 next_state = ConversationState.CONFIRM_SERVICES
                 logger.info("[ConversationEngine] Back navigation: skipped areas, redirecting to CONFIRM_SERVICES")
+            # When single service was auto-selected, back from SELECT_AREAS should go to SCHEDULE_MENU
+            if current_state == ConversationState.SELECT_AREAS and session.pop("_skipped_services", False):
+                next_state = ConversationState.SCHEDULE_MENU
+                logger.info("[ConversationEngine] Back navigation: skipped services, redirecting to SCHEDULE_MENU")
             # Clear service selection when navigating back from or through SELECT_SERVICES
             if current_state == ConversationState.SELECT_SERVICES or next_state == ConversationState.SELECT_SERVICES:
                 session.pop("selected_service_ids", None)
@@ -638,23 +647,27 @@ class ConversationEngine:
                 template_vars, override_content = self._on_enter_welcome(clinic_id, phone, session)
                 # Always land on MAIN_MENU so buttons are included
                 session["state"] = ConversationState.MAIN_MENU.value
+                # Store welcome intro for _build_messages to prepend as separate message
+                welcome_intro = session.pop("_welcome_intro", "")
+                if welcome_intro:
+                    session["_prepend_message"] = welcome_intro
 
             elif state == ConversationState.PRICE_TABLE:
                 template_vars, override_content = self._on_enter_price_table(clinic_id)
 
             elif state == ConversationState.SELECT_SERVICES:
-                template_vars, override_content, dynamic_buttons = self._on_enter_select_services(clinic_id, session)
+                template_vars, override_content, dynamic_buttons = self._on_enter_select_services(clinic_id, phone, session)
 
             elif state == ConversationState.CONFIRM_SERVICES:
                 template_vars, override_content = self._on_enter_confirm_services(clinic_id, session)
 
             elif state == ConversationState.SELECT_AREAS:
-                result = self._on_enter_select_areas(clinic_id, session)
+                result = self._on_enter_select_areas(clinic_id, phone, session)
                 if result is None:
                     # No areas configured — fall through to AVAILABLE_DAYS
                     session["state"] = ConversationState.AVAILABLE_DAYS.value
                     session["_skipped_areas"] = True
-                    template_vars, dynamic_buttons = self._on_enter_available_days(clinic_id, session)
+                    template_vars, dynamic_buttons = self._on_enter_available_days(clinic_id, phone, session)
                 else:
                     template_vars, override_content, dynamic_buttons = result
 
@@ -662,7 +675,7 @@ class ConversationEngine:
                 template_vars, override_content = self._on_enter_confirm_areas(clinic_id, session)
 
             elif state == ConversationState.AVAILABLE_DAYS:
-                template_vars, dynamic_buttons = self._on_enter_available_days(clinic_id, session)
+                template_vars, dynamic_buttons = self._on_enter_available_days(clinic_id, phone, session)
 
             elif state == ConversationState.SELECT_TIME:
                 template_vars, dynamic_buttons = self._on_enter_select_time(clinic_id, session)
@@ -672,6 +685,9 @@ class ConversationEngine:
 
             elif state == ConversationState.BOOKED:
                 template_vars, override_content = self._on_enter_booked(clinic_id, phone, session)
+                # Pick up dynamic buttons set by _on_enter_booked (recommendations confirmation)
+                if session.get("dynamic_buttons"):
+                    dynamic_buttons = session["dynamic_buttons"]
 
             elif state == ConversationState.RESCHEDULE_LOOKUP:
                 template_vars, dynamic_buttons, override_content = self._on_enter_reschedule_lookup(
@@ -753,6 +769,8 @@ class ConversationEngine:
     def _on_enter_welcome(self, clinic_id: str, phone: str, session: dict) -> tuple:
         clinic = self._get_clinic(clinic_id)
         clinic_name = clinic.get("name", "") if clinic else ""
+        address = clinic.get("address", "") if clinic else ""
+        welcome_intro = clinic.get("welcome_intro_message", "") if clinic else ""
         logger.info(f"[ConversationEngine] _on_enter_welcome: clinic='{clinic_name}' phone={phone}")
 
         patients = self.db.execute_query(
@@ -767,12 +785,16 @@ class ConversationEngine:
             patient_name = patients[0]["name"]
             session["patient_name"] = patient_name
             template_key = "WELCOME_RETURNING"
-            variables = {"patient_name": patient_name, "clinic_name": clinic_name, "bem_vindx": bem_vindx, "Bem_vindx": Bem_vindx}
+            variables = {"patient_name": patient_name, "clinic_name": clinic_name, "bem_vindx": bem_vindx, "Bem_vindx": Bem_vindx, "address": address}
             logger.info(f"[ConversationEngine] _on_enter_welcome: returning patient='{patient_name}' gender={gender}")
         else:
             template_key = "WELCOME_NEW"
-            variables = {"clinic_name": clinic_name, "bem_vindx": bem_vindx, "Bem_vindx": Bem_vindx}
+            variables = {"clinic_name": clinic_name, "bem_vindx": bem_vindx, "Bem_vindx": Bem_vindx, "address": address}
             logger.info(f"[ConversationEngine] _on_enter_welcome: new patient (no record found)")
+
+        # Store welcome intro for sending as separate message before menu
+        if welcome_intro:
+            session["_welcome_intro"] = welcome_intro
 
         content = self.template_service.get_and_render(clinic_id, template_key, variables)
         return variables, content
@@ -827,14 +849,10 @@ class ConversationEngine:
             if svc["areas"]:
                 for area in svc["areas"]:
                     price_str = self._format_price_brl(area["price"]) if area["price"] else "Consultar"
-                    dur = area["duration"]
-                    dur_str = f"{dur}min" if dur else ""
-                    lines.append(f"  • {area['name']}: {price_str} ({dur_str})")
+                    lines.append(f"  • {area['name']}: {price_str}")
             else:
                 price_str = self._format_price_brl(svc["base_price"]) if svc["base_price"] else "Consultar"
-                dur = svc["base_duration"]
-                dur_str = f" ({dur}min)" if dur else ""
-                lines.append(f"  {price_str}{dur_str}")
+                lines.append(f"  {price_str}")
             lines.append("")  # blank line between services
 
         price_table = "\n".join(lines).rstrip() if lines else "Nenhum serviço cadastrado."
@@ -842,7 +860,7 @@ class ConversationEngine:
         content = self.template_service.get_and_render(clinic_id, "PRICE_TABLE", variables)
         return variables, content
 
-    def _on_enter_select_services(self, clinic_id: str, session: dict) -> tuple:
+    def _on_enter_select_services(self, clinic_id: str, phone: str, session: dict) -> tuple:
         # Fetch all active services
         services = self.db.execute_query(
             "SELECT id, name, duration_minutes, price_cents FROM scheduler.services WHERE clinic_id = %s AND active = TRUE ORDER BY name",
@@ -865,12 +883,28 @@ class ConversationEngine:
             for s in services
         ]
 
-        # Build numbered list for the user
+        # Single service: auto-select and skip to areas
+        if len(services) == 1:
+            svc = services[0]
+            session["selected_service_ids"] = [str(svc["id"])]
+            session["selected_services_display"] = svc["name"]
+            session["_skipped_services"] = True
+            logger.info(f"[ConversationEngine] _on_enter_select_services: single service '{svc['name']}' -> auto-selecting")
+            # Redirect to SELECT_AREAS
+            session["state"] = ConversationState.SELECT_AREAS.value
+            result = self._on_enter_select_areas(clinic_id, phone, session)
+            if result is None:
+                # No areas -> skip to AVAILABLE_DAYS
+                session["state"] = ConversationState.AVAILABLE_DAYS.value
+                session["_skipped_areas"] = True
+                tv, db = self._on_enter_available_days(clinic_id, phone, session)
+                return tv, None, db
+            return result
+
+        # Build numbered list for the user (without price)
         lines = []
         for i, svc in enumerate(services, 1):
-            price = svc.get("price_cents", 0)
-            price_str = f" - R${price / 100:.2f}" if price else ""
-            lines.append(f"{i} - {svc['name']}{price_str}")
+            lines.append(f"{i} - {svc['name']}")
 
         services_list = "\n".join(lines)
         content = f"Selecione os serviços (digite os números separados por vírgula):\n\n{services_list}"
@@ -911,11 +945,9 @@ class ConversationEngine:
             session["state"] = ConversationState.SELECT_SERVICES.value
             lines = []
             for i, svc in enumerate(available_services, 1):
-                price = svc.get("price_cents", 0)
-                price_str = f" - R${price / 100:.2f}" if price else ""
-                lines.append(f"{i} - {svc['name']}{price_str}")
+                lines.append(f"{i} - {svc['name']}")
             services_list = "\n".join(lines)
-            content = f"Nenhum serviço válido selecionado. Tente novamente.\n\n{services_list}"
+            content = f"Não entendi sua seleção. Por favor, digite somente os *números* dos serviços separados por vírgula.\n\n{services_list}"
             back_button = [{"id": "back", "label": "Voltar"}]
             session["dynamic_buttons"] = back_button
             return {}, content
@@ -930,10 +962,21 @@ class ConversationEngine:
         return {}, content
 
     @staticmethod
-    def _build_areas_list(available_areas: list, multi_service: bool) -> str:
-        """Build the numbered areas list, grouped by service when multi_service."""
+    def _build_areas_list(available_areas: list, multi_service: bool, price_map: dict = None) -> str:
+        """Build the numbered areas list with prices, grouped by service when multi_service."""
+        def format_area(i, a):
+            price_str = ""
+            if price_map:
+                key = (a.get("service_id", ""), a["id"])
+                price_cents = price_map.get(key)
+                if price_cents:
+                    reais = int(price_cents) // 100
+                    centavos = int(price_cents) % 100
+                    price_str = f" - R$ {reais},{centavos:02d}"
+            return f"{i} - {a['name']}{price_str}"
+
         if not multi_service:
-            return "\n".join(f"{i} - {a['name']}" for i, a in enumerate(available_areas, 1))
+            return "\n".join(format_area(i, a) for i, a in enumerate(available_areas, 1))
 
         lines = []
         current_service = None
@@ -944,21 +987,66 @@ class ConversationEngine:
                     lines.append("")  # blank line between groups
                 lines.append(f"📌 {svc}:")
                 current_service = svc
-            lines.append(f"{i} - {area['name']}")
+            lines.append(format_area(i, area))
         return "\n".join(lines)
 
-    def _on_enter_select_areas(self, clinic_id: str, session: dict) -> tuple:
+    def _get_discount_rules(self, clinic_id: str) -> Optional[dict]:
+        """Fetch active discount rules for a clinic. Returns None if no rules configured."""
+        rows = self.db.execute_query(
+            "SELECT * FROM scheduler.discount_rules WHERE clinic_id = %s AND is_active = TRUE",
+            (clinic_id,),
+        )
+        return rows[0] if rows else None
+
+    def _is_first_session(self, clinic_id: str, phone: str) -> bool:
+        """Check if patient has zero CONFIRMED appointments in this clinic."""
+        rows = self.db.execute_query(
+            """SELECT COUNT(*) as cnt FROM scheduler.appointments a
+               JOIN scheduler.patients p ON a.patient_id = p.id
+               WHERE a.clinic_id = %s AND p.phone = %s AND a.status = 'CONFIRMED'""",
+            (clinic_id, phone),
+        )
+        return int(rows[0]["cnt"]) == 0 if rows else True
+
+    def _build_discount_info_message(self, rules: dict, is_first: bool) -> str:
+        """Build the discount informational message shown before area selection."""
+        if is_first:
+            pct = rules["first_session_discount_pct"]
+            return (
+                f"\U0001f389 *Desconto especial de primeira sessão!*\n\n"
+                f"Por ser sua primeira vez, você tem *{pct}% de desconto* "
+                f"em qualquer combinação de áreas. Aproveite! \u2728"
+            )
+
+        t2_min = rules["tier_2_min_areas"]
+        t2_max = rules["tier_2_max_areas"]
+        t2_pct = rules["tier_2_discount_pct"]
+        t3_min = rules["tier_3_min_areas"]
+        t3_pct = rules["tier_3_discount_pct"]
+
+        return (
+            f"\u2705 *Descontos progressivos* (válidos para áreas realizadas no mesmo dia):\n"
+            f"• 1 área: valor de tabela\n"
+            f"• {t2_min} a {t2_max} áreas: {t2_pct}% de desconto\n"
+            f"• {t3_min} ou mais áreas: {t3_pct}% de desconto\n\n"
+            f"\U0001f50e Como contar as áreas: cada item/linha da tabela = 1 área.\n\n"
+            f"Exemplos: buço = 1 área | rosto completo = 1 área | 1/2 perna = 1 área | perna completa = 1 área.\n"
+            f"Então: buço + perna completa = 2 áreas ({t2_pct}%)"
+        )
+
+    def _on_enter_select_areas(self, clinic_id: str, phone: str, session: dict) -> tuple:
         selected_service_ids = session.get("selected_service_ids", [])
         logger.info(f"[ConversationEngine] _on_enter_select_areas: service_ids={selected_service_ids}")
         if not selected_service_ids:
             logger.warning("[ConversationEngine] _on_enter_select_areas: no services in session")
             return {}, "Nenhum serviço selecionado.", None
 
-        # Fetch areas for all selected services (JOIN with areas table)
+        # Fetch areas for all selected services (JOIN with areas table, include price)
         placeholders = ", ".join(["%s"] * len(selected_service_ids))
         areas = self.db.execute_query(
             f"""
-            SELECT a.id, a.name, sa.service_id, s.name as service_name
+            SELECT a.id, a.name, sa.service_id, s.name as service_name,
+                   COALESCE(sa.price_cents, s.price_cents) as price_cents
             FROM scheduler.service_areas sa
             JOIN scheduler.areas a ON sa.area_id = a.id
             JOIN scheduler.services s ON sa.service_id = s.id
@@ -977,9 +1065,10 @@ class ConversationEngine:
 
         logger.info(f"[ConversationEngine] _on_enter_select_areas: {len(areas)} areas found")
 
-        # Cache areas for later use in CONFIRM_AREAS (includes service_id for pair tracking)
+        # Cache areas for later use in CONFIRM_AREAS (includes service_id for pair tracking and price)
         session["_available_areas"] = [
-            {"id": str(a["id"]), "name": a["name"], "service_id": str(a["service_id"]), "service_name": a.get("service_name", "")}
+            {"id": str(a["id"]), "name": a["name"], "service_id": str(a["service_id"]),
+             "service_name": a.get("service_name", ""), "price_cents": a.get("price_cents")}
             for a in areas
         ]
 
@@ -987,10 +1076,24 @@ class ConversationEngine:
         service_names = list(dict.fromkeys(a.get("service_name", "") for a in areas))
         multi_service = len(service_names) > 1
 
-        areas_list = self._build_areas_list(session["_available_areas"], multi_service)
-        content = f"Selecione as áreas de tratamento (digite os números separados por vírgula):\n\n{areas_list}"
+        # Build price map for area display
+        price_map = {(str(a["service_id"]), str(a["id"])): a.get("price_cents") for a in areas}
+        areas_list = self._build_areas_list(session["_available_areas"], multi_service, price_map)
 
-        back_button = [{"id": "back", "label": "Voltar"}]
+        # Build discount info message (if rules configured for this clinic)
+        discount_msg = ""
+        rules = self._get_discount_rules(clinic_id)
+        if rules:
+            is_first = self._is_first_session(clinic_id, phone)
+            session["_is_first_session"] = is_first
+            discount_msg = self._build_discount_info_message(rules, is_first) + "\n\n"
+
+        content = f"{discount_msg}Selecione as áreas de tratamento (digite os números separados por vírgula):\n\n{areas_list}"
+
+        back_button = [
+            {"id": "human", "label": "Falar com atendente"},
+            {"id": "back", "label": "Voltar"},
+        ]
         session["dynamic_buttons"] = back_button
         return {}, content, back_button
 
@@ -1035,9 +1138,13 @@ class ConversationEngine:
             session["state"] = ConversationState.SELECT_AREAS.value
             service_names = list(dict.fromkeys(a.get("service_name", "") for a in available_areas))
             multi_service = len(service_names) > 1
-            areas_list = self._build_areas_list(available_areas, multi_service)
-            content = f"Nenhuma área válida selecionada. Tente novamente.\n\n{areas_list}"
-            back_button = [{"id": "back", "label": "Voltar"}]
+            price_map = {(a["service_id"], a["id"]): a.get("price_cents") for a in available_areas}
+            areas_list = self._build_areas_list(available_areas, multi_service, price_map)
+            content = f"Não entendi sua seleção. Por favor, digite somente os *números* das áreas separados por vírgula.\n\n{areas_list}"
+            back_button = [
+                {"id": "human", "label": "Falar com atendente"},
+                {"id": "back", "label": "Voltar"},
+            ]
             session["dynamic_buttons"] = back_button
             return {}, content
 
@@ -1051,7 +1158,58 @@ class ConversationEngine:
         content = f"Áreas selecionadas:\n{areas_display}\n\nDeseja confirmar?"
         return {}, content
 
-    def _on_enter_available_days(self, clinic_id: str, session: dict) -> tuple:
+    def _calculate_discount(self, clinic_id: str, phone: str, session: dict) -> None:
+        """Calculate and store discount info in session based on clinic rules."""
+        total_price = session.get("total_price_cents", 0)
+        if not total_price:
+            return
+
+        rules = self._get_discount_rules(clinic_id)
+        if not rules:
+            session["discount_pct"] = 0
+            session["discount_reason"] = None
+            session["original_price_cents"] = total_price
+            session["discounted_price_cents"] = total_price
+            return
+
+        # Use cached value from _on_enter_select_areas if available, otherwise query
+        is_first = session.get("_is_first_session")
+        if is_first is None:
+            is_first = self._is_first_session(clinic_id, phone)
+
+        if is_first:
+            discount_pct = rules["first_session_discount_pct"]
+            discount_reason = "first_session"
+        else:
+            # Count areas (service_area_pairs). Services without areas don't count.
+            area_count = len(session.get("selected_service_area_pairs") or [])
+            t2_min = rules["tier_2_min_areas"]
+            t2_max = rules["tier_2_max_areas"]
+            t3_min = rules["tier_3_min_areas"]
+
+            if area_count >= t3_min:
+                discount_pct = rules["tier_3_discount_pct"]
+                discount_reason = "tier_3"
+            elif area_count >= t2_min:
+                discount_pct = rules["tier_2_discount_pct"]
+                discount_reason = "tier_2"
+            else:
+                discount_pct = 0
+                discount_reason = None
+
+        discounted_price = total_price * (100 - discount_pct) // 100
+
+        session["discount_pct"] = discount_pct
+        session["discount_reason"] = discount_reason
+        session["original_price_cents"] = total_price
+        session["discounted_price_cents"] = discounted_price
+
+        logger.info(
+            f"[ConversationEngine] _calculate_discount: pct={discount_pct} reason={discount_reason} "
+            f"original={total_price} discounted={discounted_price}"
+        )
+
+    def _on_enter_available_days(self, clinic_id: str, phone: str, session: dict) -> tuple:
         days = []
         dynamic_buttons = []
         dynamic_transitions = {}
@@ -1100,9 +1258,23 @@ class ConversationEngine:
                     )
                     total_duration = sum(s["duration_minutes"] for s in services)
                     total_price = sum(s.get("price_cents") or 0 for s in services)
-                session["total_duration_minutes"] = total_duration
+                # Cap duration at max_session_minutes (default 60)
+                clinic = self._get_clinic(clinic_id)
+                max_session = (clinic.get("max_session_minutes") or 60) if clinic else 60
+                buffer_minutes = int(clinic.get("buffer_minutes") or 0) if clinic else 0
+
+                if total_duration > max_session:
+                    logger.info(
+                        f"[ConversationEngine] _on_enter_available_days: capping duration {total_duration}min -> {max_session}min (max_session_minutes)"
+                    )
+                    total_duration = max_session
+
+                session["service_duration_minutes"] = total_duration
+                session["buffer_minutes"] = buffer_minutes
+                session["total_duration_minutes"] = total_duration + buffer_minutes
                 session["total_price_cents"] = total_price
-                logger.info(f"[ConversationEngine] _on_enter_available_days: multi-service total_duration={total_duration}min, service_ids={selected_service_ids}")
+                self._calculate_discount(clinic_id, phone, session)
+                logger.info(f"[ConversationEngine] _on_enter_available_days: multi-service service_duration={total_duration}min + buffer={buffer_minutes}min = total={total_duration + buffer_minutes}min, service_ids={selected_service_ids}")
                 days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
             else:
                 # Fallback: single service (legacy compat)
@@ -1123,7 +1295,7 @@ class ConversationEngine:
         if days:
             for i, day in enumerate(days):
                 btn_id = f"day_{day}"
-                dynamic_buttons.append({"id": btn_id, "label": self._format_date_br(day)})
+                dynamic_buttons.append({"id": btn_id, "label": self._format_date_br_with_weekday(day)})
                 dynamic_transitions[btn_id] = ConversationState.SELECT_TIME.value
 
         dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
@@ -1132,9 +1304,9 @@ class ConversationEngine:
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
 
-        days_list = "\n".join([f"{i+1} - {self._format_date_br(d)}" for i, d in enumerate(days)]) if days else "Nenhum dia disponível no momento."
-        variables = {"days_list": days_list}
-        return variables, dynamic_buttons
+        if not days:
+            return {}, [{"id": "human", "label": "Falar com atendente"}, {"id": "back", "label": "Voltar"}]
+        return {}, dynamic_buttons
 
     def _on_enter_select_time(self, clinic_id: str, session: dict) -> tuple:
         selected_date = session.get("selected_date", "")
@@ -1145,10 +1317,11 @@ class ConversationEngine:
         logger.info(f"[ConversationEngine] _on_enter_select_time: selected_date='{selected_date}'")
 
         if self.availability_engine and selected_date:
-            total_duration = session.get("total_duration_minutes")
-            if total_duration:
-                logger.info(f"[ConversationEngine] _on_enter_select_time: multi-service total_duration={total_duration}min")
-                slots = self.availability_engine.get_available_slots_multi(clinic_id, selected_date, total_duration)
+            # Use service_duration (without buffer) for slot calculation — availability engine handles buffer separately
+            service_duration = session.get("service_duration_minutes") or session.get("total_duration_minutes")
+            if service_duration:
+                logger.info(f"[ConversationEngine] _on_enter_select_time: multi-service service_duration={service_duration}min")
+                slots = self.availability_engine.get_available_slots_multi(clinic_id, selected_date, service_duration)
             else:
                 service_id = session.get("service_id", "")
                 logger.info(f"[ConversationEngine] _on_enter_select_time: single-service service_id={service_id}")
@@ -1168,8 +1341,9 @@ class ConversationEngine:
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
 
-        times_list = "\n".join([f"{i+1} - {t}" for i, t in enumerate(slots)]) if slots else "Nenhum horário disponível."
-        variables = {"date": self._format_date_br(selected_date), "times_list": times_list}
+        variables = {"date": self._format_date_br_with_weekday(selected_date)}
+        if not slots:
+            return variables, [{"id": "human", "label": "Falar com atendente"}, {"id": "back", "label": "Voltar"}]
         return variables, dynamic_buttons
 
     def _on_enter_confirm_booking(self, clinic_id: str, session: dict) -> dict:
@@ -1203,7 +1377,7 @@ class ConversationEngine:
         else:
             duration_str = ""
 
-        price_str = self._format_price_brl(session.get("total_price_cents"))
+        price_str = self._format_price_with_discount(session)
 
         variables = {
             "date": self._format_date_br(session.get("selected_date", "")),
@@ -1239,6 +1413,10 @@ class ConversationEngine:
                     service_ids=selected_ids if selected_ids else None,
                     total_duration_minutes=session.get("total_duration_minutes"),
                     service_area_pairs=session.get("selected_service_area_pairs") or None,
+                    discount_pct=session.get("discount_pct", 0),
+                    discount_reason=session.get("discount_reason"),
+                    original_price_cents=session.get("original_price_cents"),
+                    final_price_cents=session.get("discounted_price_cents"),
                 )
                 session["appointment_id"] = str(result.get("id", ""))
                 logger.info(f"[ConversationEngine] _on_enter_booked: appointment created id={session['appointment_id']}")
@@ -1280,19 +1458,31 @@ class ConversationEngine:
         else:
             duration_str = ""
 
-        price_str = self._format_price_brl(session.get("total_price_cents"))
+        price_str = self._format_price_with_discount(session)
 
         variables = {
             "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
             "duration": duration_str,
             "price": price_str,
-            "pre_session_instructions": pre_instructions,
         }
         content = self.template_service.get_and_render(clinic_id, "BOOKED", variables)
-        # Remove trailing whitespace/newlines when pre_session_instructions is empty
-        if not pre_instructions:
-            content = content.rstrip()
+
+        # If there are pre-session instructions, append recommendations and override buttons
+        if pre_instructions:
+            recommendations_msg = self.template_service.get_and_render(
+                clinic_id, "RECOMMENDATIONS", {"recommendations": pre_instructions}
+            )
+            content = content + "\n\n" + recommendations_msg
+            session["dynamic_buttons"] = [
+                {"id": "confirm_read", "label": "Li e entendi"},
+                {"id": "human", "label": "Falar com atendente"},
+            ]
+            session["dynamic_transitions"] = {
+                "confirm_read": ConversationState.FAREWELL.value,
+                "human": ConversationState.HUMAN_HANDOFF.value,
+            }
+
         return variables, content
 
     def _on_enter_reschedule_lookup(self, clinic_id: str, phone: str, session: dict) -> tuple:
@@ -1346,7 +1536,7 @@ class ConversationEngine:
             dynamic_transitions = {}
             for day in days:
                 btn_id = f"newday_{day}"
-                dynamic_buttons.append({"id": btn_id, "label": self._format_date_br(day)})
+                dynamic_buttons.append({"id": btn_id, "label": self._format_date_br_with_weekday(day)})
                 dynamic_transitions[btn_id] = ConversationState.SELECT_NEW_TIME.value
 
             dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
@@ -1426,7 +1616,7 @@ class ConversationEngine:
         dynamic_transitions = {}
         for day in days:
             btn_id = f"newday_{day}"
-            dynamic_buttons.append({"id": btn_id, "label": self._format_date_br(day)})
+            dynamic_buttons.append({"id": btn_id, "label": self._format_date_br_with_weekday(day)})
             dynamic_transitions[btn_id] = ConversationState.SELECT_NEW_TIME.value
 
         dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
@@ -1463,8 +1653,9 @@ class ConversationEngine:
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
 
-        times_list = "\n".join([f"{i+1} - {t}" for i, t in enumerate(slots)]) if slots else "Nenhum horário disponível."
-        variables = {"date": self._format_date_br(selected_date), "times_list": times_list}
+        variables = {"date": self._format_date_br_with_weekday(selected_date)}
+        if not slots:
+            return variables, [{"id": "human", "label": "Falar com atendente"}, {"id": "back", "label": "Voltar"}]
         return variables, dynamic_buttons
 
     def _on_enter_confirm_reschedule(self, clinic_id: str, session: dict) -> dict:
@@ -1777,6 +1968,32 @@ class ConversationEngine:
         centavos = price_cents % 100
         return f"R$ {reais},{centavos:02d}"
 
+    def _format_price_with_discount(self, session: dict) -> str:
+        """Format price string showing discount if applicable."""
+        discount_pct = session.get("discount_pct", 0)
+        original = session.get("original_price_cents") or session.get("total_price_cents", 0)
+        discounted = session.get("discounted_price_cents", original)
+
+        if not original:
+            return ""
+
+        if not discount_pct:
+            return self._format_price_brl(original)
+
+        original_str = self._format_price_brl(original)
+        discounted_str = self._format_price_brl(discounted)
+
+        reason = session.get("discount_reason", "")
+        if reason == "first_session":
+            label = "primeira sessão \u2728"
+        elif reason in ("tier_2", "tier_3"):
+            area_count = len(session.get("selected_service_area_pairs") or [])
+            label = f"{area_count} áreas"
+        else:
+            label = ""
+
+        return f"~{original_str}~ → {discounted_str} ({discount_pct}% off - {label})"
+
     @staticmethod
     def _format_date_br(date_value) -> str:
         if isinstance(date_value, date):
@@ -1786,6 +2003,21 @@ class ConversationEngine:
                 return datetime.strptime(date_value, "%Y-%m-%d").strftime("%d/%m/%Y")
             except ValueError:
                 return date_value
+        return str(date_value)
+
+    @staticmethod
+    def _format_date_br_with_weekday(date_value) -> str:
+        WEEKDAYS_PT = ["segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo"]
+        if isinstance(date_value, str) and date_value:
+            try:
+                dt = datetime.strptime(date_value, "%Y-%m-%d")
+                weekday = WEEKDAYS_PT[dt.weekday()]
+                return f"{dt.strftime('%d/%m/%Y')} ({weekday})"
+            except ValueError:
+                return date_value
+        if isinstance(date_value, date):
+            weekday = WEEKDAYS_PT[date_value.weekday()]
+            return f"{date_value.strftime('%d/%m/%Y')} ({weekday})"
         return str(date_value)
 
     @staticmethod
@@ -1808,6 +2040,12 @@ class ConversationEngine:
         session: dict,
     ) -> List[OutgoingMessage]:
         config = STATE_CONFIG.get(state, {})
+        messages = []
+
+        # Prepend message (e.g. welcome intro) as separate text message
+        prepend = session.pop("_prepend_message", "")
+        if prepend:
+            messages.append(OutgoingMessage(message_type="text", content=prepend))
 
         # Determine content
         if override_content:
@@ -1832,20 +2070,22 @@ class ConversationEngine:
         )
 
         if buttons:
-            return [
+            messages.append(
                 OutgoingMessage(
                     message_type="buttons",
                     content=content,
                     buttons=buttons,
                 )
-            ]
+            )
         else:
-            return [
+            messages.append(
                 OutgoingMessage(
                     message_type="text",
                     content=content,
                 )
-            ]
+            )
+
+        return messages
 
     def _extract_dynamic_selection(self, user_input: str, session: dict) -> None:
         """Extract values from dynamic button IDs and store in session."""

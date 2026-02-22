@@ -95,14 +95,26 @@ def handler(event, context):
                 "message": "Campo obrigatorio: area_id ou area_ids"
             })
 
-        # Extract optional fields (applies to single area_id or area_ids format)
-        duration_minutes = None
-        price_cents = None
-        pre_session_instructions = None
-        if isinstance(body, dict):
-            duration_minutes = body.get("duration_minutes")
-            price_cents = body.get("price_cents")
-            pre_session_instructions = body.get("pre_session_instructions")
+        # Build per-area overrides map
+        area_overrides = {}
+        if isinstance(body, list):
+            for item in body:
+                aid = item.get("area_id")
+                if aid:
+                    area_overrides[aid] = {
+                        "duration_minutes": item.get("duration_minutes"),
+                        "price_cents": item.get("price_cents"),
+                        "pre_session_instructions": item.get("pre_session_instructions"),
+                    }
+        elif isinstance(body, dict):
+            # Single area or area_ids format: same overrides for all
+            shared = {
+                "duration_minutes": body.get("duration_minutes"),
+                "price_cents": body.get("price_cents"),
+                "pre_session_instructions": body.get("pre_session_instructions"),
+            }
+            for aid in area_ids:
+                area_overrides[aid] = shared
 
         created = []
 
@@ -117,6 +129,11 @@ def handler(event, context):
                     "status": "ERROR",
                     "message": f"Area não encontrada: {area_id}"
                 })
+
+            overrides = area_overrides.get(area_id, {})
+            duration_minutes = overrides.get("duration_minutes")
+            price_cents = overrides.get("price_cents")
+            pre_session_instructions = overrides.get("pre_session_instructions")
 
             result = db.execute_write_returning(
                 """

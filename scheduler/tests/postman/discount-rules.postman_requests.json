@@ -1,0 +1,274 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Discount Rules",
+    "description": "API collection for managing per-clinic discount rules: first-session discount and progressive area-based discounts",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Create Discount Rules (full config)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_session_discount_pct\": 20,\n  \"tier_2_min_areas\": 2,\n  \"tier_2_max_areas\": 4,\n  \"tier_2_discount_pct\": 10,\n  \"tier_3_min_areas\": 5,\n  \"tier_3_discount_pct\": 15\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/discount-rules",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "discount-rules"]
+        },
+        "description": "Create or upsert discount rules for a clinic. Uses ON CONFLICT to update if rules already exist.\n\nFields:\n- first_session_discount_pct: discount % for patients with zero confirmed appointments (e.g. 20)\n- tier_2_min_areas / tier_2_max_areas: area count range for tier 2 (e.g. 2-4)\n- tier_2_discount_pct: discount % for tier 2 (e.g. 10)\n- tier_3_min_areas: minimum areas for tier 3 (e.g. 5)\n- tier_3_discount_pct: discount % for tier 3 (e.g. 15)"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('Response has discount_rules', function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.status).to.eql('SUCCESS');",
+              "    pm.expect(json.discount_rules).to.be.an('object');",
+              "    pm.expect(json.discount_rules.first_session_discount_pct).to.eql(20);",
+              "    pm.expect(json.discount_rules.tier_2_discount_pct).to.eql(10);",
+              "    pm.expect(json.discount_rules.tier_3_discount_pct).to.eql(15);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "201 - Created",
+          "status": "Created",
+          "code": 201,
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Discount rules criadas com sucesso\",\n  \"discount_rules\": {\n    \"id\": \"uuid\",\n    \"clinic_id\": \"laser-beauty-sp\",\n    \"first_session_discount_pct\": 20,\n    \"tier_2_min_areas\": 2,\n    \"tier_2_max_areas\": 4,\n    \"tier_2_discount_pct\": 10,\n    \"tier_3_min_areas\": 5,\n    \"tier_3_discount_pct\": 15,\n    \"is_active\": true,\n    \"created_at\": \"2026-02-21T12:00:00\",\n    \"updated_at\": \"2026-02-21T12:00:00\"\n  }\n}"
+        },
+        {
+          "name": "404 - Clinic not found",
+          "status": "Not Found",
+          "code": 404,
+          "body": "{\n  \"status\": \"ERROR\",\n  \"message\": \"Clinica não encontrada: invalid-clinic\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Create Discount Rules (first-session only)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_session_discount_pct\": 25\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/discount-rules",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "discount-rules"]
+        },
+        "description": "Create discount rules with only first-session discount. Progressive tiers default to 0%."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "pm.test('First session pct is 25, tiers are 0', function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.discount_rules.first_session_discount_pct).to.eql(25);",
+              "    pm.expect(json.discount_rules.tier_2_discount_pct).to.eql(0);",
+              "    pm.expect(json.discount_rules.tier_3_discount_pct).to.eql(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Discount Rules",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/discount-rules",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "discount-rules"]
+        },
+        "description": "Get discount rules for a clinic. Returns 404 if no rules are configured."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response has discount_rules object', function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.status).to.eql('SUCCESS');",
+              "    pm.expect(json.discount_rules).to.be.an('object');",
+              "    pm.expect(json.discount_rules).to.have.property('first_session_discount_pct');",
+              "    pm.expect(json.discount_rules).to.have.property('tier_2_min_areas');",
+              "    pm.expect(json.discount_rules).to.have.property('tier_2_max_areas');",
+              "    pm.expect(json.discount_rules).to.have.property('tier_2_discount_pct');",
+              "    pm.expect(json.discount_rules).to.have.property('tier_3_min_areas');",
+              "    pm.expect(json.discount_rules).to.have.property('tier_3_discount_pct');",
+              "    pm.expect(json.discount_rules).to.have.property('is_active');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 - OK",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"discount_rules\": {\n    \"id\": \"uuid\",\n    \"clinic_id\": \"laser-beauty-sp\",\n    \"first_session_discount_pct\": 20,\n    \"tier_2_min_areas\": 2,\n    \"tier_2_max_areas\": 4,\n    \"tier_2_discount_pct\": 10,\n    \"tier_3_min_areas\": 5,\n    \"tier_3_discount_pct\": 15,\n    \"is_active\": true,\n    \"created_at\": \"2026-02-21T12:00:00\",\n    \"updated_at\": \"2026-02-21T12:00:00\"\n  }\n}"
+        },
+        {
+          "name": "404 - No rules configured",
+          "status": "Not Found",
+          "code": 404,
+          "body": "{\n  \"status\": \"ERROR\",\n  \"message\": \"Discount rules não encontradas para clinica: laser-beauty-sp\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Update Discount Rules (partial)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"first_session_discount_pct\": 25,\n  \"tier_2_discount_pct\": 12\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/discount-rules",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "discount-rules"]
+        },
+        "description": "Partially update discount rules. Only provided fields are modified; others remain unchanged."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Updated fields are correct', function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.status).to.eql('SUCCESS');",
+              "    pm.expect(json.discount_rules.first_session_discount_pct).to.eql(25);",
+              "    pm.expect(json.discount_rules.tier_2_discount_pct).to.eql(12);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 - Updated",
+          "status": "OK",
+          "code": 200,
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Discount rules atualizadas com sucesso\",\n  \"discount_rules\": {\n    \"id\": \"uuid\",\n    \"clinic_id\": \"laser-beauty-sp\",\n    \"first_session_discount_pct\": 25,\n    \"tier_2_min_areas\": 2,\n    \"tier_2_max_areas\": 4,\n    \"tier_2_discount_pct\": 12,\n    \"tier_3_min_areas\": 5,\n    \"tier_3_discount_pct\": 15,\n    \"is_active\": true\n  }\n}"
+        },
+        {
+          "name": "404 - No rules to update",
+          "status": "Not Found",
+          "code": 404,
+          "body": "{\n  \"status\": \"ERROR\",\n  \"message\": \"Discount rules não encontradas para clinica: laser-beauty-sp\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Deactivate Discount Rules",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"is_active\": false\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/discount-rules",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "discount-rules"]
+        },
+        "description": "Deactivate discount rules for a clinic. When is_active=false, no discounts are applied during booking."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('is_active is false', function () {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.discount_rules.is_active).to.eql(false);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

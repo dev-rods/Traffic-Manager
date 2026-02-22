@@ -7,19 +7,19 @@ from src.services.db.postgres import PostgresService
 logger = logging.getLogger(__name__)
 
 DEFAULT_TEMPLATES = {
-    "WELCOME_NEW": "Olá! Seja {{bem_vindx}} à {{clinic_name}}! Como posso te ajudar hoje?",
-    "WELCOME_RETURNING": "Olá, {{patient_name}}! {{Bem_vindx}} de volta à {{clinic_name}}! Como posso te ajudar?",
+    "WELCOME_NEW": "Olá! Seja {{bem_vindx}} à *{{clinic_name}}*!\n📍 {{address}}\n\nComo posso te ajudar hoje?",
+    "WELCOME_RETURNING": "Olá, {{patient_name}}! {{Bem_vindx}} de volta à *{{clinic_name}}*!\n📍 {{address}}\n\nComo posso te ajudar?",
     "MAIN_MENU": "Escolha uma opção:",
     "SCHEDULE_MENU": "O que você gostaria de fazer?",
     "PRICE_TABLE": "{{price_table}}",
-    "AVAILABLE_DAYS": "Dias disponíveis para agendamento:\n{{days_list}}",
-    "SELECT_TIME": "Horários disponíveis para {{date}}:\n{{times_list}}",
+    "AVAILABLE_DAYS": "Selecione o dia para agendamento:",
+    "SELECT_TIME": "Selecione o horário para {{date}}:",
     "SELECT_SERVICES": "Selecione o(s) serviço(s) desejado(s):\n\nVocê selecionou: {{selected_services}}",
     "CONFIRM_SERVICES": "Serviços selecionados:\n{{selected_services}}\n\nDeseja confirmar?",
     "SELECT_AREAS": "Selecione as áreas de tratamento (digite os números separados por vírgula):\n\n{{areas_list}}",
     "CONFIRM_AREAS": "Áreas selecionadas:\n{{selected_areas}}\n\nDeseja confirmar?",
     "CONFIRM_BOOKING": "Confirme seu agendamento:\n{{date}} às {{time}}\n{{service}}\nÁreas: {{areas}}\nDuração prevista: {{duration}}\n*Valor: {{price}}*\n{{clinic_name}} - {{address}}",
-    "BOOKED": "Agendamento confirmado!\nTe esperamos no dia {{date}} às {{time}}.\nDuração prevista: {{duration}}\n*Valor: {{price}}*\n\n{{pre_session_instructions}}",
+    "BOOKED": "Agendamento confirmado!\nTe esperamos no dia {{date}} às {{time}}.\nDuração prevista: {{duration}}\n*Valor: {{price}}*",
     "RESCHEDULE_FOUND": "Encontramos seu agendamento:\n{{date}} às {{time}}\n{{service}}\n\nPara qual dia deseja remarcar?",
     "RESCHEDULE_NOT_FOUND": "Não encontramos um agendamento ativo para este número.",
     "RESCHEDULED": "Agendamento remarcado com sucesso!\nNova data: {{date}} às {{time}}",
@@ -33,6 +33,7 @@ DEFAULT_TEMPLATES = {
     "CONFIRM_CANCEL": "Deseja cancelar este agendamento?\n{{date}} às {{time}}\n{{service}}",
     "CANCELLED": "Agendamento cancelado com sucesso.",
     "FAREWELL": "Obrigado pelo contato e tenha uma ótima semana! Até a próxima!",
+    "RECOMMENDATIONS": "📋 *Recomendações importantes para sua sessão:*\n\n{{recommendations}}\n\nPor favor, confirme que leu e entendeu as recomendações acima.",
     "REMINDER_24H": "Lembrete: Amanhã às {{time}} você tem sessão na {{clinic_name}}. Responda OK para confirmar.",
 }
 

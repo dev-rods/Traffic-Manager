@@ -28,7 +28,13 @@
       "Bash(uv:*)",
       "Bash(pip:*)",
       "Bash(python -c:*)",
-      "Bash(serverless logs:*)"
+      "Bash(serverless logs:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(python -m src.scripts.setup_database:*)",
+      "Bash(cd:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell.exe:*)"
     ]
   }
 }

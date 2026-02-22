@@ -31,6 +31,8 @@ SQL_STATEMENTS = [
         google_spreadsheet_id VARCHAR(255),
         google_sheet_name VARCHAR(100) DEFAULT 'Agenda',
         owner_email VARCHAR(255),
+        max_session_minutes INTEGER DEFAULT 60,
+        welcome_intro_message TEXT,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -287,6 +289,34 @@ SQL_STATEMENTS = [
 
     # Add owner_email to clinics
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS owner_email VARCHAR(255)",
+
+    # Discount rules per clinic (configurable progressive discounts)
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.discount_rules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        first_session_discount_pct INTEGER NOT NULL DEFAULT 0,
+        tier_2_min_areas INTEGER NOT NULL DEFAULT 2,
+        tier_2_max_areas INTEGER NOT NULL DEFAULT 4,
+        tier_2_discount_pct INTEGER NOT NULL DEFAULT 0,
+        tier_3_min_areas INTEGER NOT NULL DEFAULT 5,
+        tier_3_discount_pct INTEGER NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(clinic_id)
+    )
+    """,
+
+    # Max session minutes and welcome intro message for clinics
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS max_session_minutes INTEGER DEFAULT 60",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS welcome_intro_message TEXT",
+
+    # Discount fields on appointments
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_pct INTEGER DEFAULT 0",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_reason VARCHAR(50)",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS original_price_cents INTEGER",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS final_price_cents INTEGER",
 ]
 
 
