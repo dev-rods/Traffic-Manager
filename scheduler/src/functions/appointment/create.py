@@ -98,6 +98,7 @@ def handler(event, context):
             professional_id=body.get("professionalId"),
             service_ids=service_ids,
             service_area_pairs=service_area_pairs if service_area_pairs else None,
+            full_name=body.get("fullName"),
         )
 
         appointment = _serialize_row(result)

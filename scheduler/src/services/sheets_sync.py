@@ -14,7 +14,7 @@ MONTH_NAMES_PT = {
 }
 
 SHEET_HEADERS = [
-    "Data", "Horário", "Paciente", "Telefone", "Serviço",
+    "Data", "Horário", "Nome Completo", "Paciente", "Telefone", "Serviço",
     "Áreas", "Desconto", "Valor Original", "Valor Final",
     "Status", "Observações", "AppointmentId", "UltimaAtualização"
 ]
@@ -264,6 +264,7 @@ class SheetsSync:
             row_values = [
                 str(appointment.get("appointment_date", "")),
                 str(appointment.get("start_time", "")),
+                appointment.get("full_name", ""),
                 patient_name,
                 patient_phone,
                 service_name,

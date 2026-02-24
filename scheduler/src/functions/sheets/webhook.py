@@ -311,6 +311,7 @@ def _handle_create(db, clinic_id, body):
             date=appt_date,
             time=appt_time,
             service_area_pairs=service_area_pairs,
+            full_name=body.get("full_name") or body.get("patient_name"),
         )
     except ConflictError as e:
         return http_response(409, {"status": "ERROR", "message": str(e)})

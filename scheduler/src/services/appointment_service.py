@@ -41,6 +41,7 @@ class AppointmentService:
         discount_reason: Optional[str] = None,
         original_price_cents: Optional[int] = None,
         final_price_cents: Optional[int] = None,
+        full_name: Optional[str] = None,
     ) -> Dict[str, Any]:
         # 1. Get or create patient
         patient = self._get_or_create_patient(clinic_id, phone)
@@ -125,12 +126,14 @@ class AppointmentService:
                 appointment_date, start_time, end_time,
                 total_duration_minutes,
                 discount_pct, discount_reason, original_price_cents, final_price_cents,
+                full_name,
                 status, created_at, updated_at, version
             ) VALUES (
                 %s, %s::uuid, %s::uuid, %s::uuid,
                 %s, %s::time, %s::time,
                 %s,
                 %s, %s, %s, %s,
+                %s,
                 'CONFIRMED', NOW(), NOW(), 1
             )
             RETURNING *
@@ -138,7 +141,8 @@ class AppointmentService:
             (clinic_id, patient_id, prof_id_param, primary_service_id,
              date, time, end_time,
              duration_minutes,
-             discount_pct, discount_reason, original_price_cents, final_price_cents),
+             discount_pct, discount_reason, original_price_cents, final_price_cents,
+             full_name),
         )
 
         if not result:

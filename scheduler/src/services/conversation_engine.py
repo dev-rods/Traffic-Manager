@@ -31,6 +31,7 @@ class ConversationState(str, Enum):
     AVAILABLE_DAYS = "AVAILABLE_DAYS"
     SELECT_DATE = "SELECT_DATE"
     SELECT_TIME = "SELECT_TIME"
+    ASK_FULL_NAME = "ASK_FULL_NAME"
     CONFIRM_BOOKING = "CONFIRM_BOOKING"
     BOOKED = "BOOKED"
     RESCHEDULE_LOOKUP = "RESCHEDULE_LOOKUP"
@@ -164,6 +165,14 @@ STATE_CONFIG = {
         "fallback": ConversationState.UNRECOGNIZED,
         "previous": ConversationState.AVAILABLE_DAYS,
         "input_type": "dynamic_selection",
+    },
+    ConversationState.ASK_FULL_NAME: {
+        "template_key": "ASK_FULL_NAME",
+        "buttons": [],
+        "transitions": {},
+        "fallback": ConversationState.UNRECOGNIZED,
+        "previous": ConversationState.SELECT_TIME,
+        "input_type": "free_text",
     },
     ConversationState.CONFIRM_BOOKING: {
         "template_key": "CONFIRM_BOOKING",
@@ -432,6 +441,10 @@ class ConversationEngine:
                 session.pop("_available_services", None)
                 session.pop("_services_input", None)
                 logger.info("[ConversationEngine] Back navigation: cleared service selection keys")
+            # Clear full_name when navigating back from CONFIRM_BOOKING
+            if current_state == ConversationState.CONFIRM_BOOKING:
+                session.pop("full_name", None)
+                logger.info("[ConversationEngine] Back navigation: cleared full_name")
             # Clear area selection when navigating back from or through SELECT_AREAS
             if current_state in (ConversationState.SELECT_AREAS, ConversationState.CONFIRM_AREAS) or next_state == ConversationState.SELECT_AREAS:
                 session.pop("selected_area_ids", None)
@@ -496,24 +509,37 @@ class ConversationEngine:
             logger.info(f"[ConversationEngine] _identify_input: button_id='{incoming.button_id}'")
             return incoming.button_id
 
-        text = (incoming.content or "").strip().lower()
+        raw_text = (incoming.content or "").strip()
+        text = raw_text.lower()
 
         if not text:
             logger.info("[ConversationEngine] _identify_input: empty text input")
             return ""
 
-        # Check for "voltar" / "back"
-        if text in ("voltar", "back", "0"):
+        # Global commands — recognized at any step
+        GLOBAL_BACK = {
+            "voltar", "volta", "back", "anterior", "retornar", "0",
+        }
+        GLOBAL_MENU = {
+            "menu", "menu principal", "inicio", "início",
+            "recomeçar", "recomecar", "reiniciar", "começo", "comeco",
+            "oi", "ola", "olá", "hi", "hello",
+        }
+        GLOBAL_HUMAN = {
+            "humano", "atendente", "pessoa", "ajuda", "suporte",
+            "falar com atendente", "falar com alguem", "falar com alguém",
+            "atendente humano", "falar com humano",
+        }
+
+        if text in GLOBAL_BACK:
             logger.info(f"[ConversationEngine] _identify_input: matched 'back' from text='{text}'")
             return "back"
 
-        # Check for "menu" / "inicio"
-        if text in ("menu", "inicio", "oi", "ola", "hi", "hello"):
+        if text in GLOBAL_MENU:
             logger.info(f"[ConversationEngine] _identify_input: matched 'main_menu' from text='{text}'")
             return "main_menu"
 
-        # Check for "humano" / "atendente"
-        if text in ("humano", "atendente", "pessoa", "falar com alguem"):
+        if text in GLOBAL_HUMAN:
             logger.info(f"[ConversationEngine] _identify_input: matched 'human' from text='{text}'")
             return "human"
 
@@ -579,8 +605,12 @@ class ConversationEngine:
                             logger.info(f"[ConversationEngine] _identify_input: fuzzy word overlap '{text}' -> '{scored[0][0]['id']}' (score={scored[0][1]:.2f})")
                             return scored[0][0]["id"]
 
-        # Free text input — return as-is for states that accept it
-        logger.info(f"[ConversationEngine] _identify_input: free text passthrough '{text}'")
+        # Free text input — return original (preserving case) for states that accept it
+        if input_type == "free_text":
+            logger.info(f"[ConversationEngine] _identify_input: free text passthrough '{raw_text}'")
+            return raw_text
+
+        logger.info(f"[ConversationEngine] _identify_input: unmatched input '{text}'")
         return text
 
     def _resolve_transition(
@@ -627,6 +657,9 @@ class ConversationEngine:
             return ConversationState.CONFIRM_SERVICES
         if current_state == ConversationState.SELECT_AREAS:
             return ConversationState.CONFIRM_AREAS
+        if current_state == ConversationState.ASK_FULL_NAME:
+            session["full_name"] = user_input.strip()
+            return ConversationState.CONFIRM_BOOKING
         return ConversationState.UNRECOGNIZED
 
     def _on_enter(
@@ -679,6 +712,9 @@ class ConversationEngine:
 
             elif state == ConversationState.SELECT_TIME:
                 template_vars, dynamic_buttons = self._on_enter_select_time(clinic_id, session)
+
+            elif state == ConversationState.ASK_FULL_NAME:
+                pass  # Template ASK_FULL_NAME rendered with no variables; free-text input
 
             elif state == ConversationState.CONFIRM_BOOKING:
                 template_vars = self._on_enter_confirm_booking(clinic_id, session)
@@ -1333,7 +1369,7 @@ class ConversationEngine:
             for i, slot_time in enumerate(slots):
                 btn_id = f"time_{slot_time}"
                 dynamic_buttons.append({"id": btn_id, "label": slot_time})
-                dynamic_transitions[btn_id] = ConversationState.CONFIRM_BOOKING.value
+                dynamic_transitions[btn_id] = ConversationState.ASK_FULL_NAME.value
 
         dynamic_buttons.append({"id": "human", "label": "Falar com atendente"})
         dynamic_buttons.append({"id": "back", "label": "Voltar"})
@@ -1380,6 +1416,7 @@ class ConversationEngine:
         price_str = self._format_price_with_discount(session)
 
         variables = {
+            "full_name": session.get("full_name", ""),
             "date": self._format_date_br(session.get("selected_date", "")),
             "time": session.get("selected_time", ""),
             "service": service_display,
@@ -1417,6 +1454,7 @@ class ConversationEngine:
                     discount_reason=session.get("discount_reason"),
                     original_price_cents=session.get("original_price_cents"),
                     final_price_cents=session.get("discounted_price_cents"),
+                    full_name=session.get("full_name"),
                 )
                 session["appointment_id"] = str(result.get("id", ""))
                 logger.info(f"[ConversationEngine] _on_enter_booked: appointment created id={session['appointment_id']}")

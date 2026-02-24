@@ -1,0 +1,204 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 007 Full Name & Global Commands",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com"},
+    {"key": "ENVIRONMENT", "value": "dev"},
+    {"key": "clinicId", "value": "YOUR_CLINIC_ID"},
+    {"key": "phone", "value": "5511999990000"}
+  ],
+  "item": [
+    {
+      "name": "Send Full Name (casing preserved)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-FN-001\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706746000000,\"chatName\":\"Test User\",\"senderName\":\"Test User\",\"isGroup\":false,\"text\":{\"message\":\"André Conceição Silva\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Response has status success', function () { var jsonData = pm.response.json(); pm.expect(jsonData.status).to.eql('success'); });"
+            ]
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "Full Name - Success",
+          "status": "OK",
+          "code": 200,
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": "{\"status\":\"success\",\"message\":\"Message processed\"}"
+        }
+      ]
+    },
+    {
+      "name": "Back from CONFIRM_BOOKING (goes to SELECT_TIME)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-FN-002\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706746100000,\"chatName\":\"Test User\",\"senderName\":\"Test User\",\"isGroup\":false,\"referenceMessageId\":\"MSG-PREV\",\"buttonsResponseMessage\":{\"buttonId\":\"back\",\"message\":\"Voltar\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Response has status success', function () { var jsonData = pm.response.json(); pm.expect(jsonData.status).to.eql('success'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Global Command - volta (back synonym)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-FN-003\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706746200000,\"chatName\":\"Test User\",\"senderName\":\"Test User\",\"isGroup\":false,\"text\":{\"message\":\"volta\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Global Command - menu principal",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-FN-004\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706746300000,\"chatName\":\"Test User\",\"senderName\":\"Test User\",\"isGroup\":false,\"text\":{\"message\":\"menu principal\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Global Command - ajuda (human synonym)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-FN-005\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706746400000,\"chatName\":\"Test User\",\"senderName\":\"Test User\",\"isGroup\":false,\"text\":{\"message\":\"ajuda\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Global Command - falar com atendente",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-FN-006\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706746500000,\"chatName\":\"Test User\",\"senderName\":\"Test User\",\"isGroup\":false,\"text\":{\"message\":\"falar com atendente\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

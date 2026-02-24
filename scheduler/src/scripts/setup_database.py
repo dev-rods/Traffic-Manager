@@ -121,6 +121,7 @@ SQL_STATEMENTS = [
         end_time TIME NOT NULL,
         status VARCHAR(20) DEFAULT 'CONFIRMED',
         notes TEXT,
+        full_name VARCHAR(255),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -317,6 +318,9 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_reason VARCHAR(50)",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS original_price_cents INTEGER",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS final_price_cents INTEGER",
+
+    # Full name on appointments (collected during WhatsApp flow)
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
 ]
 
 
