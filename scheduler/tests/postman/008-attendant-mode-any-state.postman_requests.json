@@ -1,0 +1,105 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 008 Attendant Mode Any State",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com"},
+    {"key": "ENVIRONMENT", "value": "dev"},
+    {"key": "phone", "value": "5511999990000"}
+  ],
+  "item": [
+    {
+      "name": "Attendant sends message (activates pause)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-ATT-001\",\"phone\":\"{{phone}}\",\"fromMe\":true,\"momment\":1706746000000,\"chatName\":\"Paciente\",\"senderName\":\"Atendente\",\"isGroup\":false,\"text\":{\"message\":\"Olá, como posso ajudar?\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Response has status OK', function () { var jsonData = pm.response.json(); pm.expect(jsonData.status).to.eql('OK'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Patient message while bot paused (no response)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-ATT-002\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706746100000,\"chatName\":\"Paciente\",\"senderName\":\"Paciente\",\"isGroup\":false,\"text\":{\"message\":\"Quero agendar\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Bot sent 0 messages', function () { var jsonData = pm.response.json(); pm.expect(jsonData.messagesProcessed).to.eql(0); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Attendant ends session (#encerrar)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-ATT-003\",\"phone\":\"{{phone}}\",\"fromMe\":true,\"momment\":1706746200000,\"chatName\":\"Paciente\",\"senderName\":\"Atendente\",\"isGroup\":false,\"text\":{\"message\":\"#encerrar\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

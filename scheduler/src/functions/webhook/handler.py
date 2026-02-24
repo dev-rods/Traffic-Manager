@@ -185,7 +185,7 @@ def _get_appointment_service(db):
         return None
 
 
-ATTENDANT_TTL_SECONDS = 2 * 60 * 60  # 2 hours
+ATTENDANT_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 
 
 def _resolve_clinic_id(db: PostgresService, instance_id: str):
@@ -240,23 +240,21 @@ def _extract_text_content(body: dict) -> str:
 def _activate_attendant_mode(clinic_id: str, phone: str) -> None:
     table = _get_sessions_table()
     session = _load_session(table, clinic_id, phone)
-    state = session.get("state", "")
 
-    if state in (ConversationState.HUMAN_HANDOFF.value, ConversationState.HUMAN_ATTENDANT_ACTIVE.value):
-        session["state"] = ConversationState.HUMAN_ATTENDANT_ACTIVE.value
-        session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
-        _save_session(table, clinic_id, phone, session)
-        logger.info(f"[Webhook] Modo atendente ativado/renovado para {phone} (TTL 2h)")
+    session["_previous_state_before_attendant"] = session.get("state", "")
+    session["state"] = ConversationState.HUMAN_ATTENDANT_ACTIVE.value
+    session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+    _save_session(table, clinic_id, phone, session)
+    logger.info(f"[Webhook] Modo atendente ativado/renovado para {phone} (TTL 24h)")
 
 
 def _deactivate_attendant_mode(clinic_id: str, phone: str) -> None:
     table = _get_sessions_table()
     session = _load_session(table, clinic_id, phone)
-    state = session.get("state", "")
 
-    if state in (ConversationState.HUMAN_HANDOFF.value, ConversationState.HUMAN_ATTENDANT_ACTIVE.value):
-        session["state"] = ConversationState.WELCOME.value
-        session.pop("attendant_active_until", None)
-        session.pop("human_handoff_requested_at", None)
-        _save_session(table, clinic_id, phone, session)
-        logger.info(f"[Webhook] Modo atendente encerrado para {phone}")
+    session["state"] = ConversationState.WELCOME.value
+    session.pop("attendant_active_until", None)
+    session.pop("human_handoff_requested_at", None)
+    session.pop("_previous_state_before_attendant", None)
+    _save_session(table, clinic_id, phone, session)
+    logger.info(f"[Webhook] Modo atendente encerrado para {phone}")
