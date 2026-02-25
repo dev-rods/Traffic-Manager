@@ -402,16 +402,17 @@ class ConversationEngine:
         )
 
         # 1.5 Check if human attendant mode is active
-        if current_state == ConversationState.HUMAN_ATTENDANT_ACTIVE:
+        if current_state in (ConversationState.HUMAN_ATTENDANT_ACTIVE, ConversationState.HUMAN_HANDOFF):
             attendant_until = session.get("attendant_active_until", 0)
-            if time.time() < attendant_until:
-                logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone}")
+            if current_state == ConversationState.HUMAN_HANDOFF or time.time() < attendant_until:
+                logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone} state={current_state}")
                 return []
             else:
                 logger.info(f"[ConversationEngine] TTL atendimento expirado para {phone}, resetando")
                 session["state"] = ConversationState.WELCOME.value
                 session.pop("attendant_active_until", None)
                 session.pop("human_handoff_requested_at", None)
+                session.pop("_previous_state_before_attendant", None)
                 self._save_session(clinic_id, phone, session)
                 current_state = ConversationState.WELCOME
 
