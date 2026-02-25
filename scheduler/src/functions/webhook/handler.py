@@ -51,7 +51,12 @@ def handler(event, context):
                 db = PostgresService()
                 clinic_id = _resolve_clinic_id(db, instance_id)
                 if clinic_id:
-                    if content and content.strip().lower() in ("#encerrar", "#fim"):
+                    DEACTIVATION_COMMANDS = {
+                        "#encerrar", "#fim",
+                        "encerrar atendimento", "finalizar atendimento",
+                        "atendimento encerrado", "atendimento finalizado",
+                    }
+                    if content and content.strip().lower() in DEACTIVATION_COMMANDS:
                         _deactivate_attendant_mode(clinic_id, phone)
                     else:
                         _activate_attendant_mode(clinic_id, phone)

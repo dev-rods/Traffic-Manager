@@ -103,7 +103,7 @@ Quando o paciente solicita atendente ou o atendente responde manualmente:
 2. **Paciente pode clicar "Retomar atendimento"** → bot reativa e volta ao menu principal
 3. **Atendente responde pelo WhatsApp** (`fromMe=true`) → estado `HUMAN_ATTENDANT_ACTIVE`, TTL 24h
 4. **Bot fica silencioso** enquanto TTL estiver ativo (cada msg do atendente renova 24h)
-5. **Para reativar o bot**, o atendente digita `#encerrar` ou `#fim`
+5. **Para reativar o bot**, o atendente digita uma das frases: `encerrar atendimento`, `finalizar atendimento`, `atendimento encerrado`, `atendimento finalizado` (ou `#encerrar`, `#fim`)
 6. **Se o TTL expirar** (24h sem msg do atendente), o bot retoma automaticamente
 
 Qualquer mensagem enviada pelo atendente (em qualquer estado da conversa) ativa o modo atendente.
