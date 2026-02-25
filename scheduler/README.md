@@ -60,10 +60,8 @@ scheduler/
 ### Agendamento
 
 ```
-WELCOME → MAIN_MENU → SCHEDULE_MENU → [PRICE_TABLE]
-  → SELECT_SERVICES (texto livre)
-  → CONFIRM_SERVICES
-  → SELECT_AREAS (texto livre)
+WELCOME → MAIN_MENU → SELECT_SERVICES (auto-skip se 1 servico)
+  → SELECT_AREAS (texto livre, com precos)
   → CONFIRM_AREAS
   → AVAILABLE_DAYS (botoes dinamicos)
   → SELECT_TIME (botoes dinamicos)

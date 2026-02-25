@@ -1,0 +1,106 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 009 Skip Schedule Menu",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com"},
+    {"key": "ENVIRONMENT", "value": "dev"},
+    {"key": "phone", "value": "5511999990000"}
+  ],
+  "item": [
+    {
+      "name": "Start conversation (Oi)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-SKIP-001\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706750000000,\"chatName\":\"Paciente\",\"senderName\":\"Paciente\",\"isGroup\":false,\"text\":{\"message\":\"Oi\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Response has status OK', function () { var jsonData = pm.response.json(); pm.expect(jsonData.status).to.eql('OK'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Click Agendar sessão (skips SCHEDULE_MENU)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-SKIP-002\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706750100000,\"chatName\":\"Paciente\",\"senderName\":\"Paciente\",\"isGroup\":false,\"buttonResponseMessage\":{\"selectedButtonId\":\"schedule\",\"title\":\"Agendar sessão\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Response has status OK', function () { var jsonData = pm.response.json(); pm.expect(jsonData.status).to.eql('OK'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "Back from SELECT_AREAS (goes to MAIN_MENU)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"instance-123\",\"messageId\":\"MSG-SKIP-003\",\"phone\":\"{{phone}}\",\"fromMe\":false,\"momment\":1706750200000,\"chatName\":\"Paciente\",\"senderName\":\"Paciente\",\"isGroup\":false,\"text\":{\"message\":\"voltar\"}}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/webhook/whatsapp",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "webhook", "whatsapp"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Response has status OK', function () { var jsonData = pm.response.json(); pm.expect(jsonData.status).to.eql('OK'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

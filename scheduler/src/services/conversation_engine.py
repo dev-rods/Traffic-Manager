@@ -73,7 +73,7 @@ STATE_CONFIG = {
             {"id": "faq", "label": "Saber mais sobre atendimento"},
         ],
         "transitions": {
-            "schedule": ConversationState.SCHEDULE_MENU,
+            "schedule": ConversationState.SELECT_SERVICES,
             "reschedule": ConversationState.RESCHEDULE_LOOKUP,
             "cancel_session": ConversationState.CANCEL_LOOKUP,
             "faq": ConversationState.FAQ_MENU,
@@ -113,7 +113,7 @@ STATE_CONFIG = {
         "buttons": [],
         "transitions": {},
         "fallback": ConversationState.UNRECOGNIZED,
-        "previous": ConversationState.SCHEDULE_MENU,
+        "previous": ConversationState.MAIN_MENU,
         "input_type": "free_text",
     },
     ConversationState.CONFIRM_SERVICES: {
@@ -430,10 +430,10 @@ class ConversationEngine:
             if current_state == ConversationState.AVAILABLE_DAYS and session.pop("_skipped_areas", False):
                 next_state = ConversationState.CONFIRM_SERVICES
                 logger.info("[ConversationEngine] Back navigation: skipped areas, redirecting to CONFIRM_SERVICES")
-            # When single service was auto-selected, back from SELECT_AREAS should go to SCHEDULE_MENU
+            # When single service was auto-selected, back from SELECT_AREAS should go to MAIN_MENU
             if current_state == ConversationState.SELECT_AREAS and session.pop("_skipped_services", False):
-                next_state = ConversationState.SCHEDULE_MENU
-                logger.info("[ConversationEngine] Back navigation: skipped services, redirecting to SCHEDULE_MENU")
+                next_state = ConversationState.MAIN_MENU
+                logger.info("[ConversationEngine] Back navigation: skipped services, redirecting to MAIN_MENU")
             # Clear service selection when navigating back from or through SELECT_SERVICES
             if current_state == ConversationState.SELECT_SERVICES or next_state == ConversationState.SELECT_SERVICES:
                 session.pop("selected_service_ids", None)
@@ -921,6 +921,8 @@ class ConversationEngine:
         ]
 
         # Single service: auto-select and skip to areas
+        # TODO: When multiple services exist, consider how to show pricing before area selection
+        # (SCHEDULE_MENU with price table was removed since prices are shown in area selection)
         if len(services) == 1:
             svc = services[0]
             session["selected_service_ids"] = [str(svc["id"])]
