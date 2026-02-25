@@ -132,6 +132,48 @@ Atendente responde enquanto paciente esta escolhendo horario. Bot deve pausar im
 
 ---
 
+### Test 6 — Paciente clica "Retomar atendimento" em HUMAN_HANDOFF
+
+Paciente pediu atendente, mas antes de ser respondido decide voltar ao bot.
+
+```bash
+# 1. Paciente pede atendente
+curl -s -X POST "$BASE_URL/$STAGE/webhook/whatsapp" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "ReceivedCallback",
+    "instanceId": "instance-123",
+    "messageId": "MSG-ATT-006a",
+    "phone": "'$PHONE'",
+    "fromMe": false,
+    "momment": 1706746400000,
+    "chatName": "Paciente",
+    "senderName": "Paciente",
+    "isGroup": false,
+    "text": {"message": "atendente"}
+  }'
+
+# 2. Paciente clica "Retomar atendimento"
+curl -s -X POST "$BASE_URL/$STAGE/webhook/whatsapp" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "ReceivedCallback",
+    "instanceId": "instance-123",
+    "messageId": "MSG-ATT-006b",
+    "phone": "'$PHONE'",
+    "fromMe": false,
+    "momment": 1706746500000,
+    "chatName": "Paciente",
+    "senderName": "Paciente",
+    "isGroup": false,
+    "buttonsResponseMessage": {"buttonId": "resume_bot", "message": "Retomar atendimento"}
+  }'
+```
+
+**Esperado:** Bot reativa, sessao volta para WELCOME e responde com MAIN_MENU.
+
+---
+
 ## Testes unitarios locais
 
 ```bash

@@ -327,10 +327,10 @@ STATE_CONFIG = {
     ConversationState.HUMAN_HANDOFF: {
         "template_key": "HUMAN_HANDOFF",
         "buttons": [
-            {"id": "main_menu", "label": "Menu principal"},
+            {"id": "resume_bot", "label": "Retomar atendimento"},
         ],
         "transitions": {
-            "main_menu": ConversationState.MAIN_MENU,
+            "resume_bot": ConversationState.MAIN_MENU,
         },
         "fallback": ConversationState.MAIN_MENU,
         "previous": None,
@@ -403,18 +403,26 @@ class ConversationEngine:
 
         # 1.5 Check if human attendant mode is active
         if current_state in (ConversationState.HUMAN_ATTENDANT_ACTIVE, ConversationState.HUMAN_HANDOFF):
-            attendant_until = session.get("attendant_active_until", 0)
-            if current_state == ConversationState.HUMAN_HANDOFF or time.time() < attendant_until:
-                logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone} state={current_state}")
-                return []
-            else:
-                logger.info(f"[ConversationEngine] TTL atendimento expirado para {phone}, resetando")
-                session["state"] = ConversationState.WELCOME.value
-                session.pop("attendant_active_until", None)
+            # Allow "Retomar atendimento" button to reactivate bot from HUMAN_HANDOFF
+            if current_state == ConversationState.HUMAN_HANDOFF and incoming.button_id == "resume_bot":
+                logger.info(f"[ConversationEngine] Paciente clicou 'Retomar atendimento', reativando bot para {phone}")
                 session.pop("human_handoff_requested_at", None)
-                session.pop("_previous_state_before_attendant", None)
+                session["state"] = ConversationState.WELCOME.value
                 self._save_session(clinic_id, phone, session)
                 current_state = ConversationState.WELCOME
+            else:
+                attendant_until = session.get("attendant_active_until", 0)
+                if current_state == ConversationState.HUMAN_HANDOFF or time.time() < attendant_until:
+                    logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone} state={current_state}")
+                    return []
+                else:
+                    logger.info(f"[ConversationEngine] TTL atendimento expirado para {phone}, resetando")
+                    session["state"] = ConversationState.WELCOME.value
+                    session.pop("attendant_active_until", None)
+                    session.pop("human_handoff_requested_at", None)
+                    session.pop("_previous_state_before_attendant", None)
+                    self._save_session(clinic_id, phone, session)
+                    current_state = ConversationState.WELCOME
 
         # 2. Identify input
         user_input = self._identify_input(incoming, session)
