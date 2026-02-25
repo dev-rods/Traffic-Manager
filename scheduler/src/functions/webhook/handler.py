@@ -44,7 +44,11 @@ def handler(event, context):
             return http_response(200, {"status": "OK"})
 
         # 1b. Handle fromMe (attendant messages)
+        # Ignore messages sent via API (status=SENT) — only process manually typed (status=RECEIVED)
         if body.get("fromMe", False):
+            if body.get("status") == "SENT":
+                logger.info("[Webhook] Ignorando fromMe com status=SENT (mensagem enviada via API/bot)")
+                return http_response(200, {"status": "OK"})
             phone = body.get("phone", "")
             if phone and instance_id:
                 content = _extract_text_content(body)
