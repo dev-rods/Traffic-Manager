@@ -26,7 +26,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "list_areas",
-            "description": "List available treatment areas for given services. Returns area name, duration, and price.",
+            "description": "List available treatment areas for given services. Only call this when the patient has confirmed they want to BOOK an appointment and the service has been identified. Do NOT call for questions/doubts.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -44,7 +44,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "check_availability",
-            "description": "Check which days have available slots for the given total duration. Returns a list of available dates.",
+            "description": "Check which days have available slots for the given total duration. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -61,7 +61,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_time_slots",
-            "description": "Get available time slots for a specific date and total duration.",
+            "description": "Get available time slots for a specific date and total duration. Only call AFTER the patient has chosen a date from check_availability.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -94,7 +94,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_faq_answer",
-            "description": "Search the clinic FAQ for an answer to the patient's question.",
+            "description": "Search the clinic FAQ for an answer to the patient's question. ALWAYS call this FIRST when the patient asks a question (phrases with 'posso', 'pode', 'como funciona', 'quanto custa', 'é possível', etc.) BEFORE calling any booking tools.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -374,6 +374,8 @@ class ToolExecutor:
 
     def _tool_get_faq_answer(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
         question = args.get("question", "")
+
+        # First: try exact ILIKE match on the full question
         rows = self.db.execute_query(
             """
             SELECT question_label, answer
@@ -387,7 +389,31 @@ class ToolExecutor:
         )
         if rows:
             return {"answers": [{"question": r["question_label"], "answer": r["answer"]} for r in rows]}
-        return {"answers": [], "message": "Nenhuma resposta encontrada para essa pergunta."}
+
+        # Second: try matching individual keywords (3+ chars) from the question
+        keywords = [w for w in question.lower().split() if len(w) >= 3]
+        if keywords:
+            conditions = []
+            params = [clinic_id]
+            for kw in keywords[:5]:  # max 5 keywords
+                conditions.append("(question_label ILIKE %s OR answer ILIKE %s)")
+                params.extend([f"%{kw}%", f"%{kw}%"])
+
+            where_clause = " OR ".join(conditions)
+            rows = self.db.execute_query(
+                f"""
+                SELECT question_label, answer
+                FROM scheduler.faq_items
+                WHERE clinic_id = %s AND active = true AND ({where_clause})
+                ORDER BY display_order
+                LIMIT 3
+                """,
+                tuple(params),
+            )
+            if rows:
+                return {"answers": [{"question": r["question_label"], "answer": r["answer"]} for r in rows]}
+
+        return {"answers": [], "message": "Nenhuma resposta encontrada no FAQ. Use seu conhecimento sobre depilação a laser para responder, ou ofereça transferir para um atendente."}
 
     def _tool_get_clinic_info(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
         rows = self.db.execute_query(
