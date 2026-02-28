@@ -402,6 +402,7 @@ class ConversationEngine:
         )
 
         # 1.5 Check if human attendant mode is active
+        HANDOFF_TTL_SECONDS = 24 * 60 * 60  # 24h
         if current_state in (ConversationState.HUMAN_ATTENDANT_ACTIVE, ConversationState.HUMAN_HANDOFF):
             # Allow "Retomar atendimento" button to reactivate bot from HUMAN_HANDOFF
             if current_state == ConversationState.HUMAN_HANDOFF and incoming.button_id == "resume_bot":
@@ -411,8 +412,16 @@ class ConversationEngine:
                 self._save_session(clinic_id, phone, session)
                 current_state = ConversationState.WELCOME
             else:
-                attendant_until = session.get("attendant_active_until", 0)
-                if current_state == ConversationState.HUMAN_HANDOFF or time.time() < attendant_until:
+                # Check TTL: attendant_active_until for HUMAN_ATTENDANT_ACTIVE,
+                # human_handoff_requested_at + 24h for HUMAN_HANDOFF
+                now = time.time()
+                if current_state == ConversationState.HUMAN_ATTENDANT_ACTIVE:
+                    is_active = now < session.get("attendant_active_until", 0)
+                else:
+                    handoff_at = session.get("human_handoff_requested_at", 0)
+                    is_active = now < (handoff_at + HANDOFF_TTL_SECONDS)
+
+                if is_active:
                     logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone} state={current_state}")
                     return []
                 else:

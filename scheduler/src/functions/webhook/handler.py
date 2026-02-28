@@ -89,14 +89,26 @@ def handler(event, context):
         availability_engine = _get_availability_engine(db)
         appointment_service = _get_appointment_service(db)
 
-        engine = ConversationEngine(
-            db=db,
-            template_service=template_service,
-            availability_engine=availability_engine,
-            appointment_service=appointment_service,
-            provider=provider,
-            message_tracker=tracker,
-        )
+        if clinic.get("use_ai_flow"):
+            from src.services.ai_conversation_engine import AIConversationEngine
+            engine = AIConversationEngine(
+                db=db,
+                template_service=template_service,
+                availability_engine=availability_engine,
+                appointment_service=appointment_service,
+                provider=provider,
+                message_tracker=tracker,
+            )
+            logger.info(f"[Webhook] Using AIConversationEngine for clinic={clinic_id}")
+        else:
+            engine = ConversationEngine(
+                db=db,
+                template_service=template_service,
+                availability_engine=availability_engine,
+                appointment_service=appointment_service,
+                provider=provider,
+                message_tracker=tracker,
+            )
 
         # 4. Parse incoming message
         incoming = provider.parse_incoming_message(body)

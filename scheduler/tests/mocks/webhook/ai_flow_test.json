@@ -1,0 +1,3 @@
+{
+  "body": "{\"type\":\"ReceivedCallback\",\"instanceId\":\"3EE10BD907D64112121A96031B028C8A\",\"messageId\":\"AI-TEST-001\",\"phone\":\"5511999990000\",\"fromMe\":false,\"momment\":1709136000000,\"chatName\":\"Teste AI\",\"senderName\":\"Teste AI\",\"isGroup\":false,\"text\":{\"message\":\"Oi, quero agendar\"}}"
+}

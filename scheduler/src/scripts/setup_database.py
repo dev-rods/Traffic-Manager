@@ -33,6 +33,8 @@ SQL_STATEMENTS = [
         owner_email VARCHAR(255),
         max_session_minutes INTEGER DEFAULT 60,
         welcome_intro_message TEXT,
+        display_name VARCHAR(255),
+        use_ai_flow BOOLEAN DEFAULT FALSE,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -321,6 +323,10 @@ SQL_STATEMENTS = [
 
     # Full name on appointments (collected during WhatsApp flow)
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
+
+    # AI Conversation Engine: display_name and use_ai_flow on clinics
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS use_ai_flow BOOLEAN DEFAULT FALSE",
 ]
 
 
