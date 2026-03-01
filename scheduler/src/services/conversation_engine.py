@@ -70,7 +70,6 @@ STATE_CONFIG = {
             {"id": "schedule", "label": "Agendar sessão"},
             {"id": "reschedule", "label": "Remarcar sessão"},
             {"id": "cancel_session", "label": "Cancelar sessão"},
-            {"id": "faq", "label": "Saber mais sobre atendimento"},
         ],
         "transitions": {
             "schedule": ConversationState.SELECT_SERVICES,
@@ -365,6 +364,8 @@ FLOW_SESSION_KEYS = [
     "_available_areas", "_areas_input",
     "discount_pct", "discount_reason", "original_price_cents", "discounted_price_cents",
     "_is_first_session", "_skipped_services", "_welcome_intro", "_prepend_message",
+    "_classifier_suggested_areas", "_classifier_faq_topic", "_classifier_service_hint",
+    "_pending_classifier_transition",
 ]
 
 
@@ -378,6 +379,7 @@ class ConversationEngine:
         appointment_service,
         provider: WhatsAppProvider,
         message_tracker: MessageTracker,
+        intent_classifier=None,
     ):
         self.db = db
         self.template_service = template_service
@@ -385,6 +387,7 @@ class ConversationEngine:
         self.appointment_service = appointment_service
         self.provider = provider
         self.message_tracker = message_tracker
+        self.intent_classifier = intent_classifier
 
         dynamodb = boto3.resource("dynamodb")
         self.sessions_table = dynamodb.Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
@@ -475,6 +478,13 @@ class ConversationEngine:
             next_state = ConversationState.HUMAN_HANDOFF
         else:
             next_state = self._resolve_transition(current_state, user_input, session)
+
+        # If classifier redirected to MAIN_MENU with a pending intent, apply it now
+        if next_state == ConversationState.MAIN_MENU:
+            pending = session.pop("_pending_classifier_transition", None)
+            if pending:
+                logger.info(f"[ConversationEngine] Applying pending classifier transition: '{pending}'")
+                next_state = self._resolve_transition(ConversationState.MAIN_MENU, pending, session)
 
         logger.info(
             f"[ConversationEngine] Transition: {current_state} -> {next_state} (input='{user_input}')"
@@ -628,8 +638,104 @@ class ConversationEngine:
             logger.info(f"[ConversationEngine] _identify_input: free text passthrough '{raw_text}'")
             return raw_text
 
+        # Intent Classifier fallback — only when deterministic matching fails
+        if self.intent_classifier is not None:
+            result = self._classify_intent(raw_text, current_state, buttons, session)
+            if result is not None:
+                return result
+
         logger.info(f"[ConversationEngine] _identify_input: unmatched input '{text}'")
         return text
+
+    # --- Intent Classifier helpers ---
+
+    _CLASSIFIER_STATES = {
+        ConversationState.MAIN_MENU,
+        ConversationState.UNRECOGNIZED,
+        ConversationState.FAQ_MENU,
+    }
+
+    _INTENT_TO_TRANSITION = {
+        "schedule": "schedule",
+        "reschedule": "reschedule",
+        "cancel": "cancel_session",
+        "faq": "faq",
+        "human": "human",
+        "greeting": "main_menu",
+        "price_inquiry": "schedule",
+    }
+
+    def _classify_intent(self, raw_text: str, current_state: ConversationState,
+                         buttons: list, session: dict):
+        if current_state not in self._CLASSIFIER_STATES:
+            return None
+
+        button_labels = [btn.get("label", "") for btn in buttons]
+        result = self.intent_classifier.classify(raw_text, current_state.value, button_labels)
+
+        logger.info(
+            f"[ConversationEngine] IntentClassifier: intent={result.intent} "
+            f"confidence={result.confidence} areas={result.areas} "
+            f"faq_topic='{result.faq_topic}' service='{result.service}'"
+        )
+
+        if result.intent == "unknown":
+            return None
+
+        # Store extracted data in session
+        if result.areas:
+            session["_classifier_suggested_areas"] = result.areas
+        if result.faq_topic:
+            session["_classifier_faq_topic"] = result.faq_topic
+        if result.service:
+            session["_classifier_service_hint"] = result.service
+
+        transition = self._INTENT_TO_TRANSITION.get(result.intent)
+        if not transition:
+            return None
+
+        # Check if transition exists in current state
+        config = STATE_CONFIG.get(current_state, {})
+        transitions = config.get("transitions", {})
+
+        if transition in transitions:
+            logger.info(f"[ConversationEngine] IntentClassifier: direct transition '{transition}' in state {current_state}")
+            return transition
+
+        # Transition not available in current state — go to MAIN_MENU with pending transition
+        session["_pending_classifier_transition"] = transition
+        logger.info(f"[ConversationEngine] IntentClassifier: pending transition '{transition}', routing to main_menu first")
+        return "main_menu"
+
+    def _match_faq_by_topic(self, topic: str, faqs: dict):
+        topic_normalized = self._normalize_text(topic)
+        topic_words = set(topic_normalized.split())
+        if not topic_words:
+            return None
+
+        best_match = None
+        best_score = 0.0
+
+        for faq_key, faq in faqs.items():
+            label = faq.get("question_label", "")
+            label_normalized = self._normalize_text(label)
+            label_words = set(label_normalized.split())
+            if not label_words:
+                continue
+
+            overlap = len(topic_words & label_words)
+            # Score based on the smaller set to be more lenient
+            score = overlap / min(len(topic_words), len(label_words))
+            if score > best_score:
+                best_score = score
+                best_match = faq
+
+        if best_score >= 0.4:
+            logger.info(f"[ConversationEngine] _match_faq_by_topic: matched '{topic}' -> '{best_match.get('question_label')}' (score={best_score:.2f})")
+            return best_match
+
+        logger.info(f"[ConversationEngine] _match_faq_by_topic: no match for '{topic}' (best_score={best_score:.2f})")
+        return None
 
     def _resolve_transition(
         self, current_state: ConversationState, user_input: str, session: dict
@@ -1144,10 +1250,15 @@ class ConversationEngine:
             session["_is_first_session"] = is_first
             discount_msg = self._build_discount_info_message(rules, is_first) + "\n\n"
 
-        content = f"{discount_msg}Selecione as áreas de tratamento (digite os números separados por vírgula):\n\n{areas_list}"
+        # If classifier suggested areas, prepend a hint
+        suggested = session.pop("_classifier_suggested_areas", None)
+        hint = ""
+        if suggested:
+            hint = f"_Você mencionou: {', '.join(suggested)}. Selecione os números correspondentes:_\n\n"
+
+        content = f"{discount_msg}{hint}Selecione as áreas de tratamento (digite os números separados por vírgula):\n\n{areas_list}"
 
         back_button = [
-            {"id": "human", "label": "Falar com atendente"},
             {"id": "back", "label": "Voltar"},
         ]
         session["dynamic_buttons"] = back_button
@@ -1898,6 +2009,18 @@ class ConversationEngine:
         )
         logger.info(f"[ConversationEngine] _on_enter_faq_menu: {len(faqs)} FAQ items loaded")
 
+        faq_items_map = {f"faq_{f['question_key']}": f for f in faqs}
+
+        # If classifier provided a faq_topic, try direct match
+        faq_topic = session.pop("_classifier_faq_topic", None)
+        if faq_topic and faqs:
+            matched = self._match_faq_by_topic(faq_topic, faq_items_map)
+            if matched:
+                session["selected_faq_key"] = f"faq_{matched['question_key']}"
+                session["state"] = ConversationState.FAQ_ANSWER.value
+                session["faq_items"] = faq_items_map
+                return self._on_enter_faq_answer(clinic_id, session)
+
         dynamic_buttons = []
         dynamic_transitions = {}
         for faq in faqs:
@@ -1909,7 +2032,7 @@ class ConversationEngine:
 
         session["dynamic_buttons"] = dynamic_buttons
         session["dynamic_transitions"] = dynamic_transitions
-        session["faq_items"] = {f"faq_{f['question_key']}": f for f in faqs}
+        session["faq_items"] = faq_items_map
 
         return {}, dynamic_buttons
 
