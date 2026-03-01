@@ -11,6 +11,7 @@ from src.services.db.postgres import PostgresService
 from src.services.template_service import TemplateService
 from src.services.conversation_engine import ConversationEngine, ConversationState
 from src.services.message_tracker import MessageTracker
+from src.services.lead_service import LeadService, extract_gclid
 from src.providers.whatsapp_provider import get_provider
 
 logger = logging.getLogger(__name__)
@@ -43,12 +44,14 @@ def handler(event, context):
             logger.warning("[Webhook] Payload sem instanceId")
             return http_response(200, {"status": "OK"})
 
-        # 1b. Handle fromMe (attendant messages)
-        # Ignore messages sent via API (status=SENT) — only process manually typed (status=RECEIVED)
+        # 1b. Handle fromMe (attendant messages or bot echo)
         if body.get("fromMe", False):
+            # Messages sent via API/bot arrive with status=SENT; ignore them
             if body.get("status") == "SENT":
                 logger.info("[Webhook] Ignorando fromMe com status=SENT (mensagem enviada via API/bot)")
                 return http_response(200, {"status": "OK"})
+
+            # status != SENT → manual attendant message
             phone = body.get("phone", "")
             if phone and instance_id:
                 content = _extract_text_content(body)
@@ -89,26 +92,16 @@ def handler(event, context):
         availability_engine = _get_availability_engine(db)
         appointment_service = _get_appointment_service(db)
 
-        if clinic.get("use_ai_flow"):
-            from src.services.ai_conversation_engine import AIConversationEngine
-            engine = AIConversationEngine(
-                db=db,
-                template_service=template_service,
-                availability_engine=availability_engine,
-                appointment_service=appointment_service,
-                provider=provider,
-                message_tracker=tracker,
-            )
-            logger.info(f"[Webhook] Using AIConversationEngine for clinic={clinic_id}")
-        else:
-            engine = ConversationEngine(
-                db=db,
-                template_service=template_service,
-                availability_engine=availability_engine,
-                appointment_service=appointment_service,
-                provider=provider,
-                message_tracker=tracker,
-            )
+        intent_classifier = _get_intent_classifier()
+        engine = ConversationEngine(
+            db=db,
+            template_service=template_service,
+            availability_engine=availability_engine,
+            appointment_service=appointment_service,
+            provider=provider,
+            message_tracker=tracker,
+            intent_classifier=intent_classifier,
+        )
 
         # 4. Parse incoming message
         incoming = provider.parse_incoming_message(body)
@@ -116,6 +109,21 @@ def handler(event, context):
             f"[Webhook] Mensagem de {incoming.phone} | type={incoming.message_type} | "
             f"content='{incoming.content[:50]}' | clinic={clinic_id}"
         )
+
+        # 4b. Extract GCLID and upsert lead
+        gclid = extract_gclid(incoming.content) if incoming.content else None
+        if gclid or incoming.content:
+            try:
+                lead_service = LeadService(db)
+                lead_service.upsert_lead(
+                    clinic_id=clinic_id,
+                    phone=incoming.phone,
+                    source="whatsapp",
+                    gclid=gclid,
+                    raw_message=incoming.content[:500] if incoming.content else None,
+                )
+            except Exception as e:
+                logger.error(f"[Webhook] Erro ao salvar lead: {e}")
 
         # 5. Track inbound
         conversation_id = f"{clinic_id}#{incoming.phone}"
@@ -186,6 +194,19 @@ def handler(event, context):
         return http_response(200, {"status": "OK", "error": "internal"})
 
 
+def _get_intent_classifier():
+    try:
+        if not os.environ.get("OPENAI_API_KEY"):
+            logger.info("[Webhook] IntentClassifier disabled (no OPENAI_API_KEY)")
+            return None
+        from src.services.intent_classifier import IntentClassifier
+        from src.services.openai_service import OpenAIService
+        return IntentClassifier(OpenAIService())
+    except ImportError:
+        logger.info("[Webhook] IntentClassifier not available")
+        return None
+
+
 def _get_availability_engine(db):
     try:
         from src.services.availability_engine import AvailabilityEngine
@@ -200,7 +221,8 @@ def _get_appointment_service(db):
         from src.services.appointment_service import AppointmentService
         from src.services.sheets_sync import SheetsSync
         sheets_sync = SheetsSync(db)
-        return AppointmentService(db, sheets_sync=sheets_sync)
+        lead_service = LeadService(db)
+        return AppointmentService(db, sheets_sync=sheets_sync, lead_service=lead_service)
     except ImportError:
         logger.info("[Webhook] AppointmentService nao disponivel (Phase 8)")
         return None
@@ -256,6 +278,7 @@ def _extract_text_content(body: dict) -> str:
     if "text" in body:
         return body["text"].get("message", "")
     return ""
+
 
 
 def _activate_attendant_mode(clinic_id: str, phone: str) -> None:

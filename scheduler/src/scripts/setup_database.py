@@ -34,7 +34,6 @@ SQL_STATEMENTS = [
         max_session_minutes INTEGER DEFAULT 60,
         welcome_intro_message TEXT,
         display_name VARCHAR(255),
-        use_ai_flow BOOLEAN DEFAULT FALSE,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -324,9 +323,37 @@ SQL_STATEMENTS = [
     # Full name on appointments (collected during WhatsApp flow)
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
 
-    # AI Conversation Engine: display_name and use_ai_flow on clinics
+    # display_name on clinics
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)",
-    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS use_ai_flow BOOLEAN DEFAULT FALSE",
+
+    # Remove legacy AI flow column
+    "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS use_ai_flow",
+
+    # Leads table (unified lead tracking with GCLID for Google Ads conversion)
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.leads (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        phone VARCHAR(20) NOT NULL,
+        name VARCHAR(255),
+        email VARCHAR(255),
+        gclid VARCHAR(255),
+        source VARCHAR(50) NOT NULL DEFAULT 'whatsapp',
+        booked BOOLEAN NOT NULL DEFAULT FALSE,
+        first_appointment_id UUID REFERENCES scheduler.appointments(id),
+        first_appointment_value DECIMAL(10,2),
+        raw_message TEXT,
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(clinic_id, phone)
+    )
+    """,
+
+    "CREATE INDEX IF NOT EXISTS idx_leads_clinic_id ON scheduler.leads(clinic_id)",
+    "CREATE INDEX IF NOT EXISTS idx_leads_phone ON scheduler.leads(phone)",
+    "CREATE INDEX IF NOT EXISTS idx_leads_gclid ON scheduler.leads(gclid) WHERE gclid IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_leads_created_at ON scheduler.leads(clinic_id, created_at)",
 ]
 
 

@@ -134,8 +134,8 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 ```
 
 ### Key Directories
-- `scheduler/src/functions/` - Lambda handlers by domain (webhook, send, clinic, service, professional, availability, appointment, template, faq, reminder, report)
-- `scheduler/src/services/` - Business logic (conversation_engine, availability_engine, appointment_service, message_tracker, reminder_service, sheets_sync, template_service)
+- `scheduler/src/functions/` - Lambda handlers by domain (webhook, send, clinic, service, professional, availability, appointment, template, faq, reminder, report, lead)
+- `scheduler/src/services/` - Business logic (conversation_engine, intent_classifier, availability_engine, appointment_service, lead_service, message_tracker, reminder_service, sheets_sync, template_service)
 - `scheduler/src/providers/` - WhatsApp provider abstraction (z-api implementation)
 - `scheduler/src/utils/` - Utilities (http, auth, logging, phone, decimal)
 - `scheduler/sls/functions/` - Serverless function interface files
@@ -145,11 +145,12 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 
 ### Data Stores
 - **DynamoDB**: ConversationSessions (TTL 30min), MessageEvents (3 GSIs, TTL 90d), ScheduledReminders (1 GSI, TTL 48h)
-- **PostgreSQL RDS** (shared instance, schema `scheduler`): clinics, services, professionals, availability_rules, availability_exceptions, patients, appointments, message_templates, faq_items
+- **PostgreSQL RDS** (shared instance, schema `scheduler`): clinics, services, professionals, availability_rules, availability_exceptions, patients, appointments, leads, message_templates, faq_items
 
 ### External Integrations
 - z-api (WhatsApp messaging)
 - Google Sheets API (appointment sync)
+- OpenAI API (intent classification fallback via GPT-4o-mini — used only when deterministic input matching fails)
 
 ### Database Migrations
 - Schema changes go in the `MIGRATIONS` list in `scheduler/src/scripts/setup_database.py`

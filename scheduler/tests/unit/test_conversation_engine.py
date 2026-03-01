@@ -102,7 +102,7 @@ class TestIdentifyInputNumeric(unittest.TestCase):
 
     def test_digit_3_maps_to_third_button(self):
         result = self.engine._identify_input(_make_incoming("3"), self.session)
-        self.assertEqual(result, "faq")
+        self.assertEqual(result, "cancel_session")
 
     def test_out_of_range_falls_through(self):
         result = self.engine._identify_input(_make_incoming("9"), self.session)
@@ -135,9 +135,10 @@ class TestIdentifyInputFuzzyMatch(unittest.TestCase):
         result = self.engine._identify_input(_make_incoming("remarcar"), self.session)
         self.assertEqual(result, "reschedule")
 
-    def test_duvida_matches_faq(self):
-        result = self.engine._identify_input(_make_incoming("duvida"), self.session)
-        self.assertEqual(result, "faq")
+    def test_cancel_session_fuzzy_match(self):
+        """'cancelar sessao' matches the 'Cancelar sessão' button label."""
+        result = self.engine._identify_input(_make_incoming("cancelar sessao"), self.session)
+        self.assertEqual(result, "cancel_session")
 
     def test_ambiguous_sessao_falls_through(self):
         """'sessao' matches all 3 MAIN_MENU buttons — should NOT resolve."""

@@ -21,10 +21,11 @@ class OptimisticLockError(Exception):
 
 class AppointmentService:
 
-    def __init__(self, db: PostgresService, reminder_service=None, sheets_sync=None):
+    def __init__(self, db: PostgresService, reminder_service=None, sheets_sync=None, lead_service=None):
         self.db = db
         self.reminder_service = reminder_service
         self.sheets_sync = sheets_sync
+        self.lead_service = lead_service
 
     def create_appointment(
         self,
@@ -213,6 +214,18 @@ class AppointmentService:
                 self.sheets_sync.sync_appointment(result, "CREATED")
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao sincronizar com Sheets: {e}")
+
+        # 10. Mark lead as booked (if lead exists for this phone+clinic)
+        if self.lead_service:
+            try:
+                self.lead_service.mark_as_booked(
+                    clinic_id=clinic_id,
+                    phone=phone,
+                    appointment_id=appointment_id,
+                    appointment_value=final_price_cents / 100.0 if final_price_cents else None,
+                )
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao atualizar lead: {e}")
 
         return result
 
