@@ -1,5 +1,3 @@
-import type { AppointmentStatus } from '@/types'
-
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'neutral' | 'info'
 
 interface BadgeProps {
@@ -26,14 +24,14 @@ export function Badge({ children, variant = 'neutral', className = '' }: BadgePr
   )
 }
 
-const STATUS_MAP: Record<AppointmentStatus, { label: string; variant: BadgeVariant }> = {
+const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   confirmed: { label: 'Confirmado', variant: 'success' },
-  pending: { label: 'Pendente', variant: 'warning' },
   cancelled: { label: 'Cancelado', variant: 'danger' },
-  completed: { label: 'Concluído', variant: 'neutral' },
+  pending: { label: 'Pendente', variant: 'warning' },
 }
 
-export function StatusBadge({ status }: { status: AppointmentStatus }) {
-  const { label, variant } = STATUS_MAP[status]
+export function StatusBadge({ status }: { status: string }) {
+  const key = status.toLowerCase()
+  const { label, variant } = STATUS_MAP[key] ?? { label: status, variant: 'neutral' as const }
   return <Badge variant={variant}>{label}</Badge>
 }

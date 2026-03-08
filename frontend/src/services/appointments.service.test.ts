@@ -6,14 +6,14 @@ vi.mock('./api', () => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
-    patch: vi.fn(),
+    put: vi.fn(),
   },
 }))
 
 const mockApi = api as unknown as {
   get: ReturnType<typeof vi.fn>
   post: ReturnType<typeof vi.fn>
-  patch: ReturnType<typeof vi.fn>
+  put: ReturnType<typeof vi.fn>
 }
 
 const CLINIC_ID = 'clinic-123'
@@ -22,7 +22,7 @@ describe('appointmentsService', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('list calls correct endpoint', async () => {
-    mockApi.get.mockResolvedValueOnce({ data: { items: [], total: 0 } })
+    mockApi.get.mockResolvedValueOnce({ data: { appointments: [], total: 0 } })
     await appointmentsService.list(CLINIC_ID, { date: '2026-03-08' })
     expect(mockApi.get).toHaveBeenCalledWith(
       `/clinics/${CLINIC_ID}/appointments`,
@@ -30,28 +30,25 @@ describe('appointmentsService', () => {
     )
   })
 
-  it('cancel sends status=cancelled', async () => {
-    mockApi.patch.mockResolvedValueOnce({ data: { id: 'appt-1', status: 'cancelled' } })
-    await appointmentsService.cancel(CLINIC_ID, 'appt-1')
-    expect(mockApi.patch).toHaveBeenCalledWith(
-      `/clinics/${CLINIC_ID}/appointments/appt-1`,
-      { status: 'cancelled' }
+  it('cancel sends PUT with status=CANCELLED', async () => {
+    mockApi.put.mockResolvedValueOnce({ data: { id: 'appt-1', status: 'CANCELLED' } })
+    await appointmentsService.cancel('appt-1')
+    expect(mockApi.put).toHaveBeenCalledWith(
+      '/appointments/appt-1',
+      { status: 'CANCELLED' }
     )
   })
 
-  it('create sends payload to correct endpoint', async () => {
+  it('create sends payload to /appointments', async () => {
     const payload = {
-      patient_id: 'p-1',
-      service_id: 's-1',
-      area_ids: ['a-1'],
-      professional: 'Dra. Ana',
-      scheduled_at: '2026-03-08T12:00:00Z',
+      clinicId: CLINIC_ID,
+      phone: '5511999990000',
+      serviceId: 's-1',
+      date: '2026-03-08',
+      time: '09:00',
     }
     mockApi.post.mockResolvedValueOnce({ data: { id: 'new-appt', ...payload } })
-    await appointmentsService.create(CLINIC_ID, payload)
-    expect(mockApi.post).toHaveBeenCalledWith(
-      `/clinics/${CLINIC_ID}/appointments`,
-      payload
-    )
+    await appointmentsService.create(payload)
+    expect(mockApi.post).toHaveBeenCalledWith('/appointments', payload)
   })
 })

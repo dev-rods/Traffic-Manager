@@ -1,51 +1,39 @@
 import { api } from './api'
 import type {
-  Appointment,
-  AppointmentStatus,
+  ListAppointmentsResponse,
   CreateAppointmentPayload,
   UpdateAppointmentPayload,
-  PaginatedResponse,
 } from '@/types'
 
 export interface ListAppointmentsParams {
-  date?: string          // ISO date string YYYY-MM-DD
-  week_start?: string    // ISO date string — returns full week
-  patient_id?: string
-  status?: AppointmentStatus
-  page?: number
-  per_page?: number
+  date?: string
+  date_from?: string
+  date_to?: string
+  status?: string
 }
 
 export const appointmentsService = {
   list(clinicId: string, params?: ListAppointmentsParams) {
     return api
-      .get<PaginatedResponse<Appointment>>(`/clinics/${clinicId}/appointments`, { params })
+      .get<ListAppointmentsResponse>(`/clinics/${clinicId}/appointments`, { params })
       .then((r) => r.data)
   },
 
-  get(clinicId: string, appointmentId: string) {
+  create(payload: CreateAppointmentPayload) {
     return api
-      .get<Appointment>(`/clinics/${clinicId}/appointments/${appointmentId}`)
+      .post('/appointments', payload)
       .then((r) => r.data)
   },
 
-  create(clinicId: string, payload: CreateAppointmentPayload) {
+  update(appointmentId: string, payload: UpdateAppointmentPayload) {
     return api
-      .post<Appointment>(`/clinics/${clinicId}/appointments`, payload)
+      .put(`/appointments/${appointmentId}`, payload)
       .then((r) => r.data)
   },
 
-  update(clinicId: string, appointmentId: string, payload: UpdateAppointmentPayload) {
+  cancel(appointmentId: string) {
     return api
-      .patch<Appointment>(`/clinics/${clinicId}/appointments/${appointmentId}`, payload)
-      .then((r) => r.data)
-  },
-
-  cancel(clinicId: string, appointmentId: string) {
-    return api
-      .patch<Appointment>(`/clinics/${clinicId}/appointments/${appointmentId}`, {
-        status: 'cancelled' satisfies AppointmentStatus,
-      })
+      .put(`/appointments/${appointmentId}`, { status: 'CANCELLED' })
       .then((r) => r.data)
   },
 }

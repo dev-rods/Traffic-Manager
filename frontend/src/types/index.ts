@@ -68,41 +68,59 @@ export interface DiscountBreakdown {
 }
 
 // ── Appointment ───────────────────────────────────────────────
-export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed'
+export type AppointmentStatus = 'CONFIRMED' | 'CANCELLED'
 
 export interface Appointment {
   id: string
   clinic_id: string
-  patient_id: string
-  patient?: Patient
   service_id: string
-  service?: Service
-  areas?: Area[]
-  professional: string
-  scheduled_at: string
-  duration_minutes: number
+  appointment_date: string   // YYYY-MM-DD
+  start_time: string         // HH:MM:SS
+  end_time: string           // HH:MM:SS
   status: AppointmentStatus
+  notes: string | null
+  patient_name: string | null
+  patient_phone: string | null
+  service_name: string | null
+  professional_name: string | null
+  areas: string | null       // comma-separated area names
+  area_ids: string | null    // comma-separated area UUIDs
+  duration_minutes: number | null
   discount_pct: number
   discount_reason: DiscountReason
-  original_price_cents: number
-  final_price_cents: number
-  full_name: string
+  original_price_cents: number | null
+  final_price_cents: number | null
+  full_name: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ListAppointmentsResponse {
+  status: string
+  clinicId: string
+  appointments: Appointment[]
+  total: number
 }
 
 export interface CreateAppointmentPayload {
-  patient_id: string
-  service_id: string
-  area_ids: string[]
-  professional: string
-  scheduled_at: string
+  clinicId: string
+  phone: string
+  serviceId: string
+  date: string
+  time: string
+  serviceAreaPairs?: { serviceId: string; areaId: string }[]
+  professionalId?: string
+  fullName?: string
 }
 
 export interface UpdateAppointmentPayload {
-  service_id?: string
-  area_ids?: string[]
-  professional?: string
-  scheduled_at?: string
   status?: AppointmentStatus
+  notes?: string
+  date?: string
+  time?: string
+  serviceId?: string
+  serviceAreaPairs?: { serviceId: string; areaId: string }[]
 }
 
 // ── Auth ──────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { PrivateRoute } from '@/components/PrivateRoute'
 import { PublicRoute } from '@/components/PublicRoute'
 import LoginPage from '@/pages/auth/LoginPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
-import AgendaPage from '@/pages/agenda/AgendaPage'
+import { AgendaPage } from '@/pages/agenda/AgendaPage'
 import { PacientesPage } from '@/pages/pacientes/PacientesPage'
 import RelatoriosPage from '@/pages/relatorios/RelatoriosPage'
 
