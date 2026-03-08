@@ -1,22 +1,15 @@
-import { createContext, useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { AuthCredentials, Clinic } from '@/types'
 import { api } from '@/services/api'
+import { AuthContext } from './auth-context'
+export type { AuthContextValue } from './auth-context'
 
-// ── Types ─────────────────────────────────────────────────────
 interface AuthState {
   isAuthenticated: boolean
   clinicId: string | null
   clinic: Clinic | null
   isLoading: boolean
 }
-
-export interface AuthContextValue extends AuthState {
-  login: (credentials: AuthCredentials) => Promise<void>
-  logout: () => void
-}
-
-// ── Context ───────────────────────────────────────────────────
-export const AuthContext = createContext<AuthContextValue | null>(null)
 
 const TOKEN_KEY = 'tm_token'
 const CLINIC_ID_KEY = 'tm_clinic_id'
@@ -30,7 +23,6 @@ function getInitialState(): AuthState {
   return { isAuthenticated: false, clinicId: null, clinic: null, isLoading: false }
 }
 
-// ── Provider ──────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>(getInitialState)
 

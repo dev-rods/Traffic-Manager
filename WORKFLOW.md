@@ -100,8 +100,11 @@ Limites:
 - DynamoDB (sessions, events, reminders)
 - Z-API (WhatsApp)
 
-### Frontend (a construir)
-- React + TypeScript
+### Frontend (Scheduler Panel)
+- React 19 + TypeScript (strict) + Vite 7
+- TailwindCSS v4 + React Router v7 + TanStack Query v5
+- Axios (interceptors) + React Hook Form + Zod
+- Vitest + Testing Library
 - Deploy: Vercel
-- Auth: API key via header `x-api-key`
-- Estilo: a definir (TailwindCSS recomendado)
+- Auth: `x-api-key` header via Axios interceptor
+- Padrões detalhados: `frontend/CLAUDE.md`

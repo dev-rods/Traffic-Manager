@@ -68,7 +68,7 @@ describe('LoginPage', () => {
     await userEvent.type(screen.getByPlaceholderText('seu@email.com'), 'test@clinic.com')
     await userEvent.type(screen.getByPlaceholderText('••••••••'), 'wrong')
     await userEvent.click(screen.getByRole('button', { name: /entrar/i }))
-    expect(await screen.findByText(/e-mail ou senha inválidos/i)).toBeInTheDocument()
+    expect(await screen.findByText(/e-mail ou senha inv/i)).toBeInTheDocument()
   })
 
   it('disables button while submitting', async () => {

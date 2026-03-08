@@ -1,0 +1,8 @@
+{
+  "pathParameters": {
+    "clinicId": "clinicadorods-da7b62"
+  },
+  "headers": {
+    "x-api-key": "${SCHEDULER_API_KEY}"
+  }
+}

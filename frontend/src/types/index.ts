@@ -22,6 +22,13 @@ export interface CreatePatientPayload {
   gender: 'M' | 'F'
 }
 
+export interface PatientWithStats extends Patient {
+  total_visits: number
+  last_visit: string | null
+  next_visit: string | null
+  total_spent_cents: number
+}
+
 // ── Service & Area ────────────────────────────────────────────
 export interface Area {
   id: string

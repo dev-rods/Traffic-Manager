@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Patient, CreatePatientPayload, PaginatedResponse } from '@/types'
+import type { Patient, PatientWithStats, CreatePatientPayload, PaginatedResponse } from '@/types'
 
 export interface ListPatientsParams {
   search?: string
@@ -10,7 +10,7 @@ export interface ListPatientsParams {
 export const patientsService = {
   list(clinicId: string, params?: ListPatientsParams) {
     return api
-      .get<PaginatedResponse<Patient>>(`/clinics/${clinicId}/patients`, { params })
+      .get<PaginatedResponse<PatientWithStats>>(`/clinics/${clinicId}/patients`, { params })
       .then((r) => r.data)
   },
 

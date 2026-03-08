@@ -427,6 +427,9 @@ class AppointmentService:
         return appointments
 
     def _get_or_create_patient(self, clinic_id: str, phone: str) -> Dict[str, Any]:
+        from src.utils.phone import normalize_phone
+        phone = normalize_phone(phone)
+
         patients = self.db.execute_query(
             "SELECT * FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
             (clinic_id, phone),

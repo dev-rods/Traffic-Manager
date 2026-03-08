@@ -321,6 +321,105 @@ SQL_STATEMENTS = [
 
     # Full name on appointments (collected during WhatsApp flow)
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
+
+    # Clinic users (login for frontend panel)
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.clinic_users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        email VARCHAR(255) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        name VARCHAR(255),
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(email)
+    )
+    """,
+
+    "CREATE INDEX IF NOT EXISTS idx_clinic_users_email ON scheduler.clinic_users(email)",
+
+    # Normalize existing patient phone numbers to digits-only format (55DDDNNNNNNNNN).
+    # Must temporarily drop unique constraint, normalize all phones, merge duplicates,
+    # then recreate the constraint.
+    """
+    DO $$
+    DECLARE
+        dup RECORD;
+        keeper_id UUID;
+        keeper_name VARCHAR;
+        keeper_gender VARCHAR;
+        donor RECORD;
+    BEGIN
+        -- 1. Drop unique constraint temporarily
+        ALTER TABLE scheduler.patients DROP CONSTRAINT IF EXISTS patients_clinic_id_phone_key;
+
+        -- 2. Normalize all phone numbers: strip non-digits, prepend 55 if missing
+        UPDATE scheduler.patients
+        SET phone = CASE
+            WHEN regexp_replace(phone, '[^0-9]', '', 'g') ~ '^55'
+            THEN regexp_replace(phone, '[^0-9]', '', 'g')
+            ELSE '55' || regexp_replace(phone, '[^0-9]', '', 'g')
+        END,
+        updated_at = NOW()
+        WHERE phone ~ '[^0-9]';
+
+        -- 3. Strip leading 0 after country code (e.g. 5501199... -> 551199...)
+        UPDATE scheduler.patients
+        SET phone = '55' || substring(phone from 4),
+            updated_at = NOW()
+        WHERE phone ~ '^550';
+
+        -- 4. Merge duplicates: for each (clinic_id, phone) with >1 row, keep the oldest
+        FOR dup IN
+            SELECT clinic_id, phone
+            FROM scheduler.patients
+            GROUP BY clinic_id, phone
+            HAVING COUNT(*) > 1
+        LOOP
+            -- Find keeper (oldest)
+            SELECT id, name, gender INTO keeper_id, keeper_name, keeper_gender
+            FROM scheduler.patients
+            WHERE clinic_id = dup.clinic_id AND phone = dup.phone
+            ORDER BY created_at ASC LIMIT 1;
+
+            -- Reassign appointments from duplicates to keeper
+            UPDATE scheduler.appointments
+            SET patient_id = keeper_id
+            WHERE patient_id IN (
+                SELECT id FROM scheduler.patients
+                WHERE clinic_id = dup.clinic_id AND phone = dup.phone AND id != keeper_id
+            );
+
+            -- Fill in keeper's missing name/gender from duplicates
+            IF keeper_name IS NULL OR keeper_gender IS NULL THEN
+                FOR donor IN
+                    SELECT name, gender FROM scheduler.patients
+                    WHERE clinic_id = dup.clinic_id AND phone = dup.phone AND id != keeper_id
+                    ORDER BY created_at ASC
+                LOOP
+                    IF keeper_name IS NULL AND donor.name IS NOT NULL THEN
+                        keeper_name := donor.name;
+                    END IF;
+                    IF keeper_gender IS NULL AND donor.gender IS NOT NULL THEN
+                        keeper_gender := donor.gender;
+                    END IF;
+                END LOOP;
+
+                UPDATE scheduler.patients
+                SET name = keeper_name, gender = keeper_gender, updated_at = NOW()
+                WHERE id = keeper_id;
+            END IF;
+
+            -- Delete duplicates
+            DELETE FROM scheduler.patients
+            WHERE clinic_id = dup.clinic_id AND phone = dup.phone AND id != keeper_id;
+        END LOOP;
+
+        -- 5. Recreate unique constraint
+        ALTER TABLE scheduler.patients ADD CONSTRAINT patients_clinic_id_phone_key UNIQUE (clinic_id, phone);
+    END $$
+    """,
 ]
 
 

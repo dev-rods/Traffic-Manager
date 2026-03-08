@@ -26,7 +26,7 @@ export default function LoginPage() {
     try {
       await login(data)
     } catch {
-      setServerError('E-mail ou senha inválidos. Tente novamente.')
+      setServerError('E-mail ou senha invalidos. Tente novamente.')
     }
   }
 
