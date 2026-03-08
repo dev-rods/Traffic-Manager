@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> 📋 **Ver também:** [`WORKFLOW.md`](./WORKFLOW.md) — processo completo de trabalho (planejamento, meta-planejamento, token monitoring, kanban)
+> 📊 **Kanban:** [`KANBAN.md`](./KANBAN.md) — cards de tasks e status
+> 🔢 **Token Log:** [`TOKEN_LOG.md`](./TOKEN_LOG.md) — consumo de tokens por task
+
+## Princípios (obrigatórios)
+- **State of the art** — melhor solução conhecida, não a mais rápida
+- **Ready for prod** — código direto pra produção
+- **Completeness** — sem TODOs esquecidos, sem edge cases ignorados
+- **Toda task tem Plano + Meta-plano** antes de execução (ver WORKFLOW.md)
+
+---
+
 ## Workflow de Desenvolvimento (Research → Spec → Code → Test → Document)
 
 Siga este processo em **5 etapas** para novas features, refatorações e remoção de código.
