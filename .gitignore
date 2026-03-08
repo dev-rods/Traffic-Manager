@@ -1,2 +1,4 @@
 .mcp.json
 scheduler/sa.json
+frontend/.env.local
+frontend/.env*.local
