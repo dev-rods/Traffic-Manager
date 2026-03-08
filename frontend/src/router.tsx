@@ -7,7 +7,7 @@ import LoginPage from '@/pages/auth/LoginPage'
 import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { AgendaPage } from '@/pages/agenda/AgendaPage'
 import { PacientesPage } from '@/pages/pacientes/PacientesPage'
-import RelatoriosPage from '@/pages/relatorios/RelatoriosPage'
+import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
 
 export const router = createBrowserRouter([
   {

@@ -12,6 +12,9 @@ export interface ReportSummary {
   net_revenue_cents: number
   confirmation_rate: number     // 0–100
   cancellation_rate: number     // 0–100
+  appointments_change_pct: number
+  revenue_change_pct: number
+  patients_change_pct: number
 }
 
 export interface ServiceStat {
@@ -34,10 +37,10 @@ export interface DailyCount {
 
 export interface ReportData {
   period: ReportPeriod
+  label: string
   summary: ReportSummary
   top_services: ServiceStat[]
   discount_breakdown: DiscountStat[]
-  daily_counts: DailyCount[]
 }
 
 export type DashboardPeriod = 'today' | 'current_week' | 'current_month'

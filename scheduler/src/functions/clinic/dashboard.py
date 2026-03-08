@@ -122,7 +122,7 @@ def handler(event, context):
             area_rows = db.execute_query("""
                 SELECT appointment_id, service_name, area_name
                 FROM scheduler.appointment_service_areas
-                WHERE appointment_id = ANY(%s)
+                WHERE appointment_id = ANY(%s::uuid[])
             """, (appt_ids,))
             for ar in area_rows:
                 aid = str(ar["appointment_id"])
