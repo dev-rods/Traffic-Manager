@@ -34,7 +34,20 @@
       "Bash(python -m src.scripts.setup_database:*)",
       "Bash(cd:*)",
       "Bash(cmd.exe:*)",
-      "Bash(powershell.exe:*)"
+      "Bash(powershell.exe:*)",
+      "Bash(npm run:*)",
+      "Bash(npm:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vitest:*)",
+      "Bash(xargs grep:*)",
+      "Bash(python:*)",
+      "Bash(serverless deploy:*)",
+      "Bash(source:*)",
+      "Bash(aws ssm:*)",
+      "Bash(\"/c/Program Files/Amazon/AWSCLIV2/aws.exe\" ssm:*)",
+      "Bash(where.exe aws:*)",
+      "Bash(grep:*)",
+      "Bash(source .env:*)"
     ]
   }
 }

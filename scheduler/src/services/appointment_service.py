@@ -343,6 +343,158 @@ class AppointmentService:
 
         return updated_appointment
 
+    def update_appointment_services(
+        self,
+        appointment_id: str,
+        service_id: str,
+        service_area_pairs: Optional[List[Dict[str, str]]] = None,
+    ) -> Dict[str, Any]:
+        """Update the service and areas of an existing appointment, recalculating duration/end_time."""
+        # 1. Fetch appointment with optimistic lock
+        appointments = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
+            (appointment_id,),
+        )
+        if not appointments:
+            raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou não confirmado")
+
+        appointment = appointments[0]
+        current_version = appointment.get("version", 1)
+        clinic_id = appointment["clinic_id"]
+        appt_date = str(appointment["appointment_date"])
+        start_time = str(appointment["start_time"])[:5]
+
+        # 2. Validate service exists
+        services = self.db.execute_query(
+            "SELECT id, duration_minutes, name, price_cents FROM scheduler.services WHERE id::text = %s AND active = TRUE",
+            (service_id,),
+        )
+        if not services:
+            raise NotFoundError("Serviço não encontrado")
+
+        svc = services[0]
+
+        # 3. Calculate new duration
+        if service_area_pairs:
+            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+            params: tuple = ()
+            for pair in service_area_pairs:
+                params += (pair["serviceId"], pair["areaId"])
+            rows = self.db.execute_query(
+                f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
+                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
+                JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
+                LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
+                params,
+            )
+            duration_minutes = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else svc["duration_minutes"]
+        else:
+            duration_minutes = svc["duration_minutes"]
+
+        # 4. Calculate new end_time
+        start_parts = start_time.split(":")
+        start_hour, start_min = int(start_parts[0]), int(start_parts[1])
+        total_minutes = start_hour * 60 + start_min + duration_minutes
+        end_hour, end_min = total_minutes // 60, total_minutes % 60
+        new_end_time = f"{end_hour:02d}:{end_min:02d}"
+
+        # 5. Check conflicts with new duration
+        conflicts = self.db.execute_query(
+            """
+            SELECT id FROM scheduler.appointments
+            WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
+            AND id != %s::uuid
+            AND (
+                (start_time < %s::time AND end_time > %s::time)
+                OR (start_time < %s::time AND end_time > %s::time)
+                OR (start_time >= %s::time AND end_time <= %s::time)
+            )
+            """,
+            (clinic_id, appt_date, appointment_id, new_end_time, start_time, new_end_time, start_time, start_time, new_end_time),
+        )
+        if conflicts:
+            raise ConflictError(f"Conflito de horário com nova duração: {appt_date} {start_time}-{new_end_time}")
+
+        # 6. Update appointment record
+        updated_rows = self.db.execute_write(
+            """
+            UPDATE scheduler.appointments
+            SET service_id = %s::uuid, end_time = %s::time, total_duration_minutes = %s,
+                version = version + 1, updated_at = NOW()
+            WHERE id = %s::uuid AND version = %s
+            """,
+            (service_id, new_end_time, duration_minutes, appointment_id, current_version),
+        )
+        if updated_rows == 0:
+            raise OptimisticLockError("Agendamento foi modificado por outro processo")
+
+        # 7. Replace junction table records
+        self.db.execute_write(
+            "DELETE FROM scheduler.appointment_service_areas WHERE appointment_id = %s::uuid",
+            (appointment_id,),
+        )
+        self.db.execute_write(
+            "DELETE FROM scheduler.appointment_services WHERE appointment_id = %s::uuid",
+            (appointment_id,),
+        )
+
+        if service_area_pairs:
+            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+            params = ()
+            for pair in service_area_pairs:
+                params += (pair["serviceId"], pair["areaId"])
+            pair_rows = self.db.execute_query(
+                f"""SELECT pairs.service_id, pairs.area_id,
+                       s.name as service_name, a.name as area_name,
+                       COALESCE(sa.duration_minutes, s.duration_minutes) as duration_minutes,
+                       COALESCE(sa.price_cents, s.price_cents) as price_cents
+                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
+                JOIN scheduler.services s ON s.id = pairs.service_id
+                JOIN scheduler.areas a ON a.id = pairs.area_id
+                LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
+                params,
+            )
+            for row in pair_rows:
+                self.db.execute_write(
+                    """
+                    INSERT INTO scheduler.appointment_service_areas
+                        (appointment_id, service_id, area_id, area_name, service_name, duration_minutes, price_cents)
+                    VALUES (%s::uuid, %s::uuid, %s::uuid, %s, %s, %s, %s)
+                    """,
+                    (appointment_id, str(row["service_id"]), str(row["area_id"]),
+                     row["area_name"], row["service_name"],
+                     row["duration_minutes"], row.get("price_cents")),
+                )
+        else:
+            self.db.execute_write(
+                """
+                INSERT INTO scheduler.appointment_services
+                    (appointment_id, service_id, service_name, duration_minutes, price_cents)
+                VALUES (%s::uuid, %s::uuid, %s, %s, %s)
+                """,
+                (appointment_id, service_id, svc["name"], svc["duration_minutes"], svc.get("price_cents")),
+            )
+
+        # 8. Re-fetch and sync
+        result = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid",
+            (appointment_id,),
+        )
+        updated_appointment = result[0] if result else appointment
+
+        if self.sheets_sync:
+            try:
+                self.sheets_sync.sync_appointment(updated_appointment, "UPDATED")
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao sincronizar atualização: {e}")
+
+        logger.info(
+            f"[AppointmentService] Serviço/áreas atualizados: id={appointment_id} "
+            f"service={service_id} areas={len(service_area_pairs) if service_area_pairs else 0}"
+        )
+
+        return updated_appointment
+
     def cancel_appointment(self, appointment_id: str) -> Dict[str, Any]:
         result = self.db.execute_write_returning(
             """
@@ -440,6 +592,9 @@ class AppointmentService:
         return appointments
 
     def _get_or_create_patient(self, clinic_id: str, phone: str) -> Dict[str, Any]:
+        from src.utils.phone import normalize_phone
+        phone = normalize_phone(phone)
+
         patients = self.db.execute_query(
             "SELECT * FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
             (clinic_id, phone),

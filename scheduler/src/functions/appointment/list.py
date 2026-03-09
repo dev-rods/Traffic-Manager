@@ -36,18 +36,23 @@ def handler(event, context):
             return http_response(400, {"status": "ERROR", "message": "clinicId e obrigatorio"})
 
         date_filter = extract_query_param(event, "date")
+        date_from = extract_query_param(event, "date_from")
+        date_to = extract_query_param(event, "date_to")
         status_filter = extract_query_param(event, "status")
 
         db = PostgresService()
 
         query = """
             SELECT
-                a.id, a.clinic_id, a.appointment_date, a.start_time, a.end_time,
+                a.id, a.clinic_id, a.service_id, a.appointment_date, a.start_time, a.end_time,
                 a.status, a.notes, a.version, a.created_at, a.updated_at,
+                a.discount_pct, a.discount_reason, a.original_price_cents, a.final_price_cents,
+                a.full_name, a.total_duration_minutes as duration_minutes,
                 p.name as patient_name, p.phone as patient_phone,
-                s.name as service_name, s.duration_minutes,
+                s.name as service_name,
                 pr.name as professional_name,
-                areas_q.areas_display as areas
+                areas_q.areas_display as areas,
+                area_ids_q.area_ids
             FROM scheduler.appointments a
             LEFT JOIN scheduler.patients p ON a.patient_id = p.id
             LEFT JOIN scheduler.services s ON a.service_id = s.id
@@ -57,6 +62,11 @@ def handler(event, context):
                 FROM scheduler.appointment_service_areas asa
                 WHERE asa.appointment_id = a.id
             ) areas_q ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT string_agg(asa.area_id::text, ',' ORDER BY asa.created_at) as area_ids
+                FROM scheduler.appointment_service_areas asa
+                WHERE asa.appointment_id = a.id
+            ) area_ids_q ON TRUE
             WHERE a.clinic_id = %s
         """
         params = [clinic_id]
@@ -64,6 +74,9 @@ def handler(event, context):
         if date_filter:
             query += " AND a.appointment_date = %s"
             params.append(date_filter)
+        elif date_from and date_to:
+            query += " AND a.appointment_date BETWEEN %s AND %s"
+            params.extend([date_from, date_to])
 
         if status_filter:
             query += " AND a.status = %s"

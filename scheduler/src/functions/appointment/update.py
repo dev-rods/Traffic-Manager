@@ -4,7 +4,7 @@ from datetime import datetime, date, time
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
-from src.services.appointment_service import AppointmentService, NotFoundError, OptimisticLockError
+from src.services.appointment_service import AppointmentService, NotFoundError, OptimisticLockError, ConflictError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -24,11 +24,17 @@ def handler(event, context):
     """
     PUT /appointments/{appointmentId}
 
-    Body:
+    Body (all fields optional, at least one required):
     {
-        "status": "CANCELLED",    (opcional)
-        "notes": "Observacoes"    (opcional)
+        "status": "CANCELLED",
+        "notes": "Observacoes",
+        "date": "2026-03-15",
+        "time": "14:00",
+        "serviceId": "uuid",
+        "serviceAreaPairs": [{"serviceId":"..","areaId":".."}]
     }
+
+    Supports combined operations in a single request (e.g. reschedule + change service + update notes).
     """
     try:
         api_key, error_response = require_api_key(event)
@@ -46,61 +52,99 @@ def handler(event, context):
         db = PostgresService()
         new_status = body.get("status")
         notes = body.get("notes")
+        new_date = body.get("date")
+        new_time = body.get("time")
+        new_service_id = body.get("serviceId")
+        new_service_area_pairs = body.get("serviceAreaPairs")
 
-        # If cancelling, use AppointmentService
+        from src.services.sheets_sync import SheetsSync
+        sheets_sync = SheetsSync(db)
+        service = AppointmentService(db, sheets_sync=sheets_sync)
+
+        # Cancel is exclusive — cannot combine with other operations
         if new_status == "CANCELLED":
-            from src.services.sheets_sync import SheetsSync
-            sheets_sync = SheetsSync(db)
-            service = AppointmentService(db, sheets_sync=sheets_sync)
             result = service.cancel_appointment(appointment_id)
-            appointment = _serialize_row(result)
-
             return http_response(200, {
                 "status": "SUCCESS",
                 "message": "Agendamento cancelado com sucesso",
-                "appointment": appointment,
+                "appointment": _serialize_row(result),
             })
 
-        # Otherwise, direct update of allowed fields
+        # Process all non-cancel changes sequentially
+        changed = False
+        messages = []
+
+        # 1. Update service/areas first (changes duration → affects end_time calculation)
+        if new_service_id:
+            service.update_appointment_services(
+                appointment_id, new_service_id, new_service_area_pairs
+            )
+            changed = True
+            messages.append("serviço/áreas")
+
+        # 2. Reschedule date/time (recalculates end_time with current duration)
+        if new_date or new_time:
+            if not new_date or not new_time:
+                existing = db.execute_query(
+                    "SELECT appointment_date, start_time FROM scheduler.appointments WHERE id = %s::uuid",
+                    (appointment_id,),
+                )
+                if not existing:
+                    return http_response(404, {"status": "ERROR", "message": "Agendamento nao encontrado"})
+                if not new_date:
+                    new_date = str(existing[0]["appointment_date"])
+                if not new_time:
+                    new_time = str(existing[0]["start_time"])[:5]
+
+            service.reschedule_appointment(appointment_id, new_date, new_time)
+            changed = True
+            messages.append("data/horário")
+
+        # 3. Update simple fields (notes, status)
         updates = []
         params = []
 
         if new_status:
             updates.append("status = %s")
             params.append(new_status)
+            messages.append("status")
 
         if notes is not None:
             updates.append("notes = %s")
             params.append(notes)
+            messages.append("observações")
 
-        if not updates:
+        if updates:
+            updates.append("updated_at = NOW()")
+            params.append(appointment_id)
+            query = f"""
+                UPDATE scheduler.appointments
+                SET {', '.join(updates)}
+                WHERE id = %s::uuid
+                RETURNING *
+            """
+            db.execute_write_returning(query, tuple(params))
+            changed = True
+
+        if not changed:
             return http_response(400, {"status": "ERROR", "message": "Nenhum campo para atualizar"})
 
-        updates.append("updated_at = NOW()")
-        params.append(appointment_id)
-
-        query = f"""
-            UPDATE scheduler.appointments
-            SET {', '.join(updates)}
-            WHERE id = %s::uuid
-            RETURNING *
-        """
-
-        result = db.execute_write_returning(query, tuple(params))
-
-        if not result:
+        # Re-fetch final state
+        final = db.execute_query("SELECT * FROM scheduler.appointments WHERE id = %s::uuid", (appointment_id,))
+        if not final:
             return http_response(404, {"status": "ERROR", "message": "Agendamento não encontrado"})
-
-        appointment = _serialize_row(result)
 
         return http_response(200, {
             "status": "SUCCESS",
-            "message": "Agendamento atualizado com sucesso",
-            "appointment": appointment,
+            "message": f"Agendamento atualizado ({', '.join(messages)})",
+            "appointment": _serialize_row(final[0]),
         })
 
     except NotFoundError as e:
         return http_response(404, {"status": "ERROR", "message": str(e)})
+
+    except ConflictError as e:
+        return http_response(409, {"status": "ERROR", "message": str(e)})
 
     except OptimisticLockError as e:
         return http_response(409, {"status": "ERROR", "message": str(e)})

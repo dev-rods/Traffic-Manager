@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> 📋 **Ver também:** [`WORKFLOW.md`](./WORKFLOW.md) — processo completo de trabalho (planejamento, meta-planejamento, token monitoring, kanban)
+> 📊 **Kanban:** [`KANBAN.md`](./KANBAN.md) — cards de tasks e status
+> 🔢 **Token Log:** [`TOKEN_LOG.md`](./TOKEN_LOG.md) — consumo de tokens por task
+
+## Princípios (obrigatórios)
+- **State of the art** — melhor solução conhecida, não a mais rápida
+- **Ready for prod** — código direto pra produção
+- **Completeness** — sem TODOs esquecidos, sem edge cases ignorados
+- **Toda task tem Plano + Meta-plano** antes de execução (ver WORKFLOW.md)
+
+---
+
 ## Workflow de Desenvolvimento (Research → Spec → Code → Test → Document)
 
 Siga este processo em **5 etapas** para novas features, refatorações e remoção de código.
@@ -165,3 +177,40 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 - DynamoDB tables: `clinic-scheduler-infra-{stage}-{table-name}`
 - RDS tables: `scheduler.{table_name}` (schema-qualified)
 - Secrets: SSM `/${stage}/KEY_NAME` (SCHEDULER_API_KEY, ZAPI_CLIENT_TOKEN, RDS_*, GOOGLE_SHEETS_SERVICE_ACCOUNT)
+
+---
+
+## Frontend (Scheduler Panel)
+
+Painel web React para proprietários de clínicas. Diretório `frontend/`.
+
+> 📋 **Padrões detalhados:** [`frontend/CLAUDE.md`](./frontend/CLAUDE.md)
+
+### Build & Dev
+
+```bash
+cd frontend && npm install
+npm run dev            # Vite dev server (localhost:5173)
+npm run build          # TypeScript check + Vite build
+npm run test           # Vitest
+npm run lint           # ESLint (zero warnings policy)
+```
+
+### Stack
+React 19 + TypeScript (strict) + Vite 7 + TailwindCSS v4 + React Router v7 + TanStack Query v5 + Axios + React Hook Form + Zod
+
+### Key Directories
+- `frontend/src/components/` — Reusable UI components and route guards
+- `frontend/src/hooks/` — Custom hooks (auth, data fetching)
+- `frontend/src/layouts/` — AppLayout (sidebar), AuthLayout
+- `frontend/src/pages/` — Pages by domain (auth, dashboard, agenda, pacientes, relatorios)
+- `frontend/src/services/` — HTTP layer (one file per resource, typed)
+- `frontend/src/store/` — React Contexts (AuthContext)
+- `frontend/src/types/` — Centralized TypeScript types
+
+### Frontend Principles
+- **Production-ready** — every component ships complete, not "MVP first"
+- **4 states always** — loading, error, empty, success handled in every data-fetching view
+- **Type-safe end-to-end** — backend types reflected in frontend, zero `any`
+- **TanStack Query** for all server state — never call services directly from components
+- **Named exports only** — no default exports
