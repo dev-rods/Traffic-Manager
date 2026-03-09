@@ -64,6 +64,7 @@ functions:
   - ${file(sls/functions/sheets/interface.yml)}
   - ${file(sls/functions/discount_rules/interface.yml)}
   - ${file(sls/functions/lead/interface.yml)}
+  - ${file(sls/functions/attendant/interface.yml)}
 
 resources:
   - ${file(sls/resources/dynamodb/conversation-sessions-table.yml)}
