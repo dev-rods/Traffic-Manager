@@ -7,8 +7,8 @@ from src.services.db.postgres import PostgresService
 logger = logging.getLogger(__name__)
 
 DEFAULT_TEMPLATES = {
-    "WELCOME_NEW": "Olá! Seja {{bem_vindx}} à *{{clinic_name}}*!\n📍 {{address}}\n\nComo posso te ajudar hoje?",
-    "WELCOME_RETURNING": "Olá, {{patient_name}}! {{Bem_vindx}} de volta à *{{clinic_name}}*!\n📍 {{address}}\n\nComo posso te ajudar?",
+    "WELCOME_NEW": "Olá! Seja {{bem_vindx}} à *{{clinic_name}}*!\n\nComo posso te ajudar hoje?",
+    "WELCOME_RETURNING": "Olá, {{patient_name}}! {{Bem_vindx}} de volta à *{{clinic_name}}*!\n\nComo posso te ajudar?",
     "MAIN_MENU": "Escolha uma opção:",
     "SCHEDULE_MENU": "O que você gostaria de fazer?",
     "PRICE_TABLE": "{{price_table}}",
