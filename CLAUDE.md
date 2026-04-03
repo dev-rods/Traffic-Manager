@@ -214,3 +214,4 @@ React 19 + TypeScript (strict) + Vite 7 + TailwindCSS v4 + React Router v7 + Tan
 - **Type-safe end-to-end** — backend types reflected in frontend, zero `any`
 - **TanStack Query** for all server state — never call services directly from components
 - **Named exports only** — no default exports
+- **Impeccable design** — all new UI must follow the design principles from the [impeccable project](../impeccable/). See `frontend/CLAUDE.md` "Design Principles (Impeccable)" section for the full rulebook

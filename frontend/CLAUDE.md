@@ -263,6 +263,62 @@ npm run format:check   # Prettier check
 
 ---
 
+## Design Principles (Impeccable)
+
+Toda UI nova **deve** seguir os padrões do projeto [impeccable](../../impeccable/). Estas regras substituem defaults genéricos.
+
+### Tipografia
+- **Modular type scale** (não incrementos de 1px). Ratio 1.25–1.5 entre tamanhos
+- Parear uma **fonte display distinta** com uma body limpa. Evitar Inter, Roboto, Open Sans
+- Mínimo **16px** para body text; usar `rem/em`, nunca `px` para texto
+
+### Espaçamento & Layout
+- **Grid de 4pt** (4, 8, 12, 16, 24, 32, 48, 80px)
+- Usar `gap` ao invés de margins para espaçamento entre siblings
+- **Assimetria intencional > centralizar tudo.** Texto alinhado à esquerda, grids quebrados são mais fortes
+- Cards são sobreusados — usar espaçamento e tipografia para agrupar. **Nunca aninhar cards dentro de cards**
+- Max width: ~1400px para layouts, ~900px para colunas de conteúdo
+
+### Cor & Contraste
+- **Tint all neutrals** com hue sutil do brand (~0.01 chroma). Cinza puro parece morto
+- Regra **60-30-10**: 60% neutro/white space, 30% secundário (texto, bordas), 10% accent
+- **Nunca usar preto ou branco puros** (#000, #fff). Usar tons com chroma sutil
+- Contraste mínimo **4.5:1** (AA) para body text; 3:1 para texto grande e UI components
+- **Não depender só de cor** para transmitir informação
+
+### Animação & Motion
+- **100–150ms** para feedback instantâneo (botão, toggle)
+- **200–300ms** para mudanças de estado (menu, hover)
+- **300–500ms** para mudanças de layout (accordion, modal)
+- Usar **easing exponencial** (`ease-out-quart/quint/expo`). **Evitar bounce/elastic**
+- **Animar apenas transform e opacity.** Para height, usar `grid-template-rows: 0fr → 1fr`
+- **Respeitar `prefers-reduced-motion`**
+
+### Interação & Componentes
+- **Botões rápidos** com optimistic UI para ações de baixo risco
+- **Progressive disclosure**: opções simples primeiro, avançadas atrás de expandable sections
+- **Hierarquia de botões**: ghost, text links, secondary. Nem tudo é primary
+- **Empty states ensinam**, não só informam. Guiar o usuário para ação
+- Touch targets mínimo **44px**
+
+### Anti-patterns (NUNCA usar)
+- Gradient text decorativo
+- Dark mode com neon glowing como default
+- Glassmorphism decorativo sem propósito
+- Cards idênticos repetidos infinitamente (icon+heading+text)
+- Modais desnecessários (usar inline quando possível)
+- Rounded rectangles com borda colorida grossa de um lado só
+- Sparklines decorativas que não comunicam nada
+- Texto cinza em backgrounds coloridos (usar shade mais escura do background)
+
+### Filosofia
+- **Evitar "AI slop"**: se alguém vê e pensa "AI fez isso", é problema
+- **Direção ousada e intencional > mediocridade segura**
+- **Cada detalhe visual deve justificar sua presença**
+- **Contraste > similaridade**: escolhas opostas (serif+sans, light+bold) criam clareza
+
+---
+
 ## Checklist Pré-Commit (toda feature)
 
 - [ ] Tipos corretos, zero `any`
@@ -271,3 +327,4 @@ npm run format:check   # Prettier check
 - [ ] `npm run lint` passa sem warnings
 - [ ] `npm run build` compila sem erros
 - [ ] Componentes reutilizáveis extraídos quando padrão se repete 2+ vezes
+- [ ] Design segue princípios Impeccable (ver seção acima)
