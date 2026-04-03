@@ -42,8 +42,8 @@ export function Modal({ open, onClose, title, children, width = 'md' }: ModalPro
         if (e.target === overlayRef.current) onClose()
       }}
     >
-      <div className={`w-full ${WIDTH_CLASSES[width]} rounded-xl bg-white shadow-xl`}>
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+      <div className={`w-full ${WIDTH_CLASSES[width]} max-h-[calc(100vh-2rem)] rounded-xl bg-white shadow-xl flex flex-col`}>
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 flex-shrink-0">
           <h2 className="text-base font-semibold text-gray-800">{title}</h2>
           <button
             onClick={onClose}
@@ -52,7 +52,7 @@ export function Modal({ open, onClose, title, children, width = 'md' }: ModalPro
             &times;
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="px-5 py-4 overflow-y-auto">{children}</div>
       </div>
     </div>
   )

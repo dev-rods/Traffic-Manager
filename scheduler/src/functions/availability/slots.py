@@ -12,9 +12,12 @@ logger.setLevel(logging.INFO)
 
 def handler(event, context):
     """
-    GET /clinics/{clinicId}/available-slots?date=YYYY-MM-DD&serviceId=UUID
+    GET /clinics/{clinicId}/available-slots?date=YYYY-MM-DD&serviceId=UUID[&totalDuration=INT]
 
     Returns available time slots for a given clinic, date, and service.
+    When totalDuration (minutes) is provided, uses it directly instead of
+    looking up the service's default duration — useful when specific areas
+    are selected and their summed duration differs from the base service.
     """
     try:
         api_key, error_response = require_api_key(event)
@@ -27,6 +30,7 @@ def handler(event, context):
 
         date_param = extract_query_param(event, "date")
         service_id = extract_query_param(event, "serviceId")
+        total_duration_param = extract_query_param(event, "totalDuration")
 
         if not date_param or not service_id:
             return http_response(400, {
@@ -34,12 +38,15 @@ def handler(event, context):
                 "message": "date and serviceId query parameters are required"
             })
 
-        logger.info(f"[clinicId: {clinic_id}] Getting available slots for date={date_param}, serviceId={service_id}")
+        logger.info(f"[clinicId: {clinic_id}] Getting available slots for date={date_param}, serviceId={service_id}, totalDuration={total_duration_param}")
 
         db = PostgresService()
         engine = AvailabilityEngine(db)
 
-        slots = engine.get_available_slots(clinic_id, date_param, service_id)
+        if total_duration_param:
+            slots = engine.get_available_slots_multi(clinic_id, date_param, int(total_duration_param))
+        else:
+            slots = engine.get_available_slots(clinic_id, date_param, service_id)
 
         return http_response(200, {
             "status": "SUCCESS",
