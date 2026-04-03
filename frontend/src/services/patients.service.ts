@@ -22,8 +22,8 @@ export const patientsService = {
 
   create(clinicId: string, payload: CreatePatientPayload) {
     return api
-      .post<Patient>(`/clinics/${clinicId}/patients`, payload)
-      .then((r) => r.data)
+      .post<{ status: string; patient: Patient }>(`/clinics/${clinicId}/patients`, payload)
+      .then((r) => r.data.patient)
   },
 
   update(clinicId: string, patientId: string, payload: Partial<CreatePatientPayload>) {

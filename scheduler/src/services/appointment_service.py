@@ -83,6 +83,27 @@ class AppointmentService:
         else:
             duration_minutes = sum(s["duration_minutes"] for s in services)
 
+        # 2b. Auto-calculate prices when not provided by caller
+        if original_price_cents is None:
+            if service_area_pairs:
+                values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+                price_params = ()
+                for pair in service_area_pairs:
+                    price_params += (pair["service_id"], pair["area_id"])
+                price_rows = self.db.execute_query(
+                    f"""SELECT SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price
+                    FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
+                    JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
+                    LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
+                    price_params,
+                )
+                original_price_cents = int(price_rows[0]["total_price"]) if price_rows and price_rows[0]["total_price"] else None
+            else:
+                original_price_cents = sum(s.get("price_cents") or 0 for s in services) or None
+
+            if original_price_cents is not None:
+                final_price_cents = original_price_cents
+
         # 3. Calculate end_time
         start_parts = time.split(":")
         start_hour, start_min = int(start_parts[0]), int(start_parts[1])
