@@ -17,33 +17,9 @@ export function todayStr(): string {
   return toDateStr(new Date())
 }
 
-/** Add days to a YYYY-MM-DD string */
-export function addDays(dateStr: string, days: number): string {
-  const d = parseDate(dateStr)
-  d.setDate(d.getDate() + days)
-  return toDateStr(d)
-}
-
-/** Get Monday of the week containing dateStr */
-export function getWeekStart(dateStr: string): string {
-  const d = parseDate(dateStr)
-  const day = d.getDay() // 0=Sun
-  const diff = day === 0 ? -6 : 1 - day // Monday
-  d.setDate(d.getDate() + diff)
-  return toDateStr(d)
-}
-
-/** Get Sunday of the week containing dateStr */
-export function getWeekEnd(dateStr: string): string {
-  return addDays(getWeekStart(dateStr), 6)
-}
-
-/** Get all 7 days of the week as YYYY-MM-DD strings */
-export function getWeekDays(weekStart: string): string[] {
-  return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
-}
 
 const SHORT_DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab']
+const SHORT_MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
@@ -59,21 +35,31 @@ export function dayNumber(dateStr: string): number {
   return parseDate(dateStr).getDate()
 }
 
-/** "Semana de 3 a 9 de Marco · 2026" */
-export function weekRangeLabel(weekStart: string): string {
-  const start = parseDate(weekStart)
-  const end = parseDate(addDays(weekStart, 6))
+/** Short month name from YYYY-MM-DD: "Mar", "Abr", etc. */
+export function shortMonthName(dateStr: string): string {
+  return SHORT_MONTHS[parseDate(dateStr).getMonth()]
+}
+
+
+/** "3 a 9 de Marco · 2026" or "3 de Marco a 9 de Abril · 2026" */
+export function dateRangeLabel(first: string, last: string): string {
+  const start = parseDate(first)
+  const end = parseDate(last)
   const startDay = start.getDate()
   const endDay = end.getDate()
   const month = MONTHS[end.getMonth()]
   const year = end.getFullYear()
 
+  if (first === last) {
+    return `${startDay} de ${month} · ${year}`
+  }
   if (start.getMonth() === end.getMonth()) {
-    return `Semana de ${startDay} a ${endDay} de ${month} · ${year}`
+    return `${startDay} a ${endDay} de ${month} · ${year}`
   }
   const startMonth = MONTHS[start.getMonth()]
-  return `Semana de ${startDay} de ${startMonth} a ${endDay} de ${month} · ${year}`
+  return `${startDay} de ${startMonth} a ${endDay} de ${month} · ${year}`
 }
+
 
 /** Convert "HH:MM:SS" or "HH:MM" to minutes since midnight */
 export function timeToMinutes(time: string): number {

@@ -1,4 +1,4 @@
-import { shortDayName, dayNumber, todayStr, timeToMinutes } from '@/utils/dateHelpers'
+import { shortDayName, dayNumber, shortMonthName, todayStr, timeToMinutes } from '@/utils/dateHelpers'
 import type { Appointment } from '@/types'
 
 const FIRST_HOUR = 7
@@ -70,11 +70,13 @@ function AppointmentBlock({
 
 export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentClick }: WeekGridProps) {
   const today = todayStr()
+  const colCount = weekDays.length
+  const gridCols = `60px repeat(${colCount}, 1fr)`
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
       {/* Header row */}
-      <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: '60px repeat(7, 1fr)' }}>
+      <div className="grid border-b border-gray-200" style={{ gridTemplateColumns: gridCols }}>
         <div className="border-r border-gray-100" />
         {weekDays.map((day) => {
           const isToday = day === today
@@ -82,15 +84,18 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
             <div
               key={day}
               className={[
-                'text-center py-1.5 border-r border-gray-100 last:border-r-0',
+                'text-center py-2 border-r border-gray-100 last:border-r-0',
                 isToday ? 'bg-brand-500 text-white' : '',
               ].join(' ')}
             >
-              <p className={['text-[11px] font-medium leading-tight', isToday ? 'text-white/80' : 'text-gray-400'].join(' ')}>
+              <p className={['text-[11px] font-medium leading-tight uppercase tracking-wide', isToday ? 'text-white/70' : 'text-gray-400'].join(' ')}>
                 {shortDayName(day)}
               </p>
-              <p className={['text-base font-bold leading-tight', isToday ? 'text-white' : 'text-gray-800'].join(' ')}>
+              <p className={['text-lg font-bold leading-tight mt-0.5', isToday ? 'text-white' : 'text-gray-800'].join(' ')}>
                 {dayNumber(day)}
+              </p>
+              <p className={['text-[10px] font-medium leading-tight mt-0.5', isToday ? 'text-white/60' : 'text-gray-300'].join(' ')}>
+                {shortMonthName(day)}
               </p>
             </div>
           )
@@ -99,7 +104,7 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
 
       {/* Time grid body */}
       <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 170px)' }}>
-        <div className="grid relative pt-2" style={{ gridTemplateColumns: '60px repeat(7, 1fr)' }}>
+        <div className="grid relative pt-2" style={{ gridTemplateColumns: gridCols }}>
           {/* Time labels + horizontal lines */}
           <div className="relative" style={{ height: `${TOTAL_HOURS * HOUR_HEIGHT}px` }}>
             {HOURS.map((hour) => (

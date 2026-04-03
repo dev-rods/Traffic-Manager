@@ -19,7 +19,7 @@ export interface Patient {
 export interface CreatePatientPayload {
   name: string
   phone: string
-  gender: 'M' | 'F'
+  gender?: 'M' | 'F'
 }
 
 export interface PatientWithStats extends Patient {
@@ -121,6 +121,18 @@ export interface UpdateAppointmentPayload {
   time?: string
   serviceId?: string
   serviceAreaPairs?: { serviceId: string; areaId: string }[]
+}
+
+// ── Availability Rule ────────────────────────────────────────
+export interface AvailabilityRule {
+  id: string
+  clinic_id: string
+  day_of_week: number | null  // 0=Sun, 6=Sat
+  rule_date: string | null    // YYYY-MM-DD
+  start_time: string          // HH:MM:SS
+  end_time: string            // HH:MM:SS
+  professional_id: string | null
+  active: boolean
 }
 
 // ── Auth ──────────────────────────────────────────────────────

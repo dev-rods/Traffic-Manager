@@ -1,22 +1,21 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useAppointments } from '@/hooks/useAppointments'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { AgendaHeader } from './components/AgendaHeader'
-import type { ViewMode } from './components/AgendaHeader'
 import { WeekGrid } from './components/WeekGrid'
-import { DayGrid } from './components/DayGrid'
 import { AppointmentPopover } from './components/AppointmentPopover'
 import { CancelAppointmentModal } from './components/CancelAppointmentModal'
 import { CreateAppointmentModal } from './components/CreateAppointmentModal'
 import { EditAppointmentModal } from './components/EditAppointmentModal'
-import { todayStr, getWeekStart, getWeekEnd, getWeekDays, addDays } from '@/utils/dateHelpers'
+import { todayStr } from '@/utils/dateHelpers'
+import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import type { Appointment } from '@/types'
 
+const PAGE_SIZE = 7
+
 export function AgendaPage() {
-  const [selectedDate, setSelectedDate] = useState(todayStr)
-  const [viewMode, setViewMode] = useState<ViewMode>('week')
-  const [weekStart, setWeekStart] = useState(() => getWeekStart(todayStr()))
+  const [pageIndex, setPageIndex] = useState(0)
 
   // Popover state
   const [popoverAppointment, setPopoverAppointment] = useState<Appointment | null>(null)
@@ -29,52 +28,41 @@ export function AgendaPage() {
   const [createDate, setCreateDate] = useState('')
   const [createTime, setCreateTime] = useState('')
 
-  // Fetch appointments for the visible range
-  const weekEnd = getWeekEnd(weekStart)
-  const weekDays = getWeekDays(weekStart)
+  // Fetch availability rules — only specific dates (rule_date)
+  const { data: rulesData } = useAvailabilityRules()
 
-  const fetchParams = viewMode === 'week'
-    ? { date_from: weekStart, date_to: weekEnd }
-    : { date: selectedDate }
+  const allDates = useMemo(() => {
+    const rules = rulesData?.data ?? []
+    const dates = rules
+      .filter((r) => r.rule_date !== null)
+      .map((r) => r.rule_date as string)
+    // Deduplicate and sort ascending
+    return [...new Set(dates)].sort()
+  }, [rulesData])
+
+  // Paginate
+  const totalPages = Math.max(1, Math.ceil(allDates.length / PAGE_SIZE))
+  const safePageIndex = Math.min(pageIndex, totalPages - 1)
+  const visibleDates = allDates.slice(safePageIndex * PAGE_SIZE, (safePageIndex + 1) * PAGE_SIZE)
+
+  // Fetch appointments for the visible date range
+  const fetchParams = visibleDates.length > 0
+    ? { date_from: visibleDates[0], date_to: visibleDates[visibleDates.length - 1] }
+    : undefined
 
   const { data, isLoading, isError, error, refetch } = useAppointments(fetchParams)
   const appointments = data?.appointments ?? []
 
   // Navigation
-  const handlePrev = () => {
-    if (viewMode === 'week') {
-      setWeekStart((ws) => addDays(ws, -7))
-    } else {
-      setSelectedDate((d) => {
-        const newDate = addDays(d, -1)
-        setWeekStart(getWeekStart(newDate))
-        return newDate
-      })
-    }
-  }
-
-  const handleNext = () => {
-    if (viewMode === 'week') {
-      setWeekStart((ws) => addDays(ws, 7))
-    } else {
-      setSelectedDate((d) => {
-        const newDate = addDays(d, 1)
-        setWeekStart(getWeekStart(newDate))
-        return newDate
-      })
-    }
-  }
+  const handlePrev = () => setPageIndex((i) => Math.max(0, i - 1))
+  const handleNext = () => setPageIndex((i) => Math.min(totalPages - 1, i + 1))
 
   const handleToday = () => {
     const today = todayStr()
-    setSelectedDate(today)
-    setWeekStart(getWeekStart(today))
-  }
-
-  const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode)
-    if (mode === 'day') {
-      setSelectedDate(todayStr())
+    // Find page that contains today or the nearest future date
+    const idx = allDates.findIndex((d) => d >= today)
+    if (idx >= 0) {
+      setPageIndex(Math.floor(idx / PAGE_SIZE))
     }
   }
 
@@ -92,7 +80,7 @@ export function AgendaPage() {
   }, [])
 
   const handleNewAppointment = () => {
-    setCreateDate(viewMode === 'day' ? selectedDate : todayStr())
+    setCreateDate(visibleDates[0] ?? todayStr())
     setCreateTime('')
     setCreateOpen(true)
   }
@@ -100,13 +88,13 @@ export function AgendaPage() {
   return (
     <div className="p-6 pb-2 space-y-3">
       <AgendaHeader
-        weekStart={viewMode === 'week' ? weekStart : getWeekStart(selectedDate)}
-        viewMode={viewMode}
-        onViewModeChange={handleViewModeChange}
+        visibleDates={visibleDates}
         onPrev={handlePrev}
         onNext={handleNext}
         onToday={handleToday}
         onNewAppointment={handleNewAppointment}
+        hasPrev={safePageIndex > 0}
+        hasNext={safePageIndex < totalPages - 1}
       />
 
       {isLoading ? (
@@ -116,16 +104,9 @@ export function AgendaPage() {
           message={error instanceof Error ? error.message : 'Erro ao carregar agendamentos.'}
           onRetry={() => refetch()}
         />
-      ) : viewMode === 'week' ? (
-        <WeekGrid
-          weekDays={weekDays}
-          appointments={appointments}
-          onSlotClick={handleSlotClick}
-          onAppointmentClick={handleAppointmentClick}
-        />
       ) : (
-        <DayGrid
-          date={selectedDate}
+        <WeekGrid
+          weekDays={visibleDates}
           appointments={appointments}
           onSlotClick={handleSlotClick}
           onAppointmentClick={handleAppointmentClick}
