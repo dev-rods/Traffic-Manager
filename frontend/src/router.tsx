@@ -8,6 +8,7 @@ import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { AgendaPage } from '@/pages/agenda/AgendaPage'
 import { PacientesPage } from '@/pages/pacientes/PacientesPage'
 import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
+import { DescontosPage } from '@/pages/descontos/DescontosPage'
 
 export const router = createBrowserRouter([
   {
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
       { path: 'agenda', element: <AgendaPage /> },
       { path: 'pacientes', element: <PacientesPage /> },
       { path: 'relatorios', element: <RelatoriosPage /> },
+      { path: 'descontos', element: <DescontosPage /> },
     ],
   },
   {

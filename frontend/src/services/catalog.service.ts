@@ -22,7 +22,13 @@ export const catalogService = {
 
   getDiscountRules(clinicId: string) {
     return api
-      .get<DiscountRule>(`/clinics/${clinicId}/discount-rules`)
+      .get<{ status: string; discount_rules: DiscountRule }>(`/clinics/${clinicId}/discount-rules`)
+      .then((r) => r.data)
+  },
+
+  upsertDiscountRules(clinicId: string, payload: Omit<DiscountRule, 'clinic_id'>) {
+    return api
+      .post<{ status: string; discount_rules: DiscountRule }>(`/clinics/${clinicId}/discount-rules`, payload)
       .then((r) => r.data)
   },
 }
