@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { usePatients } from '@/hooks/usePatients'
+import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import { useDebounce } from '@/hooks/useDebounce'
+import { todayStr } from '@/utils/dateHelpers'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
@@ -15,6 +17,16 @@ export function PacientesPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<PatientWithStats | null>(null)
   const debouncedSearch = useDebounce(search)
+
+  // Fetch available dates for WhatsApp message
+  const { data: rulesData } = useAvailabilityRules()
+  const availableDates = useMemo(() => {
+    const today = todayStr()
+    return (rulesData?.data ?? [])
+      .filter((r) => r.rule_date !== null && r.rule_date! >= today)
+      .map((r) => r.rule_date as string)
+      .sort()
+  }, [rulesData])
 
   const { data, isLoading, isError, error, refetch } = usePatients({
     search: debouncedSearch || undefined,
@@ -67,7 +79,7 @@ export function PacientesPage() {
           }
         />
       ) : (
-        <PatientsTable patients={data.items} onSelect={setEditingPatient} />
+        <PatientsTable patients={data.items} onSelect={setEditingPatient} availableDates={availableDates} />
       )}
 
       <CreatePatientModal open={createOpen} onClose={() => setCreateOpen(false)} />
