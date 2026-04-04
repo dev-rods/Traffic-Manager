@@ -8,7 +8,7 @@ function buildWhatsAppUrl(phone: string, name: string, availableDates: string[])
   const firstName = name.split(' ')[0] || 'Ola'
   const datesText = availableDates.length > 0
     ? availableDates.map((d) => {
-        const [y, m, day] = d.split('-')
+        const [, m, day] = d.split('-')
         return `${day}/${m}`
       }).join(', ')
     : 'em breve'
