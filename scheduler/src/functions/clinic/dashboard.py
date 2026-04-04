@@ -2,7 +2,7 @@ import json
 import logging
 from datetime import datetime, date, time, timedelta
 
-from src.utils.http import http_response, require_api_key, extract_path_param
+from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,15 @@ def handler(event, context):
             })
 
         db = PostgresService()
-        today = date.today()
+        date_param = extract_query_param(event, "date")
+        if date_param:
+            try:
+                target_date = datetime.strptime(date_param, "%Y-%m-%d").date()
+            except ValueError:
+                target_date = date.today()
+        else:
+            target_date = date.today()
+        today = target_date
         week_start, week_end = _get_week_bounds(today)
         month_start, month_end = _get_month_bounds(today)
 

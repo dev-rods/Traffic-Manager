@@ -76,9 +76,11 @@ export const reportsService = {
       .then((r) => r.data)
   },
 
-  dashboard(clinicId: string) {
+  dashboard(clinicId: string, date?: string) {
     return api
-      .get<DashboardData>(`/clinics/${clinicId}/dashboard`)
+      .get<DashboardData>(`/clinics/${clinicId}/dashboard`, {
+        params: date ? { date } : undefined,
+      })
       .then((r) => r.data)
   },
 }

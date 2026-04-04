@@ -4,17 +4,17 @@ import { useAuth } from './useAuth'
 
 export const dashboardKeys = {
   all: ['dashboard'] as const,
-  data: (clinicId: string) => [...dashboardKeys.all, clinicId] as const,
+  data: (clinicId: string, date?: string) => [...dashboardKeys.all, clinicId, date] as const,
 }
 
-export function useDashboard() {
+export function useDashboard(date?: string) {
   const { clinicId } = useAuth()
 
   return useQuery({
-    queryKey: dashboardKeys.data(clinicId!),
-    queryFn: () => reportsService.dashboard(clinicId!),
+    queryKey: dashboardKeys.data(clinicId!, date),
+    queryFn: () => reportsService.dashboard(clinicId!, date),
     enabled: !!clinicId,
-    staleTime: 2 * 60 * 1000, // 2 min — dashboard data is near-realtime but not critical
-    refetchInterval: 5 * 60 * 1000, // auto-refresh every 5 min
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   })
 }
