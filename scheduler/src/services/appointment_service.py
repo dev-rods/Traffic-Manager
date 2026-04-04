@@ -102,7 +102,7 @@ class AppointmentService:
                 original_price_cents = sum(s.get("price_cents") or 0 for s in services) or None
 
             if original_price_cents is not None:
-                final_price_cents = original_price_cents
+                final_price_cents = original_price_cents * (100 - discount_pct) // 100
 
         # 3. Calculate end_time
         start_parts = time.split(":")

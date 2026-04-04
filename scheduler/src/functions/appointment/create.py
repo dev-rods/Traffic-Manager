@@ -99,6 +99,8 @@ def handler(event, context):
             service_ids=service_ids,
             service_area_pairs=service_area_pairs if service_area_pairs else None,
             full_name=body.get("fullName"),
+            discount_pct=body.get("discountPct", 0),
+            discount_reason=body.get("discountReason"),
         )
 
         appointment = _serialize_row(result)

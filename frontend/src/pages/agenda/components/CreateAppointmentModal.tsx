@@ -29,6 +29,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     services?.length === 1 ? services[0].id : ''
   )
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([])
+  const [isPartnership, setIsPartnership] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [prevServiceId, setPrevServiceId] = useState('')
 
@@ -171,6 +172,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         date,
         time,
         serviceAreaPairs,
+        ...(isPartnership ? { discountPct: 100, discountReason: 'partnership' } : {}),
       })
       handleClose()
     } catch (err: unknown) {
@@ -420,6 +422,20 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
             </div>
           )}
         </div>
+
+        {/* Partnership toggle */}
+        <button
+          type="button"
+          onClick={() => setIsPartnership(!isPartnership)}
+          className={[
+            'w-full py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 border',
+            isPartnership
+              ? 'bg-amber-50 border-amber-300 text-amber-700'
+              : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600',
+          ].join(' ')}
+        >
+          {isPartnership ? '🤝 Parceria — valor zerado' : '🤝 Marcar como parceria'}
+        </button>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">

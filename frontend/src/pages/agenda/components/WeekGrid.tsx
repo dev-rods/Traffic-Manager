@@ -3,9 +3,15 @@ import type { Appointment } from '@/types'
 
 const FIRST_HOUR = 7
 const LAST_HOUR = 20
+const SLOT_MINUTES = 15
 const HOUR_HEIGHT = 48 // px per hour
+const SLOT_HEIGHT = HOUR_HEIGHT / (60 / SLOT_MINUTES) // px per 15-min slot
 const TOTAL_HOURS = LAST_HOUR - FIRST_HOUR
 const HOURS = Array.from({ length: TOTAL_HOURS }, (_, i) => FIRST_HOUR + i)
+const SLOTS = Array.from(
+  { length: TOTAL_HOURS * (60 / SLOT_MINUTES) },
+  (_, i) => FIRST_HOUR * 60 + i * SLOT_MINUTES,
+)
 
 interface WeekGridProps {
   weekDays: string[]
@@ -15,7 +21,7 @@ interface WeekGridProps {
 }
 
 function getAppointmentsForDay(appointments: Appointment[], date: string): Appointment[] {
-  return appointments.filter((a) => a.appointment_date === date)
+  return appointments.filter((a) => a.appointment_date === date && a.status !== 'CANCELLED')
 }
 
 function appointmentStyle(a: Appointment): React.CSSProperties {
@@ -41,9 +47,9 @@ function AppointmentBlock({
   onClick: (a: Appointment, rect: DOMRect) => void
 }) {
   const a = appointment
-  const isCancelled = a.status === 'CANCELLED'
   const displayName = a.patient_name || a.full_name || 'Sem nome'
   const serviceLine = [a.service_name, a.areas].filter(Boolean).join(' · ')
+  const isPartnership = a.discount_reason === 'partnership'
 
   return (
     <button
@@ -55,7 +61,7 @@ function AppointmentBlock({
       style={appointmentStyle(a)}
       className={[
         'w-full text-left rounded-md px-2 py-1 border-l-3 overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
-        isCancelled
+        isPartnership
           ? 'bg-amber-50 border-l-amber-400 text-amber-800'
           : 'bg-brand-50 border-l-brand-500 text-brand-900',
       ].join(' ')}
@@ -134,16 +140,27 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
                 ].join(' ')}
                 style={{ height: `${TOTAL_HOURS * HOUR_HEIGHT}px` }}
               >
-                {/* Hour grid lines + click targets */}
-                {HOURS.map((hour) => (
-                  <button
-                    type="button"
-                    key={hour}
-                    className="absolute w-full border-t border-gray-100 hover:bg-brand-50/40 transition-colors cursor-pointer"
-                    style={{ top: `${(hour - FIRST_HOUR) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
-                    onClick={() => onSlotClick(day, `${String(hour).padStart(2, '0')}:00`)}
-                  />
-                ))}
+                {/* 15-min grid lines + click targets */}
+                {SLOTS.map((slotMin) => {
+                  const h = Math.floor(slotMin / 60)
+                  const m = slotMin % 60
+                  const isHourLine = m === 0
+                  return (
+                    <button
+                      type="button"
+                      key={slotMin}
+                      className={[
+                        'absolute w-full hover:bg-brand-50/40 transition-colors cursor-pointer',
+                        isHourLine ? 'border-t border-gray-100' : 'border-t border-gray-50',
+                      ].join(' ')}
+                      style={{
+                        top: `${((slotMin - FIRST_HOUR * 60) / 60) * HOUR_HEIGHT}px`,
+                        height: `${SLOT_HEIGHT}px`,
+                      }}
+                      onClick={() => onSlotClick(day, `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)}
+                    />
+                  )
+                })}
 
                 {/* Appointment blocks */}
                 {dayAppts.map((a) => (

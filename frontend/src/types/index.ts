@@ -58,7 +58,7 @@ export interface DiscountRule {
   is_active: boolean
 }
 
-export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | null
+export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'partnership' | null
 
 export interface DiscountBreakdown {
   original_price_cents: number
@@ -112,6 +112,8 @@ export interface CreateAppointmentPayload {
   serviceAreaPairs?: { serviceId: string; areaId: string }[]
   professionalId?: string
   fullName?: string
+  discountPct?: number
+  discountReason?: string
 }
 
 export interface UpdateAppointmentPayload {

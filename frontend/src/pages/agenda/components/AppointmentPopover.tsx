@@ -6,6 +6,7 @@ const DISCOUNT_LABELS: Record<string, string> = {
   first_session: '1a sessao',
   tier_2: '2-4 areas',
   tier_3: '5+ areas',
+  partnership: 'Parceria',
 }
 
 interface AppointmentPopoverProps {
@@ -61,7 +62,14 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
         {/* Header */}
         <div className="flex items-start justify-between p-4 pb-2">
           <div className="min-w-0">
-            <p className="font-semibold text-gray-800 truncate">{displayName}</p>
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-gray-800 truncate">{displayName}</p>
+              {a.discount_reason === 'partnership' && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
+                  PARCERIA
+                </span>
+              )}
+            </div>
             {serviceLine && <p className="text-sm text-gray-500">{serviceLine}</p>}
           </div>
           <button
