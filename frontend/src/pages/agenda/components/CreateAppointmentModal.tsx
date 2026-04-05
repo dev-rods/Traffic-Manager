@@ -29,7 +29,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     services?.length === 1 ? services[0].id : ''
   )
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([])
-  const [isPartnership, setIsPartnership] = useState(false)
+  const [discountMode, setDiscountMode] = useState<'none' | 'partnership' | 'custom'>('none')
+  const [customDiscountPct, setCustomDiscountPct] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [prevServiceId, setPrevServiceId] = useState('')
 
@@ -172,7 +173,11 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         date,
         time,
         serviceAreaPairs,
-        ...(isPartnership ? { discountPct: 100, discountReason: 'partnership' } : {}),
+        ...(discountMode === 'partnership'
+          ? { discountPct: 100, discountReason: 'partnership' }
+          : discountMode === 'custom' && customDiscountPct
+            ? { discountPct: Number(customDiscountPct), discountReason: 'custom' }
+            : {}),
       })
       handleClose()
     } catch (err: unknown) {
@@ -423,19 +428,49 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           )}
         </div>
 
-        {/* Partnership toggle */}
-        <button
-          type="button"
-          onClick={() => setIsPartnership(!isPartnership)}
-          className={[
-            'w-full py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 border',
-            isPartnership
-              ? 'bg-amber-50 border-amber-300 text-amber-700'
-              : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600',
-          ].join(' ')}
-        >
-          {isPartnership ? '🤝 Parceria — valor zerado' : '🤝 Marcar como parceria'}
-        </button>
+        {/* Discount section */}
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1.5">Desconto</label>
+          <div className="flex gap-2">
+            {([
+              { key: 'none', label: 'Sem desconto' },
+              { key: 'partnership', label: 'Parceria (100%)' },
+              { key: 'custom', label: 'Personalizado' },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setDiscountMode(key)}
+                className={[
+                  'flex-1 py-2 rounded-lg text-xs font-semibold transition-all duration-150 border',
+                  discountMode === key
+                    ? key === 'partnership'
+                      ? 'bg-amber-50 border-amber-300 text-amber-700'
+                      : key === 'custom'
+                        ? 'bg-brand-50 border-brand-300 text-brand-700'
+                        : 'bg-gray-900 border-gray-900 text-white'
+                    : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600',
+                ].join(' ')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {discountMode === 'custom' && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="99"
+                placeholder="Ex: 30"
+                value={customDiscountPct}
+                onChange={(e) => setCustomDiscountPct(e.target.value)}
+                className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              />
+              <span className="text-sm text-gray-500">% de desconto</span>
+            </div>
+          )}
+        </div>
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">

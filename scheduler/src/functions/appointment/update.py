@@ -56,6 +56,8 @@ def handler(event, context):
         new_time = body.get("time")
         new_service_id = body.get("serviceId")
         new_service_area_pairs = body.get("serviceAreaPairs")
+        new_discount_pct = body.get("discountPct")
+        new_discount_reason = body.get("discountReason")
 
         from src.services.sheets_sync import SheetsSync
         sheets_sync = SheetsSync(db)
@@ -100,7 +102,7 @@ def handler(event, context):
             changed = True
             messages.append("data/horário")
 
-        # 3. Update simple fields (notes, status)
+        # 3. Update simple fields (notes, status, discount)
         updates = []
         params = []
 
@@ -113,6 +115,25 @@ def handler(event, context):
             updates.append("notes = %s")
             params.append(notes)
             messages.append("observações")
+
+        if new_discount_pct is not None:
+            discount_pct = int(new_discount_pct)
+            if discount_pct < 0 or discount_pct > 100:
+                return http_response(400, {"status": "ERROR", "message": "Desconto deve ser entre 0 e 100"})
+            updates.append("discount_pct = %s")
+            params.append(discount_pct)
+            updates.append("discount_reason = %s")
+            params.append(new_discount_reason)
+            # Recalculate final price
+            existing = db.execute_query(
+                "SELECT original_price_cents FROM scheduler.appointments WHERE id = %s::uuid",
+                (appointment_id,),
+            )
+            if existing and existing[0].get("original_price_cents") is not None:
+                orig = existing[0]["original_price_cents"]
+                updates.append("final_price_cents = %s")
+                params.append(orig * (100 - discount_pct) // 100)
+            messages.append("desconto")
 
         if updates:
             updates.append("updated_at = NOW()")

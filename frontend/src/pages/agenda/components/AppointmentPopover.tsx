@@ -7,6 +7,7 @@ const DISCOUNT_LABELS: Record<string, string> = {
   tier_2: '2-4 areas',
   tier_3: '5+ areas',
   partnership: 'Parceria',
+  custom: 'Personalizado',
 }
 
 interface AppointmentPopoverProps {

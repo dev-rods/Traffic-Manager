@@ -9,6 +9,11 @@ import { AgendaPage } from '@/pages/agenda/AgendaPage'
 import { PacientesPage } from '@/pages/pacientes/PacientesPage'
 import { RelatoriosPage } from '@/pages/relatorios/RelatoriosPage'
 import { DescontosPage } from '@/pages/descontos/DescontosPage'
+import { ServicosPage } from '@/pages/servicos/ServicosPage'
+import { AreasPage } from '@/pages/areas/AreasPage'
+import { HorariosPage } from '@/pages/horarios/HorariosPage'
+import { FaqPage } from '@/pages/faq/FaqPage'
+import { ConfiguracoesPage } from '@/pages/configuracoes/ConfiguracoesPage'
 
 export const router = createBrowserRouter([
   {
@@ -38,6 +43,11 @@ export const router = createBrowserRouter([
       { path: 'pacientes', element: <PacientesPage /> },
       { path: 'relatorios', element: <RelatoriosPage /> },
       { path: 'descontos', element: <DescontosPage /> },
+      { path: 'servicos', element: <ServicosPage /> },
+      { path: 'areas', element: <AreasPage /> },
+      { path: 'horarios', element: <HorariosPage /> },
+      { path: 'faq', element: <FaqPage /> },
+      { path: 'configuracoes', element: <ConfiguracoesPage /> },
     ],
   },
   {

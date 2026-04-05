@@ -3,6 +3,34 @@ export interface Clinic {
   clinic_id: string
   name: string
   owner_email: string
+  phone: string | null
+  address: string | null
+  timezone: string | null
+  buffer_minutes: number | null
+  max_future_dates: number | null
+  max_session_minutes: number | null
+  display_name: string | null
+  welcome_message: string | null
+  welcome_intro_message: string | null
+  pre_session_instructions: string | null
+  google_spreadsheet_id: string | null
+  google_sheet_name: string | null
+  active: boolean
+}
+
+export interface UpdateClinicPayload {
+  name?: string
+  display_name?: string
+  phone?: string
+  address?: string
+  buffer_minutes?: number
+  max_future_dates?: number
+  max_session_minutes?: number
+  welcome_message?: string
+  welcome_intro_message?: string
+  pre_session_instructions?: string
+  google_spreadsheet_id?: string
+  google_sheet_name?: string
 }
 
 // ── Patient ───────────────────────────────────────────────────
@@ -58,7 +86,7 @@ export interface DiscountRule {
   is_active: boolean
 }
 
-export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'partnership' | null
+export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'partnership' | 'custom' | null
 
 export interface DiscountBreakdown {
   original_price_cents: number
@@ -123,6 +151,8 @@ export interface UpdateAppointmentPayload {
   time?: string
   serviceId?: string
   serviceAreaPairs?: { serviceId: string; areaId: string }[]
+  discountPct?: number
+  discountReason?: string | null
 }
 
 // ── Availability Rule ────────────────────────────────────────
@@ -135,6 +165,64 @@ export interface AvailabilityRule {
   end_time: string            // HH:MM:SS
   professional_id: string | null
   active: boolean
+}
+
+export interface CreateAvailabilityRulePayload {
+  day_of_week?: number
+  rule_date?: string
+  start_time: string
+  end_time: string
+}
+
+export interface AvailabilityException {
+  id: string
+  clinic_id: string
+  exception_date: string
+  exception_type: 'BLOCKED' | 'SPECIAL_HOURS'
+  start_time: string | null
+  end_time: string | null
+  reason: string | null
+  active: boolean
+}
+
+export interface CreateAvailabilityExceptionPayload {
+  exception_date: string
+  exception_type: 'BLOCKED' | 'SPECIAL_HOURS'
+  start_time?: string
+  end_time?: string
+  reason?: string
+}
+
+// ── Clinic Area (global catalog) ─────────────────────────────
+export interface ClinicArea {
+  id: string
+  clinic_id: string
+  name: string
+  display_order: number
+  active: boolean
+}
+
+export interface CreateAreaPayload {
+  name: string
+  display_order?: number
+}
+
+// ── FAQ ──────────────────────────────────────────────────────
+export interface FaqItem {
+  id: string
+  clinic_id: string
+  question_key: string
+  question_label: string
+  answer: string
+  display_order: number
+  active: boolean
+}
+
+export interface CreateFaqPayload {
+  question_key: string
+  question_label: string
+  answer: string
+  display_order?: number
 }
 
 // ── Auth ──────────────────────────────────────────────────────

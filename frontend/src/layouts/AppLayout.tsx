@@ -6,7 +6,12 @@ const NAV_ITEMS = [
   { to: '/agenda', label: 'Agenda', icon: '📅' },
   { to: '/pacientes', label: 'Pacientes', icon: '👥' },
   { to: '/relatorios', label: 'Relatórios', icon: '📊' },
+  { to: '/servicos', label: 'Serviços', icon: '💆' },
+  { to: '/areas', label: 'Áreas', icon: '📋' },
   { to: '/descontos', label: 'Descontos', icon: '🏷' },
+  { to: '/horarios', label: 'Horários', icon: '🕐' },
+  { to: '/faq', label: 'FAQ', icon: '❓' },
+  { to: '/configuracoes', label: 'Configurações', icon: '⚙' },
 ]
 
 export default function AppLayout() {

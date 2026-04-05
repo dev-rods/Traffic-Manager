@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/Input'
 import { useUpdateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
 import { useServiceAreas } from '@/hooks/useAreas'
+import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
 import type { Appointment, UpdateAppointmentPayload } from '@/types'
 
 interface EditAppointmentModalProps {
@@ -25,14 +26,61 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const [prevServiceId, setPrevServiceId] = useState(serviceId)
   const [error, setError] = useState<string | null>(null)
 
+  // Discount state
+  const initDiscountMode = appointment?.discount_reason === 'partnership'
+    ? 'partnership' as const
+    : appointment?.discount_reason === 'custom'
+      ? 'custom' as const
+      : appointment?.discount_pct && appointment.discount_pct > 0
+        ? 'custom' as const
+        : 'none' as const
+  const [discountMode, setDiscountMode] = useState<'none' | 'partnership' | 'custom'>(initDiscountMode)
+  const [customDiscountPct, setCustomDiscountPct] = useState(
+    initDiscountMode === 'custom' && appointment?.discount_pct
+      ? String(appointment.discount_pct)
+      : ''
+  )
+
   const { data: serviceAreas } = useServiceAreas(serviceId || undefined)
+
+  // Compute total duration from selected areas for accurate slot calculation
+  const totalDuration = selectedAreaIds.length > 0 && serviceAreas
+    ? serviceAreas
+        .filter((a) => selectedAreaIds.includes(a.area_id))
+        .reduce((sum, a) => sum + a.effective_duration_minutes, 0)
+    : undefined
+
+  // Fetch available slots
+  const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(
+    date || undefined,
+    serviceId || undefined,
+    totalDuration,
+  )
+  const slots = slotsData?.slots ?? []
+
+  // Include the current appointment's time in the slot list (it's "available" for itself)
+  const currentSlot = appointment?.start_time.slice(0, 5) ?? ''
+  const slotsWithCurrent = slots.includes(currentSlot)
+    ? slots
+    : currentSlot && date === appointment?.appointment_date
+      ? [currentSlot, ...slots].sort()
+      : slots
 
   // Reset areas when service changes (derived state pattern)
   if (serviceId !== prevServiceId) {
     setPrevServiceId(serviceId)
-    // Only reset if the user actually changed the service (not initial render)
     if (prevServiceId !== '') {
       setSelectedAreaIds([])
+    }
+  }
+
+  // Clear selected time when date, service, or areas change (derived state pattern)
+  const [prevSlotKey, setPrevSlotKey] = useState(`${date}|${serviceId}|${totalDuration}`)
+  const slotKey = `${date}|${serviceId}|${totalDuration}`
+  if (slotKey !== prevSlotKey) {
+    setPrevSlotKey(slotKey)
+    if (date !== appointment?.appointment_date) {
+      setTime('')
     }
   }
 
@@ -50,8 +98,14 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     const origSorted = [...initialAreaIds].sort()
     return sorted.length !== origSorted.length || sorted.some((v, i) => v !== origSorted[i])
   })()
+  const discountChanged = (() => {
+    const origMode = initDiscountMode
+    if (discountMode !== origMode) return true
+    if (discountMode === 'custom' && Number(customDiscountPct) !== (a.discount_pct ?? 0)) return true
+    return false
+  })()
 
-  const hasChanges = dateChanged || timeChanged || notesChanged || serviceChanged || areasChanged
+  const hasChanges = dateChanged || timeChanged || notesChanged || serviceChanged || areasChanged || discountChanged
 
   const toggleArea = (areaId: string) => {
     setSelectedAreaIds((prev) =>
@@ -71,6 +125,11 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
 
     if (!serviceId) {
       setError('Selecione um serviço.')
+      return
+    }
+
+    if (discountMode === 'custom' && (!customDiscountPct || Number(customDiscountPct) <= 0 || Number(customDiscountPct) > 100)) {
+      setError('Informe um desconto válido entre 1 e 100%.')
       return
     }
 
@@ -97,6 +156,19 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
         }
       }
 
+      if (discountChanged) {
+        if (discountMode === 'partnership') {
+          payload.discountPct = 100
+          payload.discountReason = 'partnership'
+        } else if (discountMode === 'custom') {
+          payload.discountPct = Number(customDiscountPct)
+          payload.discountReason = 'custom'
+        } else {
+          payload.discountPct = 0
+          payload.discountReason = null
+        }
+      }
+
       await updateAppointment.mutateAsync({
         appointmentId: a.id,
         payload,
@@ -104,8 +176,9 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
       onClose()
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'response' in err) {
-        const response = (err as { response: { data?: { message?: string } } }).response
-        setError(response.data?.message ?? 'Erro ao atualizar agendamento')
+        const response = (err as { response: { data?: { message?: string; error?: string } } }).response
+        const detail = response.data?.error || response.data?.message
+        setError(detail ?? 'Erro ao atualizar agendamento')
       } else {
         setError('Erro ao atualizar agendamento')
       }
@@ -113,28 +186,20 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   }
 
   return (
-    <Modal open onClose={onClose} title="Editar agendamento">
-      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+    <Modal open onClose={onClose} title="Editar agendamento" width="lg">
+      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-5">
         {/* Patient info (read-only) */}
         <div className="rounded-lg bg-gray-50 p-3">
           <p className="text-sm font-medium text-gray-800">{displayName}</p>
         </div>
 
-        {/* Date + Time */}
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="Data"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-          <Input
-            label="Horário"
-            type="time"
-            value={time}
-            onChange={(e) => setTime(e.target.value)}
-          />
-        </div>
+        {/* Date */}
+        <Input
+          label="Data"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
 
         {/* Service */}
         <div>
@@ -182,6 +247,83 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
             </div>
           </div>
         )}
+
+        {/* Time slot picker */}
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1.5">Horário</label>
+          {!date || !serviceId ? (
+            <p className="text-sm text-gray-300 py-3">Selecione data e serviço para ver horários</p>
+          ) : slotsLoading ? (
+            <div className="flex items-center gap-2 py-3">
+              <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-gray-400">Carregando horários...</span>
+            </div>
+          ) : slotsWithCurrent.length === 0 ? (
+            <p className="text-sm text-gray-400 py-3">Nenhum horário disponível para esta data</p>
+          ) : (
+            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+              {slotsWithCurrent.map((slot) => (
+                <button
+                  key={slot}
+                  type="button"
+                  onClick={() => setTime(slot)}
+                  className={[
+                    'px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                    time === slot
+                      ? 'bg-gray-900 text-white shadow-sm'
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                  ].join(' ')}
+                >
+                  {slot}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Discount section */}
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1.5">Desconto</label>
+          <div className="flex gap-2">
+            {([
+              { key: 'none', label: 'Sem desconto' },
+              { key: 'partnership', label: 'Parceria (100%)' },
+              { key: 'custom', label: 'Personalizado' },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setDiscountMode(key)}
+                className={[
+                  'flex-1 py-2 rounded-lg text-xs font-semibold transition-all duration-150 border',
+                  discountMode === key
+                    ? key === 'partnership'
+                      ? 'bg-amber-50 border-amber-300 text-amber-700'
+                      : key === 'custom'
+                        ? 'bg-brand-50 border-brand-300 text-brand-700'
+                        : 'bg-gray-900 border-gray-900 text-white'
+                    : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600',
+                ].join(' ')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {discountMode === 'custom' && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max="99"
+                placeholder="Ex: 30"
+                value={customDiscountPct}
+                onChange={(e) => setCustomDiscountPct(e.target.value)}
+                className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              />
+              <span className="text-sm text-gray-500">% de desconto</span>
+            </div>
+          )}
+        </div>
 
         {/* Notes */}
         <div>

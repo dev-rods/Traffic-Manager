@@ -13,6 +13,8 @@ const DISCOUNT_LABELS: Record<string, string> = {
   first_session: '1a sessao',
   tier_2: '2-4 areas',
   tier_3: '5+ areas',
+  partnership: 'Parceria',
+  custom: 'Personalizado',
 }
 
 export function TodayAppointments({ appointments }: TodayAppointmentsProps) {

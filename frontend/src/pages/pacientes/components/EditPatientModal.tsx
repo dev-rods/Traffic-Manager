@@ -62,8 +62,9 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
         'response' in err &&
         (err as Record<string, unknown>).response
       ) {
-        const response = (err as { response: { data?: { message?: string } } }).response
-        setServerError(response.data?.message ?? 'Erro ao atualizar paciente')
+        const response = (err as { response: { data?: { message?: string; error?: string } } }).response
+        const detail = response.data?.error || response.data?.message
+        setServerError(detail ?? 'Erro ao atualizar paciente')
       } else {
         setServerError('Erro ao atualizar paciente')
       }

@@ -1,0 +1,242 @@
+import { useState } from 'react'
+import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
+import { SkeletonTable } from '@/components/ui/Skeleton'
+import { ErrorState } from '@/components/ui/ErrorState'
+import type { UpdateClinicPayload } from '@/types'
+
+function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['data']>): UpdateClinicPayload {
+  return {
+    name: clinic.name ?? '',
+    display_name: clinic.display_name ?? '',
+    phone: clinic.phone ?? '',
+    address: clinic.address ?? '',
+    buffer_minutes: clinic.buffer_minutes ?? 10,
+    max_future_dates: clinic.max_future_dates ?? 5,
+    max_session_minutes: clinic.max_session_minutes ?? 120,
+    welcome_message: clinic.welcome_message ?? '',
+    welcome_intro_message: clinic.welcome_intro_message ?? '',
+    pre_session_instructions: clinic.pre_session_instructions ?? '',
+    google_spreadsheet_id: clinic.google_spreadsheet_id ?? '',
+    google_sheet_name: clinic.google_sheet_name ?? '',
+  }
+}
+
+export function ConfiguracoesPage() {
+  const { data: clinic, isLoading, isError, error, refetch } = useClinic()
+  const updateClinic = useUpdateClinic()
+
+  const [form, setForm] = useState<UpdateClinicPayload>({})
+  const [saved, setSaved] = useState(false)
+  const [prevClinicId, setPrevClinicId] = useState<string | null>(null)
+
+  // Derived state pattern — populate form when clinic data loads
+  if (clinic && clinic.clinic_id !== prevClinicId) {
+    setPrevClinicId(clinic.clinic_id)
+    setForm(buildFormFromClinic(clinic))
+  }
+
+  const set = (key: keyof UpdateClinicPayload, value: string | number) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const handleSave = async () => {
+    setSaved(false)
+    await updateClinic.mutateAsync(form)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 3000)
+  }
+
+  if (isLoading) return <div className="p-6"><SkeletonTable rows={8} /></div>
+  if (isError) {
+    return (
+      <div className="p-6">
+        <ErrorState
+          message={error instanceof Error ? error.message : 'Erro ao carregar configurações.'}
+          onRetry={() => refetch()}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 max-w-2xl">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Configurações</h1>
+        <p className="text-sm text-gray-400 mt-1">Dados e preferências da sua clínica</p>
+      </div>
+
+      <div className="space-y-8">
+        {/* General info */}
+        <Section title="Dados gerais" description="Informações básicas da clínica">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Nome" value={form.name as string} onChange={(v) => set('name', v)} />
+            <Field label="Nome de exibição" value={form.display_name as string} onChange={(v) => set('display_name', v)} placeholder="Como aparece para o paciente" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Telefone" value={form.phone as string} onChange={(v) => set('phone', v)} />
+            <Field label="Endereço" value={form.address as string} onChange={(v) => set('address', v)} />
+          </div>
+        </Section>
+
+        <hr className="border-gray-100" />
+
+        {/* Scheduling */}
+        <Section title="Agendamento" description="Parâmetros que afetam a disponibilidade de horários">
+          <div className="grid grid-cols-3 gap-4">
+            <NumberField
+              label="Buffer (min)"
+              value={form.buffer_minutes as number}
+              onChange={(v) => set('buffer_minutes', v)}
+              min={0}
+              max={120}
+              help="Intervalo entre agendamentos"
+            />
+            <NumberField
+              label="Datas futuras"
+              value={form.max_future_dates as number}
+              onChange={(v) => set('max_future_dates', v)}
+              min={1}
+              max={90}
+              help="Máx. dias que o paciente vê"
+            />
+            <NumberField
+              label="Sessão máx. (min)"
+              value={form.max_session_minutes as number}
+              onChange={(v) => set('max_session_minutes', v)}
+              min={15}
+              max={480}
+              help="Duração máxima de uma sessão"
+            />
+          </div>
+        </Section>
+
+        <hr className="border-gray-100" />
+
+        {/* Messages */}
+        <Section title="Mensagens" description="Textos que o bot envia no WhatsApp">
+          <TextAreaField
+            label="Mensagem de boas-vindas (intro)"
+            value={form.welcome_intro_message as string}
+            onChange={(v) => set('welcome_intro_message', v)}
+            placeholder="Primeira mensagem ao contato novo..."
+          />
+          <TextAreaField
+            label="Mensagem de boas-vindas"
+            value={form.welcome_message as string}
+            onChange={(v) => set('welcome_message', v)}
+            placeholder="Mensagem principal do menu..."
+          />
+          <TextAreaField
+            label="Instruções pré-sessão"
+            value={form.pre_session_instructions as string}
+            onChange={(v) => set('pre_session_instructions', v)}
+            placeholder="Enviadas antes do agendamento..."
+          />
+        </Section>
+
+        <hr className="border-gray-100" />
+
+        {/* Integrations */}
+        <Section title="Integrações" description="Conexões com sistemas externos">
+          <div className="grid grid-cols-2 gap-4">
+            <Field
+              label="Google Spreadsheet ID"
+              value={form.google_spreadsheet_id as string}
+              onChange={(v) => set('google_spreadsheet_id', v)}
+              placeholder="ID da planilha"
+            />
+            <Field
+              label="Nome da aba"
+              value={form.google_sheet_name as string}
+              onChange={(v) => set('google_sheet_name', v)}
+              placeholder="Ex: Agendamentos"
+            />
+          </div>
+        </Section>
+
+        {/* Save */}
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={updateClinic.isPending}
+            className={[
+              'px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors',
+              updateClinic.isPending
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-900 text-white hover:bg-brand-600',
+            ].join(' ')}
+          >
+            {updateClinic.isPending ? 'Salvando...' : 'Salvar configurações'}
+          </button>
+          {saved && <span className="text-sm text-green-600 font-medium">Salvo com sucesso</span>}
+          {updateClinic.isError && <span className="text-sm text-red-500">Erro ao salvar</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Section wrapper ──────────────────────────────────────────
+function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-gray-800">{title}</h2>
+        <p className="text-xs text-gray-400 mt-0.5">{description}</p>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+// ── Field components ─────────────────────────────────────────
+function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-gray-500 block mb-1.5">{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+      />
+    </div>
+  )
+}
+
+function NumberField({ label, value, onChange, min, max, help }: { label: string; value: number; onChange: (v: number) => void; min: number; max: number; help?: string }) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-gray-500 block mb-1.5">{label}</label>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => {
+          const v = parseInt(e.target.value, 10)
+          if (!isNaN(v) && v >= min && v <= max) onChange(v)
+        }}
+        min={min}
+        max={max}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+      />
+      {help && <p className="text-[11px] text-gray-400 mt-1">{help}</p>}
+    </div>
+  )
+}
+
+function TextAreaField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-gray-500 block mb-1.5">{label}</label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={3}
+        placeholder={placeholder}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
+      />
+    </div>
+  )
+}

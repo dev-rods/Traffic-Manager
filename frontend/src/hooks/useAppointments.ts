@@ -3,6 +3,7 @@ import { appointmentsService } from '@/services/appointments.service'
 import type { ListAppointmentsParams } from '@/services/appointments.service'
 import type { CreateAppointmentPayload, UpdateAppointmentPayload } from '@/types'
 import { useAuth } from './useAuth'
+import { slotKeys } from './useAvailabilityRules'
 
 export const appointmentKeys = {
   all: ['appointments'] as const,
@@ -28,6 +29,7 @@ export function useCreateAppointment() {
     mutationFn: (payload: CreateAppointmentPayload) => appointmentsService.create(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: slotKeys.all })
     },
   })
 }
@@ -40,6 +42,7 @@ export function useUpdateAppointment() {
       appointmentsService.update(appointmentId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: slotKeys.all })
     },
   })
 }
@@ -51,6 +54,7 @@ export function useCancelAppointment() {
     mutationFn: (appointmentId: string) => appointmentsService.cancel(appointmentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: slotKeys.all })
     },
   })
 }
