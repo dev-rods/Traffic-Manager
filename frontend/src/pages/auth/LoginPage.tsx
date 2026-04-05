@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useAuth } from '@/hooks/useAuth'
+import { Button } from '@/components/ui/Button'
 
 const schema = z.object({
   email: z.string().min(1, 'E-mail obrigatório').email('E-mail inválido'),
@@ -106,18 +107,9 @@ export default function LoginPage() {
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className={[
-                'w-full font-semibold py-2.5 rounded-lg text-sm transition-colors',
-                isSubmitting
-                  ? 'bg-brand-300 text-white cursor-not-allowed'
-                  : 'bg-brand-500 hover:bg-brand-600 text-white',
-              ].join(' ')}
-            >
-              {isSubmitting ? 'Entrando…' : 'Entrar'}
-            </button>
+            <Button type="submit" loading={isSubmitting} className="w-full">
+              Entrar
+            </Button>
           </form>
 
           <p className="text-xs text-gray-400 mt-6 text-center">

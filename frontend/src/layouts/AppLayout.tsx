@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/relatorios', label: 'Relatórios', icon: '📊' },
   { to: '/servicos', label: 'Serviços', icon: '💆' },
   { to: '/areas', label: 'Áreas', icon: '📋' },
+  { to: '/servicos-areas', label: 'Serviços & Áreas', icon: '🔗' },
   { to: '/descontos', label: 'Descontos', icon: '🏷' },
   { to: '/horarios', label: 'Horários', icon: '🕐' },
   { to: '/faq', label: 'FAQ', icon: '❓' },

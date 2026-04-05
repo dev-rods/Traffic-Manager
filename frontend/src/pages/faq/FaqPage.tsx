@@ -4,6 +4,7 @@ import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 import type { FaqItem } from '@/types'
 
 export function FaqPage() {
@@ -77,18 +78,13 @@ export function FaqPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">FAQ</h1>
           <p className="text-sm text-gray-400 mt-1">Perguntas frequentes respondidas pelo bot do WhatsApp</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold bg-gray-900 text-white hover:bg-brand-600 transition-colors"
-        >
-          + Nova pergunta
-        </button>
+        <Button onClick={() => setShowCreate(true)}>+ Nova pergunta</Button>
       </div>
 
       {!faqs || faqs.length === 0 ? (
@@ -96,12 +92,7 @@ export function FaqPage() {
           title="Nenhuma pergunta cadastrada"
           description="Crie perguntas frequentes para o bot responder automaticamente."
           action={
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
-            >
-              Criar primeira pergunta
-            </button>
+            <Button size="sm" onClick={() => setShowCreate(true)}>Criar primeira pergunta</Button>
           }
         />
       ) : (
@@ -180,21 +171,14 @@ export function FaqPage() {
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">
-              Cancelar
-            </button>
-            <button
+            <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancelar</Button>
+            <Button
               onClick={() => void handleCreate()}
-              disabled={createFaq.isPending || !newKey.trim() || !newLabel.trim() || !newAnswer.trim()}
-              className={[
-                'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                createFaq.isPending || !newKey.trim() || !newLabel.trim() || !newAnswer.trim()
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-900 text-white hover:bg-brand-600',
-              ].join(' ')}
+              loading={createFaq.isPending}
+              disabled={!newKey.trim() || !newLabel.trim() || !newAnswer.trim()}
             >
-              {createFaq.isPending ? 'Criando...' : 'Criar pergunta'}
-            </button>
+              Criar pergunta
+            </Button>
           </div>
         </div>
       </Modal>
@@ -232,21 +216,10 @@ export function FaqPage() {
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setEditingFaq(null)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={() => void handleUpdate()}
-              disabled={updateFaq.isPending || !editLabel.trim() || !editAnswer.trim()}
-              className={[
-                'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                updateFaq.isPending || !editLabel.trim() || !editAnswer.trim()
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-brand-500 text-white hover:bg-brand-600',
-              ].join(' ')}
-            >
-              {updateFaq.isPending ? 'Salvando...' : 'Salvar'}
-            </button>
+            <Button variant="ghost" onClick={() => setEditingFaq(null)}>Cancelar</Button>
+            <Button onClick={() => void handleUpdate()} loading={updateFaq.isPending} disabled={!editLabel.trim() || !editAnswer.trim()}>
+              Salvar
+            </Button>
           </div>
         </div>
       </Modal>

@@ -233,10 +233,8 @@ def _get_availability_engine(db):
 def _get_appointment_service(db):
     try:
         from src.services.appointment_service import AppointmentService
-        from src.services.sheets_sync import SheetsSync
-        sheets_sync = SheetsSync(db)
         lead_service = LeadService(db)
-        return AppointmentService(db, sheets_sync=sheets_sync, lead_service=lead_service)
+        return AppointmentService(db, lead_service=lead_service)
     except ImportError:
         logger.info("[Webhook] AppointmentService nao disponivel (Phase 8)")
         return None

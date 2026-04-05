@@ -38,9 +38,7 @@ def handler(event, context):
         "pre_session_instructions": "...", (opcional)
         "zapi_instance_id": "...",   (opcional)
         "zapi_instance_token": "...", (opcional)
-        "google_spreadsheet_id": "...", (opcional)
-        "google_sheet_name": "...",  (opcional)
-        "owner_email": "..."         (opcional - auto-cria planilha e compartilha)
+        "owner_email": "..."         (opcional)
     }
     """
     try:
@@ -77,32 +75,17 @@ def handler(event, context):
         db = PostgresService()
 
         owner_email = body.get("owner_email")
-        google_spreadsheet_id = body.get("google_spreadsheet_id")
-
-        # Auto-create spreadsheet if owner_email is provided and no spreadsheet_id given
-        if owner_email and not google_spreadsheet_id:
-            try:
-                from src.services.sheets_sync import SheetsSync
-                sheets = SheetsSync(db)
-                auto_spreadsheet_id = sheets.create_spreadsheet(name, owner_email)
-                if auto_spreadsheet_id:
-                    google_spreadsheet_id = auto_spreadsheet_id
-                    logger.info(f"Planilha criada automaticamente: {google_spreadsheet_id}")
-            except Exception as e:
-                logger.warning(f"Erro ao criar planilha automaticamente (nao critico): {e}")
 
         query = """
             INSERT INTO scheduler.clinics (
                 clinic_id, name, phone, address, timezone,
                 business_hours, buffer_minutes, welcome_message,
                 pre_session_instructions, zapi_instance_id,
-                zapi_instance_token, google_spreadsheet_id,
-                google_sheet_name, owner_email,
+                zapi_instance_token, owner_email,
                 active, created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s,
                 %s, %s, %s,
-                %s, %s,
                 %s, %s,
                 %s, %s,
                 %s, NOW(), NOW()
@@ -124,8 +107,6 @@ def handler(event, context):
             body.get("pre_session_instructions"),
             body.get("zapi_instance_id"),
             body.get("zapi_instance_token"),
-            google_spreadsheet_id,
-            body.get("google_sheet_name"),
             owner_email,
             True,
         )

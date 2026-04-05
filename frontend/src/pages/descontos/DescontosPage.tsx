@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useDiscountRules, useUpsertDiscountRules } from '@/hooks/useDiscountRules'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { Button } from '@/components/ui/Button'
+import { Switch } from '@/components/ui/Switch'
 
 export function DescontosPage() {
   const { data, isLoading, isError, error, refetch } = useDiscountRules()
@@ -57,7 +59,7 @@ export function DescontosPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Descontos</h1>
         <p className="text-sm text-gray-400 mt-1">Configure as regras de desconto progressivo da sua clinica</p>
@@ -70,21 +72,7 @@ export function DescontosPage() {
             <p className="text-sm font-semibold text-gray-800">Descontos ativos</p>
             <p className="text-xs text-gray-400 mt-0.5">Quando desativado, nenhum desconto sera aplicado</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsActive(!isActive)}
-            className={[
-              'relative w-11 h-6 rounded-full transition-colors duration-200',
-              isActive ? 'bg-gray-900' : 'bg-gray-200',
-            ].join(' ')}
-          >
-            <span
-              className={[
-                'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200',
-                isActive ? 'translate-x-5' : 'translate-x-0',
-              ].join(' ')}
-            />
-          </button>
+          <Switch checked={isActive} onChange={setIsActive} label="Descontos ativos" />
         </div>
 
         <div className={isActive ? '' : 'opacity-40 pointer-events-none'}>
@@ -168,19 +156,9 @@ export function DescontosPage() {
 
         {/* Save */}
         <div className="flex items-center gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={upsert.isPending}
-            className={[
-              'px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-              upsert.isPending
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-900 text-white hover:bg-brand-600',
-            ].join(' ')}
-          >
-            {upsert.isPending ? 'Salvando...' : 'Salvar regras'}
-          </button>
+          <Button onClick={() => void handleSave()} loading={upsert.isPending}>
+            Salvar regras
+          </Button>
           {saved && (
             <span className="text-sm text-green-600 font-medium">Salvo com sucesso</span>
           )}

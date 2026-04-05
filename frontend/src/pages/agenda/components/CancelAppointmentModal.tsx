@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 import { useCancelAppointment } from '@/hooks/useAppointments'
 import type { Appointment } from '@/types'
 
@@ -53,26 +54,10 @@ export function CancelAppointmentModal({ appointment, onClose }: CancelAppointme
         )}
 
         <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
-          >
-            Voltar
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleConfirm()}
-            disabled={cancelMutation.isPending}
-            className={[
-              'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-              cancelMutation.isPending
-                ? 'bg-red-300 text-white cursor-not-allowed'
-                : 'bg-red-500 hover:bg-red-600 text-white',
-            ].join(' ')}
-          >
-            {cancelMutation.isPending ? 'Cancelando...' : 'Confirmar cancelamento'}
-          </button>
+          <Button variant="ghost" onClick={handleClose}>Voltar</Button>
+          <Button variant="danger" onClick={() => void handleConfirm()} loading={cancelMutation.isPending}>
+            Confirmar cancelamento
+          </Button>
         </div>
       </div>
     </Modal>

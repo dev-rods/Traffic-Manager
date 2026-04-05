@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
+import { Button } from '@/components/ui/Button'
 import { useUpdateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
 import { useServiceAreas } from '@/hooks/useAreas'
@@ -352,25 +353,10 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
         )}
 
         <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={updateAppointment.isPending || !hasChanges}
-            className={[
-              'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-              updateAppointment.isPending || !hasChanges
-                ? 'bg-brand-300 text-white cursor-not-allowed'
-                : 'bg-brand-500 hover:bg-brand-600 text-white',
-            ].join(' ')}
-          >
-            {updateAppointment.isPending ? 'Salvando...' : 'Salvar alterações'}
-          </button>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button type="submit" loading={updateAppointment.isPending} disabled={!hasChanges}>
+            Salvar alterações
+          </Button>
         </div>
       </form>
     </Modal>

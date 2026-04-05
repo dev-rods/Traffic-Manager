@@ -21,10 +21,9 @@ class OptimisticLockError(Exception):
 
 class AppointmentService:
 
-    def __init__(self, db: PostgresService, reminder_service=None, sheets_sync=None, lead_service=None):
+    def __init__(self, db: PostgresService, reminder_service=None, lead_service=None):
         self.db = db
         self.reminder_service = reminder_service
-        self.sheets_sync = sheets_sync
         self.lead_service = lead_service
 
     def create_appointment(
@@ -229,14 +228,7 @@ class AppointmentService:
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao agendar lembrete: {e}")
 
-        # 9. Sync to Google Sheets (if available)
-        if self.sheets_sync:
-            try:
-                self.sheets_sync.sync_appointment(result, "CREATED")
-            except Exception as e:
-                logger.error(f"[AppointmentService] Erro ao sincronizar com Sheets: {e}")
-
-        # 10. Mark lead as booked (if lead exists for this phone+clinic)
+        # 9. Mark lead as booked (if lead exists for this phone+clinic)
         if self.lead_service:
             try:
                 self.lead_service.mark_as_booked(
@@ -349,13 +341,6 @@ class AppointmentService:
                 self.reminder_service.schedule_reminder(updated_appointment)
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao agendar novo lembrete: {e}")
-
-        # 7. Sync to Sheets
-        if self.sheets_sync:
-            try:
-                self.sheets_sync.sync_appointment(updated_appointment, "RESCHEDULED")
-            except Exception as e:
-                logger.error(f"[AppointmentService] Erro ao sincronizar remarcacao: {e}")
 
         logger.info(
             f"[AppointmentService] Agendamento remarcado: id={appointment_id} "
@@ -503,12 +488,6 @@ class AppointmentService:
         )
         updated_appointment = result[0] if result else appointment
 
-        if self.sheets_sync:
-            try:
-                self.sheets_sync.sync_appointment(updated_appointment, "UPDATED")
-            except Exception as e:
-                logger.error(f"[AppointmentService] Erro ao sincronizar atualização: {e}")
-
         logger.info(
             f"[AppointmentService] Serviço/áreas atualizados: id={appointment_id} "
             f"service={service_id} areas={len(service_area_pairs) if service_area_pairs else 0}"
@@ -535,12 +514,6 @@ class AppointmentService:
                 self.reminder_service.cancel_reminder(appointment_id)
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao cancelar lembrete: {e}")
-
-        if self.sheets_sync:
-            try:
-                self.sheets_sync.sync_appointment(result, "CANCELLED")
-            except Exception as e:
-                logger.error(f"[AppointmentService] Erro ao sincronizar cancelamento: {e}")
 
         logger.info(f"[AppointmentService] Agendamento cancelado: id={appointment_id}")
         return result

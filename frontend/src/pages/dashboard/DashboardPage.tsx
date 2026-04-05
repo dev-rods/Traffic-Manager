@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useDashboard } from '@/hooks/useDashboard'
+import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonCard, SkeletonTable, SkeletonChart } from '@/components/ui/Skeleton'
 import { KpiCards } from './components/KpiCards'
@@ -9,8 +10,33 @@ import { DiscountsSummary } from './components/DiscountsSummary'
 import { TopServices } from './components/TopServices'
 import { todayStr } from '@/utils/dateHelpers'
 
+function formatDateBR(dateStr: string) {
+  const [y, m, d] = dateStr.split('-')
+  return `${d}/${m}/${y}`
+}
+
 export function DashboardPage() {
-  const [selectedDate, setSelectedDate] = useState(todayStr)
+  const { data: rulesData } = useAvailabilityRules()
+  const availableDates = useMemo(() => {
+    return (rulesData?.data ?? [])
+      .filter((r) => r.rule_date !== null)
+      .map((r) => r.rule_date as string)
+      .filter((d, i, arr) => arr.indexOf(d) === i)
+      .sort()
+  }, [rulesData])
+
+  const today = todayStr()
+  const defaultDate = availableDates.find((d) => d >= today) ?? availableDates[0] ?? today
+  const [selectedDate, setSelectedDate] = useState(defaultDate)
+
+  // Update default when availableDates load
+  const [initialized, setInitialized] = useState(false)
+  if (!initialized && availableDates.length > 0) {
+    setInitialized(true)
+    const closest = availableDates.find((d) => d >= today) ?? availableDates[0]
+    if (closest !== selectedDate) setSelectedDate(closest)
+  }
+
   const { data, isLoading, isError, error, refetch } = useDashboard(selectedDate)
 
   if (isLoading) return <DashboardSkeleton />
@@ -35,12 +61,18 @@ export function DashboardPage() {
           <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
           <p className="text-sm text-gray-400 mt-0.5">Visao geral do dia</p>
         </div>
-        <input
-          type="date"
+        <select
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-        />
+        >
+          {availableDates.length === 0 && (
+            <option value={today}>{formatDateBR(today)}</option>
+          )}
+          {availableDates.map((d) => (
+            <option key={d} value={d}>{formatDateBR(d)}</option>
+          ))}
+        </select>
       </div>
 
       <KpiCards summary={data.summary} />

@@ -23,14 +23,27 @@ interface PatientsTableProps {
   patients: PatientWithStats[]
   onSelect: (patient: PatientWithStats) => void
   availableDates?: string[]
+  selectedIds: Set<string>
+  onToggleSelect: (id: string) => void
+  onToggleAll: () => void
 }
 
-export function PatientsTable({ patients, onSelect, availableDates = [] }: PatientsTableProps) {
+export function PatientsTable({ patients, onSelect, availableDates = [], selectedIds, onToggleSelect, onToggleAll }: PatientsTableProps) {
+  const allSelected = patients.length > 0 && patients.every((p) => selectedIds.has(p.id))
+
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100 text-left text-xs font-medium uppercase tracking-wide text-gray-400">
+            <th className="px-3 py-3 w-10">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={onToggleAll}
+                className="accent-brand-500"
+              />
+            </th>
             <th className="px-5 py-3">Paciente</th>
             <th className="px-3 py-3">Telefone</th>
             <th className="px-3 py-3">Visitas</th>
@@ -42,8 +55,16 @@ export function PatientsTable({ patients, onSelect, availableDates = [] }: Patie
         </thead>
         <tbody className="divide-y divide-gray-50">
           {patients.map((p: PatientWithStats) => (
-            <tr key={p.id} onClick={() => onSelect(p)} className="hover:bg-gray-50/50 transition-colors cursor-pointer">
-              <td className="px-5 py-3">
+            <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
+              <td className="px-3 py-3">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(p.id)}
+                  onChange={() => onToggleSelect(p.id)}
+                  className="accent-brand-500"
+                />
+              </td>
+              <td className="px-5 py-3 cursor-pointer" onClick={() => onSelect(p)}>
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-brand-100 flex-shrink-0 flex items-center justify-center text-brand-700 font-bold text-xs">
                     {(p.name ?? '?')[0].toUpperCase()}

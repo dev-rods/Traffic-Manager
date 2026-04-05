@@ -28,8 +28,8 @@ SQL_STATEMENTS = [
         pre_session_instructions TEXT,
         zapi_instance_id VARCHAR(255),
         zapi_instance_token VARCHAR(255),
-        google_spreadsheet_id VARCHAR(255),
-        google_sheet_name VARCHAR(100) DEFAULT 'Agenda',
+        google_spreadsheet_id VARCHAR(255),  -- DEPRECATED: will be dropped by migration
+        google_sheet_name VARCHAR(100) DEFAULT 'Agenda',  -- DEPRECATED: will be dropped by migration
         owner_email VARCHAR(255),
         max_session_minutes INTEGER DEFAULT 60,
         welcome_intro_message TEXT,
@@ -457,6 +457,10 @@ SQL_STATEMENTS = [
 
     # Agent mode flag per clinic
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS use_agent BOOLEAN DEFAULT FALSE",
+
+    # Remove deprecated Google Sheets columns
+    "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS google_spreadsheet_id",
+    "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS google_sheet_name",
 ]
 
 

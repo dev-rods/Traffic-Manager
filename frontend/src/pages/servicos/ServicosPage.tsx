@@ -5,6 +5,7 @@ import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 import type { ClinicService } from '@/services/services.service'
 
 export function ServicosPage() {
@@ -45,18 +46,13 @@ export function ServicosPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Serviços</h1>
           <p className="text-sm text-gray-400 mt-1">Gerencie os serviços oferecidos pela clínica</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold bg-gray-900 text-white hover:bg-brand-600 transition-colors"
-        >
-          + Novo serviço
-        </button>
+        <Button onClick={() => setShowCreate(true)}>+ Novo serviço</Button>
       </div>
 
       {!services || services.length === 0 ? (
@@ -64,12 +60,7 @@ export function ServicosPage() {
           title="Nenhum serviço cadastrado"
           description="Crie serviços para começar a agendar."
           action={
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
-            >
-              Criar primeiro serviço
-            </button>
+            <Button size="sm" onClick={() => setShowCreate(true)}>Criar primeiro serviço</Button>
           }
         />
       ) : (
@@ -122,21 +113,14 @@ export function ServicosPage() {
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">
-              Cancelar
-            </button>
-            <button
+            <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancelar</Button>
+            <Button
               onClick={() => void handleCreate()}
-              disabled={createService.isPending || !newName.trim()}
-              className={[
-                'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                createService.isPending || !newName.trim()
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-900 text-white hover:bg-brand-600',
-              ].join(' ')}
+              loading={createService.isPending}
+              disabled={!newName.trim()}
             >
-              {createService.isPending ? 'Criando...' : 'Criar serviço'}
-            </button>
+              Criar serviço
+            </Button>
           </div>
         </div>
       </Modal>

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { Button } from '@/components/ui/Button'
+import { Switch } from '@/components/ui/Switch'
 import type { UpdateClinicPayload } from '@/types'
 
 function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['data']>): UpdateClinicPayload {
@@ -16,8 +18,7 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     welcome_message: clinic.welcome_message ?? '',
     welcome_intro_message: clinic.welcome_intro_message ?? '',
     pre_session_instructions: clinic.pre_session_instructions ?? '',
-    google_spreadsheet_id: clinic.google_spreadsheet_id ?? '',
-    google_sheet_name: clinic.google_sheet_name ?? '',
+    use_agent: clinic.use_agent ?? false,
   }
 }
 
@@ -35,7 +36,7 @@ export function ConfiguracoesPage() {
     setForm(buildFormFromClinic(clinic))
   }
 
-  const set = (key: keyof UpdateClinicPayload, value: string | number) => {
+  const set = (key: keyof UpdateClinicPayload, value: string | number | boolean) => {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
@@ -59,7 +60,7 @@ export function ConfiguracoesPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Configurações</h1>
         <p className="text-sm text-gray-400 mt-1">Dados e preferências da sua clínica</p>
@@ -136,39 +137,26 @@ export function ConfiguracoesPage() {
 
         <hr className="border-gray-100" />
 
-        {/* Integrations */}
-        <Section title="Integrações" description="Conexões com sistemas externos">
-          <div className="grid grid-cols-2 gap-4">
-            <Field
-              label="Google Spreadsheet ID"
-              value={form.google_spreadsheet_id as string}
-              onChange={(v) => set('google_spreadsheet_id', v)}
-              placeholder="ID da planilha"
-            />
-            <Field
-              label="Nome da aba"
-              value={form.google_sheet_name as string}
-              onChange={(v) => set('google_sheet_name', v)}
-              placeholder="Ex: Agendamentos"
+        {/* AI Agent */}
+        <Section title="Agente de IA" description="Configurações do agente inteligente para conversas no WhatsApp">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Usar agente de IA</p>
+              <p className="text-xs text-gray-400 mt-0.5">Quando ativado, o bot usa inteligência artificial para conduzir as conversas</p>
+            </div>
+            <Switch
+              checked={!!form.use_agent}
+              onChange={(v) => set('use_agent', v)}
+              label="Usar agente de IA"
             />
           </div>
         </Section>
 
         {/* Save */}
         <div className="flex items-center gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={updateClinic.isPending}
-            className={[
-              'px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-              updateClinic.isPending
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-900 text-white hover:bg-brand-600',
-            ].join(' ')}
-          >
-            {updateClinic.isPending ? 'Salvando...' : 'Salvar configurações'}
-          </button>
+          <Button onClick={() => void handleSave()} loading={updateClinic.isPending}>
+            Salvar configurações
+          </Button>
           {saved && <span className="text-sm text-green-600 font-medium">Salvo com sucesso</span>}
           {updateClinic.isError && <span className="text-sm text-red-500">Erro ao salvar</span>}
         </div>

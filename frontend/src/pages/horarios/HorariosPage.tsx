@@ -9,6 +9,7 @@ import {
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 import type { AvailabilityRule, AvailabilityException } from '@/types'
 
 const DAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
@@ -25,8 +26,14 @@ export function HorariosPage() {
   const deleteRule = useDeleteAvailabilityRule()
   const createException = useCreateAvailabilityException()
 
+  const [showAddFixedDay, setShowAddFixedDay] = useState(false)
   const [showAddRule, setShowAddRule] = useState(false)
   const [showAddException, setShowAddException] = useState(false)
+
+  // Fixed day form
+  const [fixedDate, setFixedDate] = useState('')
+  const [fixedStart, setFixedStart] = useState('09:00')
+  const [fixedEnd, setFixedEnd] = useState('18:00')
 
   // Rule form
   const [ruleDow, setRuleDow] = useState(1)
@@ -42,14 +49,35 @@ export function HorariosPage() {
 
   const rules: AvailabilityRule[] = rulesData?.data ?? []
 
-  // Group rules by day_of_week
+  // Separate fixed dates from recurring rules
+  const fixedDayRules = rules.filter((r) => r.rule_date !== null).sort((a, b) => (a.rule_date! > b.rule_date! ? 1 : -1))
+  const recurringRules = rules.filter((r) => r.day_of_week !== null)
+
+  // Group fixed days by date
+  const fixedByDate = new Map<string, AvailabilityRule[]>()
+  for (const r of fixedDayRules) {
+    const list = fixedByDate.get(r.rule_date!) ?? []
+    list.push(r)
+    fixedByDate.set(r.rule_date!, list)
+  }
+
+  // Group recurring rules by day_of_week
   const rulesByDay = new Map<number, AvailabilityRule[]>()
-  for (const r of rules) {
-    if (r.day_of_week != null) {
-      const list = rulesByDay.get(r.day_of_week) ?? []
-      list.push(r)
-      rulesByDay.set(r.day_of_week, list)
-    }
+  for (const r of recurringRules) {
+    const list = rulesByDay.get(r.day_of_week!) ?? []
+    list.push(r)
+    rulesByDay.set(r.day_of_week!, list)
+  }
+
+  const handleAddFixedDay = async () => {
+    if (!fixedDate) return
+    await createRule.mutateAsync({
+      rule_date: fixedDate,
+      start_time: fixedStart,
+      end_time: fixedEnd,
+    })
+    setFixedDate('')
+    setShowAddFixedDay(false)
   }
 
   const handleAddRule = async () => {
@@ -91,11 +119,63 @@ export function HorariosPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Horários de Funcionamento</h1>
         <p className="text-sm text-gray-400 mt-1">Defina quando a clínica está disponível para agendamentos</p>
       </div>
+
+      {/* Fixed days (most important) */}
+      <section className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">Dias fixos</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Datas específicas em que a clínica funciona</p>
+          </div>
+          <button
+            onClick={() => setShowAddFixedDay(true)}
+            className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors"
+          >
+            + Adicionar dia
+          </button>
+        </div>
+
+        {fixedDayRules.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-200 py-8 text-center">
+            <p className="text-sm text-gray-400">Nenhum dia fixo cadastrado</p>
+            <p className="text-xs text-gray-300 mt-1">Adicione as datas em que a clínica estará disponível</p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
+            {[...fixedByDate.entries()].map(([date, dateRules]) => (
+              <div key={date} className="flex items-center px-4 py-3 gap-4">
+                <span className="w-24 text-sm font-medium text-gray-700">
+                  {new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                </span>
+                <div className="flex-1">
+                  <div className="flex flex-wrap gap-2">
+                    {dateRules.map((r) => (
+                      <span
+                        key={r.id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-medium"
+                      >
+                        {formatTime(r.start_time)} — {formatTime(r.end_time)}
+                        <button
+                          onClick={() => void handleDeleteRule(r.id)}
+                          className="text-emerald-400 hover:text-red-500 transition-colors ml-0.5"
+                          title="Remover"
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Weekly rules */}
       <section className="mb-10">
@@ -194,6 +274,47 @@ export function HorariosPage() {
         )}
       </section>
 
+      {/* Add fixed day modal */}
+      <Modal open={showAddFixedDay} onClose={() => setShowAddFixedDay(false)} title="Adicionar dia fixo">
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-medium text-gray-500 block mb-1.5">Data</label>
+            <input
+              type="date"
+              value={fixedDate}
+              onChange={(e) => setFixedDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1.5">Início</label>
+              <input
+                type="time"
+                value={fixedStart}
+                onChange={(e) => setFixedStart(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1.5">Fim</label>
+              <input
+                type="time"
+                value={fixedEnd}
+                onChange={(e) => setFixedEnd(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="ghost" onClick={() => setShowAddFixedDay(false)}>Cancelar</Button>
+            <Button onClick={() => void handleAddFixedDay()} loading={createRule.isPending} disabled={!fixedDate}>
+              Adicionar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Add rule modal */}
       <Modal open={showAddRule} onClose={() => setShowAddRule(false)} title="Adicionar horário">
         <div className="space-y-4">
@@ -230,21 +351,10 @@ export function HorariosPage() {
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setShowAddRule(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={() => void handleAddRule()}
-              disabled={createRule.isPending}
-              className={[
-                'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                createRule.isPending
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-900 text-white hover:bg-brand-600',
-              ].join(' ')}
-            >
-              {createRule.isPending ? 'Adicionando...' : 'Adicionar'}
-            </button>
+            <Button variant="ghost" onClick={() => setShowAddRule(false)}>Cancelar</Button>
+            <Button onClick={() => void handleAddRule()} loading={createRule.isPending}>
+              Adicionar
+            </Button>
           </div>
         </div>
       </Modal>
@@ -319,21 +429,10 @@ export function HorariosPage() {
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setShowAddException(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={() => void handleAddException()}
-              disabled={createException.isPending || !excDate}
-              className={[
-                'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                createException.isPending || !excDate
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-900 text-white hover:bg-brand-600',
-              ].join(' ')}
-            >
-              {createException.isPending ? 'Adicionando...' : 'Adicionar'}
-            </button>
+            <Button variant="ghost" onClick={() => setShowAddException(false)}>Cancelar</Button>
+            <Button onClick={() => void handleAddException()} loading={createException.isPending} disabled={!excDate}>
+              Adicionar
+            </Button>
           </div>
         </div>
       </Modal>

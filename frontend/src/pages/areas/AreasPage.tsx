@@ -4,6 +4,7 @@ import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 import type { ClinicArea } from '@/types'
 
 export function AreasPage() {
@@ -57,18 +58,13 @@ export function AreasPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
+    <div className="p-6">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Áreas</h1>
           <p className="text-sm text-gray-400 mt-1">Catálogo de áreas de tratamento da clínica</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold bg-gray-900 text-white hover:bg-brand-600 transition-colors"
-        >
-          + Nova área
-        </button>
+        <Button onClick={() => setShowCreate(true)}>+ Nova área</Button>
       </div>
 
       {!areas || areas.length === 0 ? (
@@ -76,12 +72,7 @@ export function AreasPage() {
           title="Nenhuma área cadastrada"
           description="Crie áreas de tratamento para vincular aos serviços."
           action={
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
-            >
-              Criar primeira área
-            </button>
+            <Button size="sm" onClick={() => setShowCreate(true)}>Criar primeira área</Button>
           }
         />
       ) : (
@@ -133,21 +124,10 @@ export function AreasPage() {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <button onClick={() => setShowCreate(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={() => void handleCreate()}
-              disabled={createArea.isPending || !newName.trim()}
-              className={[
-                'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                createArea.isPending || !newName.trim()
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-900 text-white hover:bg-brand-600',
-              ].join(' ')}
-            >
-              {createArea.isPending ? 'Criando...' : 'Criar área'}
-            </button>
+            <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancelar</Button>
+            <Button onClick={() => void handleCreate()} loading={createArea.isPending} disabled={!newName.trim()}>
+              Criar área
+            </Button>
           </div>
         </div>
       </Modal>
@@ -176,21 +156,10 @@ export function AreasPage() {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <button onClick={() => setEditingArea(null)} className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors">
-              Cancelar
-            </button>
-            <button
-              onClick={() => void handleUpdate()}
-              disabled={updateArea.isPending || !editName.trim()}
-              className={[
-                'px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-                updateArea.isPending || !editName.trim()
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-brand-500 text-white hover:bg-brand-600',
-              ].join(' ')}
-            >
-              {updateArea.isPending ? 'Salvando...' : 'Salvar'}
-            </button>
+            <Button variant="ghost" onClick={() => setEditingArea(null)}>Cancelar</Button>
+            <Button onClick={() => void handleUpdate()} loading={updateArea.isPending} disabled={!editName.trim()}>
+              Salvar
+            </Button>
           </div>
         </div>
       </Modal>

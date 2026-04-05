@@ -75,9 +75,7 @@ def handler(event, context):
 
         db = PostgresService()
 
-        from src.services.sheets_sync import SheetsSync
-        sheets_sync = SheetsSync(db)
-        service = AppointmentService(db, sheets_sync=sheets_sync)
+        service = AppointmentService(db)
 
         # Parse serviceAreaPairs from body
         raw_pairs = body.get("serviceAreaPairs")

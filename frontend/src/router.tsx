@@ -14,6 +14,7 @@ import { AreasPage } from '@/pages/areas/AreasPage'
 import { HorariosPage } from '@/pages/horarios/HorariosPage'
 import { FaqPage } from '@/pages/faq/FaqPage'
 import { ConfiguracoesPage } from '@/pages/configuracoes/ConfiguracoesPage'
+import { ServicosAreasPage } from '@/pages/servicos-areas/ServicosAreasPage'
 
 export const router = createBrowserRouter([
   {
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
       { path: 'descontos', element: <DescontosPage /> },
       { path: 'servicos', element: <ServicosPage /> },
       { path: 'areas', element: <AreasPage /> },
+      { path: 'servicos-areas', element: <ServicosAreasPage /> },
       { path: 'horarios', element: <HorariosPage /> },
       { path: 'faq', element: <FaqPage /> },
       { path: 'configuracoes', element: <ConfiguracoesPage /> },

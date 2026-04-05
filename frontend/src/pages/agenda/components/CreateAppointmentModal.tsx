@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
+import { Button } from '@/components/ui/Button'
 import { useCreateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
 import { useServiceAreas } from '@/hooks/useAreas'
@@ -324,19 +325,13 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
             {newPatientError && (
               <p className="text-xs text-red-500">{newPatientError}</p>
             )}
-            <button
-              type="button"
+            <Button
+              className="w-full"
               onClick={() => void handleCreatePatient()}
-              disabled={createPatient.isPending}
-              className={[
-                'w-full py-2 rounded-lg text-sm font-semibold transition-colors',
-                createPatient.isPending
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-900 text-white hover:bg-brand-600',
-              ].join(' ')}
+              loading={createPatient.isPending}
             >
-              {createPatient.isPending ? 'Cadastrando...' : 'Cadastrar paciente'}
-            </button>
+              Cadastrar paciente
+            </Button>
           </div>
         )}
 
@@ -479,25 +474,10 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         )}
 
         <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={handleClose}
-            className="px-4 py-2.5 text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={createAppointment.isPending}
-            className={[
-              'px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors',
-              createAppointment.isPending
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-900 hover:bg-brand-600 text-white',
-            ].join(' ')}
-          >
-            {createAppointment.isPending ? 'Criando...' : 'Criar agendamento'}
-          </button>
+          <Button variant="ghost" onClick={handleClose}>Cancelar</Button>
+          <Button type="submit" loading={createAppointment.isPending}>
+            Criar agendamento
+          </Button>
         </div>
       </form>
     </Modal>

@@ -59,9 +59,7 @@ def handler(event, context):
         new_discount_pct = body.get("discountPct")
         new_discount_reason = body.get("discountReason")
 
-        from src.services.sheets_sync import SheetsSync
-        sheets_sync = SheetsSync(db)
-        service = AppointmentService(db, sheets_sync=sheets_sync)
+        service = AppointmentService(db)
 
         # Cancel is exclusive — cannot combine with other operations
         if new_status == "CANCELLED":

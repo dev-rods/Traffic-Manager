@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { usePatients } from '@/hooks/usePatients'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -6,16 +6,20 @@ import { todayStr } from '@/utils/dateHelpers'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
+import { Button } from '@/components/ui/Button'
 import { PatientSearch } from './components/PatientSearch'
 import { PatientsTable } from './components/PatientsTable'
 import { CreatePatientModal } from './components/CreatePatientModal'
 import { EditPatientModal } from './components/EditPatientModal'
+import { BatchMessageModal } from './components/BatchMessageModal'
 import type { PatientWithStats } from '@/types'
 
 export function PacientesPage() {
   const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<PatientWithStats | null>(null)
+  const [batchOpen, setBatchOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const debouncedSearch = useDebounce(search)
 
   // Fetch available dates for WhatsApp message
@@ -33,6 +37,31 @@ export function PacientesPage() {
     per_page: 50,
   })
 
+  const patients = useMemo(() => data?.items ?? [], [data])
+
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const handleToggleAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      if (patients.length > 0 && patients.every((p) => prev.has(p.id))) {
+        return new Set()
+      }
+      return new Set(patients.map((p) => p.id))
+    })
+  }, [patients])
+
+  const selectedPatients = useMemo(
+    () => patients.filter((p) => selectedIds.has(p.id)),
+    [patients, selectedIds],
+  )
+
   return (
     <div className="p-8 space-y-6">
       <div className="flex items-center justify-between">
@@ -42,12 +71,7 @@ export function PacientesPage() {
             {data ? `${data.total} paciente${data.total !== 1 ? 's' : ''}` : 'Carregando...'}
           </p>
         </div>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
-        >
-          + Cadastrar paciente
-        </button>
+        <Button onClick={() => setCreateOpen(true)}>+ Cadastrar paciente</Button>
       </div>
 
       <PatientSearch value={search} onChange={setSearch} />
@@ -69,21 +93,47 @@ export function PacientesPage() {
           }
           action={
             !search ? (
-              <button
-                onClick={() => setCreateOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-500 px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-600"
-              >
-                + Cadastrar paciente
-              </button>
+              <Button size="sm" onClick={() => setCreateOpen(true)}>+ Cadastrar paciente</Button>
             ) : undefined
           }
         />
       ) : (
-        <PatientsTable patients={data.items} onSelect={setEditingPatient} availableDates={availableDates} />
+        <PatientsTable
+          patients={data.items}
+          onSelect={setEditingPatient}
+          availableDates={availableDates}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onToggleAll={handleToggleAll}
+        />
+      )}
+
+      {/* Batch action bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-56 right-0 bg-white border-t border-gray-200 shadow-lg px-6 py-3 flex items-center justify-between z-40">
+          <p className="text-sm text-gray-700 font-medium">
+            {selectedIds.size} paciente{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}
+          </p>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+              Limpar seleção
+            </Button>
+            <Button variant="success" size="sm" onClick={() => setBatchOpen(true)}>
+              💬 Enviar WhatsApp
+            </Button>
+          </div>
+        </div>
       )}
 
       <CreatePatientModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <EditPatientModal patient={editingPatient} onClose={() => setEditingPatient(null)} />
+      <BatchMessageModal
+        open={batchOpen}
+        patients={selectedPatients}
+        availableDates={availableDates}
+        onClose={() => setBatchOpen(false)}
+        onDone={() => setSelectedIds(new Set())}
+      />
     </div>
   )
 }

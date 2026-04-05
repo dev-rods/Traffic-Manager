@@ -21,9 +21,8 @@ ALLOWED_FIELDS = {
     "pre_session_instructions",
     "zapi_instance_id",
     "zapi_instance_token",
-    "google_spreadsheet_id",
-    "google_sheet_name",
     "owner_email",
+    "use_agent",
     "max_future_dates",
     "active",
     "display_name",
@@ -61,8 +60,6 @@ def handler(event, context):
         "pre_session_instructions": "...",
         "zapi_instance_id": "...",
         "zapi_instance_token": "...",
-        "google_spreadsheet_id": "...",
-        "google_sheet_name": "...",
         "active": true/false
     }
     """

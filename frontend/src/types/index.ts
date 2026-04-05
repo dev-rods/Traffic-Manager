@@ -13,8 +13,7 @@ export interface Clinic {
   welcome_message: string | null
   welcome_intro_message: string | null
   pre_session_instructions: string | null
-  google_spreadsheet_id: string | null
-  google_sheet_name: string | null
+  use_agent: boolean
   active: boolean
 }
 
@@ -29,8 +28,7 @@ export interface UpdateClinicPayload {
   welcome_message?: string
   welcome_intro_message?: string
   pre_session_instructions?: string
-  google_spreadsheet_id?: string
-  google_sheet_name?: string
+  use_agent?: boolean
 }
 
 // ── Patient ───────────────────────────────────────────────────

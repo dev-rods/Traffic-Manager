@@ -41,10 +41,8 @@ provider:
     RDS_USERNAME: ${ssm:/${self:custom.stage}/RDS_MASTER_USERNAME}
     RDS_PASSWORD: ${ssm:/${self:custom.stage}/RDS_MASTER_PASSWORD}
     SCHEDULER_API_KEY: ${ssm:/${self:custom.stage}/SCHEDULER_API_KEY}
-    GOOGLE_SHEETS_SERVICE_ACCOUNT: ${ssm:/${self:custom.stage}/GOOGLE_SHEETS_SERVICE_ACCOUNT}
     ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
     ALLOWED_PHONES: ${ssm:/${self:custom.stage}/ALLOWED_PHONES}
-    SHEETS_WEBHOOK_TOKEN: ${ssm:/${self:custom.stage}/SHEETS_WEBHOOK_TOKEN}
     OPENAI_API_KEY: ${ssm:/${self:custom.stage}/OPENAI_API_KEY}
     ANTHROPIC_API_KEY: ${ssm:/${self:custom.stage}/ANTHROPIC_API_KEY}
 
@@ -62,7 +60,6 @@ functions:
   - ${file(sls/functions/faq/interface.yml)}
   - ${file(sls/functions/reminder/interface.yml)}
   - ${file(sls/functions/report/interface.yml)}
-  - ${file(sls/functions/sheets/interface.yml)}
   - ${file(sls/functions/discount_rules/interface.yml)}
   - ${file(sls/functions/auth/interface.yml)}
   - ${file(sls/functions/patient/interface.yml)}
