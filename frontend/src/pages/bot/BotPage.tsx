@@ -120,11 +120,11 @@ export function BotPage() {
       {/* Conversations */}
       <section>
         <h2 className="text-sm font-semibold text-gray-800 mb-3">Conversas recentes</h2>
-        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden" style={{ minHeight: '400px' }}>
-          <div className="flex h-full" style={{ minHeight: '400px' }}>
+        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden h-[calc(100vh-420px)] min-h-80">
+          <div className="flex h-full">
             {/* Conversation list */}
             <div className={[
-              'border-r border-gray-200 overflow-y-auto',
+              'border-r border-gray-200 overflow-y-auto h-full',
               selectedPhone ? 'w-80 flex-shrink-0' : 'flex-1',
             ].join(' ')}>
               {recentLoading || activeLoading ? (
@@ -140,7 +140,7 @@ export function BotPage() {
 
             {/* Thread panel */}
             {selectedPhone && (
-              <div className="flex-1">
+              <div className="flex-1 h-full overflow-hidden">
                 <ConversationThread
                   phone={selectedPhone}
                   senderName={selectedName}

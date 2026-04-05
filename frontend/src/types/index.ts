@@ -13,6 +13,8 @@ export interface Clinic {
   welcome_message: string | null
   welcome_intro_message: string | null
   pre_session_instructions: string | null
+  zapi_instance_id: string | null
+  zapi_instance_token: string | null
   use_agent: boolean
   bot_paused: boolean
   active: boolean
@@ -29,6 +31,8 @@ export interface UpdateClinicPayload {
   welcome_message?: string
   welcome_intro_message?: string
   pre_session_instructions?: string
+  zapi_instance_id?: string
+  zapi_instance_token?: string
   use_agent?: boolean
   bot_paused?: boolean
 }

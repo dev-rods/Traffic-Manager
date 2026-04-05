@@ -16,6 +16,8 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     max_future_dates: clinic.max_future_dates ?? 5,
     max_session_minutes: clinic.max_session_minutes ?? 120,
     pre_session_instructions: clinic.pre_session_instructions ?? '',
+    zapi_instance_id: clinic.zapi_instance_id ?? '',
+    zapi_instance_token: clinic.zapi_instance_token ?? '',
     use_agent: clinic.use_agent ?? false,
   }
 }
@@ -120,6 +122,16 @@ export function ConfiguracoesPage() {
             placeholder="Instruções gerais enviadas antes de cada sessão..."
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
           />
+        </Section>
+
+        <hr className="border-gray-100" />
+
+        {/* z-api Integration */}
+        <Section title="Integração z-api" description="Credenciais para conexão com o WhatsApp via z-api">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Instance ID" value={form.zapi_instance_id as string} onChange={(v) => set('zapi_instance_id', v)} placeholder="ID da instância z-api" />
+            <Field label="Instance Token" value={form.zapi_instance_token as string} onChange={(v) => set('zapi_instance_token', v)} placeholder="Token da instância z-api" />
+          </div>
         </Section>
 
         <hr className="border-gray-100" />
