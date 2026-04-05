@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { usePatients } from '@/hooks/usePatients'
+import { useClinic } from '@/hooks/useClinic'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import { useActiveConversations, usePauseBot, useResumeBot } from '@/hooks/useBot'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -45,15 +46,18 @@ export function PacientesPage() {
     }
   }, [pausedPhones, pauseBot, resumeBot])
 
-  // Fetch available dates for WhatsApp message
+  // Fetch available dates for WhatsApp message, limited by max_future_dates
+  const { data: clinic } = useClinic()
   const { data: rulesData } = useAvailabilityRules()
   const availableDates = useMemo(() => {
     const today = todayStr()
+    const maxDates = clinic?.max_future_dates ?? 5
     return (rulesData?.data ?? [])
       .filter((r) => r.rule_date !== null && r.rule_date! >= today)
       .map((r) => r.rule_date as string)
       .sort()
-  }, [rulesData])
+      .slice(0, maxDates)
+  }, [rulesData, clinic])
 
   const { data, isLoading, isError, error, refetch } = usePatients({
     search: debouncedSearch || undefined,
