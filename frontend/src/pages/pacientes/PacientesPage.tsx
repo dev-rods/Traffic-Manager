@@ -19,6 +19,7 @@ export function PacientesPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<PatientWithStats | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
+  const [batchPatients, setBatchPatients] = useState<PatientWithStats[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const debouncedSearch = useDebounce(search)
 
@@ -101,7 +102,7 @@ export function PacientesPage() {
         <PatientsTable
           patients={data.items}
           onSelect={setEditingPatient}
-          availableDates={availableDates}
+          onWhatsApp={(p) => { setBatchPatients([p]); setBatchOpen(true) }}
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
           onToggleAll={handleToggleAll}
@@ -118,7 +119,7 @@ export function PacientesPage() {
             <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
               Limpar seleção
             </Button>
-            <Button variant="success" size="sm" onClick={() => setBatchOpen(true)}>
+            <Button variant="success" size="sm" onClick={() => { setBatchPatients(selectedPatients); setBatchOpen(true) }}>
               💬 Enviar WhatsApp
             </Button>
           </div>
@@ -129,10 +130,10 @@ export function PacientesPage() {
       <EditPatientModal patient={editingPatient} onClose={() => setEditingPatient(null)} />
       <BatchMessageModal
         open={batchOpen}
-        patients={selectedPatients}
+        patients={batchPatients}
         availableDates={availableDates}
         onClose={() => setBatchOpen(false)}
-        onDone={() => setSelectedIds(new Set())}
+        onDone={() => { setSelectedIds(new Set()); setBatchPatients([]) }}
       />
     </div>
   )

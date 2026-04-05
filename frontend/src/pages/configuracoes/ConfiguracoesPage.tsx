@@ -15,9 +15,6 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     buffer_minutes: clinic.buffer_minutes ?? 10,
     max_future_dates: clinic.max_future_dates ?? 5,
     max_session_minutes: clinic.max_session_minutes ?? 120,
-    welcome_message: clinic.welcome_message ?? '',
-    welcome_intro_message: clinic.welcome_intro_message ?? '',
-    pre_session_instructions: clinic.pre_session_instructions ?? '',
     use_agent: clinic.use_agent ?? false,
   }
 }
@@ -113,44 +110,18 @@ export function ConfiguracoesPage() {
 
         <hr className="border-gray-100" />
 
-        {/* Messages */}
-        <Section title="Mensagens" description="Textos que o bot envia no WhatsApp">
-          <TextAreaField
-            label="Mensagem de boas-vindas (intro)"
-            value={form.welcome_intro_message as string}
-            onChange={(v) => set('welcome_intro_message', v)}
-            placeholder="Primeira mensagem ao contato novo..."
-          />
-          <TextAreaField
-            label="Mensagem de boas-vindas"
-            value={form.welcome_message as string}
-            onChange={(v) => set('welcome_message', v)}
-            placeholder="Mensagem principal do menu..."
-          />
-          <TextAreaField
-            label="Instruções pré-sessão"
-            value={form.pre_session_instructions as string}
-            onChange={(v) => set('pre_session_instructions', v)}
-            placeholder="Enviadas antes do agendamento..."
-          />
-        </Section>
-
-        <hr className="border-gray-100" />
-
-        {/* AI Agent */}
-        <Section title="Agente de IA" description="Configurações do agente inteligente para conversas no WhatsApp">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-700">Usar agente de IA</p>
-              <p className="text-xs text-gray-400 mt-0.5">Quando ativado, o bot usa inteligência artificial para conduzir as conversas</p>
-            </div>
-            <Switch
-              checked={!!form.use_agent}
-              onChange={(v) => set('use_agent', v)}
-              label="Usar agente de IA"
-            />
+        {/* AI Agent — inline toggle, no section wrapper */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">Agente de IA</p>
+            <p className="text-xs text-gray-400 mt-0.5">Usa inteligência artificial para conduzir conversas no WhatsApp</p>
           </div>
-        </Section>
+          <Switch
+            checked={!!form.use_agent}
+            onChange={(v) => set('use_agent', v)}
+            label="Agente de IA"
+          />
+        </div>
 
         {/* Save */}
         <div className="flex items-center gap-3 pt-2">
@@ -210,21 +181,6 @@ function NumberField({ label, value, onChange, min, max, help }: { label: string
         className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
       {help && <p className="text-[11px] text-gray-400 mt-1">{help}</p>}
-    </div>
-  )
-}
-
-function TextAreaField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-gray-500 block mb-1.5">{label}</label>
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={3}
-        placeholder={placeholder}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
-      />
     </div>
   )
 }

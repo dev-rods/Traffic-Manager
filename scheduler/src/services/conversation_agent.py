@@ -160,7 +160,7 @@ class ConversationAgent:
             session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
 
         # 7. Build outgoing messages
-        final_text = "\n".join(text_parts).strip()
+        final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
         outgoing = self._build_outgoing(final_text, pending_buttons)
 
         # 8. Save history (truncated)
@@ -256,6 +256,23 @@ class ConversationAgent:
         )
 
         return system_prompt
+
+    # ── WhatsApp formatting fix ──
+
+    @staticmethod
+    def _fix_whatsapp_bold(text: str) -> str:
+        """Fix bold formatting for WhatsApp.
+
+        WhatsApp uses *text* for bold. Common LLM issues:
+        - *text*! → should be *text!*  (punctuation outside asterisk)
+        - **text** → should be *text*  (double asterisks from Markdown)
+        """
+        import re
+        # Fix double asterisks → single: **text** → *text*
+        text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', text)
+        # Fix punctuation after closing asterisk: *text*! → *text!*
+        text = re.sub(r'\*([^*]+)\*([.!?,;:]+)', r'*\1\2*', text)
+        return text
 
     # ── Outgoing message builder ──
 

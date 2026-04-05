@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useServices, useCreateService, useUpdateService } from '@/hooks/useServices'
-import { useServiceAreas, useClinicAreas, useCreateServiceArea, useDeleteServiceArea } from '@/hooks/useAreas'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -13,7 +12,6 @@ export function ServicosPage() {
   const createService = useCreateService()
 
   const [showCreate, setShowCreate] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   // Create form
   const [newName, setNewName] = useState('')
@@ -66,12 +64,7 @@ export function ServicosPage() {
       ) : (
         <div className="space-y-3">
           {services.map((svc) => (
-            <ServiceCard
-              key={svc.id}
-              service={svc}
-              expanded={expandedId === svc.id}
-              onToggle={() => setExpandedId(expandedId === svc.id ? null : svc.id)}
-            />
+            <ServiceCard key={svc.id} service={svc} />
           ))}
         </div>
       )}
@@ -128,13 +121,9 @@ export function ServicosPage() {
   )
 }
 
-// ── Service card with expandable areas ───────────────────────
-function ServiceCard({ service, expanded, onToggle }: { service: ClinicService; expanded: boolean; onToggle: () => void }) {
+// ── Service card ────────────────────────────────────────────
+function ServiceCard({ service }: { service: ClinicService }) {
   const updateService = useUpdateService()
-  const { data: serviceAreas, isLoading: areasLoading } = useServiceAreas(expanded ? service.id : undefined)
-  const { data: clinicAreas } = useClinicAreas()
-  const createServiceArea = useCreateServiceArea()
-  const deleteServiceArea = useDeleteServiceArea()
 
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(service.name)
@@ -153,47 +142,26 @@ function ServiceCard({ service, expanded, onToggle }: { service: ClinicService; 
     setEditing(false)
   }
 
-  const handleLinkArea = async (areaId: string) => {
-    await createServiceArea.mutateAsync({
-      serviceId: service.id,
-      payload: { area_id: areaId },
-    })
-  }
-
-  const handleUnlinkArea = async (areaId: string) => {
-    await deleteServiceArea.mutateAsync({ serviceId: service.id, areaId })
-  }
-
-  const linkedAreaIds = new Set(serviceAreas?.map((sa) => sa.area_id) ?? [])
-  const unlinkedAreas = clinicAreas?.filter((a) => !linkedAreaIds.has(a.id)) ?? []
-
   const formatPrice = (cents: number | null) =>
     cents != null ? (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3">
-        <button onClick={onToggle} className="flex items-center gap-3 flex-1 text-left">
-          <span className={['text-xs transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>
-            ▶
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-gray-800">{service.name}</p>
-            <p className="text-xs text-gray-400">
-              {service.duration_minutes} min · {formatPrice(service.price_cents)}
-            </p>
-          </div>
-        </button>
+        <div>
+          <p className="text-sm font-semibold text-gray-800">{service.name}</p>
+          <p className="text-xs text-gray-400">
+            {service.duration_minutes} min · {formatPrice(service.price_cents)}
+          </p>
+        </div>
         <button
           onClick={() => { setEditing(true); setEditName(service.name); setEditDuration(service.duration_minutes); setEditPrice(service.price_cents ? (service.price_cents / 100).toFixed(2) : '') }}
-          className="text-xs text-gray-400 hover:text-brand-600 transition-colors font-medium"
+          className="text-xs text-gray-400 hover:text-brand-600 transition-colors font-medium cursor-pointer"
         >
           Editar
         </button>
       </div>
 
-      {/* Edit inline */}
       {editing && (
         <div className="px-4 pb-3 border-t border-gray-100 pt-3 space-y-3">
           <div className="grid grid-cols-3 gap-3">
@@ -227,69 +195,13 @@ function ServiceCard({ service, expanded, onToggle }: { service: ClinicService; 
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <button onClick={() => setEditing(false)} className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5">
+            <button onClick={() => setEditing(false)} className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 cursor-pointer">
               Cancelar
             </button>
-            <button
-              onClick={() => void handleSave()}
-              disabled={updateService.isPending}
-              className="text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              {updateService.isPending ? 'Salvando...' : 'Salvar'}
-            </button>
+            <Button size="sm" onClick={() => void handleSave()} loading={updateService.isPending}>
+              Salvar
+            </Button>
           </div>
-        </div>
-      )}
-
-      {/* Expanded areas */}
-      {expanded && (
-        <div className="border-t border-gray-100 px-4 py-3 bg-gray-50/30">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Áreas vinculadas</p>
-
-          {areasLoading ? (
-            <div className="text-xs text-gray-400 py-2">Carregando...</div>
-          ) : serviceAreas && serviceAreas.length > 0 ? (
-            <div className="space-y-1 mb-3">
-              {serviceAreas.map((sa) => (
-                <div key={sa.area_id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-gray-100/50">
-                  <div>
-                    <span className="text-sm text-gray-700">{sa.name}</span>
-                    <span className="text-xs text-gray-400 ml-2">
-                      {sa.effective_duration_minutes}min · {formatPrice(sa.effective_price_cents)}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => void handleUnlinkArea(sa.area_id)}
-                    disabled={deleteServiceArea.isPending}
-                    className="text-xs text-gray-400 hover:text-red-500 transition-colors"
-                  >
-                    Desvincular
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-gray-400 mb-3">Nenhuma área vinculada</p>
-          )}
-
-          {/* Link new area */}
-          {unlinkedAreas.length > 0 && (
-            <div>
-              <p className="text-[11px] text-gray-400 mb-1.5">Vincular área:</p>
-              <div className="flex flex-wrap gap-1.5">
-                {unlinkedAreas.map((area) => (
-                  <button
-                    key={area.id}
-                    onClick={() => void handleLinkArea(area.id)}
-                    disabled={createServiceArea.isPending}
-                    className="px-2.5 py-1 rounded-md text-xs font-medium border border-dashed border-gray-300 text-gray-500 hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50 transition-colors"
-                  >
-                    + {area.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

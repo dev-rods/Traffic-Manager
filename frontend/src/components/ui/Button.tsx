@@ -41,7 +41,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={isDisabled}
         className={[
-          'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-colors duration-150',
+          'inline-flex items-center justify-center gap-1.5 rounded-lg font-semibold transition-colors duration-150 cursor-pointer',
           isDisabled ? DISABLED_CLASSES : VARIANT_CLASSES[variant],
           SIZE_CLASSES[size],
           className,

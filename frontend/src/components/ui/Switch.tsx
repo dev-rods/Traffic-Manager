@@ -16,7 +16,7 @@ export function Switch({ checked, onChange, disabled, label }: SwitchProps) {
       onClick={() => onChange(!checked)}
       className={[
         'group relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200',
-        disabled ? 'opacity-50 cursor-not-allowed' : '',
+        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
         checked ? 'bg-brand-500' : 'bg-gray-200',
       ].join(' ')}
     >

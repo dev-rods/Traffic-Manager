@@ -47,7 +47,9 @@ export function DescontosPage() {
   }
 
   if (isLoading) return <div className="p-6"><SkeletonTable rows={6} /></div>
-  if (isError && !(error instanceof Error && error.message.includes('404'))) {
+  const errorMsg = error instanceof Error ? error.message : ''
+  const isNotFound = errorMsg.includes('404') || errorMsg.includes('não encontrad') || errorMsg.includes('not found')
+  if (isError && !isNotFound) {
     return (
       <div className="p-6">
         <ErrorState

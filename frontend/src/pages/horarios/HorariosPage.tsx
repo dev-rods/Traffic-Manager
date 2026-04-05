@@ -30,6 +30,11 @@ export function HorariosPage() {
   const [showAddRule, setShowAddRule] = useState(false)
   const [showAddException, setShowAddException] = useState(false)
 
+  // Edit rule state (delete + recreate)
+  const [editingRule, setEditingRule] = useState<AvailabilityRule | null>(null)
+  const [editStart, setEditStart] = useState('09:00')
+  const [editEnd, setEditEnd] = useState('18:00')
+
   // Fixed day form
   const [fixedDate, setFixedDate] = useState('')
   const [fixedStart, setFixedStart] = useState('09:00')
@@ -91,6 +96,24 @@ export function HorariosPage() {
 
   const handleDeleteRule = async (ruleId: string) => {
     await deleteRule.mutateAsync(ruleId)
+  }
+
+  const openEditRule = (rule: AvailabilityRule) => {
+    setEditingRule(rule)
+    setEditStart(formatTime(rule.start_time))
+    setEditEnd(formatTime(rule.end_time))
+  }
+
+  const handleEditRule = async () => {
+    if (!editingRule) return
+    await deleteRule.mutateAsync(editingRule.id)
+    await createRule.mutateAsync({
+      ...(editingRule.day_of_week != null ? { day_of_week: editingRule.day_of_week } : {}),
+      ...(editingRule.rule_date != null ? { rule_date: editingRule.rule_date } : {}),
+      start_time: editStart,
+      end_time: editEnd,
+    })
+    setEditingRule(null)
   }
 
   const handleAddException = async () => {
@@ -157,11 +180,12 @@ export function HorariosPage() {
                     {dateRules.map((r) => (
                       <span
                         key={r.id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-medium"
+                        onClick={() => openEditRule(r)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-medium cursor-pointer hover:bg-emerald-100 transition-colors"
                       >
                         {formatTime(r.start_time)} — {formatTime(r.end_time)}
                         <button
-                          onClick={() => void handleDeleteRule(r.id)}
+                          onClick={(e) => { e.stopPropagation(); void handleDeleteRule(r.id) }}
                           className="text-emerald-400 hover:text-red-500 transition-colors ml-0.5"
                           title="Remover"
                         >
@@ -203,11 +227,12 @@ export function HorariosPage() {
                       {dayRules.map((r) => (
                         <span
                           key={r.id}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-50 text-brand-700 text-xs font-medium"
+                          onClick={() => openEditRule(r)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-brand-50 text-brand-700 text-xs font-medium cursor-pointer hover:bg-brand-100 transition-colors"
                         >
                           {formatTime(r.start_time)} — {formatTime(r.end_time)}
                           <button
-                            onClick={() => void handleDeleteRule(r.id)}
+                            onClick={(e) => { e.stopPropagation(); void handleDeleteRule(r.id) }}
                             className="text-brand-400 hover:text-red-500 transition-colors ml-0.5"
                             title="Remover"
                           >
@@ -273,6 +298,38 @@ export function HorariosPage() {
           </div>
         )}
       </section>
+
+      {/* Edit rule modal */}
+      <Modal open={!!editingRule} onClose={() => setEditingRule(null)} title="Editar horário">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1.5">Início</label>
+              <input
+                type="time"
+                value={editStart}
+                onChange={(e) => setEditStart(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1.5">Fim</label>
+              <input
+                type="time"
+                value={editEnd}
+                onChange={(e) => setEditEnd(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="ghost" onClick={() => setEditingRule(null)}>Cancelar</Button>
+            <Button onClick={() => void handleEditRule()} loading={createRule.isPending || deleteRule.isPending}>
+              Salvar
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Add fixed day modal */}
       <Modal open={showAddFixedDay} onClose={() => setShowAddFixedDay(false)} title="Adicionar dia fixo">

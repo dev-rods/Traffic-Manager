@@ -4,31 +4,16 @@ import { formatDate } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
 import type { PatientWithStats } from '@/types'
 
-function buildWhatsAppUrl(phone: string, name: string, availableDates: string[]): string {
-  const firstName = name.split(' ')[0] || 'Ola'
-  const datesText = availableDates.length > 0
-    ? availableDates.map((d) => {
-        const [, m, day] = d.split('-')
-        return `${day}/${m}`
-      }).join(', ')
-    : 'em breve'
-
-  const message = `Oi ${firstName}! Tudo bem? 😊\n\nEstamos com novas datas disponíveis para agendamento: *${datesText}*.\n\nGostaria de agendar sua sessão? Responda aqui que te ajudamos! ✨`
-
-  const cleanPhone = phone.replace(/\D/g, '')
-  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
-}
-
 interface PatientsTableProps {
   patients: PatientWithStats[]
   onSelect: (patient: PatientWithStats) => void
-  availableDates?: string[]
+  onWhatsApp: (patient: PatientWithStats) => void
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
   onToggleAll: () => void
 }
 
-export function PatientsTable({ patients, onSelect, availableDates = [], selectedIds, onToggleSelect, onToggleAll }: PatientsTableProps) {
+export function PatientsTable({ patients, onSelect, onWhatsApp, selectedIds, onToggleSelect, onToggleAll }: PatientsTableProps) {
   const allSelected = patients.length > 0 && patients.every((p) => selectedIds.has(p.id))
 
   return (
@@ -97,16 +82,13 @@ export function PatientsTable({ patients, onSelect, availableDates = [], selecte
                 {p.total_spent_cents > 0 ? formatCurrency(p.total_spent_cents) : '—'}
               </td>
               <td className="px-3 py-3">
-                <a
-                  href={buildWhatsAppUrl(p.phone, p.name ?? '', availableDates)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors"
+                <button
+                  onClick={(e) => { e.stopPropagation(); onWhatsApp(p) }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
                   title="Enviar mensagem no WhatsApp"
                 >
                   <span>💬</span> WhatsApp
-                </a>
+                </button>
               </td>
             </tr>
           ))}
