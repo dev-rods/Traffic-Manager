@@ -15,6 +15,7 @@ export function ServicosPage() {
 
   // Create form
   const [newName, setNewName] = useState('')
+  const [newDescription, setNewDescription] = useState('')
   const [newDuration, setNewDuration] = useState(30)
   const [newPrice, setNewPrice] = useState('')
 
@@ -22,10 +23,12 @@ export function ServicosPage() {
     if (!newName.trim() || newDuration <= 0) return
     await createService.mutateAsync({
       name: newName.trim(),
+      description: newDescription.trim() || undefined,
       duration_minutes: newDuration,
       price_cents: newPrice ? Math.round(parseFloat(newPrice) * 100) : undefined,
     })
     setNewName('')
+    setNewDescription('')
     setNewDuration(30)
     setNewPrice('')
     setShowCreate(false)
@@ -83,6 +86,16 @@ export function ServicosPage() {
               autoFocus
             />
           </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 block mb-1.5">Descrição</label>
+            <textarea
+              value={newDescription}
+              onChange={(e) => setNewDescription(e.target.value)}
+              rows={2}
+              placeholder="Descrição do serviço (opcional)..."
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
+            />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-gray-500 block mb-1.5">Duração (min)</label>
@@ -127,6 +140,7 @@ function ServiceCard({ service }: { service: ClinicService }) {
 
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(service.name)
+  const [editDescription, setEditDescription] = useState(service.description ?? '')
   const [editDuration, setEditDuration] = useState(service.duration_minutes)
   const [editPrice, setEditPrice] = useState(service.price_cents ? (service.price_cents / 100).toFixed(2) : '')
 
@@ -135,6 +149,7 @@ function ServiceCard({ service }: { service: ClinicService }) {
       serviceId: service.id,
       payload: {
         name: editName.trim(),
+        description: editDescription.trim() || undefined,
         duration_minutes: editDuration,
         price_cents: editPrice ? Math.round(parseFloat(editPrice) * 100) : undefined,
       },
@@ -152,10 +167,11 @@ function ServiceCard({ service }: { service: ClinicService }) {
           <p className="text-sm font-semibold text-gray-800">{service.name}</p>
           <p className="text-xs text-gray-400">
             {service.duration_minutes} min · {formatPrice(service.price_cents)}
+            {service.description && <span className="ml-1">· {service.description}</span>}
           </p>
         </div>
         <button
-          onClick={() => { setEditing(true); setEditName(service.name); setEditDuration(service.duration_minutes); setEditPrice(service.price_cents ? (service.price_cents / 100).toFixed(2) : '') }}
+          onClick={() => { setEditing(true); setEditName(service.name); setEditDescription(service.description ?? ''); setEditDuration(service.duration_minutes); setEditPrice(service.price_cents ? (service.price_cents / 100).toFixed(2) : '') }}
           className="text-xs text-gray-400 hover:text-brand-600 transition-colors font-medium cursor-pointer"
         >
           Editar
@@ -164,6 +180,16 @@ function ServiceCard({ service }: { service: ClinicService }) {
 
       {editing && (
         <div className="px-4 pb-3 border-t border-gray-100 pt-3 space-y-3">
+          <div>
+            <label className="text-[11px] text-gray-400 block mb-1">Descrição</label>
+            <textarea
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              rows={2}
+              placeholder="Descrição do serviço (opcional)..."
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
+            />
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-[11px] text-gray-400 block mb-1">Nome</label>

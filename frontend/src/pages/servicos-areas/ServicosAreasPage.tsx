@@ -61,6 +61,7 @@ function ServiceAreaCard({ service, expanded, onToggle }: { service: ClinicServi
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null)
   const [editDuration, setEditDuration] = useState(0)
   const [editPrice, setEditPrice] = useState('')
+  const [editInstructions, setEditInstructions] = useState('')
 
   const linkedAreaIds = new Set(serviceAreas?.map((sa) => sa.area_id) ?? [])
   const unlinkedAreas = clinicAreas?.filter((a) => !linkedAreaIds.has(a.id)) ?? []
@@ -79,10 +80,11 @@ function ServiceAreaCard({ service, expanded, onToggle }: { service: ClinicServi
     await deleteServiceArea.mutateAsync({ serviceId: service.id, areaId })
   }
 
-  const openEditArea = (areaId: string, duration: number, priceCents: number | null) => {
+  const openEditArea = (areaId: string, duration: number, priceCents: number | null, instructions: string | null) => {
     setEditingAreaId(areaId)
     setEditDuration(duration)
     setEditPrice(priceCents != null ? (priceCents / 100).toFixed(2) : '')
+    setEditInstructions(instructions ?? '')
   }
 
   const handleSaveArea = async () => {
@@ -93,6 +95,7 @@ function ServiceAreaCard({ service, expanded, onToggle }: { service: ClinicServi
       payload: {
         duration_minutes: editDuration > 0 ? editDuration : null,
         price_cents: editPrice ? Math.round(parseFloat(editPrice) * 100) : null,
+        pre_session_instructions: editInstructions.trim() || null,
       },
     })
     setEditingAreaId(null)
@@ -134,7 +137,7 @@ function ServiceAreaCard({ service, expanded, onToggle }: { service: ClinicServi
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => openEditArea(sa.area_id, sa.duration_minutes ?? sa.effective_duration_minutes, sa.price_cents)}
+                        onClick={() => openEditArea(sa.area_id, sa.duration_minutes ?? sa.effective_duration_minutes, sa.price_cents, sa.pre_session_instructions)}
                         className="text-xs text-gray-400 hover:text-brand-600 transition-colors font-medium"
                       >
                         Editar
@@ -172,6 +175,16 @@ function ServiceAreaCard({ service, expanded, onToggle }: { service: ClinicServi
                             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                           />
                         </div>
+                      </div>
+                      <div className="mb-2">
+                        <label className="text-[11px] text-gray-400 block mb-1">Instruções pré-sessão</label>
+                        <textarea
+                          value={editInstructions}
+                          onChange={(e) => setEditInstructions(e.target.value)}
+                          rows={2}
+                          placeholder="Instruções enviadas ao paciente antes da sessão nesta área..."
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
+                        />
                       </div>
                       <div className="flex justify-end gap-2">
                         <button onClick={() => setEditingAreaId(null)} className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5">

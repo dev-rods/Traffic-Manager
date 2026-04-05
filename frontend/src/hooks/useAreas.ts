@@ -84,7 +84,7 @@ export function useUpdateServiceArea() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ serviceId, areaId, payload }: { serviceId: string; areaId: string; payload: { duration_minutes?: number | null; price_cents?: number | null } }) =>
+    mutationFn: ({ serviceId, areaId, payload }: { serviceId: string; areaId: string; payload: { duration_minutes?: number | null; price_cents?: number | null; pre_session_instructions?: string | null } }) =>
       areasService.updateServiceArea(serviceId, areaId, payload),
     onSuccess: (_data, { serviceId }) => {
       queryClient.invalidateQueries({ queryKey: areaKeys.byService(serviceId) })

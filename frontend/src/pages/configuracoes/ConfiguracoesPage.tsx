@@ -15,6 +15,7 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     buffer_minutes: clinic.buffer_minutes ?? 10,
     max_future_dates: clinic.max_future_dates ?? 5,
     max_session_minutes: clinic.max_session_minutes ?? 120,
+    pre_session_instructions: clinic.pre_session_instructions ?? '',
     use_agent: clinic.use_agent ?? false,
   }
 }
@@ -106,6 +107,19 @@ export function ConfiguracoesPage() {
               help="Duração máxima de uma sessão"
             />
           </div>
+        </Section>
+
+        <hr className="border-gray-100" />
+
+        {/* Pre-session instructions */}
+        <Section title="Instruções pré-sessão" description="Enviadas ao paciente antes do agendamento">
+          <textarea
+            value={form.pre_session_instructions as string}
+            onChange={(e) => set('pre_session_instructions', e.target.value)}
+            rows={3}
+            placeholder="Instruções gerais enviadas antes de cada sessão..."
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
+          />
         </Section>
 
         <hr className="border-gray-100" />

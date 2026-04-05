@@ -80,7 +80,7 @@ export const areasService = {
       .then((r) => r.data)
   },
 
-  updateServiceArea(serviceId: string, areaId: string, payload: { duration_minutes?: number | null; price_cents?: number | null }) {
+  updateServiceArea(serviceId: string, areaId: string, payload: { duration_minutes?: number | null; price_cents?: number | null; pre_session_instructions?: string | null }) {
     return api
       .put<ServiceAreaResponse>(`/services/${serviceId}/areas/${areaId}`, payload)
       .then((r) => r.data)
