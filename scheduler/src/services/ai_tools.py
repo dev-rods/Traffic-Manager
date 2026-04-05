@@ -123,7 +123,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "book_appointment",
-            "description": "Book an appointment. Requires all data to be collected: service areas, date, time, and patient full name. Always call check_availability and get_time_slots before booking.",
+            "description": "Book an appointment. Requires all data to be collected: service areas, date, time, and patient full name. Always call check_availability and get_time_slots before booking. Always call calculate_discount before booking to get the correct pricing.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -150,6 +150,22 @@ TOOL_DEFINITIONS = [
                     "full_name": {
                         "type": "string",
                         "description": "Patient's full name",
+                    },
+                    "discount_pct": {
+                        "type": "integer",
+                        "description": "Discount percentage from calculate_discount (0 if no discount)",
+                    },
+                    "discount_reason": {
+                        "type": "string",
+                        "description": "Discount reason from calculate_discount (e.g. 'first_session', 'tier_2')",
+                    },
+                    "original_price_cents": {
+                        "type": "integer",
+                        "description": "Original total price in cents before discount",
+                    },
+                    "final_price_cents": {
+                        "type": "integer",
+                        "description": "Final price in cents after discount",
                     },
                 },
                 "required": ["service_area_pairs", "date", "time", "full_name"],
@@ -244,7 +260,83 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_discount",
+            "description": "Calculate applicable discount for the patient based on clinic rules. Call this BEFORE showing the booking summary so you can display the correct price. Returns discount percentage, original price, and discounted price.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "List of service-area pairs selected by the patient",
+                    },
+                },
+                "required": ["service_area_pairs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_pre_session_instructions",
+            "description": "Get pre-session care instructions for the booked service areas. Call this AFTER a successful booking to inform the patient about preparation steps.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "List of service-area pairs that were booked",
+                    },
+                },
+                "required": ["service_area_pairs"],
+            },
+        },
+    },
 ]
+
+
+# ──────────────────────────────────────────────
+# Format conversion helper
+# ──────────────────────────────────────────────
+
+def get_tool_definitions(format="anthropic"):
+    """
+    Return tool definitions in the requested format.
+
+    - "openai": Original OpenAI function calling format
+    - "anthropic": Anthropic tool use format
+    """
+    if format == "openai":
+        return TOOL_DEFINITIONS
+
+    # Convert OpenAI format → Anthropic format
+    anthropic_tools = []
+    for tool in TOOL_DEFINITIONS:
+        func = tool["function"]
+        anthropic_tools.append({
+            "name": func["name"],
+            "description": func["description"],
+            "input_schema": func["parameters"],
+        })
+    return anthropic_tools
 
 
 # ──────────────────────────────────────────────
@@ -259,12 +351,11 @@ class ToolExecutor:
         self.availability_engine = availability_engine
         self.appointment_service = appointment_service
 
-    def execute(self, tool_name: str, arguments: dict, context: dict) -> dict:
+    def execute(self, tool_name, arguments, context):
         """
         Execute a tool and return the result dict.
 
         context must contain: clinic_id, phone
-        context may contain: collected_data (for validation)
         """
         clinic_id = context["clinic_id"]
         phone = context.get("phone", "")
@@ -282,7 +373,7 @@ class ToolExecutor:
 
     # ── Read-only tools ──
 
-    def _tool_list_services(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_list_services(self, args, clinic_id, phone, ctx):
         rows = self.db.execute_query(
             """
             SELECT id, name, description, duration_minutes, price_cents
@@ -304,7 +395,7 @@ class ToolExecutor:
         single_service = len(services) == 1
         return {"services": services, "single_service": single_service}
 
-    def _tool_list_areas(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_list_areas(self, args, clinic_id, phone, ctx):
         service_ids = args.get("service_ids", [])
         if not service_ids:
             return {"error": "service_ids is required"}
@@ -339,14 +430,14 @@ class ToolExecutor:
             })
         return {"areas": areas}
 
-    def _tool_check_availability(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_check_availability(self, args, clinic_id, phone, ctx):
         total_duration = args.get("total_duration_minutes", 60)
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
         days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
         return {"available_dates": days}
 
-    def _tool_get_time_slots(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_get_time_slots(self, args, clinic_id, phone, ctx):
         date = args.get("date")
         total_duration = args.get("total_duration_minutes", 60)
         if not date:
@@ -356,7 +447,7 @@ class ToolExecutor:
         slots = self.availability_engine.get_available_slots_multi(clinic_id, date, total_duration)
         return {"date": date, "available_slots": slots}
 
-    def _tool_lookup_appointments(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_lookup_appointments(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
         appointments = self.appointment_service.get_active_appointments_by_phone(clinic_id, phone)
@@ -372,10 +463,9 @@ class ToolExecutor:
             })
         return {"appointments": result}
 
-    def _tool_get_faq_answer(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_get_faq_answer(self, args, clinic_id, phone, ctx):
         question = args.get("question", "")
 
-        # First: try exact ILIKE match on the full question
         rows = self.db.execute_query(
             """
             SELECT question_label, answer
@@ -390,12 +480,11 @@ class ToolExecutor:
         if rows:
             return {"answers": [{"question": r["question_label"], "answer": r["answer"]} for r in rows]}
 
-        # Second: try matching individual keywords (3+ chars) from the question
         keywords = [w for w in question.lower().split() if len(w) >= 3]
         if keywords:
             conditions = []
             params = [clinic_id]
-            for kw in keywords[:5]:  # max 5 keywords
+            for kw in keywords[:5]:
                 conditions.append("(question_label ILIKE %s OR answer ILIKE %s)")
                 params.extend([f"%{kw}%", f"%{kw}%"])
 
@@ -415,7 +504,7 @@ class ToolExecutor:
 
         return {"answers": [], "message": "Nenhuma resposta encontrada no FAQ. Use seu conhecimento sobre depilação a laser para responder, ou ofereça transferir para um atendente."}
 
-    def _tool_get_clinic_info(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_get_clinic_info(self, args, clinic_id, phone, ctx):
         rows = self.db.execute_query(
             """
             SELECT name, display_name, phone, address, timezone, business_hours
@@ -437,7 +526,7 @@ class ToolExecutor:
 
     # ── Write tools ──
 
-    def _tool_book_appointment(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_book_appointment(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
 
@@ -465,8 +554,13 @@ class ToolExecutor:
             if rows:
                 total_duration += rows[0]["duration_minutes"] or 0
 
-        # Use the first service_id for the primary service field
         primary_service_id = service_area_pairs[0]["service_id"]
+
+        # Extract optional discount fields
+        discount_pct = args.get("discount_pct", 0)
+        discount_reason = args.get("discount_reason")
+        original_price_cents = args.get("original_price_cents")
+        final_price_cents = args.get("final_price_cents")
 
         result = self.appointment_service.create_appointment(
             clinic_id=clinic_id,
@@ -477,6 +571,10 @@ class ToolExecutor:
             service_area_pairs=service_area_pairs,
             total_duration_minutes=total_duration,
             full_name=full_name,
+            discount_pct=discount_pct,
+            discount_reason=discount_reason,
+            original_price_cents=original_price_cents,
+            final_price_cents=final_price_cents,
         )
         return {
             "success": True,
@@ -487,7 +585,7 @@ class ToolExecutor:
             "total_duration_minutes": total_duration,
         }
 
-    def _tool_reschedule_appointment(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_reschedule_appointment(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
         appointment_id = args.get("appointment_id")
@@ -495,28 +593,170 @@ class ToolExecutor:
         new_time = args.get("new_time")
         if not all([appointment_id, new_date, new_time]):
             return {"error": "Missing required fields: appointment_id, new_date, new_time"}
-        result = self.appointment_service.reschedule_appointment(appointment_id, new_date, new_time)
+        self.appointment_service.reschedule_appointment(appointment_id, new_date, new_time)
         return {"success": True, "new_date": new_date, "new_time": new_time}
 
-    def _tool_cancel_appointment(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_cancel_appointment(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
         appointment_id = args.get("appointment_id")
         if not appointment_id:
             return {"error": "appointment_id is required"}
-        result = self.appointment_service.cancel_appointment(appointment_id)
+        self.appointment_service.cancel_appointment(appointment_id)
         return {"success": True, "appointment_id": appointment_id}
 
-    def _tool_request_human_handoff(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
+    def _tool_request_human_handoff(self, args, clinic_id, phone, ctx):
         reason = args.get("reason", "patient_request")
-        # Signal to the engine that handoff was requested
         return {"success": True, "handoff_requested": True, "reason": reason}
 
-    def _tool_present_options(self, args: dict, clinic_id: str, phone: str, ctx: dict) -> dict:
-        # This tool is special — the engine intercepts it to generate WhatsApp buttons.
-        # Return the data as-is for the engine to handle.
+    def _tool_present_options(self, args, clinic_id, phone, ctx):
         return {
             "presented": True,
             "message": args.get("message", ""),
             "options": args.get("options", []),
+        }
+
+    # ── New tools ──
+
+    def _tool_calculate_discount(self, args, clinic_id, phone, ctx):
+        service_area_pairs = args.get("service_area_pairs", [])
+        if not service_area_pairs:
+            return {"error": "service_area_pairs is required"}
+
+        # Calculate total price from service_area_pairs
+        total_price_cents = 0
+        for pair in service_area_pairs:
+            rows = self.db.execute_query(
+                """
+                SELECT COALESCE(sa.price_cents, s.price_cents) as price_cents
+                FROM scheduler.service_areas sa
+                JOIN scheduler.services s ON s.id = sa.service_id
+                WHERE sa.service_id = %s AND sa.area_id = %s
+                """,
+                (pair["service_id"], pair["area_id"]),
+            )
+            if rows and rows[0].get("price_cents"):
+                total_price_cents += rows[0]["price_cents"]
+
+        if not total_price_cents:
+            return {
+                "discount_pct": 0,
+                "discount_reason": None,
+                "original_price_cents": 0,
+                "discounted_price_cents": 0,
+                "price_display": "Valor a consultar",
+            }
+
+        # Fetch discount rules
+        rules_rows = self.db.execute_query(
+            "SELECT * FROM scheduler.discount_rules WHERE clinic_id = %s AND is_active = TRUE",
+            (clinic_id,),
+        )
+        rules = rules_rows[0] if rules_rows else None
+
+        if not rules:
+            return {
+                "discount_pct": 0,
+                "discount_reason": None,
+                "original_price_cents": total_price_cents,
+                "discounted_price_cents": total_price_cents,
+                "price_display": f"R$ {total_price_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
+            }
+
+        # Check if first session
+        count_rows = self.db.execute_query(
+            """SELECT COUNT(*) as cnt FROM scheduler.appointments a
+               JOIN scheduler.patients p ON a.patient_id = p.id
+               WHERE a.clinic_id = %s AND p.phone = %s AND a.status = 'CONFIRMED'""",
+            (clinic_id, phone),
+        )
+        is_first = int(count_rows[0]["cnt"]) == 0 if count_rows else True
+
+        if is_first:
+            discount_pct = rules["first_session_discount_pct"]
+            discount_reason = "first_session"
+        else:
+            area_count = len(service_area_pairs)
+            t2_min = rules["tier_2_min_areas"]
+            t2_max = rules["tier_2_max_areas"]
+            t3_min = rules["tier_3_min_areas"]
+
+            if area_count >= t3_min:
+                discount_pct = rules["tier_3_discount_pct"]
+                discount_reason = "tier_3"
+            elif area_count >= t2_min:
+                discount_pct = rules["tier_2_discount_pct"]
+                discount_reason = "tier_2"
+            else:
+                discount_pct = 0
+                discount_reason = None
+
+        discounted_price = total_price_cents * (100 - discount_pct) // 100
+
+        original_display = f"R$ {total_price_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        discounted_display = f"R$ {discounted_price / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        result = {
+            "discount_pct": discount_pct,
+            "discount_reason": discount_reason,
+            "original_price_cents": total_price_cents,
+            "discounted_price_cents": discounted_price,
+            "original_price_display": original_display,
+            "discounted_price_display": discounted_display,
+            "is_first_session": is_first,
+        }
+
+        if discount_pct > 0:
+            result["discount_message"] = (
+                f"Desconto de {discount_pct}% aplicado! "
+                f"De {original_display} por {discounted_display}"
+            )
+
+        logger.info(
+            f"[ToolExecutor] calculate_discount: pct={discount_pct} reason={discount_reason} "
+            f"original={total_price_cents} discounted={discounted_price}"
+        )
+
+        return result
+
+    def _tool_get_pre_session_instructions(self, args, clinic_id, phone, ctx):
+        service_area_pairs = args.get("service_area_pairs", [])
+        if not service_area_pairs:
+            return {"has_instructions": False, "instructions": ""}
+
+        # Get clinic-level instructions
+        clinic_rows = self.db.execute_query(
+            "SELECT pre_session_instructions FROM scheduler.clinics WHERE clinic_id = %s",
+            (clinic_id,),
+        )
+        clinic_instructions = ""
+        if clinic_rows and clinic_rows[0].get("pre_session_instructions"):
+            clinic_instructions = clinic_rows[0]["pre_session_instructions"]
+
+        # Get service_area-level instructions (more specific, take priority)
+        sa_instructions = ""
+        if service_area_pairs:
+            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+            params = ()
+            for pair in service_area_pairs:
+                params += (pair["service_id"], pair["area_id"])
+            rows = self.db.execute_query(
+                f"""
+                SELECT pre_session_instructions
+                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
+                JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id
+                WHERE sa.pre_session_instructions IS NOT NULL
+                AND sa.active = TRUE
+                """,
+                params,
+            )
+            sa_parts = [r["pre_session_instructions"] for r in rows if r.get("pre_session_instructions")]
+            sa_instructions = "\n".join(sa_parts)
+
+        parts = [p for p in [sa_instructions, clinic_instructions] if p]
+        instructions = "\n\n".join(parts)
+
+        return {
+            "has_instructions": bool(instructions),
+            "instructions": instructions,
         }

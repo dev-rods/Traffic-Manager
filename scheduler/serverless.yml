@@ -46,6 +46,7 @@ provider:
     ALLOWED_PHONES: ${ssm:/${self:custom.stage}/ALLOWED_PHONES}
     SHEETS_WEBHOOK_TOKEN: ${ssm:/${self:custom.stage}/SHEETS_WEBHOOK_TOKEN}
     OPENAI_API_KEY: ${ssm:/${self:custom.stage}/OPENAI_API_KEY}
+    ANTHROPIC_API_KEY: ${ssm:/${self:custom.stage}/ANTHROPIC_API_KEY}
 
 functions:
   - ${file(sls/functions/webhook/interface.yml)}

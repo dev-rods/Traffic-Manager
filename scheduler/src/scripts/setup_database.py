@@ -34,6 +34,7 @@ SQL_STATEMENTS = [
         max_session_minutes INTEGER DEFAULT 60,
         welcome_intro_message TEXT,
         display_name VARCHAR(255),
+        use_agent BOOLEAN DEFAULT FALSE,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -453,10 +454,14 @@ SQL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_leads_phone ON scheduler.leads(phone)",
     "CREATE INDEX IF NOT EXISTS idx_leads_gclid ON scheduler.leads(gclid) WHERE gclid IS NOT NULL",
     "CREATE INDEX IF NOT EXISTS idx_leads_created_at ON scheduler.leads(clinic_id, created_at)",
+
+    # Agent mode flag per clinic
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS use_agent BOOLEAN DEFAULT FALSE",
 ]
 
 
 def main():
+    print("RDS HOST = ", os.environ.get("RDS_HOST"))
     conn = psycopg2.connect(
         host=os.environ.get("RDS_HOST"),
         port=int(os.environ.get("RDS_PORT", "5432")),

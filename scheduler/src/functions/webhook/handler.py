@@ -92,16 +92,30 @@ def handler(event, context):
         availability_engine = _get_availability_engine(db)
         appointment_service = _get_appointment_service(db)
 
-        intent_classifier = _get_intent_classifier()
-        engine = ConversationEngine(
-            db=db,
-            template_service=template_service,
-            availability_engine=availability_engine,
-            appointment_service=appointment_service,
-            provider=provider,
-            message_tracker=tracker,
-            intent_classifier=intent_classifier,
-        )
+        # Feature flag: use LLM agent or legacy state machine
+        use_agent = clinic.get("use_agent", False) or os.environ.get("USE_AGENT_MODE") == "true"
+
+        if use_agent:
+            from src.services.conversation_agent import ConversationAgent
+            engine = ConversationAgent(
+                db=db,
+                template_service=template_service,
+                availability_engine=availability_engine,
+                appointment_service=appointment_service,
+                provider=provider,
+                message_tracker=tracker,
+            )
+        else:
+            intent_classifier = _get_intent_classifier()
+            engine = ConversationEngine(
+                db=db,
+                template_service=template_service,
+                availability_engine=availability_engine,
+                appointment_service=appointment_service,
+                provider=provider,
+                message_tracker=tracker,
+                intent_classifier=intent_classifier,
+            )
 
         # 4. Parse incoming message
         incoming = provider.parse_incoming_message(body)
