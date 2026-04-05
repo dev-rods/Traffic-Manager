@@ -83,6 +83,11 @@ def handler(event, context):
         clinic = clinics[0]
         clinic_id = clinic["clinic_id"]
 
+        # Global bot pause — clinic owner disabled the bot
+        if clinic.get("bot_paused", False):
+            logger.info(f"[Webhook] Bot paused globally for clinic {clinic_id}, ignoring message")
+            return http_response(200, {"status": "OK"})
+
         # 3. Setup services
         provider = get_provider(clinic)
         tracker = MessageTracker()

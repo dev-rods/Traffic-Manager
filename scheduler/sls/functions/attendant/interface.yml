@@ -52,3 +52,90 @@ AttendantPanel:
         path: attendant/panel
         method: get
         cors: true
+
+ConversationManager:
+  handler: src.functions.attendant.conversations.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ConversationManager-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events/index/*"
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/conversations
+        method: get
+        cors: true
+
+ConversationMessages:
+  handler: src.functions.attendant.messages.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ConversationMessages-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/conversations/{phone}/messages
+        method: get
+        cors: true
+
+ActiveConversations:
+  handler: src.functions.attendant.list_active.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ActiveConversations-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/conversations/active
+        method: get
+        cors: true

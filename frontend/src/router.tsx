@@ -15,6 +15,8 @@ import { HorariosPage } from '@/pages/horarios/HorariosPage'
 import { FaqPage } from '@/pages/faq/FaqPage'
 import { ConfiguracoesPage } from '@/pages/configuracoes/ConfiguracoesPage'
 import { ServicosAreasPage } from '@/pages/servicos-areas/ServicosAreasPage'
+import { BotPage } from '@/pages/bot/BotPage'
+import { LeadsPage } from '@/pages/leads/LeadsPage'
 
 export const router = createBrowserRouter([
   {
@@ -48,6 +50,8 @@ export const router = createBrowserRouter([
       { path: 'areas', element: <AreasPage /> },
       { path: 'servicos-areas', element: <ServicosAreasPage /> },
       { path: 'horarios', element: <HorariosPage /> },
+      { path: 'bot', element: <BotPage /> },
+      { path: 'leads', element: <LeadsPage /> },
       { path: 'faq', element: <FaqPage /> },
       { path: 'configuracoes', element: <ConfiguracoesPage /> },
     ],

@@ -14,6 +14,7 @@ export interface Clinic {
   welcome_intro_message: string | null
   pre_session_instructions: string | null
   use_agent: boolean
+  bot_paused: boolean
   active: boolean
 }
 
@@ -29,6 +30,7 @@ export interface UpdateClinicPayload {
   welcome_intro_message?: string
   pre_session_instructions?: string
   use_agent?: boolean
+  bot_paused?: boolean
 }
 
 // ── Patient ───────────────────────────────────────────────────
@@ -246,4 +248,56 @@ export interface PaginatedResponse<T> {
 export interface ApiError {
   message: string
   code?: string
+}
+
+// ── Bot / Conversations ──────────────────────────────────────
+export interface ActiveConversation {
+  phone: string
+  state: string
+  bot_paused: boolean
+  attendant_active_until: number | null
+  updated_at: string
+}
+
+export interface ConversationPreview {
+  phone: string
+  last_message: string
+  last_direction: 'INBOUND' | 'OUTBOUND'
+  last_message_at: string
+  sender_name: string
+}
+
+export interface ConversationMessage {
+  id: string
+  direction: 'INBOUND' | 'OUTBOUND'
+  content: string
+  message_type: string
+  status: string
+  created_at: string
+  sender_name: string
+}
+
+export interface BotMetrics {
+  total_conversations: number
+  messages_sent: number
+  conversion_rate: number
+  total_leads: number
+  booked_leads: number
+  handoff_count: number
+  daily_conversations: Record<string, number>
+}
+
+// ── Lead ─────────────────────────────────────────────────────
+export interface Lead {
+  id: string
+  clinic_id: string
+  phone: string
+  name: string | null
+  booked: boolean
+  source: string
+  first_appointment_id: string | null
+  first_appointment_value: number | null
+  raw_message: string | null
+  created_at: string
+  updated_at: string
 }

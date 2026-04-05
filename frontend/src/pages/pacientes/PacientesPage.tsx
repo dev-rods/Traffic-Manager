@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { usePatients } from '@/hooks/usePatients'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
+import { useActiveConversations, usePauseBot, useResumeBot } from '@/hooks/useBot'
 import { useDebounce } from '@/hooks/useDebounce'
 import { todayStr } from '@/utils/dateHelpers'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -22,6 +23,27 @@ export function PacientesPage() {
   const [batchPatients, setBatchPatients] = useState<PatientWithStats[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const debouncedSearch = useDebounce(search)
+
+  // Bot pause per patient
+  const { data: activeData } = useActiveConversations()
+  const pauseBot = usePauseBot()
+  const resumeBot = useResumeBot()
+  const pausedPhones = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of activeData?.conversations ?? []) {
+      if (c.bot_paused) set.add(c.phone)
+    }
+    return set
+  }, [activeData])
+
+  const handleTogglePause = useCallback((phone: string) => {
+    const clean = phone.replace(/\D/g, '')
+    if (pausedPhones.has(clean)) {
+      resumeBot.mutate(clean)
+    } else {
+      pauseBot.mutate(clean)
+    }
+  }, [pausedPhones, pauseBot, resumeBot])
 
   // Fetch available dates for WhatsApp message
   const { data: rulesData } = useAvailabilityRules()
@@ -103,6 +125,9 @@ export function PacientesPage() {
           patients={data.items}
           onSelect={setEditingPatient}
           onWhatsApp={(p) => { setBatchPatients([p]); setBatchOpen(true) }}
+          onPauseBot={handleTogglePause}
+          pausedPhones={pausedPhones}
+          pauseLoading={pauseBot.isPending || resumeBot.isPending}
           selectedIds={selectedIds}
           onToggleSelect={handleToggleSelect}
           onToggleAll={handleToggleAll}

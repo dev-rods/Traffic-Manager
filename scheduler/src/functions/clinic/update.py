@@ -28,6 +28,7 @@ ALLOWED_FIELDS = {
     "display_name",
     "max_session_minutes",
     "welcome_intro_message",
+    "bot_paused",
 }
 
 JSONB_FIELDS = {"business_hours"}

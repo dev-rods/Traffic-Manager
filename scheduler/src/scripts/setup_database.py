@@ -461,6 +461,9 @@ SQL_STATEMENTS = [
     # Remove deprecated Google Sheets columns
     "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS google_spreadsheet_id",
     "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS google_sheet_name",
+
+    # Bot pause flag per clinic
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_paused BOOLEAN DEFAULT FALSE",
 ]
 
 

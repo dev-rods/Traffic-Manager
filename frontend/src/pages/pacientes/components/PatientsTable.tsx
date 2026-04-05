@@ -8,12 +8,15 @@ interface PatientsTableProps {
   patients: PatientWithStats[]
   onSelect: (patient: PatientWithStats) => void
   onWhatsApp: (patient: PatientWithStats) => void
+  onPauseBot: (phone: string) => void
+  pausedPhones: Set<string>
+  pauseLoading?: boolean
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
   onToggleAll: () => void
 }
 
-export function PatientsTable({ patients, onSelect, onWhatsApp, selectedIds, onToggleSelect, onToggleAll }: PatientsTableProps) {
+export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, pausedPhones, pauseLoading, selectedIds, onToggleSelect, onToggleAll }: PatientsTableProps) {
   const allSelected = patients.length > 0 && patients.every((p) => selectedIds.has(p.id))
 
   return (
@@ -82,13 +85,28 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, selectedIds, onT
                 {p.total_spent_cents > 0 ? formatCurrency(p.total_spent_cents) : '—'}
               </td>
               <td className="px-3 py-3">
-                <button
-                  onClick={(e) => { e.stopPropagation(); onWhatsApp(p) }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
-                  title="Enviar mensagem no WhatsApp"
-                >
-                  <span>💬</span> WhatsApp
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onWhatsApp(p) }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
+                    title="Enviar mensagem no WhatsApp"
+                  >
+                    <span>💬</span> WhatsApp
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onPauseBot(p.phone) }}
+                    disabled={pauseLoading}
+                    className={[
+                      'px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
+                      pausedPhones.has(p.phone)
+                        ? 'text-amber-700 bg-amber-50 hover:bg-amber-100'
+                        : 'text-gray-500 bg-gray-50 hover:bg-gray-100',
+                    ].join(' ')}
+                    title={pausedPhones.has(p.phone) ? 'Retomar bot para este paciente' : 'Pausar bot para este paciente'}
+                  >
+                    {pausedPhones.has(p.phone) ? '▶ Retomar' : '⏸ Pausar'}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
