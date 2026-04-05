@@ -34,21 +34,31 @@ def handler(event, context):
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(TABLE_NAME)
 
-        # Query recent messages via GSI (most recent first)
-        response = table.query(
-            IndexName="clinicId-statusTimestamp-index",
-            KeyConditionExpression=Key("clinicId").eq(clinic_id),
-            ScanIndexForward=False,
-            Limit=500,  # Fetch enough to group by phone
-        )
+        # Query RECEIVED messages (INBOUND) and SENT messages (OUTBOUND) separately,
+        # then merge. We can't query both prefixes at once with DynamoDB key conditions.
+        # STATUS_UPDATE items have corrupted timestamps (year 58228) so we must avoid them.
+        all_items = []
+        for prefix in ("RECEIVED#", "SENT#"):
+            response = table.query(
+                IndexName="clinicId-statusTimestamp-index",
+                KeyConditionExpression=(
+                    Key("clinicId").eq(clinic_id) &
+                    Key("statusTimestamp").begins_with(prefix)
+                ),
+                ScanIndexForward=False,
+                Limit=300,
+            )
+            all_items.extend(response.get("Items", []))
+
+        # Sort all items by createdAt descending
+        all_items.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
 
         # Group by phone, keep only latest message per phone
         conversations = OrderedDict()
-        for item in response.get("Items", []):
+        for item in all_items:
             phone = item.get("phone", "")
             direction = item.get("direction", "")
 
-            # Skip status updates
             if direction == "STATUS_UPDATE":
                 continue
 

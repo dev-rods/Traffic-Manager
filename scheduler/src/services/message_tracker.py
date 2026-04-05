@@ -131,6 +131,9 @@ class MessageTracker:
     ) -> Dict[str, Any]:
         now = int(time.time())
         event_time = timestamp if timestamp else now
+        # z-api sends momment in milliseconds — convert to seconds if too large
+        if event_time > 9999999999:
+            event_time = event_time // 1000
         timestamp_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(event_time))
 
         item = {

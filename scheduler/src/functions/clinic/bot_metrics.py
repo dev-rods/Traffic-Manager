@@ -42,17 +42,20 @@ def handler(event, context):
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(MESSAGE_EVENTS_TABLE)
 
-        response = table.query(
-            IndexName="clinicId-statusTimestamp-index",
-            KeyConditionExpression=(
-                Key("clinicId").eq(clinic_id) &
-                Key("statusTimestamp").gte(f"RECEIVED#{start}")
-            ),
-            ScanIndexForward=True,
-            Limit=5000,
-        )
-
-        items = response.get("Items", [])
+        # Query RECEIVED (INBOUND) and SENT (OUTBOUND) separately to avoid
+        # STATUS_UPDATE items that have corrupted timestamps (year 58228)
+        items = []
+        for prefix, ts_start in [("RECEIVED#", f"RECEIVED#{start}"), ("SENT#", f"SENT#{start}")]:
+            response = table.query(
+                IndexName="clinicId-statusTimestamp-index",
+                KeyConditionExpression=(
+                    Key("clinicId").eq(clinic_id) &
+                    Key("statusTimestamp").between(ts_start, f"{prefix}9999")
+                ),
+                ScanIndexForward=True,
+                Limit=5000,
+            )
+            items.extend(response.get("Items", []))
 
         # Count unique conversations and messages
         inbound_phones = set()
