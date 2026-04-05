@@ -1,24 +1,28 @@
 import { api } from './api'
 
-export type MessageTemplate = 'confirmacao' | 'lembrete' | 'reagendamento' | 'livre'
-
 export interface SendMessagePayload {
   patient_id: string
   phone: string
-  template: MessageTemplate
-  body: string             // message text (may be edited by user)
-  appointment_id?: string  // optional context
+  template: string
+  body: string
 }
 
 export interface SendMessageResponse {
-  message_id: string
-  status: 'sent' | 'queued' | 'failed'
+  status: string
+  messageId?: string
+  providerMessageId?: string
 }
 
 export const messagesService = {
   send(clinicId: string, payload: SendMessagePayload) {
     return api
-      .post<SendMessageResponse>(`/clinics/${clinicId}/messages`, payload)
+      .post<SendMessageResponse>('/send', {
+        clinicId,
+        phone: payload.phone,
+        type: 'text',
+        content: payload.body,
+        metadata: { patient_id: payload.patient_id, template: payload.template },
+      })
       .then((r) => r.data)
   },
 }

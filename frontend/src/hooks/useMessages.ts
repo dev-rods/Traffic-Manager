@@ -26,9 +26,10 @@ export function useSendBatchMessages() {
       const payload = payloads[i]
       try {
         const res: SendMessageResponse = await messagesService.send(clinicId, payload)
+        const resultStatus = res.status === 'OK' ? 'sent' as const : 'failed' as const
         setResults((prev) =>
           prev.map((r) =>
-            r.patientId === payload.patient_id ? { ...r, status: res.status } : r,
+            r.patientId === payload.patient_id ? { ...r, status: resultStatus } : r,
           ),
         )
       } catch (err: unknown) {

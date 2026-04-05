@@ -56,12 +56,14 @@ def handler(event, context):
         # Group by phone, keep only latest message per phone
         conversations = OrderedDict()
         for item in all_items:
-            phone = item.get("phone", "")
+            raw_phone = item.get("phone", "")
 
             # Skip WhatsApp group/list IDs
-            if "@" in phone or not phone:
+            if "@" in raw_phone or not raw_phone:
                 continue
 
+            # Normalize phone to digits only for consistent dedup
+            phone = "".join(c for c in raw_phone if c.isdigit())
             direction = item.get("direction", "")
 
             if direction == "STATUS_UPDATE":
