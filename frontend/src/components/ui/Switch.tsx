@@ -3,10 +3,9 @@ interface SwitchProps {
   onChange: (checked: boolean) => void
   disabled?: boolean
   label?: string
-  description?: string
 }
 
-export function Switch({ checked, onChange, disabled, label, description }: SwitchProps) {
+export function Switch({ checked, onChange, disabled, label }: SwitchProps) {
   return (
     <button
       type="button"
