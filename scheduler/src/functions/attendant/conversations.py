@@ -34,16 +34,16 @@ def handler(event, context):
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(TABLE_NAME)
 
-        # Query RECEIVED messages (INBOUND) and SENT messages (OUTBOUND) separately,
-        # then merge. We can't query both prefixes at once with DynamoDB key conditions.
-        # STATUS_UPDATE items have corrupted timestamps (year 58228) so we must avoid them.
+        # Query RECEIVED (INBOUND) and SENT (OUTBOUND) with date range to avoid
+        # STATUS_UPDATE items that have corrupted timestamps (year 58228 from ms→s bug).
+        # Using BETWEEN with year range ensures we only get valid timestamps.
         all_items = []
-        for prefix in ("RECEIVED#", "SENT#"):
+        for prefix in ("RECEIVED#", "SENT#", "QUEUED#"):
             response = table.query(
                 IndexName="clinicId-statusTimestamp-index",
                 KeyConditionExpression=(
                     Key("clinicId").eq(clinic_id) &
-                    Key("statusTimestamp").begins_with(prefix)
+                    Key("statusTimestamp").between(f"{prefix}2020", f"{prefix}2030")
                 ),
                 ScanIndexForward=False,
                 Limit=300,

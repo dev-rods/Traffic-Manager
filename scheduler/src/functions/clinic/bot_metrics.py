@@ -42,15 +42,15 @@ def handler(event, context):
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(MESSAGE_EVENTS_TABLE)
 
-        # Query RECEIVED (INBOUND) and SENT (OUTBOUND) separately to avoid
-        # STATUS_UPDATE items that have corrupted timestamps (year 58228)
+        # Query RECEIVED (INBOUND) and SENT/QUEUED (OUTBOUND) with date range to avoid
+        # STATUS_UPDATE items that have corrupted timestamps (year 58228 from ms→s bug)
         items = []
-        for prefix, ts_start in [("RECEIVED#", f"RECEIVED#{start}"), ("SENT#", f"SENT#{start}")]:
+        for prefix in ("RECEIVED#", "SENT#", "QUEUED#"):
             response = table.query(
                 IndexName="clinicId-statusTimestamp-index",
                 KeyConditionExpression=(
                     Key("clinicId").eq(clinic_id) &
-                    Key("statusTimestamp").between(ts_start, f"{prefix}9999")
+                    Key("statusTimestamp").between(f"{prefix}{start[:10]}", f"{prefix}2030")
                 ),
                 ScanIndexForward=True,
                 Limit=5000,
