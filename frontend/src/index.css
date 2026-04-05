@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-brand-50: #f0f5ff;
   --color-brand-100: #e0eaff;
@@ -11,4 +13,15 @@
   --color-brand-700: #1f3fa6;
   --color-brand-800: #1a3380;
   --color-brand-900: #142766;
+  --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+}
+
+/* Dark mode surface overrides */
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  background-color: #0f1117;
+  color: #e2e4e9;
 }

@@ -29,13 +29,16 @@ def handler(event, context):
     if not clinic_id:
         return http_response(400, {"status": "ERROR", "message": "clinicId obrigatório"})
 
-    now = datetime.utcnow()
+    # Use BRT (UTC-3) for period boundaries so "today" matches the clinic's local day
+    now_utc = datetime.utcnow()
+    now_brt = now_utc - timedelta(hours=3)
     if period == "week":
-        start = (now - timedelta(days=7)).isoformat() + "Z"
+        start = (now_utc - timedelta(days=7)).isoformat() + "Z"
     elif period == "month":
-        start = (now - timedelta(days=30)).isoformat() + "Z"
+        start = (now_utc - timedelta(days=30)).isoformat() + "Z"
     else:
-        start = now.strftime("%Y-%m-%dT00:00:00Z")
+        # Midnight BRT = 03:00 UTC
+        start = now_brt.strftime("%Y-%m-%dT03:00:00Z")
 
     try:
         # 1. Query MessageEvents for the period

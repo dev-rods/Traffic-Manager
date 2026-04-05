@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from 'react'
 import { useConversationMessages } from '@/hooks/useBot'
 import { formatPhone } from '@/utils/formatPhone'
 import { Button } from '@/components/ui/Button'
@@ -15,14 +16,26 @@ interface ConversationThreadProps {
 
 export function ConversationThread({ phone, senderName, botPaused, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
   const { data, isLoading } = useConversationMessages(phone)
-  const messages = data?.messages ?? []
+  const messages = useMemo(() => data?.messages ?? [], [data])
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom when messages load or change
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [messages])
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg cursor-pointer">&larr;</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
           <div>
             <p className="text-sm font-semibold text-gray-800">{senderName || formatPhone(phone)}</p>
             <p className="text-xs text-gray-400">{formatPhone(phone)}</p>
@@ -38,7 +51,7 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {isLoading ? (
           <div className="text-center py-8">
             <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -51,10 +64,10 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
             <div
               key={msg.id}
               className={[
-                'max-w-[75%] rounded-lg px-3 py-2 text-sm whitespace-pre-line',
+                'max-w-[75%] rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-line',
                 msg.direction === 'INBOUND'
-                  ? 'bg-gray-100 text-gray-800 self-start mr-auto'
-                  : 'bg-brand-500 text-white self-end ml-auto',
+                  ? 'bg-gray-100 text-gray-800 rounded-bl-sm'
+                  : 'bg-brand-500 text-white ml-auto rounded-br-sm',
               ].join(' ')}
             >
               <p>{msg.content}</p>
