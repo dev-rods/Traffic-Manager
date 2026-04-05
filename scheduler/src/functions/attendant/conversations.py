@@ -57,6 +57,11 @@ def handler(event, context):
         conversations = OrderedDict()
         for item in all_items:
             phone = item.get("phone", "")
+
+            # Skip WhatsApp group/list IDs
+            if "@" in phone or not phone:
+                continue
+
             direction = item.get("direction", "")
 
             if direction == "STATUS_UPDATE":
@@ -73,6 +78,24 @@ def handler(event, context):
 
             if len(conversations) >= limit:
                 break
+
+        # Enrich with patient names from PostgreSQL
+        if conversations:
+            from src.services.db.postgres import PostgresService
+            try:
+                db = PostgresService()
+                phones_list = list(conversations.keys())
+                placeholders = ",".join(["%s"] * len(phones_list))
+                patients = db.execute_query(
+                    f"SELECT phone, name FROM scheduler.patients WHERE clinic_id = %s AND phone IN ({placeholders})",
+                    (clinic_id, *phones_list),
+                )
+                name_map = {p["phone"]: p["name"] for p in patients if p.get("name")}
+                for phone, conv in conversations.items():
+                    if phone in name_map:
+                        conv["sender_name"] = name_map[phone]
+            except Exception as e:
+                logger.warning(f"[Conversations] Could not enrich names: {e}")
 
         return http_response(200, {
             "status": "OK",

@@ -43,6 +43,11 @@ def handler(event, context):
         for item in response.get("Items", []):
             session = item.get("session", {})
             phone = item.get("phone", "")
+
+            # Skip WhatsApp group/list IDs
+            if "@" in phone or not phone:
+                continue
+
             state = session.get("state", "")
             attendant_until = session.get("attendant_active_until")
             handoff_at = session.get("human_handoff_requested_at")
@@ -63,6 +68,23 @@ def handler(event, context):
                 "attendant_active_until": attendant_until,
                 "updated_at": updated_at,
             })
+
+        # Enrich with patient names from PostgreSQL
+        if conversations:
+            from src.services.db.postgres import PostgresService
+            try:
+                db = PostgresService()
+                phones_list = [c["phone"] for c in conversations]
+                placeholders = ",".join(["%s"] * len(phones_list))
+                patients = db.execute_query(
+                    f"SELECT phone, name FROM scheduler.patients WHERE clinic_id = %s AND phone IN ({placeholders})",
+                    (clinic_id, *phones_list),
+                )
+                name_map = {p["phone"]: p["name"] for p in patients if p.get("name")}
+                for conv in conversations:
+                    conv["name"] = name_map.get(conv["phone"], "")
+            except Exception as e:
+                logger.warning(f"[ListActive] Could not enrich names: {e}")
 
         # Sort: paused first, then by updated_at desc
         conversations.sort(key=lambda c: (not c["bot_paused"], c.get("updated_at", "")), reverse=False)

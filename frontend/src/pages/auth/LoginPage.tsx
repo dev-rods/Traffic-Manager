@@ -36,16 +36,17 @@ export default function LoginPage() {
       {/* Brand panel */}
       <div className="hidden lg:flex flex-col justify-between w-96 bg-brand-600 p-10 text-white flex-shrink-0">
         <div>
-          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-xl font-bold mb-8">
-            T
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mb-8">
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
           </div>
-          <h1 className="text-3xl font-bold leading-tight mb-3">Traffic Manager</h1>
+          <h1 className="text-3xl font-bold leading-tight mb-3">Painel da Clínica</h1>
           <p className="text-brand-100 text-sm leading-relaxed">
-            Painel de gestão para clínicas de estética. Visualize agendamentos, pacientes e
-            relatórios em tempo real.
+            Gerencie agendamentos, pacientes, bot do WhatsApp e relatórios da sua clínica.
           </p>
         </div>
-        <p className="text-brand-200 text-xs">© {new Date().getFullYear()} Traffic Manager</p>
+        <p className="text-brand-200 text-xs">© {new Date().getFullYear()}</p>
       </div>
 
       {/* Form panel */}
@@ -53,14 +54,16 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center text-white font-bold">
-              T
+            <div className="w-8 h-8 rounded-lg bg-brand-500 flex items-center justify-center">
+              <svg className="w-4.5 h-4.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
             </div>
-            <span className="font-bold text-gray-800">Traffic Manager</span>
+            <span className="font-bold text-gray-800">Painel da Clínica</span>
           </div>
 
           <h2 className="text-2xl font-bold text-gray-800 mb-1">Entrar</h2>
-          <p className="text-sm text-gray-400 mb-8">Acesse o painel da sua clínica</p>
+          <p className="text-sm text-gray-400 mb-8">Acesse o painel de gestão da sua clínica</p>
 
           <form onSubmit={(e) => void handleSubmit(onSubmit)(e)} className="space-y-4" noValidate>
             <div>
