@@ -1172,7 +1172,7 @@ class ConversationEngine:
 
     def _build_discount_info_message(self, rules: dict, is_first: bool) -> str:
         """Build the discount informational message shown before area selection."""
-        if is_first:
+        if is_first and rules.get("first_session_discount_pct"):
             pct = rules["first_session_discount_pct"]
             return (
                 f"\U0001f389 *Desconto especial de primeira sessão!*\n\n"
@@ -1344,7 +1344,7 @@ class ConversationEngine:
         if is_first is None:
             is_first = self._is_first_session(clinic_id, phone)
 
-        if is_first:
+        if is_first and rules.get("first_session_discount_pct"):
             discount_pct = rules["first_session_discount_pct"]
             discount_reason = "first_session"
         else:

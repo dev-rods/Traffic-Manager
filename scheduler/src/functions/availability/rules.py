@@ -105,6 +105,34 @@ def create_handler(event, context):
         return http_response(500, {"status": "ERROR", "message": str(e)})
 
 
+def delete_handler(event, context):
+    try:
+        api_key, error_response = require_api_key(event)
+        if error_response:
+            return error_response
+
+        rule_id = extract_path_param(event, "ruleId")
+        if not rule_id:
+            return http_response(400, {"status": "ERROR", "message": "ruleId is required"})
+
+        db = PostgresService()
+        result = db.execute_write_returning(
+            "DELETE FROM scheduler.availability_rules WHERE id = %s RETURNING id",
+            (rule_id,)
+        )
+
+        if not result:
+            return http_response(404, {"status": "ERROR", "message": "Rule not found"})
+
+        logger.info(f"Availability rule deleted: {rule_id}")
+
+        return http_response(200, {"status": "SUCCESS", "message": "Rule deleted"})
+
+    except Exception as e:
+        logger.error(f"Error deleting availability rule: {str(e)}")
+        return http_response(500, {"status": "ERROR", "message": str(e)})
+
+
 def list_handler(event, context):
     try:
         api_key, error_response = require_api_key(event)

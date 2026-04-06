@@ -1,6 +1,7 @@
 import os
 import logging
 import hashlib
+import unicodedata
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -21,6 +22,8 @@ class SchedulerAuth:
 
     @staticmethod
     def generate_clinic_id(clinic_name):
-        base = "".join(e for e in clinic_name if e.isalnum()).lower()
+        nfkd = unicodedata.normalize("NFKD", clinic_name)
+        ascii_only = "".join(c for c in nfkd if not unicodedata.combining(c))
+        base = "".join(e for e in ascii_only if e.isalnum()).lower()
         hash_suffix = hashlib.md5(clinic_name.encode()).hexdigest()[:6]
         return f"{base}-{hash_suffix}"

@@ -2,7 +2,7 @@ import { shortDayName, dayNumber, shortMonthName, todayStr, timeToMinutes } from
 import type { Appointment } from '@/types'
 
 const FIRST_HOUR = 7
-const LAST_HOUR = 20
+const LAST_HOUR = 22
 const SLOT_MINUTES = 15
 const HOUR_HEIGHT = 48 // px per hour
 const SLOT_HEIGHT = HOUR_HEIGHT / (60 / SLOT_MINUTES) // px per 15-min slot
