@@ -120,7 +120,7 @@ export function BotPage() {
       {/* Conversations */}
       <section>
         <h2 className="text-sm font-semibold text-gray-800 mb-3">Conversas recentes</h2>
-        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden h-[calc(100vh-420px)] min-h-80">
+        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden h-[calc(100vh-280px)] min-h-96">
           <div className="flex h-full">
             {/* Conversation list */}
             <div className={[

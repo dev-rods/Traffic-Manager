@@ -42,21 +42,35 @@ def handler(event, context):
             Limit=limit,
         )
 
-        messages = []
+        # Deduplicate by messageId — outbound messages create both QUEUED and SENT entries.
+        # Keep the latest entry per messageId (SENT supersedes QUEUED).
+        seen = {}
         for item in response.get("Items", []):
             direction = item.get("direction", "")
             if direction == "STATUS_UPDATE":
                 continue
 
-            messages.append({
-                "id": item.get("messageId", ""),
+            msg_id = item.get("messageId", "")
+            msg = {
+                "id": msg_id,
                 "direction": direction,
                 "content": item.get("content", ""),
                 "message_type": item.get("messageType", "text"),
                 "status": item.get("status", ""),
                 "created_at": item.get("createdAt", ""),
                 "sender_name": item.get("senderName", ""),
-            })
+            }
+
+            if msg_id in seen:
+                # Keep the entry with the "better" status (SENT > QUEUED > FAILED)
+                existing = seen[msg_id]
+                if msg["status"] in ("SENT", "RECEIVED") or existing["status"] == "QUEUED":
+                    seen[msg_id] = msg
+            else:
+                seen[msg_id] = msg
+
+        # Preserve chronological order from the original query
+        messages = list(seen.values())
 
         return http_response(200, {
             "status": "OK",

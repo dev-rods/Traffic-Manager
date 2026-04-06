@@ -46,6 +46,11 @@ def handler(event, context):
 
         # 1b. Handle fromMe (attendant messages or bot echo)
         if body.get("fromMe", False):
+            logger.info(
+                f"[Webhook] fromMe=true | status={body.get('status')} | type={body.get('type')} | "
+                f"phone={body.get('phone')} | messageId={body.get('messageId')} | "
+                f"payload_keys={list(body.keys())}"
+            )
             # Messages sent via API/bot arrive with status=SENT; ignore them
             if body.get("status") == "SENT":
                 logger.info("[Webhook] Ignorando fromMe com status=SENT (mensagem enviada via API/bot)")
@@ -67,6 +72,25 @@ def handler(event, context):
                         _deactivate_attendant_mode(clinic_id, phone)
                     else:
                         _activate_attendant_mode(clinic_id, phone)
+
+                    # Track attendant message so it appears in the conversation view
+                    if content:
+                        try:
+                            tracker = MessageTracker()
+                            msg_id = body.get("messageId") or body.get("id", {}).get("id", "") or str(uuid.uuid4())
+                            conversation_id = f"{clinic_id}#{phone}"
+                            tracker.track_outbound(
+                                clinic_id=clinic_id,
+                                phone=phone,
+                                message_id=msg_id,
+                                conversation_id=conversation_id,
+                                message_type="TEXT",
+                                content=content,
+                                status="SENT",
+                            )
+                        except Exception as e:
+                            logger.error(f"[Webhook] Erro ao rastrear mensagem do atendente: {e}")
+
             logger.info("[Webhook] Mensagem propria processada (fromMe=true)")
             return http_response(200, {"status": "OK"})
 
@@ -144,8 +168,23 @@ def handler(event, context):
             except Exception as e:
                 logger.error(f"[Webhook] Erro ao salvar lead: {e}")
 
-        # 5. Track inbound
+        # 5. Dedup: skip if this message_id was already processed (z-api can send duplicate webhooks)
         conversation_id = f"{clinic_id}#{incoming.phone}"
+        dedup_table = boto3.resource("dynamodb").Table(os.environ.get("CONVERSATION_SESSIONS_TABLE", ""))
+        try:
+            dedup_table.put_item(
+                Item={
+                    "pk": f"DEDUP#{clinic_id}",
+                    "sk": f"MSG#{incoming.message_id}",
+                    "ttl": int(time.time()) + 300,  # 5 min TTL
+                },
+                ConditionExpression="attribute_not_exists(pk)",
+            )
+        except dedup_table.meta.client.exceptions.ConditionalCheckFailedException:
+            logger.info(f"[Webhook] Duplicate message {incoming.message_id}, skipping")
+            return http_response(200, {"status": "OK", "duplicate": True})
+
+        # 5b. Track inbound
         tracker.track_inbound(
             clinic_id=clinic_id,
             phone=incoming.phone,

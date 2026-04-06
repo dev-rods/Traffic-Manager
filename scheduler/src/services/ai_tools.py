@@ -33,7 +33,7 @@ TOOL_DEFINITIONS = [
                     "service_ids": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "UUIDs of the services to list areas for",
+                        "description": "UUIDs (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) of the services, as returned by list_services. NEVER use service names or slugs.",
                     },
                 },
                 "required": ["service_ids"],

@@ -30,7 +30,7 @@ class AnthropicService:
         Call Anthropic Messages API with optional tool use.
 
         Returns the parsed JSON response dict.
-        Retries up to 3 times on 429/5xx with exponential backoff.
+        Retries up to 5 times on 429/5xx with exponential backoff (3s base).
         """
         headers = {
             "x-api-key": self.api_key,
@@ -49,19 +49,19 @@ class AnthropicService:
         if tools:
             payload["tools"] = tools
 
-        max_retries = 3
+        max_retries = 5
 
         for attempt in range(max_retries):
             try:
                 response = requests.post(
-                    ANTHROPIC_API_URL, headers=headers, json=payload, timeout=30
+                    ANTHROPIC_API_URL, headers=headers, json=payload, timeout=25
                 )
 
                 if response.status_code == 200:
                     return response.json()
 
                 if response.status_code == 429 or response.status_code >= 500:
-                    wait_time = 2 ** (attempt + 1)
+                    wait_time = min(3 * 2 ** attempt, 15)
                     logger.warning(
                         f"[AnthropicService] API error (status {response.status_code}), "
                         f"retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"

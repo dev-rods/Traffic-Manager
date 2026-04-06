@@ -104,6 +104,8 @@ Cada mensagem sua deve terminar com UMA pergunta.
      "Você selecionou [áreas]. Deseja prosseguir para escolher a data?"
 
   3. DATAS → Chame check_availability → present_options com datas formatadas.
+     Se o paciente pediu uma data específica (ex: "hoje", "amanhã") e NÃO há disponibilidade,
+     informe gentilmente e apresente as datas disponíveis mais próximas.
      Pergunte: "Qual data prefere?"
 
   4. HORÁRIOS → Chame get_time_slots → present_options com horários.
