@@ -2,9 +2,9 @@ import { shortDayName, dayNumber, shortMonthName, todayStr, timeToMinutes } from
 import type { Appointment } from '@/types'
 
 const FIRST_HOUR = 7
-const LAST_HOUR = 20
+const LAST_HOUR = 22
 const SLOT_MINUTES = 15
-const HOUR_HEIGHT = 48 // px per hour
+const HOUR_HEIGHT = 112 // px per hour
 const SLOT_HEIGHT = HOUR_HEIGHT / (60 / SLOT_MINUTES) // px per 15-min slot
 const TOTAL_HOURS = LAST_HOUR - FIRST_HOUR
 const HOURS = Array.from({ length: TOTAL_HOURS }, (_, i) => FIRST_HOUR + i)
@@ -77,7 +77,7 @@ function AppointmentBlock({
 export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentClick }: WeekGridProps) {
   const today = todayStr()
   const colCount = weekDays.length
-  const gridCols = `60px repeat(${colCount}, 1fr)`
+  const gridCols = `52px repeat(${colCount}, 1fr)`
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -114,14 +114,28 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
           {/* Time labels + horizontal lines */}
           <div className="relative" style={{ height: `${TOTAL_HOURS * HOUR_HEIGHT}px` }}>
             {HOURS.map((hour) => (
-              <div
-                key={hour}
-                className="absolute right-0 left-0 flex items-start justify-end pr-2"
-                style={{ top: `${(hour - FIRST_HOUR) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
-              >
-                <span className="text-xs text-gray-400 -mt-2">
-                  {String(hour).padStart(2, '0')}h
-                </span>
+              <div key={hour}>
+                {/* Hour label */}
+                <div
+                  className="absolute right-0 left-0 flex items-start justify-end pr-2"
+                  style={{ top: `${(hour - FIRST_HOUR) * HOUR_HEIGHT}px`, height: `${SLOT_HEIGHT}px` }}
+                >
+                  <span className="text-xs font-medium text-gray-400 -mt-2">
+                    {String(hour).padStart(2, '0')}:00
+                  </span>
+                </div>
+                {/* Sub-slot labels (:15, :30, :45) */}
+                {[15, 30, 45].map((m) => (
+                  <div
+                    key={m}
+                    className="absolute right-0 left-0 flex items-start justify-end pr-2"
+                    style={{ top: `${(hour - FIRST_HOUR) * HOUR_HEIGHT + (m / 60) * HOUR_HEIGHT}px`, height: `${SLOT_HEIGHT}px` }}
+                  >
+                    <span className="text-[10px] text-gray-300 -mt-2">
+                      {String(hour).padStart(2, '0')}:{String(m).padStart(2, '0')}
+                    </span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -151,7 +165,7 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
                       key={slotMin}
                       className={[
                         'absolute w-full hover:bg-brand-50/40 transition-colors cursor-pointer',
-                        isHourLine ? 'border-t border-gray-100' : 'border-t border-gray-50',
+                        isHourLine ? 'border-t border-gray-300' : 'border-t border-gray-200',
                       ].join(' ')}
                       style={{
                         top: `${((slotMin - FIRST_HOUR * 60) / 60) * HOUR_HEIGHT}px`,
