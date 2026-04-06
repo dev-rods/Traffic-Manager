@@ -369,8 +369,35 @@ class ConversationAgent:
         return obj
 
     def _truncate_history(self, history):
-        """Keep the last MAX_HISTORY_PAIRS message pairs to stay within DynamoDB limits."""
+        """Keep the last MAX_HISTORY_PAIRS message pairs to stay within DynamoDB limits.
+
+        Ensures the truncated history never starts with a tool_result (user message
+        referencing a tool_use in a now-removed assistant message), which would cause
+        Anthropic API error 400.
+        """
         max_items = MAX_HISTORY_PAIRS * 2
         if len(history) > max_items:
             history = history[-max_items:]
+
+        # Strip leading messages until we reach a plain user text message.
+        # A valid conversation must start with a user message whose content is
+        # a string (not a list of tool_result blocks).
+        while history:
+            first = history[0]
+            if first.get("role") == "user":
+                content = first.get("content")
+                # Plain text user message — valid start
+                if isinstance(content, str):
+                    break
+                # List content could be tool_results — check
+                if isinstance(content, list) and any(
+                    block.get("type") == "tool_result" for block in content
+                ):
+                    # Orphaned tool_result — remove it
+                    history.pop(0)
+                    continue
+                break
+            # Assistant message without preceding user message — remove it
+            history.pop(0)
+
         return history
