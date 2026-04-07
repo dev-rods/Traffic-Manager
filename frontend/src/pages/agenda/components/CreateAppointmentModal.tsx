@@ -136,6 +136,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         last_visit: null,
         next_visit: null,
         total_spent_cents: 0,
+        last_message_at: null,
       }
       handleSelectPatient(asPatientWithStats)
       // Reset creation form
