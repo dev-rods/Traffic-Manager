@@ -17,6 +17,7 @@ export interface Clinic {
   zapi_instance_token: string | null
   use_agent: boolean
   bot_paused: boolean
+  batch_message_template: string | null
   active: boolean
 }
 
@@ -35,6 +36,7 @@ export interface UpdateClinicPayload {
   zapi_instance_token?: string
   use_agent?: boolean
   bot_paused?: boolean
+  batch_message_template?: string
 }
 
 // ── Patient ───────────────────────────────────────────────────

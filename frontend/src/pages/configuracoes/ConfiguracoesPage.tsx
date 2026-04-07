@@ -5,6 +5,7 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { Button } from '@/components/ui/Button'
 import { Switch } from '@/components/ui/Switch'
 import type { UpdateClinicPayload } from '@/types'
+import { buildDefaultMessage } from '@/pages/pacientes/components/BatchMessageModal'
 
 function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['data']>): UpdateClinicPayload {
   return {
@@ -19,6 +20,7 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     zapi_instance_id: clinic.zapi_instance_id ?? '',
     zapi_instance_token: clinic.zapi_instance_token ?? '',
     use_agent: clinic.use_agent ?? false,
+    batch_message_template: clinic.batch_message_template ?? '',
   }
 }
 
@@ -132,6 +134,20 @@ export function ConfiguracoesPage() {
             <Field label="Instance ID" value={form.zapi_instance_id as string} onChange={(v) => set('zapi_instance_id', v)} placeholder="ID da instância z-api" />
             <Field label="Instance Token" value={form.zapi_instance_token as string} onChange={(v) => set('zapi_instance_token', v)} placeholder="Token da instância z-api" />
           </div>
+        </Section>
+
+        <hr className="border-gray-100" />
+
+        {/* Batch WhatsApp message template */}
+        <Section title="Mensagem WhatsApp em lote" description="Template padrão para envio em lote. Use {nome} para o primeiro nome do paciente.">
+          <textarea
+            value={form.batch_message_template as string}
+            onChange={(e) => set('batch_message_template', e.target.value)}
+            rows={4}
+            placeholder={buildDefaultMessage([])}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
+          />
+          <p className="text-[11px] text-gray-400">Deixe vazio para usar a mensagem padrão com as datas disponíveis.</p>
         </Section>
 
         <hr className="border-gray-100" />

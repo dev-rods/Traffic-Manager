@@ -10,11 +10,12 @@ interface BatchMessageModalProps {
   open: boolean
   patients: PatientWithStats[]
   availableDates: string[]
+  clinicTemplate?: string | null
   onClose: () => void
   onDone: () => void
 }
 
-function buildDefaultMessage(availableDates: string[]): string {
+export function buildDefaultMessage(availableDates: string[]): string {
   const datesText = availableDates.length > 0
     ? availableDates.map((d) => {
         const [, m, day] = d.split('-')
@@ -25,8 +26,10 @@ function buildDefaultMessage(availableDates: string[]): string {
   return `Oi {nome}! Tudo bem?\n\nEstamos com novas datas disponíveis para agendamento: *${datesText}*.\n\nGostaria de agendar sua sessão? Responda aqui que te ajudamos!`
 }
 
-export function BatchMessageModal({ open, patients, availableDates, onClose, onDone }: BatchMessageModalProps) {
-  const [messageTemplate, setMessageTemplate] = useState(() => buildDefaultMessage(availableDates))
+export function BatchMessageModal({ open, patients, availableDates, clinicTemplate, onClose, onDone }: BatchMessageModalProps) {
+  const [messageTemplate, setMessageTemplate] = useState(() =>
+    clinicTemplate?.trim() ? clinicTemplate : buildDefaultMessage(availableDates),
+  )
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
   const { send, results, isSending, progress, reset } = useSendBatchMessages()
 

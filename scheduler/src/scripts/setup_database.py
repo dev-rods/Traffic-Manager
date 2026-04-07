@@ -35,6 +35,8 @@ SQL_STATEMENTS = [
         welcome_intro_message TEXT,
         display_name VARCHAR(255),
         use_agent BOOLEAN DEFAULT FALSE,
+        bot_paused BOOLEAN DEFAULT FALSE,
+        batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -464,6 +466,9 @@ SQL_STATEMENTS = [
 
     # Bot pause flag per clinic
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_paused BOOLEAN DEFAULT FALSE",
+
+    # Configurable default message template for batch WhatsApp sends
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS batch_message_template TEXT",
 ]
 
 

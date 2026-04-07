@@ -40,6 +40,7 @@ def handler(event, context):
             })
 
         search = extract_query_param(event, "search") or ""
+        next_visit = extract_query_param(event, "next_visit") or ""  # "with" | "without" | ""
         page = int(extract_query_param(event, "page") or "1")
         per_page = int(extract_query_param(event, "per_page") or "20")
         offset = (page - 1) * per_page
@@ -64,11 +65,24 @@ def handler(event, context):
                 like = f"%{search_term}%"
                 params.extend([like, like])
 
-        # Count total
-        count_rows = db.execute_query(
-            f"SELECT COUNT(*) as total FROM scheduler.patients p {where}",
-            tuple(params),
-        )
+        # Build HAVING clause for next_visit filter (aggregate-based)
+        having = ""
+        if next_visit == "with":
+            having = "HAVING MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) IS NOT NULL"
+        elif next_visit == "without":
+            having = "HAVING MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) IS NULL"
+
+        # Count total (with HAVING filter applied)
+        count_rows = db.execute_query(f"""
+            SELECT COUNT(*) as total FROM (
+                SELECT p.id
+                FROM scheduler.patients p
+                LEFT JOIN scheduler.appointments a ON a.patient_id = p.id AND a.status != 'CANCELLED'
+                {where}
+                GROUP BY p.id
+                {having}
+            ) sub
+        """, tuple(params))
         total = count_rows[0]["total"] if count_rows else 0
 
         # Fetch patients with appointment stats
@@ -89,6 +103,7 @@ def handler(event, context):
             LEFT JOIN scheduler.appointments a ON a.patient_id = p.id AND a.status != 'CANCELLED'
             {where}
             GROUP BY p.id
+            {having}
             ORDER BY p.created_at DESC
             LIMIT %s OFFSET %s
         """, tuple(params + [per_page, offset]))

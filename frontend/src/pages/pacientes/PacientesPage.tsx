@@ -16,8 +16,11 @@ import { EditPatientModal } from './components/EditPatientModal'
 import { BatchMessageModal } from './components/BatchMessageModal'
 import type { PatientWithStats } from '@/types'
 
+type NextVisitFilter = 'all' | 'with' | 'without'
+
 export function PacientesPage() {
   const [search, setSearch] = useState('')
+  const [nextVisitFilter, setNextVisitFilter] = useState<NextVisitFilter>('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<PatientWithStats | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
@@ -61,6 +64,7 @@ export function PacientesPage() {
 
   const { data, isLoading, isError, error, refetch } = usePatients({
     search: debouncedSearch || undefined,
+    next_visit: nextVisitFilter !== 'all' ? nextVisitFilter : undefined,
     per_page: 50,
   })
 
@@ -101,7 +105,20 @@ export function PacientesPage() {
         <Button onClick={() => setCreateOpen(true)}>+ Cadastrar paciente</Button>
       </div>
 
-      <PatientSearch value={search} onChange={setSearch} />
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <PatientSearch value={search} onChange={setSearch} />
+        </div>
+        <select
+          value={nextVisitFilter}
+          onChange={(e) => setNextVisitFilter(e.target.value as NextVisitFilter)}
+          className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+        >
+          <option value="all">Todas as visitas</option>
+          <option value="with">Com próxima visita</option>
+          <option value="without">Sem próxima visita</option>
+        </select>
+      </div>
 
       {isLoading ? (
         <SkeletonTable rows={8} />
@@ -161,6 +178,7 @@ export function PacientesPage() {
         open={batchOpen}
         patients={batchPatients}
         availableDates={availableDates}
+        clinicTemplate={clinic?.batch_message_template}
         onClose={() => setBatchOpen(false)}
         onDone={() => { setSelectedIds(new Set()); setBatchPatients([]) }}
       />
