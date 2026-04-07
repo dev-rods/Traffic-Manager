@@ -467,6 +467,38 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           )}
         </div>
 
+        {/* Price summary */}
+        {selectedAreaIds.length > 0 && serviceAreas && (() => {
+          const subtotal = serviceAreas
+            .filter((a) => selectedAreaIds.includes(a.area_id))
+            .reduce((sum, a) => sum + a.effective_price_cents, 0)
+          const discountPct = discountMode === 'partnership' ? 100
+            : discountMode === 'custom' && customDiscountPct ? Number(customDiscountPct)
+            : 0
+          const discountAmount = subtotal * discountPct / 100
+          const total = subtotal - discountAmount
+          const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+          return (
+            <div className="rounded-lg bg-gray-50 px-4 py-3 space-y-1.5">
+              <div className="flex justify-between text-sm text-gray-500">
+                <span>{selectedAreaIds.length} área{selectedAreaIds.length !== 1 ? 's' : ''}</span>
+                <span>{fmt(subtotal)}</span>
+              </div>
+              {discountPct > 0 && (
+                <div className="flex justify-between text-sm text-amber-600">
+                  <span>Desconto ({discountPct}%)</span>
+                  <span>-{fmt(discountAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-semibold text-gray-900 border-t border-gray-200 pt-1.5">
+                <span>Total</span>
+                <span>{fmt(total)}</span>
+              </div>
+            </div>
+          )
+        })()}
+
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">
             {error}
