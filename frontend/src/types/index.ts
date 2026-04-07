@@ -61,6 +61,7 @@ export interface PatientWithStats extends Patient {
   last_visit: string | null
   next_visit: string | null
   total_spent_cents: number
+  last_message_at: string | null
 }
 
 // ── Service & Area ────────────────────────────────────────────

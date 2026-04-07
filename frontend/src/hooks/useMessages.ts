@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { messagesService } from '@/services/messages.service'
 import type { SendMessagePayload, SendMessageResponse } from '@/services/messages.service'
 import { useAuth } from './useAuth'
@@ -14,9 +14,12 @@ export function useSendBatchMessages() {
   const [results, setResults] = useState<BatchMessageResult[]>([])
   const [isSending, setIsSending] = useState(false)
   const [progress, setProgress] = useState({ sent: 0, total: 0 })
+  const sendingRef = useRef(false)
 
   const send = useCallback(async (payloads: SendMessagePayload[]) => {
     if (!clinicId || payloads.length === 0) return
+    if (sendingRef.current) return
+    sendingRef.current = true
 
     setIsSending(true)
     setProgress({ sent: 0, total: payloads.length })
@@ -26,7 +29,7 @@ export function useSendBatchMessages() {
       const payload = payloads[i]
       try {
         const res: SendMessageResponse = await messagesService.send(clinicId, payload)
-        const resultStatus = res.status === 'OK' ? 'sent' as const : 'failed' as const
+        const resultStatus = res.status === 'SUCCESS' ? 'sent' as const : 'failed' as const
         setResults((prev) =>
           prev.map((r) =>
             r.patientId === payload.patient_id ? { ...r, status: resultStatus } : r,
@@ -44,6 +47,7 @@ export function useSendBatchMessages() {
     }
 
     setIsSending(false)
+    sendingRef.current = false
   }, [clinicId])
 
   const reset = useCallback(() => {

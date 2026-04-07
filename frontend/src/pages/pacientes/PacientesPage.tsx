@@ -9,6 +9,7 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
+import { Pagination } from '@/components/ui/Pagination'
 import { PatientSearch } from './components/PatientSearch'
 import { PatientsTable } from './components/PatientsTable'
 import { CreatePatientModal } from './components/CreatePatientModal'
@@ -17,10 +18,14 @@ import { BatchMessageModal } from './components/BatchMessageModal'
 import type { PatientWithStats } from '@/types'
 
 type NextVisitFilter = 'all' | 'with' | 'without'
+type LastMessageFilter = 'all' | '7' | '15' | '30' | '60' | 'never'
 
 export function PacientesPage() {
   const [search, setSearch] = useState('')
   const [nextVisitFilter, setNextVisitFilter] = useState<NextVisitFilter>('all')
+  const [lastMessageFilter, setLastMessageFilter] = useState<LastMessageFilter>('all')
+  const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState(25)
   const [createOpen, setCreateOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<PatientWithStats | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
@@ -65,8 +70,15 @@ export function PacientesPage() {
   const { data, isLoading, isError, error, refetch } = usePatients({
     search: debouncedSearch || undefined,
     next_visit: nextVisitFilter !== 'all' ? nextVisitFilter : undefined,
-    per_page: 50,
+    last_message_days: lastMessageFilter !== 'all' ? lastMessageFilter : undefined,
+    page,
+    per_page: perPage,
   })
+
+  // Reset page when filters change
+  const handleSearch = useCallback((v: string) => { setSearch(v); setPage(1) }, [])
+  const handleNextVisitFilter = useCallback((v: NextVisitFilter) => { setNextVisitFilter(v); setPage(1) }, [])
+  const handleLastMessageFilter = useCallback((v: LastMessageFilter) => { setLastMessageFilter(v); setPage(1) }, [])
 
   const patients = useMemo(() => data?.items ?? [], [data])
 
@@ -107,16 +119,28 @@ export function PacientesPage() {
 
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <PatientSearch value={search} onChange={setSearch} />
+          <PatientSearch value={search} onChange={handleSearch} />
         </div>
         <select
           value={nextVisitFilter}
-          onChange={(e) => setNextVisitFilter(e.target.value as NextVisitFilter)}
+          onChange={(e) => handleNextVisitFilter(e.target.value as NextVisitFilter)}
           className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
         >
           <option value="all">Todas as visitas</option>
           <option value="with">Com próxima visita</option>
           <option value="without">Sem próxima visita</option>
+        </select>
+        <select
+          value={lastMessageFilter}
+          onChange={(e) => handleLastMessageFilter(e.target.value as LastMessageFilter)}
+          className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+        >
+          <option value="all">Última mensagem</option>
+          <option value="7">Últimos 7 dias</option>
+          <option value="15">Últimos 15 dias</option>
+          <option value="30">Últimos 30 dias</option>
+          <option value="60">Últimos 60 dias</option>
+          <option value="never">Nunca contatado</option>
         </select>
       </div>
 
@@ -142,17 +166,26 @@ export function PacientesPage() {
           }
         />
       ) : (
-        <PatientsTable
-          patients={data.items}
-          onSelect={setEditingPatient}
-          onWhatsApp={(p) => { setBatchPatients([p]); setBatchOpen(true) }}
-          onPauseBot={handleTogglePause}
-          pausedPhones={pausedPhones}
-          pauseLoading={pauseBot.isPending || resumeBot.isPending}
-          selectedIds={selectedIds}
-          onToggleSelect={handleToggleSelect}
-          onToggleAll={handleToggleAll}
-        />
+        <>
+          <PatientsTable
+            patients={data.items}
+            onSelect={setEditingPatient}
+            onWhatsApp={(p) => { setBatchPatients([p]); setBatchOpen(true) }}
+            onPauseBot={handleTogglePause}
+            pausedPhones={pausedPhones}
+            pauseLoading={pauseBot.isPending || resumeBot.isPending}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleAll={handleToggleAll}
+          />
+          <Pagination
+            page={page}
+            perPage={perPage}
+            total={data.total}
+            onPageChange={setPage}
+            onPerPageChange={setPerPage}
+          />
+        </>
       )}
 
       {/* Batch action bar */}

@@ -140,6 +140,17 @@ def handler(event, context):
                 provider_response=response.raw_response,
             )
 
+            # Update last_message_at on patient record
+            try:
+                db.execute_query(
+                    """UPDATE scheduler.patients
+                       SET last_message_at = NOW(), updated_at = NOW()
+                       WHERE clinic_id = %s AND phone = %s""",
+                    (clinic_id, phone),
+                )
+            except Exception as e:
+                logger.warning(f"Falha ao atualizar last_message_at para {phone}: {e}")
+
             logger.info(f"Mensagem {message_id} enviada com sucesso. Provider ID: {response.provider_message_id}")
 
             return http_response(200, {

@@ -41,6 +41,7 @@ def handler(event, context):
 
         search = extract_query_param(event, "search") or ""
         next_visit = extract_query_param(event, "next_visit") or ""  # "with" | "without" | ""
+        last_message_days = extract_query_param(event, "last_message_days") or ""  # "7"|"15"|"30"|"60"|"never"|""
         page = int(extract_query_param(event, "page") or "1")
         per_page = int(extract_query_param(event, "per_page") or "20")
         offset = (page - 1) * per_page
@@ -64,6 +65,12 @@ def handler(event, context):
                 where += " AND (p.name ILIKE %s OR p.phone ILIKE %s)"
                 like = f"%{search_term}%"
                 params.extend([like, like])
+
+        # Filter by last_message_at
+        if last_message_days == "never":
+            where += " AND p.last_message_at IS NULL"
+        elif last_message_days in ("7", "15", "30", "60"):
+            where += f" AND p.last_message_at >= NOW() - INTERVAL '{int(last_message_days)} days'"
 
         # Build HAVING clause for next_visit filter (aggregate-based)
         having = ""
@@ -95,6 +102,7 @@ def handler(event, context):
                 p.gender,
                 p.created_at,
                 p.updated_at,
+                p.last_message_at,
                 COUNT(a.id) as total_visits,
                 MAX(a.appointment_date) as last_visit,
                 MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) as next_visit,

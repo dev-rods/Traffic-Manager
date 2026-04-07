@@ -4,6 +4,7 @@ import type { Patient, PatientWithStats, CreatePatientPayload, PaginatedResponse
 export interface ListPatientsParams {
   search?: string
   next_visit?: 'with' | 'without'
+  last_message_days?: string
   page?: number
   per_page?: number
 }

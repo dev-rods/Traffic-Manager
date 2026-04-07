@@ -38,6 +38,7 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, paus
             <th className="px-3 py-3">Ultima visita</th>
             <th className="px-3 py-3">Proxima visita</th>
             <th className="px-3 py-3">Total gasto</th>
+            <th className="px-3 py-3">Última msg</th>
             <th className="px-3 py-3"></th>
           </tr>
         </thead>
@@ -83,6 +84,9 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, paus
               </td>
               <td className="px-3 py-3 font-medium text-gray-800 whitespace-nowrap">
                 {p.total_spent_cents > 0 ? formatCurrency(p.total_spent_cents) : '—'}
+              </td>
+              <td className="px-3 py-3 text-gray-600 whitespace-nowrap">
+                {p.last_message_at ? formatDate(p.last_message_at) : '—'}
               </td>
               <td className="px-3 py-3">
                 <div className="flex items-center gap-1.5">

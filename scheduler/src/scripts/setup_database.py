@@ -106,6 +106,7 @@ SQL_STATEMENTS = [
         phone VARCHAR(20) NOT NULL,
         name VARCHAR(255),
         gender VARCHAR(1) CHECK (gender IN ('M', 'F')),
+        last_message_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(clinic_id, phone)
@@ -469,6 +470,10 @@ SQL_STATEMENTS = [
 
     # Configurable default message template for batch WhatsApp sends
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS batch_message_template TEXT",
+
+    # Last message timestamp on patients (updated when outbound message is sent)
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS idx_patients_last_message ON scheduler.patients(clinic_id, last_message_at)",
 ]
 
 
