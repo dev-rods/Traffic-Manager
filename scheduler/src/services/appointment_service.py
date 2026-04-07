@@ -380,22 +380,28 @@ class AppointmentService:
 
         svc = services[0]
 
-        # 3. Calculate new duration
+        # 3. Calculate new duration and price
+        discount_pct = appointment.get("discount_pct") or 0
         if service_area_pairs:
             values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
             params: tuple = ()
             for pair in service_area_pairs:
                 params += (pair["serviceId"], pair["areaId"])
             rows = self.db.execute_query(
-                f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
+                f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration,
+                       SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price
                 FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
                 JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
                 LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
                 params,
             )
             duration_minutes = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else svc["duration_minutes"]
+            original_price_cents = int(rows[0]["total_price"]) if rows and rows[0]["total_price"] else svc.get("price_cents")
         else:
             duration_minutes = svc["duration_minutes"]
+            original_price_cents = svc.get("price_cents")
+
+        final_price_cents = original_price_cents * (100 - discount_pct) // 100 if original_price_cents else original_price_cents
 
         # 4. Calculate new end_time
         start_parts = start_time.split(":")
@@ -426,10 +432,11 @@ class AppointmentService:
             """
             UPDATE scheduler.appointments
             SET service_id = %s::uuid, end_time = %s::time, total_duration_minutes = %s,
+                original_price_cents = %s, final_price_cents = %s,
                 version = version + 1, updated_at = NOW()
             WHERE id = %s::uuid AND version = %s
             """,
-            (service_id, new_end_time, duration_minutes, appointment_id, current_version),
+            (service_id, new_end_time, duration_minutes, original_price_cents, final_price_cents, appointment_id, current_version),
         )
         if updated_rows == 0:
             raise OptimisticLockError("Agendamento foi modificado por outro processo")
