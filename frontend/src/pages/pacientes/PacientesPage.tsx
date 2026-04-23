@@ -24,6 +24,7 @@ export function PacientesPage() {
   const [search, setSearch] = useState('')
   const [nextVisitFilter, setNextVisitFilter] = useState<NextVisitFilter>('all')
   const [lastMessageFilter, setLastMessageFilter] = useState<LastMessageFilter>('all')
+  const [lastVisitBefore, setLastVisitBefore] = useState('')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(25)
   const [createOpen, setCreateOpen] = useState(false)
@@ -71,6 +72,7 @@ export function PacientesPage() {
     search: debouncedSearch || undefined,
     next_visit: nextVisitFilter !== 'all' ? nextVisitFilter : undefined,
     last_message_days: lastMessageFilter !== 'all' ? lastMessageFilter : undefined,
+    last_visit_before: lastVisitBefore || undefined,
     page,
     per_page: perPage,
   })
@@ -79,6 +81,7 @@ export function PacientesPage() {
   const handleSearch = useCallback((v: string) => { setSearch(v); setPage(1) }, [])
   const handleNextVisitFilter = useCallback((v: NextVisitFilter) => { setNextVisitFilter(v); setPage(1) }, [])
   const handleLastMessageFilter = useCallback((v: LastMessageFilter) => { setLastMessageFilter(v); setPage(1) }, [])
+  const handleLastVisitBefore = useCallback((v: string) => { setLastVisitBefore(v); setPage(1) }, [])
 
   const patients = useMemo(() => data?.items ?? [], [data])
 
@@ -142,6 +145,26 @@ export function PacientesPage() {
           <option value="60">Últimos 60 dias</option>
           <option value="never">Nunca contatado</option>
         </select>
+        <div className="relative">
+          <input
+            type="date"
+            value={lastVisitBefore}
+            onChange={(e) => handleLastVisitBefore(e.target.value)}
+            aria-label="Última visita até"
+            title="Última visita até"
+            className="border border-gray-200 rounded-lg px-3 py-2.5 pr-8 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+          />
+          {lastVisitBefore && (
+            <button
+              type="button"
+              onClick={() => handleLastVisitBefore('')}
+              aria-label="Limpar filtro de última visita"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm leading-none"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
       {isLoading ? (

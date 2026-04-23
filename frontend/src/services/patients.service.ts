@@ -5,6 +5,7 @@ export interface ListPatientsParams {
   search?: string
   next_visit?: 'with' | 'without'
   last_message_days?: string
+  last_visit_before?: string
   page?: number
   per_page?: number
 }

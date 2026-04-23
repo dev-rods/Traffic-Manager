@@ -42,6 +42,7 @@ def handler(event, context):
         search = extract_query_param(event, "search") or ""
         next_visit = extract_query_param(event, "next_visit") or ""  # "with" | "without" | ""
         last_message_days = extract_query_param(event, "last_message_days") or ""  # "7"|"15"|"30"|"60"|"never"|""
+        last_visit_before = extract_query_param(event, "last_visit_before") or ""  # "YYYY-MM-DD"
         page = int(extract_query_param(event, "page") or "1")
         per_page = int(extract_query_param(event, "per_page") or "20")
         offset = (page - 1) * per_page
@@ -72,12 +73,21 @@ def handler(event, context):
         elif last_message_days in ("7", "15", "30", "60"):
             where += f" AND p.last_message_at >= NOW() - INTERVAL '{int(last_message_days)} days'"
 
-        # Build HAVING clause for next_visit filter (aggregate-based)
-        having = ""
+        # Build HAVING clause for aggregate-based filters (next_visit, last_visit_before)
+        having_clauses = []
+        having_params = []
         if next_visit == "with":
-            having = "HAVING MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) IS NOT NULL"
+            having_clauses.append("MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) IS NOT NULL")
         elif next_visit == "without":
-            having = "HAVING MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) IS NULL"
+            having_clauses.append("MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) IS NULL")
+
+        if last_visit_before:
+            # Patients whose MAX(appointment_date) <= last_visit_before.
+            # NULL last_visit (never had appointment) is always included — they're the strongest candidates for reactivation.
+            having_clauses.append("(MAX(a.appointment_date) <= %s::date OR MAX(a.appointment_date) IS NULL)")
+            having_params.append(last_visit_before)
+
+        having = f"HAVING {' AND '.join(having_clauses)}" if having_clauses else ""
 
         # Count total (with HAVING filter applied)
         count_rows = db.execute_query(f"""
@@ -89,7 +99,7 @@ def handler(event, context):
                 GROUP BY p.id
                 {having}
             ) sub
-        """, tuple(params))
+        """, tuple(params + having_params))
         total = count_rows[0]["total"] if count_rows else 0
 
         # Fetch patients with appointment stats
@@ -114,7 +124,7 @@ def handler(event, context):
             {having}
             ORDER BY p.created_at DESC
             LIMIT %s OFFSET %s
-        """, tuple(params + [per_page, offset]))
+        """, tuple(params + having_params + [per_page, offset]))
 
         items = [_serialize_row(r) for r in rows]
 
