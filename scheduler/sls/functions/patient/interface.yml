@@ -66,3 +66,26 @@ CreatePatient:
         path: clinics/{clinicId}/patients
         method: post
         cors: true
+
+DeletePatient:
+  handler: src.functions.patient.delete.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DeletePatient-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/patients/{patientId}
+        method: delete
+        cors: true

@@ -1,0 +1,287 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 008 Patient Soft-Delete",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com"},
+    {"key": "ENVIRONMENT", "value": "dev"},
+    {"key": "API_KEY", "value": "YOUR_API_KEY_HERE"},
+    {"key": "clinicId", "value": "clinic-test"},
+    {"key": "phone", "value": "5511999990000"},
+    {"key": "patientId", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "1. Create patient (CREATED)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"},
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Joao Teste\",\"phone\":\"{{phone}}\",\"gender\":\"M\"}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+              "var jsonData = pm.response.json();",
+              "pm.test('Status is CREATED', function () { pm.expect(jsonData.status).to.eql('CREATED'); });",
+              "pm.test('deleted_at is null', function () { pm.expect(jsonData.patient.deleted_at).to.be.null; });",
+              "pm.collectionVariables.set('patientId', jsonData.patient.id);"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "2. Delete patient (SUCCESS)",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/{{patientId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients", "{{patientId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "var jsonData = pm.response.json();",
+              "pm.test('Status is SUCCESS', function () { pm.expect(jsonData.status).to.eql('SUCCESS'); });",
+              "pm.test('Message confirms deletion', function () { pm.expect(jsonData.message).to.eql('Paciente excluido'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "3. Delete again (idempotent)",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/{{patientId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients", "{{patientId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "var jsonData = pm.response.json();",
+              "pm.test('Message indicates already deleted', function () { pm.expect(jsonData.message).to.eql('Paciente ja estava excluido'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "4. Delete unknown patient (404)",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/00000000-0000-0000-0000-000000000099",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients", "00000000-0000-0000-0000-000000000099"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 404', function () { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "5. List patients excludes deleted",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients?search={{phone}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients"],
+          "query": [{"key": "search", "value": "{{phone}}"}]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "var jsonData = pm.response.json();",
+              "pm.test('Deleted patient not in items', function () { var ids = jsonData.items.map(function(p) { return p.id; }); pm.expect(ids).to.not.include(pm.collectionVariables.get('patientId')); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "6. Update soft-deleted patient (404)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"},
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Outro Nome\"}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/{{patientId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients", "{{patientId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 404', function () { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "7. Recreate patient (RESTORED)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"},
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Joao Restaurado\",\"phone\":\"{{phone}}\",\"gender\":\"M\"}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "var jsonData = pm.response.json();",
+              "pm.test('Status is RESTORED', function () { pm.expect(jsonData.status).to.eql('RESTORED'); });",
+              "pm.test('Same patient ID restored', function () { pm.expect(jsonData.patient.id).to.eql(pm.collectionVariables.get('patientId')); });",
+              "pm.test('deleted_at cleared', function () { pm.expect(jsonData.patient.deleted_at).to.be.null; });",
+              "pm.test('Name updated to new value', function () { pm.expect(jsonData.patient.name).to.eql('Joao Restaurado'); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "8. Recreate active patient (409 conflict)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"},
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Outro\",\"phone\":\"{{phone}}\",\"gender\":\"F\"}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 409', function () { pm.response.to.have.status(409); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    },
+    {
+      "name": "9. Cleanup — delete test patient",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {"key": "x-api-key", "value": "{{API_KEY}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/{{patientId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "patients", "{{patientId}}"]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "response": []
+    }
+  ]
+}

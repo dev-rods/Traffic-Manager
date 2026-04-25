@@ -90,7 +90,7 @@ def handler(event, context):
                 phones_list = list(conversations.keys())
                 placeholders = ",".join(["%s"] * len(phones_list))
                 patients = db.execute_query(
-                    f"SELECT phone, name FROM scheduler.patients WHERE clinic_id = %s AND phone IN ({placeholders})",
+                    f"SELECT phone, name FROM scheduler.patients WHERE clinic_id = %s AND phone IN ({placeholders}) AND deleted_at IS NULL",
                     (clinic_id, *phones_list),
                 )
                 name_map = {p["phone"]: p["name"] for p in patients if p.get("name")}

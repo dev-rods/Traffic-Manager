@@ -46,6 +46,7 @@ export interface Patient {
   phone: string
   name: string
   gender: 'M' | 'F'
+  deleted_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -54,6 +55,11 @@ export interface CreatePatientPayload {
   name: string
   phone: string
   gender?: 'M' | 'F'
+}
+
+export interface CreatePatientResponse {
+  status: 'CREATED' | 'RESTORED'
+  patient: Patient
 }
 
 export interface PatientWithStats extends Patient {

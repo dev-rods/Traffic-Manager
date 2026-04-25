@@ -1,5 +1,11 @@
 import { api } from './api'
-import type { Patient, PatientWithStats, CreatePatientPayload, PaginatedResponse } from '@/types'
+import type {
+  Patient,
+  PatientWithStats,
+  CreatePatientPayload,
+  CreatePatientResponse,
+  PaginatedResponse,
+} from '@/types'
 
 export interface ListPatientsParams {
   search?: string
@@ -25,13 +31,19 @@ export const patientsService = {
 
   create(clinicId: string, payload: CreatePatientPayload) {
     return api
-      .post<{ status: string; patient: Patient }>(`/clinics/${clinicId}/patients`, payload)
-      .then((r) => r.data.patient)
+      .post<CreatePatientResponse>(`/clinics/${clinicId}/patients`, payload)
+      .then((r) => r.data)
   },
 
   update(clinicId: string, patientId: string, payload: Partial<CreatePatientPayload>) {
     return api
       .patch<Patient>(`/clinics/${clinicId}/patients/${patientId}`, payload)
+      .then((r) => r.data)
+  },
+
+  delete(clinicId: string, patientId: string) {
+    return api
+      .delete<{ status: string; message: string }>(`/clinics/${clinicId}/patients/${patientId}`)
       .then((r) => r.data)
   },
 }

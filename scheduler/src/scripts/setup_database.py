@@ -107,6 +107,7 @@ SQL_STATEMENTS = [
         name VARCHAR(255),
         gender VARCHAR(1) CHECK (gender IN ('M', 'F')),
         last_message_at TIMESTAMPTZ,
+        deleted_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(clinic_id, phone)
@@ -474,6 +475,10 @@ SQL_STATEMENTS = [
     # Last message timestamp on patients (updated when outbound message is sent)
     "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMPTZ",
     "CREATE INDEX IF NOT EXISTS idx_patients_last_message ON scheduler.patients(clinic_id, last_message_at)",
+
+    # Soft-delete column on patients (set when patient is excluded by clinic owner)
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS idx_patients_deleted ON scheduler.patients(clinic_id, deleted_at)",
 ]
 
 

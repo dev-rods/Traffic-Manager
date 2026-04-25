@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/Badge'
+import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon } from '@/components/ui/Icons'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
@@ -9,6 +10,7 @@ interface PatientsTableProps {
   onSelect: (patient: PatientWithStats) => void
   onWhatsApp: (patient: PatientWithStats) => void
   onPauseBot: (phone: string) => void
+  onDelete: (patient: PatientWithStats) => void
   pausedPhones: Set<string>
   pauseLoading?: boolean
   selectedIds: Set<string>
@@ -16,7 +18,7 @@ interface PatientsTableProps {
   onToggleAll: () => void
 }
 
-export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, pausedPhones, pauseLoading, selectedIds, onToggleSelect, onToggleAll }: PatientsTableProps) {
+export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDelete, pausedPhones, pauseLoading, selectedIds, onToggleSelect, onToggleAll }: PatientsTableProps) {
   const allSelected = patients.length > 0 && patients.every((p) => selectedIds.has(p.id))
 
   return (
@@ -89,26 +91,42 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, paus
                 {p.last_message_at ? formatDate(p.last_message_at) : '—'}
               </td>
               <td className="px-3 py-3">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
                   <button
                     onClick={(e) => { e.stopPropagation(); onWhatsApp(p) }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40"
                     title="Enviar mensagem no WhatsApp"
+                    aria-label="Enviar mensagem no WhatsApp"
                   >
-                    <span>💬</span> WhatsApp
+                    <WhatsAppIcon className="w-[18px] h-[18px]" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); onPauseBot(p.phone) }}
                     disabled={pauseLoading}
                     className={[
-                      'px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
+                      'inline-flex items-center justify-center w-9 h-9 rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2',
                       pausedPhones.has(p.phone)
-                        ? 'text-amber-700 bg-amber-50 hover:bg-amber-100'
-                        : 'text-gray-500 bg-gray-50 hover:bg-gray-100',
+                        ? 'text-amber-600 bg-amber-50 hover:bg-amber-100 focus-visible:ring-amber-400/40'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-400/40',
+                      pauseLoading ? 'opacity-50 cursor-not-allowed' : '',
                     ].join(' ')}
                     title={pausedPhones.has(p.phone) ? 'Retomar bot para este paciente' : 'Pausar bot para este paciente'}
+                    aria-label={pausedPhones.has(p.phone) ? 'Retomar bot' : 'Pausar bot'}
+                    aria-pressed={pausedPhones.has(p.phone)}
                   >
-                    {pausedPhones.has(p.phone) ? '▶ Retomar' : '⏸ Pausar'}
+                    {pausedPhones.has(p.phone) ? (
+                      <PlayIcon className="w-[18px] h-[18px]" />
+                    ) : (
+                      <PauseIcon className="w-[18px] h-[18px]" />
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(p) }}
+                    className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"
+                    title="Excluir paciente"
+                    aria-label="Excluir paciente"
+                  >
+                    <TrashIcon className="w-[18px] h-[18px]" />
                   </button>
                 </div>
               </td>

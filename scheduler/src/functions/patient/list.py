@@ -50,7 +50,7 @@ def handler(event, context):
         db = PostgresService()
 
         # Build WHERE clause
-        where = "WHERE p.clinic_id = %s"
+        where = "WHERE p.clinic_id = %s AND p.deleted_at IS NULL"
         params = [clinic_id]
 
         if search.strip():

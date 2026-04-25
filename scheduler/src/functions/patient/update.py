@@ -49,9 +49,9 @@ def handler(event, context):
 
         db = PostgresService()
 
-        # Check patient exists and belongs to clinic
+        # Check patient exists and belongs to clinic (and is not soft-deleted)
         existing = db.execute_query(
-            "SELECT id FROM scheduler.patients WHERE id = %s::uuid AND clinic_id = %s",
+            "SELECT id FROM scheduler.patients WHERE id = %s::uuid AND clinic_id = %s AND deleted_at IS NULL",
             (patient_id, clinic_id),
         )
         if not existing:
@@ -87,7 +87,7 @@ def handler(event, context):
         params.extend([patient_id, clinic_id])
 
         result = db.execute_write_returning(
-            f"UPDATE scheduler.patients SET {', '.join(sets)} WHERE id = %s::uuid AND clinic_id = %s RETURNING *",
+            f"UPDATE scheduler.patients SET {', '.join(sets)} WHERE id = %s::uuid AND clinic_id = %s AND deleted_at IS NULL RETURNING *",
             tuple(params),
         )
 
