@@ -934,7 +934,7 @@ class ConversationEngine:
         logger.info(f"[ConversationEngine] _on_enter_welcome: clinic='{clinic_name}' phone={phone}")
 
         patients = self.db.execute_query(
-            "SELECT name, gender FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
+            "SELECT name, gender FROM scheduler.patients WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL",
             (clinic_id, phone),
         )
 

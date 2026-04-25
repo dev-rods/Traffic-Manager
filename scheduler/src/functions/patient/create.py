@@ -73,15 +73,39 @@ def handler(event, context):
 
         db = PostgresService()
 
-        # Check if phone already exists for this clinic
+        # Check if phone already exists for this clinic (active or soft-deleted)
         existing = db.execute_query(
-            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
+            "SELECT id, deleted_at FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
             (clinic_id, phone),
         )
+
         if existing:
-            return http_response(409, {
-                "status": "ERROR",
-                "message": "Ja existe um paciente com esse telefone"
+            row = existing[0]
+            if row.get("deleted_at") is None:
+                return http_response(409, {
+                    "status": "ERROR",
+                    "message": "Ja existe um paciente com esse telefone"
+                })
+
+            # Soft-deleted patient with same phone — restore and update fields
+            restored = db.execute_write_returning("""
+                UPDATE scheduler.patients
+                SET name = %s, gender = %s, deleted_at = NULL, updated_at = NOW()
+                WHERE id = %s::uuid
+                RETURNING *
+            """, (name, gender, str(row["id"])))
+
+            if not restored:
+                return http_response(500, {
+                    "status": "ERROR",
+                    "message": "Falha ao restaurar paciente"
+                })
+
+            patient = _serialize_row(restored)
+            logger.info(f"Patient restored: {patient['id']} for clinic {clinic_id}")
+            return http_response(200, {
+                "status": "RESTORED",
+                "patient": patient,
             })
 
         result = db.execute_write_returning("""
@@ -100,7 +124,7 @@ def handler(event, context):
         logger.info(f"Patient created: {patient['id']} for clinic {clinic_id}")
 
         return http_response(201, {
-            "status": "SUCCESS",
+            "status": "CREATED",
             "patient": patient,
         })
 

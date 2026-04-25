@@ -18,9 +18,10 @@ type FormData = z.infer<typeof schema>
 interface CreatePatientModalProps {
   open: boolean
   onClose: () => void
+  onSuccess?: (status: 'CREATED' | 'RESTORED', patientName: string) => void
 }
 
-export function CreatePatientModal({ open, onClose }: CreatePatientModalProps) {
+export function CreatePatientModal({ open, onClose, onSuccess }: CreatePatientModalProps) {
   const createPatient = useCreatePatient()
   const [serverError, setServerError] = useState<string | null>(null)
 
@@ -34,11 +35,12 @@ export function CreatePatientModal({ open, onClose }: CreatePatientModalProps) {
   const onSubmit = async (data: FormData) => {
     setServerError(null)
     try {
-      await createPatient.mutateAsync({
+      const result = await createPatient.mutateAsync({
         name: data.name,
         phone: normalizePhone(data.phone),
         gender: data.gender as 'M' | 'F',
       })
+      onSuccess?.(result.status, result.patient.name ?? data.name)
       reset()
       onClose()
     } catch (err: unknown) {

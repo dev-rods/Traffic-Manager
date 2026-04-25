@@ -140,12 +140,12 @@ def handler(event, context):
                 provider_response=response.raw_response,
             )
 
-            # Update last_message_at on patient record
+            # Update last_message_at on patient record (skip soft-deleted)
             try:
                 db.execute_query(
                     """UPDATE scheduler.patients
                        SET last_message_at = NOW(), updated_at = NOW()
-                       WHERE clinic_id = %s AND phone = %s""",
+                       WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL""",
                     (clinic_id, phone),
                 )
             except Exception as e:

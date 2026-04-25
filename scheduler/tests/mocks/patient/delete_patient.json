@@ -1,0 +1,12 @@
+{
+  "httpMethod": "DELETE",
+  "path": "/clinics/clinic-test/patients/00000000-0000-0000-0000-000000000001",
+  "pathParameters": {
+    "clinicId": "clinic-test",
+    "patientId": "00000000-0000-0000-0000-000000000001"
+  },
+  "headers": {
+    "x-api-key": "REPLACE_WITH_ENV_KEY"
+  },
+  "body": null
+}

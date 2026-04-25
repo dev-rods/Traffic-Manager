@@ -529,7 +529,7 @@ class AppointmentService:
         self, clinic_id: str, phone: str
     ) -> Optional[Dict[str, Any]]:
         patients = self.db.execute_query(
-            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
+            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL",
             (clinic_id, phone),
         )
 
@@ -563,7 +563,7 @@ class AppointmentService:
         self, clinic_id: str, phone: str
     ) -> List[Dict[str, Any]]:
         patients = self.db.execute_query(
-            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
+            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL",
             (clinic_id, phone),
         )
 
@@ -596,13 +596,32 @@ class AppointmentService:
         from src.utils.phone import normalize_phone
         phone = normalize_phone(phone)
 
+        # Lookup includes soft-deleted records so we can restore in place
+        # and avoid violating the UNIQUE(clinic_id, phone) constraint.
         patients = self.db.execute_query(
             "SELECT * FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
             (clinic_id, phone),
         )
 
         if patients:
-            return patients[0]
+            existing = patients[0]
+            if existing.get("deleted_at") is None:
+                return existing
+
+            # Soft-deleted patient came back — restore in place
+            restored = self.db.execute_write_returning(
+                """
+                UPDATE scheduler.patients
+                SET deleted_at = NULL, updated_at = NOW()
+                WHERE id = %s::uuid
+                RETURNING *
+                """,
+                (str(existing["id"]),),
+            )
+            logger.info(
+                f"[AppointmentService] Patient restored from soft-delete: id={existing['id']} phone={phone}"
+            )
+            return restored
 
         result = self.db.execute_write_returning(
             """

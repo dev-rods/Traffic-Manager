@@ -99,11 +99,12 @@ def handler(event, context):
         gross = s.get("gross_revenue_cents", 0) or 0
         discounts = s.get("total_discount_cents", 0) or 0
 
-        # New patients in period
+        # New patients in period (excluding soft-deleted)
         new_patients_row = db.execute_query("""
             SELECT COUNT(*) as count
             FROM scheduler.patients
             WHERE clinic_id = %s AND created_at::date BETWEEN %s AND %s
+              AND deleted_at IS NULL
         """, (clinic_id, start, end))
         new_patients = (new_patients_row[0]["count"] or 0) if new_patients_row else 0
 
@@ -125,6 +126,7 @@ def handler(event, context):
             SELECT COUNT(*) as count
             FROM scheduler.patients
             WHERE clinic_id = %s AND created_at::date BETWEEN %s AND %s
+              AND deleted_at IS NULL
         """, (clinic_id, prev_start, prev_end))
         prev_patients = (prev_patients_row[0]["count"] or 0) if prev_patients_row else 0
 

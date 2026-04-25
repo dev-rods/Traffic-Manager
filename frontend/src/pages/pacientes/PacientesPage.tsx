@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { usePatients } from '@/hooks/usePatients'
 import { useClinic } from '@/hooks/useClinic'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
@@ -15,6 +15,9 @@ import { PatientsTable } from './components/PatientsTable'
 import { CreatePatientModal } from './components/CreatePatientModal'
 import { EditPatientModal } from './components/EditPatientModal'
 import { BatchMessageModal } from './components/BatchMessageModal'
+import { DeletePatientConfirmModal } from './components/DeletePatientConfirmModal'
+import { BatchDeletePatientsModal } from './components/BatchDeletePatientsModal'
+import { WhatsAppIcon, TrashIcon } from '@/components/ui/Icons'
 import type { PatientWithStats } from '@/types'
 
 type NextVisitFilter = 'all' | 'with' | 'without'
@@ -28,10 +31,20 @@ export function PacientesPage() {
   const [perPage, setPerPage] = useState(25)
   const [createOpen, setCreateOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<PatientWithStats | null>(null)
+  const [deletingPatient, setDeletingPatient] = useState<PatientWithStats | null>(null)
   const [batchOpen, setBatchOpen] = useState(false)
   const [batchPatients, setBatchPatients] = useState<PatientWithStats[]>([])
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
+  const [batchDeleteTargets, setBatchDeleteTargets] = useState<PatientWithStats[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [feedback, setFeedback] = useState<{ tone: 'success' | 'info'; message: string } | null>(null)
   const debouncedSearch = useDebounce(search)
+
+  useEffect(() => {
+    if (!feedback) return
+    const timer = window.setTimeout(() => setFeedback(null), 4000)
+    return () => window.clearTimeout(timer)
+  }, [feedback])
 
   // Bot pause per patient
   const { data: activeData } = useActiveConversations()
@@ -172,6 +185,7 @@ export function PacientesPage() {
             onSelect={setEditingPatient}
             onWhatsApp={(p) => { setBatchPatients([p]); setBatchOpen(true) }}
             onPauseBot={handleTogglePause}
+            onDelete={setDeletingPatient}
             pausedPhones={pausedPhones}
             pauseLoading={pauseBot.isPending || resumeBot.isPending}
             selectedIds={selectedIds}
@@ -199,14 +213,42 @@ export function PacientesPage() {
               Limpar seleção
             </Button>
             <Button variant="success" size="sm" onClick={() => { setBatchPatients(selectedPatients); setBatchOpen(true) }}>
-              💬 Enviar WhatsApp
+              <WhatsAppIcon className="w-4 h-4" />
+              Enviar WhatsApp
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => { setBatchDeleteTargets(selectedPatients); setBatchDeleteOpen(true) }}
+            >
+              <TrashIcon className="w-4 h-4" />
+              Excluir selecionados
             </Button>
           </div>
         </div>
       )}
 
-      <CreatePatientModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <CreatePatientModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={(status, name) =>
+          setFeedback({
+            tone: status === 'RESTORED' ? 'info' : 'success',
+            message:
+              status === 'RESTORED'
+                ? `${name} foi restaurado e voltou para a lista.`
+                : `${name} foi cadastrado.`,
+          })
+        }
+      />
       <EditPatientModal patient={editingPatient} onClose={() => setEditingPatient(null)} />
+      <DeletePatientConfirmModal
+        patient={deletingPatient}
+        onClose={() => setDeletingPatient(null)}
+        onSuccess={(name) =>
+          setFeedback({ tone: 'success', message: `${name} foi excluído.` })
+        }
+      />
       <BatchMessageModal
         open={batchOpen}
         patients={batchPatients}
@@ -215,6 +257,35 @@ export function PacientesPage() {
         onClose={() => setBatchOpen(false)}
         onDone={() => { setSelectedIds(new Set()); setBatchPatients([]) }}
       />
+      <BatchDeletePatientsModal
+        open={batchDeleteOpen}
+        patients={batchDeleteTargets}
+        onClose={() => setBatchDeleteOpen(false)}
+        onDone={(deletedCount) => {
+          setSelectedIds(new Set())
+          setBatchDeleteTargets([])
+          if (deletedCount > 0) {
+            setFeedback({
+              tone: 'success',
+              message: `${deletedCount} paciente${deletedCount !== 1 ? 's' : ''} excluído${deletedCount !== 1 ? 's' : ''}.`,
+            })
+          }
+        }}
+      />
+
+      {feedback && (
+        <div
+          className={[
+            'fixed bottom-6 right-6 z-50 max-w-sm rounded-lg px-4 py-3 shadow-lg text-sm font-medium border',
+            feedback.tone === 'info'
+              ? 'bg-amber-50 border-amber-200 text-amber-800'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-800',
+          ].join(' ')}
+          role="status"
+        >
+          {feedback.message}
+        </div>
+      )}
     </div>
   )
 }

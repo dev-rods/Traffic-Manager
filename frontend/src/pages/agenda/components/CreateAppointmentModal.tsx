@@ -129,9 +129,9 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         phone: newPhone.trim(),
         gender: newGender || undefined,
       })
-      // Auto-select the new patient
+      // Auto-select the new (or restored) patient
       const asPatientWithStats: PatientWithStats = {
-        ...created,
+        ...created.patient,
         total_visits: 0,
         last_visit: null,
         next_visit: null,
