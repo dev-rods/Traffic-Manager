@@ -76,7 +76,10 @@ class ConversationAgent:
         system_prompt = self._build_system_prompt(clinic_id, phone)
 
         # 4. Load conversation history and append user message
-        history = session.get("agent_history", [])
+        # Sanitize loaded history: sessions saved by older code versions may
+        # start with an orphan tool_result block (no preceding tool_use), which
+        # the Anthropic API rejects with 400.
+        history = self._truncate_history(session.get("agent_history", []))
         user_content = incoming.content or ""
         if incoming.button_id:
             user_content = incoming.button_text or incoming.button_id
