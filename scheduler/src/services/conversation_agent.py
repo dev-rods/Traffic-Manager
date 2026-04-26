@@ -209,11 +209,25 @@ class ConversationAgent:
             rules = rules_rows[0]
             discount_context = (
                 f"\n═══ DESCONTOS ═══\n"
-                f"Primeira sessão: {rules['first_session_discount_pct']}% de desconto.\n"
-                f"{rules['tier_2_min_areas']}-{rules['tier_2_max_areas']} áreas: {rules['tier_2_discount_pct']}% de desconto.\n"
-                f"{rules['tier_3_min_areas']}+ áreas: {rules['tier_3_discount_pct']}% de desconto.\n"
-                f"SEMPRE chame calculate_discount antes de mostrar o resumo do agendamento.\n"
-                f"Mencione proativamente os descontos quando a cliente estiver selecionando áreas."
+                f"Regras vigentes (apenas para seu contexto):\n"
+                f"• Primeira sessão: {rules['first_session_discount_pct']}%\n"
+                f"• {rules['tier_2_min_areas']}-{rules['tier_2_max_areas']} áreas: {rules['tier_2_discount_pct']}%\n"
+                f"• {rules['tier_3_min_areas']}+ áreas: {rules['tier_3_discount_pct']}%\n"
+                f"\n"
+                f"REGRAS CRÍTICAS (NÃO QUEBRE):\n"
+                f"1. Descontos são MUTUAMENTE EXCLUSIVOS — nunca cumulativos. "
+                f"A tool calculate_discount aplica APENAS UM desconto: o de primeira sessão (se aplicável) "
+                f"OU o de faixa de áreas, jamais os dois juntos.\n"
+                f"2. NUNCA cite uma porcentagem de desconto, valor com desconto, ou qualquer "
+                f"número de desconto sem ter chamado calculate_discount ANTES nesta mesma mensagem. "
+                f"Se ainda não chamou, chame antes de responder.\n"
+                f"3. Chame calculate_discount em DOIS momentos do fluxo:\n"
+                f"   (a) Logo após a paciente confirmar as áreas, ANTES de mostrar o subtotal e perguntar sobre data. "
+                f"Apresente o resultado como: 'Total: ~De {{original}}~ por *{{final}}* ({{discount_pct}}% de desconto — {{motivo amigável}})'. "
+                f"Se discount_pct=0, mostre apenas 'Total: *{{final}}*'.\n"
+                f"   (b) Novamente no resumo final do agendamento (etapa 6), passando os mesmos valores para book_appointment.\n"
+                f"4. Os valores 'De X por Y' devem vir EXATAMENTE de original_price_display e discounted_price_display "
+                f"retornados pela tool. Não recalcule manualmente."
             )
 
         variables = {

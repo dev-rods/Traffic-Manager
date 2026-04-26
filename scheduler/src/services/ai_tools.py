@@ -1,8 +1,27 @@
 import json
 import logging
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+_PT_WEEKDAY_SHORT = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+_PT_MONTH = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+]
+
+
+def _format_pt_br_date_label(iso_date: str) -> str:
+    """Format an ISO date (YYYY-MM-DD) as 'Terça, 12 de maio' (PT-BR)."""
+    try:
+        d = datetime.strptime(iso_date, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return iso_date
+    weekday = _PT_WEEKDAY_SHORT[d.weekday()]
+    month = _PT_MONTH[d.month - 1]
+    return f"{weekday}, {d.day} de {month}"
 
 
 # ──────────────────────────────────────────────
@@ -44,7 +63,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "check_availability",
-            "description": "Check which days have available slots for the given total duration. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts.",
+            "description": "Check which days have available slots for the given total duration. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts. Returns objects with `date` (YYYY-MM-DD, used internally) and `label` (PT-BR formatted, ALWAYS use this for display — never compute the weekday yourself).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -61,7 +80,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_time_slots",
-            "description": "Get available time slots for a specific date and total duration. Only call AFTER the patient has chosen a date from check_availability.",
+            "description": "Get available time slots for a specific date and total duration. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -435,17 +454,25 @@ class ToolExecutor:
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
         days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
-        return {"available_dates": days}
+        return {
+            "available_dates": [
+                {"date": d, "label": _format_pt_br_date_label(d)} for d in days
+            ]
+        }
 
     def _tool_get_time_slots(self, args, clinic_id, phone, ctx):
-        date = args.get("date")
+        target_date = args.get("date")
         total_duration = args.get("total_duration_minutes", 60)
-        if not date:
+        if not target_date:
             return {"error": "date is required"}
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
-        slots = self.availability_engine.get_available_slots_multi(clinic_id, date, total_duration)
-        return {"date": date, "available_slots": slots}
+        slots = self.availability_engine.get_available_slots_multi(clinic_id, target_date, total_duration)
+        return {
+            "date": target_date,
+            "date_label": _format_pt_br_date_label(target_date),
+            "available_slots": slots,
+        }
 
     def _tool_lookup_appointments(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
