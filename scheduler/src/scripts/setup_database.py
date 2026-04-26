@@ -43,11 +43,36 @@ SQL_STATEMENTS = [
     )
     """,
 
+    # Unidades (filhos da clinic — fronteira operacional)
+    # 1 clinic pode ter N units; cada unit tem agenda/profissionais/preços próprios
+    # zapi_instance_id é opcional: se NULL, herda da clinic (fallback no webhook)
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.units (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(100) NOT NULL,
+        address TEXT,
+        timezone VARCHAR(50) NOT NULL DEFAULT 'America/Sao_Paulo',
+        business_hours JSONB DEFAULT '{}',
+        buffer_minutes INTEGER DEFAULT 0,
+        zapi_instance_id VARCHAR(255),
+        max_future_dates INTEGER DEFAULT 5,
+        active BOOLEAN DEFAULT TRUE,
+        metadata JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(clinic_id, slug)
+    )
+    """,
+
     # Serviços
+    # unit_id NULL = padrão da clinic (vale para todas units); NOT NULL = override desta unit
     """
     CREATE TABLE IF NOT EXISTS scheduler.services (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        unit_id UUID REFERENCES scheduler.units(id),
         name VARCHAR(255) NOT NULL,
         duration_minutes INTEGER NOT NULL,
         price_cents INTEGER,
@@ -70,11 +95,25 @@ SQL_STATEMENTS = [
     )
     """,
 
+    # Junction profissional <-> unidade (M2M)
+    # Profissional pode atuar em N unidades; flag active permite ativar/desativar por unit
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.professionals_units (
+        professional_id UUID NOT NULL REFERENCES scheduler.professionals(id) ON DELETE CASCADE,
+        unit_id UUID NOT NULL REFERENCES scheduler.units(id) ON DELETE CASCADE,
+        active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        PRIMARY KEY (professional_id, unit_id)
+    )
+    """,
+
     # Regras de disponibilidade
+    # unit_id é a fronteira da agenda — sempre obrigatório operacionalmente (NOT NULL após Fase 3)
     """
     CREATE TABLE IF NOT EXISTS scheduler.availability_rules (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        unit_id UUID REFERENCES scheduler.units(id),
         professional_id UUID REFERENCES scheduler.professionals(id),
         day_of_week INTEGER NOT NULL,
         start_time TIME NOT NULL,
@@ -84,11 +123,12 @@ SQL_STATEMENTS = [
     )
     """,
 
-    # Exceções de disponibilidade
+    # Exceções de disponibilidade (sempre por unit operacionalmente)
     """
     CREATE TABLE IF NOT EXISTS scheduler.availability_exceptions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        unit_id UUID REFERENCES scheduler.units(id),
         exception_date DATE NOT NULL,
         exception_type VARCHAR(20) NOT NULL,
         start_time TIME,
@@ -114,11 +154,12 @@ SQL_STATEMENTS = [
     )
     """,
 
-    # Agendamentos
+    # Agendamentos (sempre por unit operacionalmente)
     """
     CREATE TABLE IF NOT EXISTS scheduler.appointments (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        unit_id UUID REFERENCES scheduler.units(id),
         patient_id UUID REFERENCES scheduler.patients(id),
         professional_id UUID REFERENCES scheduler.professionals(id),
         service_id UUID REFERENCES scheduler.services(id),
@@ -135,10 +176,13 @@ SQL_STATEMENTS = [
     """,
 
     # Templates de mensagem
+    # unit_id NULL = padrão da clinic; NOT NULL = override desta unit
+    # Constraint UNIQUE(clinic_id, template_key) será substituída por partial unique indexes na migration 009
     """
     CREATE TABLE IF NOT EXISTS scheduler.message_templates (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        unit_id UUID REFERENCES scheduler.units(id),
         template_key VARCHAR(100) NOT NULL,
         content TEXT NOT NULL,
         buttons JSONB,
@@ -150,10 +194,12 @@ SQL_STATEMENTS = [
     """,
 
     # FAQ
+    # unit_id NULL = padrão da clinic; NOT NULL = override desta unit
     """
     CREATE TABLE IF NOT EXISTS scheduler.faq_items (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        unit_id UUID REFERENCES scheduler.units(id),
         question_key VARCHAR(100) NOT NULL,
         question_label VARCHAR(255) NOT NULL,
         answer TEXT NOT NULL,
@@ -164,10 +210,12 @@ SQL_STATEMENTS = [
     """,
 
     # Areas de tratamento (independentes, reutilizaveis entre servicos)
+    # unit_id NULL = padrão da clinic; NOT NULL = override desta unit
     """
     CREATE TABLE IF NOT EXISTS scheduler.areas (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        unit_id UUID REFERENCES scheduler.units(id),
         name VARCHAR(255) NOT NULL,
         display_order INTEGER DEFAULT 0,
         active BOOLEAN DEFAULT TRUE,
@@ -180,10 +228,12 @@ SQL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_areas_clinic ON scheduler.areas(clinic_id)",
 
     # Junction: servico <-> area
+    # unit_id NULL = preço padrão da clinic; NOT NULL = override desta unit (preço/duração)
     """
     CREATE TABLE IF NOT EXISTS scheduler.service_areas (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         service_id UUID NOT NULL REFERENCES scheduler.services(id) ON DELETE CASCADE,
+        unit_id UUID REFERENCES scheduler.units(id),
         area_id UUID NOT NULL REFERENCES scheduler.areas(id) ON DELETE CASCADE,
         duration_minutes INTEGER,
         price_cents INTEGER,
@@ -329,10 +379,12 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS full_name VARCHAR(255)",
 
     # Clinic users (login for frontend panel)
+    # unit_id NULL = acesso clinic-wide (default); NOT NULL = role unit-scoped (futuro)
     """
     CREATE TABLE IF NOT EXISTS scheduler.clinic_users (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        unit_id UUID REFERENCES scheduler.units(id),
         email VARCHAR(255) NOT NULL,
         password_hash VARCHAR(255) NOT NULL,
         name VARCHAR(255),
@@ -479,6 +531,99 @@ SQL_STATEMENTS = [
     # Soft-delete column on patients (set when patient is excluded by clinic owner)
     "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ",
     "CREATE INDEX IF NOT EXISTS idx_patients_deleted ON scheduler.patients(clinic_id, deleted_at)",
+
+    # ============================================================
+    # Migration 009 — Multi-unit architecture (Fase 0: Schema)
+    # PRD: docs/work/prd/009-multi-unit-architecture.md
+    # SPEC: docs/work/spec/009-multi-unit-architecture.md
+    #
+    # Aplica em DBs existentes os mesmos elementos já presentes nos CREATE TABLE acima.
+    # Operacionais (appointments/availability_*) ficam nullable nesta fase; passam a NOT NULL
+    # apenas na Fase 3 (cutover), após o backfill rodar em prod.
+    # ============================================================
+
+    # 1. Indexes em units / professionals_units (criação garantida; tabelas vêm do CREATE acima)
+    "CREATE INDEX IF NOT EXISTS idx_units_clinic ON scheduler.units(clinic_id) WHERE active = TRUE",
+    "CREATE INDEX IF NOT EXISTS idx_units_zapi ON scheduler.units(zapi_instance_id) WHERE zapi_instance_id IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_prof_units_unit ON scheduler.professionals_units(unit_id) WHERE active = TRUE",
+
+    # 2. unit_id columns — idempotentes (no-op se CREATE TABLE já incluiu)
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+    "ALTER TABLE scheduler.availability_rules ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+    "ALTER TABLE scheduler.availability_exceptions ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+    "ALTER TABLE scheduler.services ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+    "ALTER TABLE scheduler.areas ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+    "ALTER TABLE scheduler.service_areas ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+    "ALTER TABLE scheduler.faq_items ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+    "ALTER TABLE scheduler.message_templates ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS unit_id UUID REFERENCES scheduler.units(id)",
+
+    # 3. Indexes operacionais por unit (queries de availability/appointment passam a filtrar por unit_id)
+    "CREATE INDEX IF NOT EXISTS idx_appointments_unit_date ON scheduler.appointments(unit_id, appointment_date)",
+    "CREATE INDEX IF NOT EXISTS idx_availability_rules_unit ON scheduler.availability_rules(unit_id)",
+    "CREATE INDEX IF NOT EXISTS idx_availability_exceptions_unit ON scheduler.availability_exceptions(unit_id, exception_date)",
+
+    # 4. Drop dos UNIQUE inline antigos para liberar override pattern (clinic-default + unit-override).
+    #    Faz lookup pelo nome auto-gerado do Postgres; se a constraint não existir, NO-OP.
+    #    Sem este drop, a constraint atual (sem unit_id) bloquearia overrides com mesmo name.
+    """
+    DO $$
+    DECLARE
+        cons TEXT;
+    BEGIN
+        SELECT conname INTO cons FROM pg_constraint
+        WHERE conrelid = 'scheduler.areas'::regclass
+          AND contype = 'u'
+          AND pg_get_constraintdef(oid) ILIKE '%(clinic_id, name)%';
+        IF cons IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE scheduler.areas DROP CONSTRAINT %I', cons);
+        END IF;
+
+        SELECT conname INTO cons FROM pg_constraint
+        WHERE conrelid = 'scheduler.service_areas'::regclass
+          AND contype = 'u'
+          AND pg_get_constraintdef(oid) ILIKE '%(service_id, area_id)%';
+        IF cons IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE scheduler.service_areas DROP CONSTRAINT %I', cons);
+        END IF;
+
+        SELECT conname INTO cons FROM pg_constraint
+        WHERE conrelid = 'scheduler.faq_items'::regclass
+          AND contype = 'u'
+          AND pg_get_constraintdef(oid) ILIKE '%(clinic_id, question_key)%';
+        IF cons IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE scheduler.faq_items DROP CONSTRAINT %I', cons);
+        END IF;
+
+        SELECT conname INTO cons FROM pg_constraint
+        WHERE conrelid = 'scheduler.message_templates'::regclass
+          AND contype = 'u'
+          AND pg_get_constraintdef(oid) ILIKE '%(clinic_id, template_key)%';
+        IF cons IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE scheduler.message_templates DROP CONSTRAINT %I', cons);
+        END IF;
+    END $$
+    """,
+
+    # 5. Partial unique indexes (override pattern):
+    #    - default da clinic: 1 row por chave funcional com unit_id IS NULL
+    #    - override por unit:  1 row por (chave, unit_id) com unit_id IS NOT NULL
+    #
+    # services — chave funcional (clinic_id, name)
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_services_clinic_default ON scheduler.services(clinic_id, name) WHERE unit_id IS NULL AND active = TRUE",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_services_clinic_unit ON scheduler.services(clinic_id, unit_id, name) WHERE unit_id IS NOT NULL AND active = TRUE",
+    # areas — chave funcional (clinic_id, name)
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_areas_clinic_default ON scheduler.areas(clinic_id, name) WHERE unit_id IS NULL AND active = TRUE",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_areas_clinic_unit ON scheduler.areas(clinic_id, unit_id, name) WHERE unit_id IS NOT NULL AND active = TRUE",
+    # service_areas — chave funcional (service_id, area_id)
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_service_areas_default ON scheduler.service_areas(service_id, area_id) WHERE unit_id IS NULL AND active = TRUE",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_service_areas_unit ON scheduler.service_areas(service_id, area_id, unit_id) WHERE unit_id IS NOT NULL AND active = TRUE",
+    # faq_items — chave funcional (clinic_id, question_key)
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_faq_clinic_default ON scheduler.faq_items(clinic_id, question_key) WHERE unit_id IS NULL AND active = TRUE",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_faq_clinic_unit ON scheduler.faq_items(clinic_id, unit_id, question_key) WHERE unit_id IS NOT NULL AND active = TRUE",
+    # message_templates — chave funcional (clinic_id, template_key)
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_templates_clinic_default ON scheduler.message_templates(clinic_id, template_key) WHERE unit_id IS NULL AND active = TRUE",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uniq_templates_clinic_unit ON scheduler.message_templates(clinic_id, unit_id, template_key) WHERE unit_id IS NOT NULL AND active = TRUE",
 ]
 
 
