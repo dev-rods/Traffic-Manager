@@ -40,12 +40,12 @@ provider:
     LEADS_TABLE: ${self:custom.resourcePrefix}-leads
     BASE_FUNCTION_NAME: arn:aws:lambda:${self:provider.region}:${self:custom.awsId}:function:${self:service}-${self:custom.stage}-
     BASE_ROLE_ARN: arn:aws:iam::${self:custom.awsId}:role/${self:service}-${self:custom.stage}-
-    # RDS PostgreSQL
-    RDS_HOST: !GetAtt PostgresDatabase.Endpoint.Address
-    RDS_PORT: !GetAtt PostgresDatabase.Endpoint.Port
-    RDS_DATABASE: trafficmanager
-    RDS_USERNAME: ${ssm:/${self:custom.stage}/RDS_MASTER_USERNAME}
-    RDS_PASSWORD: ${ssm:/${self:custom.stage}/RDS_MASTER_PASSWORD}
+    # PostgreSQL (Supabase)
+    RDS_HOST: ${ssm:/${self:custom.stage}/SUPABASE_DB_HOST}
+    RDS_PORT: ${ssm:/${self:custom.stage}/SUPABASE_DB_PORT}
+    RDS_DATABASE: ${ssm:/${self:custom.stage}/SUPABASE_DB_NAME}
+    RDS_USERNAME: ${ssm:/${self:custom.stage}/SUPABASE_DB_USER}
+    RDS_PASSWORD: ${ssm:/${self:custom.stage}/SUPABASE_DB_PASSWORD}
 
 functions:
   - ${file(sls/functions/campaign/interface.yml)}
@@ -75,8 +75,6 @@ resources:
     - ${file(sls/resources/dynamodb/prompts-table.yml)}
     - ${file(sls/resources/dynamodb/recommendations-table.yml)}
     - ${file(sls/resources/dynamodb/leads-table.yml)}
-    # RDS PostgreSQL
-    - ${file(sls/resources/rds/postgres-database.yml)}
 
 plugins:
   - serverless-iam-roles-per-function
