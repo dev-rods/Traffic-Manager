@@ -227,7 +227,10 @@ class ConversationAgent:
                 f"Se discount_pct=0, mostre apenas 'Total: *{{final}}*'.\n"
                 f"   (b) Novamente no resumo final do agendamento (etapa 6), passando os mesmos valores para book_appointment.\n"
                 f"4. Os valores 'De X por Y' devem vir EXATAMENTE de original_price_display e discounted_price_display "
-                f"retornados pela tool. Não recalcule manualmente."
+                f"retornados pela tool. Não recalcule manualmente.\n"
+                f"5. Não explique por que outras regras de desconto não se aplicaram. Apenas anuncie "
+                f"o resultado retornado pela tool. A tool já escolhe a melhor opção para a paciente "
+                f"(maior desconto aplicável entre todas as regras vigentes)."
             )
 
         variables = {

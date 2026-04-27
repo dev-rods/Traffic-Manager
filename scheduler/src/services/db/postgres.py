@@ -17,7 +17,7 @@ def _get_connection_pool() -> SimpleConnectionPool:
     if _pool is None or _pool.closed:
         _pool = SimpleConnectionPool(
             minconn=1,
-            maxconn=5,
+            maxconn=1,
             host=os.environ.get("RDS_HOST"),
             port=int(os.environ.get("RDS_PORT", "5432")),
             dbname=os.environ.get("RDS_DATABASE"),

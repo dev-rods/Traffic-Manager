@@ -699,24 +699,30 @@ class ToolExecutor:
         )
         is_first = int(count_rows[0]["cnt"]) == 0 if count_rows else True
 
-        if is_first:
-            discount_pct = rules["first_session_discount_pct"]
-            discount_reason = "first_session"
-        else:
-            area_count = len(service_area_pairs)
-            t2_min = rules["tier_2_min_areas"]
-            t2_max = rules["tier_2_max_areas"]
-            t3_min = rules["tier_3_min_areas"]
+        # Evaluate every applicable rule and pick the best (highest pct) for the patient.
+        # Discounts are mutually exclusive — only the winner is applied.
+        candidates = []
 
-            if area_count >= t3_min:
-                discount_pct = rules["tier_3_discount_pct"]
-                discount_reason = "tier_3"
-            elif area_count >= t2_min:
-                discount_pct = rules["tier_2_discount_pct"]
-                discount_reason = "tier_2"
-            else:
-                discount_pct = 0
-                discount_reason = None
+        first_pct = int(rules.get("first_session_discount_pct") or 0)
+        if is_first and first_pct > 0:
+            candidates.append((first_pct, "first_session"))
+
+        area_count = len(service_area_pairs)
+        t2_min = int(rules.get("tier_2_min_areas") or 0)
+        t3_min = int(rules.get("tier_3_min_areas") or 0)
+        t2_pct = int(rules.get("tier_2_discount_pct") or 0)
+        t3_pct = int(rules.get("tier_3_discount_pct") or 0)
+
+        if t3_min and area_count >= t3_min and t3_pct > 0:
+            candidates.append((t3_pct, "tier_3"))
+        elif t2_min and area_count >= t2_min and t2_pct > 0:
+            candidates.append((t2_pct, "tier_2"))
+
+        if candidates:
+            discount_pct, discount_reason = max(candidates, key=lambda c: c[0])
+        else:
+            discount_pct = 0
+            discount_reason = None
 
         discounted_price = total_price_cents * (100 - discount_pct) // 100
 

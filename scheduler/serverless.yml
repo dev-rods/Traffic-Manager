@@ -35,11 +35,11 @@ provider:
     CONVERSATION_SESSIONS_TABLE: ${self:custom.resourcePrefix}-conversation-sessions
     MESSAGE_EVENTS_TABLE: ${self:custom.resourcePrefix}-message-events
     SCHEDULED_REMINDERS_TABLE: ${self:custom.resourcePrefix}-scheduled-reminders
-    RDS_HOST: ${cf:traffic-manager-infra-${self:custom.stage}.PostgresEndpoint}
-    RDS_PORT: ${cf:traffic-manager-infra-${self:custom.stage}.PostgresPort}
-    RDS_DATABASE: trafficmanager
-    RDS_USERNAME: ${ssm:/${self:custom.stage}/RDS_MASTER_USERNAME}
-    RDS_PASSWORD: ${ssm:/${self:custom.stage}/RDS_MASTER_PASSWORD}
+    RDS_HOST: ${ssm:/${self:custom.stage}/SUPABASE_DB_HOST}
+    RDS_PORT: ${ssm:/${self:custom.stage}/SUPABASE_DB_PORT}
+    RDS_DATABASE: ${ssm:/${self:custom.stage}/SUPABASE_DB_NAME}
+    RDS_USERNAME: ${ssm:/${self:custom.stage}/SUPABASE_DB_USER}
+    RDS_PASSWORD: ${ssm:/${self:custom.stage}/SUPABASE_DB_PASSWORD}
     SCHEDULER_API_KEY: ${ssm:/${self:custom.stage}/SCHEDULER_API_KEY}
     ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
     ALLOWED_PHONES: ${ssm:/${self:custom.stage}/ALLOWED_PHONES}
