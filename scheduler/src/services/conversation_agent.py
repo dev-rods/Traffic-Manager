@@ -151,6 +151,15 @@ class ConversationAgent:
 
         except AnthropicError as e:
             logger.error(f"[ConversationAgent] Anthropic API error for {phone}: {e}")
+            # Persist whatever history we have (including the user's just-arrived
+            # message) so the next attempt has the full context. Without this,
+            # the user's message is silently dropped and they have to repeat it.
+            try:
+                session["agent_history"] = self._truncate_history(history)
+                session["mode"] = "agent"
+                self._save_session(clinic_id, phone, session)
+            except Exception as save_err:
+                logger.error(f"[ConversationAgent] Failed to persist session after API error: {save_err}")
             return [OutgoingMessage(
                 message_type="text",
                 content="Desculpe, estou com dificuldades no momento. Tente novamente em instantes.",
