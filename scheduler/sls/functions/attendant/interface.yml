@@ -95,6 +95,7 @@ ConversationMessages:
         - dynamodb:Query
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events/index/*"
     - Effect: Allow
       Action:
         - ssm:GetParameter
