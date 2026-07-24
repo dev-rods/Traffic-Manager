@@ -1,10 +1,21 @@
 import { useState, useMemo } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { useSendBatchMessages } from '@/hooks/useMessages'
+import { useSendBatchMessages, type BatchMessageResult } from '@/hooks/useMessages'
 import { formatPhone } from '@/utils/formatPhone'
 import type { PatientWithStats } from '@/types'
 import type { SendMessagePayload } from '@/services/messages.service'
+
+function getStatusLabel(result: BatchMessageResult | undefined): { text: string; className: string } | null {
+  if (!result) return null
+  if (result.status === 'failed') return { text: 'Falhou', className: 'text-red-500' }
+  if (result.status === 'pending') return { text: '...', className: 'text-gray-400' }
+  // status === 'sent' | 'queued'
+  if (result.delivery === 'delivered') return { text: 'Entregue', className: 'text-emerald-600' }
+  if (result.delivery === 'sent_only') return { text: 'Sem confirmação', className: 'text-amber-600' }
+  if (result.delivery === 'checking') return { text: 'Verificando...', className: 'text-gray-500' }
+  return { text: 'Enviado', className: 'text-emerald-600' }
+}
 
 interface BatchMessageModalProps {
   open: boolean
@@ -31,14 +42,14 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
     clinicTemplate?.trim() ? clinicTemplate : buildDefaultMessage(availableDates),
   )
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
-  const { send, results, isSending, progress, reset } = useSendBatchMessages()
+  const { send, results, isSending, isCheckingDelivery, progress, reset } = useSendBatchMessages()
 
   const activePatients = useMemo(
     () => patients.filter((p) => !removedIds.has(p.id)),
     [patients, removedIds],
   )
 
-  const isDone = results.length > 0 && !isSending
+  const isDone = results.length > 0 && !isSending && !isCheckingDelivery
 
   const handleRemovePatient = (id: string) => {
     setRemovedIds((prev) => new Set([...prev, id]))
@@ -70,7 +81,8 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
     return messageTemplate.replace(/\{nome\}/g, firstName)
   }, [messageTemplate, activePatients])
 
-  const sentCount = results.filter((r) => r.status === 'sent' || r.status === 'queued').length
+  const deliveredCount = results.filter((r) => r.delivery === 'delivered').length
+  const unconfirmedCount = results.filter((r) => (r.status === 'sent' || r.status === 'queued') && r.delivery === 'sent_only').length
   const failedCount = results.filter((r) => r.status === 'failed').length
 
   return (
@@ -84,6 +96,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
           <div className="rounded-lg border border-gray-200 max-h-40 overflow-y-auto divide-y divide-gray-50">
             {activePatients.map((p) => {
               const result = results.find((r) => r.patientId === p.id)
+              const label = getStatusLabel(result)
               return (
                 <div key={p.id} className="flex items-center justify-between px-3 py-2">
                   <div className="flex items-center gap-2">
@@ -91,19 +104,12 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
                     <span className="text-xs text-gray-400">{formatPhone(p.phone)}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    {result && (
-                      <span className={[
-                        'text-xs font-medium',
-                        result.status === 'sent' || result.status === 'queued'
-                          ? 'text-emerald-600'
-                          : result.status === 'failed'
-                            ? 'text-red-500'
-                            : 'text-gray-400',
-                      ].join(' ')}>
-                        {result.status === 'sent' || result.status === 'queued' ? 'Enviado' : result.status === 'failed' ? 'Falhou' : '...'}
+                    {label && (
+                      <span className={['text-xs font-medium', label.className].join(' ')}>
+                        {label.text}
                       </span>
                     )}
-                    {!isSending && !isDone && (
+                    {!isSending && !isCheckingDelivery && !isDone && (
                       <button
                         onClick={() => handleRemovePatient(p.id)}
                         className="text-xs text-gray-400 hover:text-red-500 transition-colors"
@@ -119,7 +125,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
         </div>
 
         {/* Message template */}
-        {!isDone && (
+        {results.length === 0 && (
           <div>
             <label className="text-xs font-medium text-gray-500 block mb-1.5">
               Mensagem <span className="text-gray-300">({'{nome}'} = primeiro nome do paciente)</span>
@@ -128,14 +134,13 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
               value={messageTemplate}
               onChange={(e) => setMessageTemplate(e.target.value)}
               rows={5}
-              disabled={isSending}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
             />
           </div>
         )}
 
         {/* Preview */}
-        {!isDone && (
+        {results.length === 0 && (
           <div>
             <label className="text-xs font-medium text-gray-500 block mb-1.5">Preview</label>
             <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-4 py-3 text-sm text-gray-700 whitespace-pre-line">
@@ -162,11 +167,33 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
           </div>
         )}
 
+        {/* Delivery verification */}
+        {!isSending && isCheckingDelivery && (
+          <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-gray-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-sm text-gray-700">
+                Verificando confirmações de entrega...
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Aguardando WhatsApp confirmar quais mensagens realmente chegaram.
+            </p>
+          </div>
+        )}
+
         {/* Summary */}
         {isDone && (
           <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 space-y-1">
             <p className="text-sm font-semibold text-gray-800">Envio concluído</p>
-            <p className="text-sm text-emerald-600">{sentCount} mensagen{sentCount !== 1 ? 's' : ''} enviada{sentCount !== 1 ? 's' : ''}</p>
+            <p className="text-sm text-emerald-600">
+              {deliveredCount} entregue{deliveredCount !== 1 ? 's' : ''}
+            </p>
+            {unconfirmedCount > 0 && (
+              <p className="text-sm text-amber-600">
+                {unconfirmedCount} sem confirmação — o WhatsApp aceitou mas não confirmou entrega. Verifique com esses pacientes por outro canal.
+              </p>
+            )}
             {failedCount > 0 && (
               <p className="text-sm text-red-500">{failedCount} falha{failedCount !== 1 ? 's' : ''}</p>
             )}
@@ -178,7 +205,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
           <Button variant="ghost" onClick={handleClose}>
             {isDone ? 'Fechar' : 'Cancelar'}
           </Button>
-          {!isDone && (
+          {results.length === 0 && (
             <Button
               onClick={() => void handleSend()}
               loading={isSending}

@@ -31,8 +31,8 @@ class ZApiProvider(WhatsAppProvider):
             masked = phone[-4:] if len(phone) >= 4 else phone
             logger.warning(f"Message blocked by allowlist — phone ending in ***{masked}")
             return ProviderResponse(
-                success=True,
-                provider_message_id="blocked-by-allowlist",
+                success=False,
+                error="blocked_by_allowlist",
                 raw_response={"blocked": True, "reason": "phone_not_in_allowlist"},
             )
         return None
@@ -50,9 +50,11 @@ class ZApiProvider(WhatsAppProvider):
             data = resp.json() if resp.content else {}
 
             if resp.status_code == 200:
+                # Prefer WhatsApp messageId — this is what comes back on delivery webhooks,
+                # allowing correlation between OUTBOUND records and STATUS_UPDATE events.
                 return ProviderResponse(
                     success=True,
-                    provider_message_id=data.get("zaapId", data.get("messageId", "")),
+                    provider_message_id=data.get("messageId", data.get("zaapId", "")),
                     raw_response=data,
                 )
             else:
@@ -86,7 +88,7 @@ class ZApiProvider(WhatsAppProvider):
             if resp.status_code == 200:
                 return ProviderResponse(
                     success=True,
-                    provider_message_id=data.get("zaapId", data.get("messageId", "")),
+                    provider_message_id=data.get("messageId", data.get("zaapId", "")),
                     raw_response=data,
                 )
             else:
