@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useConversationMessages } from '@/hooks/useBot'
 import { formatPhone } from '@/utils/formatPhone'
 import { Button } from '@/components/ui/Button'
@@ -17,19 +17,20 @@ interface ConversationThreadProps {
 
 const READ_STATUSES: MessageStatus[] = ['READ', 'READ_BY_ME', 'PLAYED']
 const DELIVERED_STATUSES: MessageStatus[] = ['RECEIVED', ...READ_STATUSES]
+// If a message sits in SENT (accepted by z-api but no RECEIVED webhook) longer than this,
+// WhatsApp almost certainly won't deliver it — treat as "sem confirmação" in the UI.
+const STALE_SENT_THRESHOLD_MS = 2 * 60 * 1000
 
 /**
- * WhatsApp-style delivery ticks for outbound messages.
- * - failed: red exclamation
- * - queued / sent: single tick (light)
- * - received: double ticks (light)
- * - read / played: double ticks (bright white) — mimics WhatsApp's blue read receipt
- *   but rendered in white here since the bubble background is already brand blue.
+ * WhatsApp-style delivery ticks for outbound messages, with one product-specific twist:
+ * "SENT" older than 2 minutes escalates to a warning glyph, because at that point
+ * WhatsApp is very unlikely to deliver and 1-tick would be misleading in the history.
  */
-function DeliveryTicks({ status }: { status: MessageStatus }) {
+function DeliveryTicks({ status, createdAt, nowMs }: { status: MessageStatus; createdAt: string; nowMs: number }) {
   if (status === 'FAILED') {
     return (
       <svg aria-label="Falhou" className="w-3.5 h-3.5 text-red-300" viewBox="0 0 20 20" fill="currentColor">
+        <title>Falhou</title>
         <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm-.75 4h1.5v6h-1.5V6zm.75 9a1 1 0 110-2 1 1 0 010 2z" />
       </svg>
     )
@@ -37,6 +38,20 @@ function DeliveryTicks({ status }: { status: MessageStatus }) {
 
   const isRead = READ_STATUSES.includes(status)
   const isDelivered = DELIVERED_STATUSES.includes(status)
+
+  if (!isDelivered && status === 'SENT') {
+    const sentAt = createdAt ? new Date(createdAt).getTime() : 0
+    const isStale = sentAt > 0 && nowMs - sentAt > STALE_SENT_THRESHOLD_MS
+    if (isStale) {
+      return (
+        <svg aria-label="Sem confirmação de entrega" className="w-3.5 h-3.5 text-amber-300" viewBox="0 0 20 20" fill="currentColor">
+          <title>Sem confirmação de entrega</title>
+          <path d="M9.1 2.6a1 1 0 011.8 0l7.5 13.5A1 1 0 0117.5 18h-15a1 1 0 01-.9-1.5L9.1 2.6zM10 8v4a.75.75 0 001.5 0V8A.75.75 0 0010 8zm0 6.5a1 1 0 100 2 1 1 0 000-2z" />
+        </svg>
+      )
+    }
+  }
+
   const color = isRead ? 'text-white' : 'text-brand-200'
   const label = isRead ? 'Lida' : isDelivered ? 'Entregue' : status === 'SENT' ? 'Enviada' : 'Aguardando'
 
@@ -51,9 +66,8 @@ function DeliveryTicks({ status }: { status: MessageStatus }) {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {/* Back tick (rendered when delivered, i.e. two ticks) */}
+      <title>{label}</title>
       {isDelivered && <path d="M2 7l3.5 3.5L12 4" />}
-      {/* Front tick (always rendered) */}
       <path d="M8 7l3.5 3.5L18 4" />
     </svg>
   )
@@ -63,6 +77,7 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
   const { data, isLoading } = useConversationMessages(phone)
   const messages = useMemo(() => data?.messages ?? [], [data])
   const scrollRef = useRef<HTMLDivElement>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   // Auto-scroll to bottom when messages load or change
   useEffect(() => {
@@ -70,6 +85,13 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages])
+
+  // Refresh the "now" reference every 30s so the SENT → "sem confirmação" transition
+  // shows up while the user is looking at the screen without needing a manual reload.
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
 
   return (
     <div className="flex flex-col h-full">
@@ -126,7 +148,7 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
                 ].join(' ')}>
                   {msg.created_at ? new Date(msg.created_at).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}
                 </p>
-                {msg.direction === 'OUTBOUND' && <DeliveryTicks status={msg.status} />}
+                {msg.direction === 'OUTBOUND' && <DeliveryTicks status={msg.status} createdAt={msg.created_at} nowMs={nowMs} />}
               </div>
             </div>
           ))

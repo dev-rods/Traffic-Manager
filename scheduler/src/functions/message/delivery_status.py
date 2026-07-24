@@ -66,7 +66,10 @@ def handler(event, context):
             return http_response(200, {"status": "SUCCESS", "results": []})
 
         target_pmids: Set[str] = {s["providerMessageId"] for s in normalized}
-        min_sent_at = min(s["sentAtIso"] for s in normalized)
+        # The frontend sends ISO with milliseconds (Date.toISOString), but STATUS_UPDATE
+        # rows store second-precision (e.g. "RECEIVED#2026-07-24T12:23:25Z"). Truncate
+        # to seconds so the lexicographic range on statusTimestamp matches cleanly.
+        min_sent_at = _truncate_ms(min(s["sentAtIso"] for s in normalized))
         upper_bound = _iso_plus(min_sent_at, minutes=LOOKAHEAD_MINUTES)
 
         table = _get_table()
@@ -106,8 +109,17 @@ def handler(event, context):
         return http_response(500, {"status": "ERROR", "message": str(e)})
 
 
+def _truncate_ms(iso_ts: str) -> str:
+    """Strip fractional seconds so 2026-07-24T12:23:19.731Z becomes 2026-07-24T12:23:19Z."""
+    if "." in iso_ts:
+        head, _, tail = iso_ts.partition(".")
+        # tail is like "731Z" — keep only the trailing zone marker if present
+        return head + ("Z" if tail.endswith("Z") else "")
+    return iso_ts
+
+
 def _iso_plus(iso_ts: str, minutes: int) -> str:
-    dt = datetime.strptime(iso_ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    dt = datetime.strptime(_truncate_ms(iso_ts), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     dt += timedelta(minutes=minutes)
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
