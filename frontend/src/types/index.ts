@@ -280,12 +280,22 @@ export interface ConversationPreview {
   sender_name: string
 }
 
+export type MessageStatus =
+  | 'QUEUED'
+  | 'SENT'
+  | 'RECEIVED'
+  | 'READ'
+  | 'READ_BY_ME'
+  | 'PLAYED'
+  | 'FAILED'
+  | ''
+
 export interface ConversationMessage {
   id: string
   direction: 'INBOUND' | 'OUTBOUND'
   content: string
   message_type: string
-  status: string
+  status: MessageStatus
   created_at: string
   sender_name: string
 }
