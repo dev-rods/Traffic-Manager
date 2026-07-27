@@ -240,6 +240,20 @@ class AppointmentService:
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao atualizar lead: {e}")
 
+            # Record this appointment as a conversion tied to the lead's gclid
+            # (recurring return: every appointment counts). No-op if no gclid lead.
+            try:
+                self.lead_service.record_conversion(
+                    clinic_id=clinic_id,
+                    phone=phone,
+                    name=full_name,
+                    appointment_id=appointment_id,
+                    value_cents=final_price_cents,
+                    conversion_date=date,
+                )
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao registrar conversao do lead: {e}")
+
         return result
 
     def reschedule_appointment(

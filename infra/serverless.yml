@@ -61,6 +61,7 @@ functions:
   - ${file(sls/functions/recommendations/interface.yml)}
   - ${file(sls/functions/leads/interface.yml)}
   - ${file(sls/functions/keywords/interface.yml)}
+  - ${file(sls/functions/conversions/interface.yml)}
 
 resources:
     # ECR Repository (comentado - Serverless Framework gerencia automaticamente via provider.ecr.images)

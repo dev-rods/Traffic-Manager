@@ -1101,4 +1101,100 @@ class GoogleAdsClientService:
         """
         Método mantido para compatibilidade. Use get_campaigns() para nova implementação.
         """
-        return self.get_campaigns(client_id, limit, include_metrics=True) 
+        return self.get_campaigns(client_id, limit, include_metrics=True)
+
+    def upload_offline_conversions(
+        self,
+        customer_id: str,
+        conversion_action_id: str,
+        conversions: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Envia conversões offline (agendamentos) para o Google Ads via GCLID.
+
+        Usa as credenciais do MCC (env) e envia para a conta filha `customer_id`.
+
+        Args:
+            customer_id: ID da conta Google Ads da clínica (10 dígitos, sem hífen)
+            conversion_action_id: ID da Conversion Action offline
+            conversions: lista de dicts com:
+                - gclid (str)
+                - conversion_date_time (str: "YYYY-MM-DD HH:MM:SS+/-HH:MM")
+                - conversion_value (float, em BRL)
+                - identifier (opcional, para logar/marcar sucesso — ex: id da linha)
+
+        Returns:
+            dict com {success, uploaded_identifiers, failed} — uploaded_identifiers
+            contém os `identifier` das conversões aceitas pelo Google.
+        """
+        from src.services.google_ads_config import GoogleAdsConfig
+
+        clean_customer_id = str(customer_id).replace("-", "")
+        conversion_action = (
+            f"customers/{clean_customer_id}/conversionActions/{conversion_action_id}"
+        )
+
+        try:
+            config = GoogleAdsConfig().get_google_ads_config()
+            client = GoogleAdsClient.load_from_dict(config, version="v20")
+            service = client.get_service("ConversionUploadService")
+
+            click_conversions = []
+            for conv in conversions:
+                click_conversion = client.get_type("ClickConversion")
+                click_conversion.gclid = conv["gclid"]
+                click_conversion.conversion_action = conversion_action
+                click_conversion.conversion_date_time = conv["conversion_date_time"]
+                click_conversion.conversion_value = float(conv["conversion_value"])
+                click_conversion.currency_code = "BRL"
+                click_conversions.append(click_conversion)
+
+            response = service.upload_click_conversions(
+                customer_id=clean_customer_id,
+                conversions=click_conversions,
+                partial_failure=True,
+            )
+
+            # Determinar quais linhas foram aceitas. Com partial_failure, os erros
+            # vêm em partial_failure_error com índices; o que não falhou foi aceito.
+            failed_indices = set()
+            if response.partial_failure_error and response.partial_failure_error.code != 0:
+                for detail in response.partial_failure_error.details:
+                    # google.rpc GoogleAdsFailure com locations por operação
+                    try:
+                        failure = client.get_type("GoogleAdsFailure")
+                        failure = type(failure).deserialize(detail.value)
+                        for error in failure.errors:
+                            for elem in error.location.field_path_elements:
+                                if elem.field_name == "conversions":
+                                    failed_indices.add(elem.index)
+                                    logger.error(
+                                        f"Falha no upload de conversão [idx {elem.index}]: {error.message}"
+                                    )
+                    except Exception as parse_err:
+                        logger.error(f"Erro ao interpretar partial_failure: {parse_err}")
+
+            uploaded_identifiers = [
+                conversions[i].get("identifier")
+                for i in range(len(conversions))
+                if i not in failed_indices
+            ]
+
+            logger.info(
+                f"Upload de conversões para {clean_customer_id}: "
+                f"{len(uploaded_identifiers)} aceitas, {len(failed_indices)} falharam"
+            )
+
+            return {
+                "success": True,
+                "uploaded_identifiers": [i for i in uploaded_identifiers if i is not None],
+                "failed": len(failed_indices),
+            }
+
+        except GoogleAdsException as ex:
+            messages = [error.message for error in ex.failure.errors]
+            logger.error(f"GoogleAdsException no upload de conversões: {messages}")
+            return {"success": False, "error": "; ".join(messages), "uploaded_identifiers": []}
+        except Exception as e:
+            logger.error(f"Erro no upload de conversões offline: {str(e)}")
+            return {"success": False, "error": str(e), "uploaded_identifiers": []}
