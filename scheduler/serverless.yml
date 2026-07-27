@@ -41,6 +41,9 @@ provider:
     RDS_USERNAME: ${ssm:/${self:custom.stage}/SUPABASE_DB_USER}
     RDS_PASSWORD: ${ssm:/${self:custom.stage}/SUPABASE_DB_PASSWORD}
     SCHEDULER_API_KEY: ${ssm:/${self:custom.stage}/SCHEDULER_API_KEY}
+    # Chave dedicada e restrita ao endpoint público POST /leads (usada pela landing page).
+    # Fallback vazio para não quebrar o deploy antes do parâmetro ser provisionado no SSM.
+    LEADS_INTAKE_API_KEY: ${ssm:/${self:custom.stage}/LEADS_INTAKE_API_KEY, ''}
     ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
     ALLOWED_PHONES: ${ssm:/${self:custom.stage}/ALLOWED_PHONES}
     OPENAI_API_KEY: ${ssm:/${self:custom.stage}/OPENAI_API_KEY}

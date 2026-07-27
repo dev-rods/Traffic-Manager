@@ -8,6 +8,21 @@ Rastreamento ponta-a-ponta: anúncio → LP (gclid) → lead → agendamentos re
 |--------|------|-------------|
 | POST | `/leads` | Cria/atualiza lead com gclid (chamado pela landing page) |
 
+### Autenticação do `POST /leads`
+Endpoint público (client-side), então usa uma **chave de intake dedicada** —
+não a `SCHEDULER_API_KEY` mestra. Header `x-api-key` aceita:
+- `LEADS_INTAKE_API_KEY` (env, SSM `/${stage}/LEADS_INTAKE_API_KEY`) — restrita só a este endpoint; é a que vai na landing page (`VITE_LEADS_API_KEY`).
+- `SCHEDULER_API_KEY` (mestra) — para chamadas internas/admin.
+
+A chave de intake **não** autoriza os demais endpoints do scheduler.
+
+**Pré-deploy:** provisionar o parâmetro (valor aleatório forte), ex.:
+```
+aws ssm put-parameter --name /dev/LEADS_INTAKE_API_KEY --type SecureString \
+  --value "$(openssl rand -hex 24)" --profile <perfil> --region us-east-1
+```
+Se o parâmetro não existir, o deploy não quebra (fallback vazio) e só a chave mestra funciona no endpoint.
+
 Identidade do lead: `clinic_id + phone + first_name` (nome normalizado: minúsculas, sem acento, primeiro token).
 
 ## Fluxo

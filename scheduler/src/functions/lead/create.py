@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, date, time
 from decimal import Decimal
 
-from src.utils.http import http_response, require_api_key, parse_body
+from src.utils.http import http_response, require_intake_api_key, parse_body
 from src.services.db.postgres import PostgresService
 from src.services.lead_service import LeadService
 
@@ -40,7 +40,7 @@ def handler(event, context):
     try:
         body = parse_body(event)
 
-        api_key, error_response = require_api_key(event, body)
+        api_key, error_response = require_intake_api_key(event, body)
         if error_response:
             return error_response
 
