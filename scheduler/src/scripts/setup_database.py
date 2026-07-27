@@ -459,7 +459,8 @@ SQL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_leads_phone ON scheduler.leads(phone)",
     "CREATE INDEX IF NOT EXISTS idx_leads_gclid ON scheduler.leads(gclid) WHERE gclid IS NOT NULL",
     "CREATE INDEX IF NOT EXISTS idx_leads_created_at ON scheduler.leads(clinic_id, created_at)",
-    "CREATE INDEX IF NOT EXISTS idx_leads_identity ON scheduler.leads(clinic_id, phone, first_name)",
+    # Note: idx_leads_identity (needs first_name) is created in the migrations section,
+    # after the first_name column is added, so existing DBs don't fail on ordering.
 
     # Lead conversions: one row per appointment tied to a gclid lead (recurring return tracking)
     """
