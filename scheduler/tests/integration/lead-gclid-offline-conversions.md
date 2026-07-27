@@ -14,7 +14,7 @@ Identidade do lead: `clinic_id + phone + first_name` (nome normalizado: minúscu
 
 1. **LP (Lovable):** JS lê `?gclid=` da URL, guarda em `localStorage`, envia no submit para `POST /leads`.
 2. **Agendamento:** ao criar appointment (`AppointmentService.create_appointment`), `record_conversion` insere uma linha em `scheduler.lead_conversions` por agendamento (recorrência), casando o telefone+nome ao lead com gclid.
-3. **Upload diário:** Lambda `ConversionUploader` (infra, cron 7h BRT) envia ao Google Ads cada agendamento elegível.
+3. **Upload semanal:** Lambda `ConversionUploader` (infra, cron segunda-feira 7h BRT) envia ao Google Ads cada agendamento elegível.
 
 ### Elegibilidade para upload (delay anti-cancelamento + janela gclid)
 - `uploaded_at IS NULL`
