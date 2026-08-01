@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch, call
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
-from src.services.lead_service import LeadService, extract_gclid
+from src.services.lead_service import LeadService, extract_gclid, normalize_first_name
 
 
 class TestExtractGclid(unittest.TestCase):
@@ -156,6 +156,78 @@ class TestLeadServiceUpdateLead(unittest.TestCase):
         result = self.service.update_lead(lead_id="uuid-1")
         self.assertIsNone(result)
         self.db.execute_write_returning.assert_not_called()
+
+
+class TestNormalizeFirstName(unittest.TestCase):
+    """Tests for the normalize_first_name identity helper."""
+
+    def test_lowercases_and_takes_first_token(self):
+        self.assertEqual(normalize_first_name("Maria Silva"), "maria")
+
+    def test_strips_accents(self):
+        self.assertEqual(normalize_first_name("JOÃO Pedro"), "joao")
+        self.assertEqual(normalize_first_name("Ângela"), "angela")
+
+    def test_trims_whitespace(self):
+        self.assertEqual(normalize_first_name("   ástrid  "), "astrid")
+
+    def test_empty_and_none(self):
+        self.assertEqual(normalize_first_name(""), "")
+        self.assertEqual(normalize_first_name(None), "")
+
+
+class TestLeadServiceRecordConversion(unittest.TestCase):
+    """Tests for LeadService.record_conversion."""
+
+    def setUp(self):
+        self.db = MagicMock()
+        self.service = LeadService(self.db)
+
+    def test_records_when_gclid_lead_exists(self):
+        self.db.execute_query.return_value = [
+            {"id": "lead-1", "gclid": "abc123", "created_at": "2026-07-01T00:00:00+00:00"}
+        ]
+        self.db.execute_write_returning.return_value = {"id": "conv-1"}
+
+        result = self.service.record_conversion(
+            clinic_id="clinic-1", phone="5511999990000", name="Maria Silva",
+            appointment_id="appt-1", value_cents=15000, conversion_date="2026-07-20",
+        )
+
+        self.db.execute_query.assert_called_once()
+        # first_name normalizado deve ser usado no lookup
+        self.assertIn("maria", self.db.execute_query.call_args[0][1])
+        self.db.execute_write_returning.assert_called_once()
+        self.assertEqual(result["id"], "conv-1")
+
+    def test_noop_when_no_gclid_lead(self):
+        self.db.execute_query.return_value = []
+
+        result = self.service.record_conversion(
+            clinic_id="clinic-1", phone="5511999990000", name="Maria",
+            appointment_id="appt-1", value_cents=15000, conversion_date="2026-07-20",
+        )
+
+        self.assertIsNone(result)
+        self.db.execute_write_returning.assert_not_called()
+
+
+class TestLeadServicePendingConversions(unittest.TestCase):
+    """Tests for get_pending_conversions eligibility SQL."""
+
+    def setUp(self):
+        self.db = MagicMock()
+        self.service = LeadService(self.db)
+
+    def test_query_enforces_delay_and_window(self):
+        self.db.execute_query.return_value = []
+        self.service.get_pending_conversions(clinic_id="clinic-1")
+
+        sql = self.db.execute_query.call_args[0][0]
+        self.assertIn("uploaded_at IS NULL", sql)
+        self.assertIn("status = 'CONFIRMED'", sql)
+        self.assertIn("appointment_date < CURRENT_DATE", sql)
+        self.assertIn("INTERVAL '90 days'", sql)
 
 
 if __name__ == "__main__":

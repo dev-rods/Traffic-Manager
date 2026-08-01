@@ -440,6 +440,7 @@ SQL_STATEMENTS = [
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
         phone VARCHAR(20) NOT NULL,
         name VARCHAR(255),
+        first_name VARCHAR(120) NOT NULL DEFAULT '',
         email VARCHAR(255),
         gclid VARCHAR(255),
         source VARCHAR(50) NOT NULL DEFAULT 'whatsapp',
@@ -450,7 +451,7 @@ SQL_STATEMENTS = [
         metadata JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE(clinic_id, phone)
+        UNIQUE(clinic_id, phone, first_name)
     )
     """,
 
@@ -458,6 +459,28 @@ SQL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_leads_phone ON scheduler.leads(phone)",
     "CREATE INDEX IF NOT EXISTS idx_leads_gclid ON scheduler.leads(gclid) WHERE gclid IS NOT NULL",
     "CREATE INDEX IF NOT EXISTS idx_leads_created_at ON scheduler.leads(clinic_id, created_at)",
+    # Note: idx_leads_identity (needs first_name) is created in the migrations section,
+    # after the first_name column is added, so existing DBs don't fail on ordering.
+
+    # Lead conversions: one row per appointment tied to a gclid lead (recurring return tracking)
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.lead_conversions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        lead_id UUID NOT NULL REFERENCES scheduler.leads(id),
+        appointment_id UUID NOT NULL REFERENCES scheduler.appointments(id),
+        gclid VARCHAR(255) NOT NULL,
+        value_cents INTEGER NOT NULL,
+        conversion_date TIMESTAMPTZ NOT NULL,
+        click_date TIMESTAMPTZ NOT NULL,
+        uploaded_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(appointment_id)
+    )
+    """,
+
+    "CREATE INDEX IF NOT EXISTS idx_lead_conversions_pending ON scheduler.lead_conversions(clinic_id) WHERE uploaded_at IS NULL",
+    "CREATE INDEX IF NOT EXISTS idx_lead_conversions_lead ON scheduler.lead_conversions(lead_id)",
 
     # Agent mode flag per clinic
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS use_agent BOOLEAN DEFAULT FALSE",
@@ -479,6 +502,44 @@ SQL_STATEMENTS = [
     # Soft-delete column on patients (set when patient is excluded by clinic owner)
     "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ",
     "CREATE INDEX IF NOT EXISTS idx_patients_deleted ON scheduler.patients(clinic_id, deleted_at)",
+
+    # --- Lead identity key (clinic_id + phone + first_name) and offline conversions ---
+    # first_name on leads (normalized: lowercase, unaccented first token of name)
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_name VARCHAR(120) NOT NULL DEFAULT ''",
+    # Backfill first_name from existing name (lower, unaccent-ish, first token)
+    """
+    UPDATE scheduler.leads
+    SET first_name = COALESCE(
+        NULLIF(
+            split_part(
+                lower(translate(name,
+                    'ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇç',
+                    'aaaaaaaaaaeeeeeeeeiiiiiiiiooooooooooouuuuuuuucc')),
+                ' ', 1),
+            ''),
+        '')
+    WHERE (first_name IS NULL OR first_name = '') AND name IS NOT NULL
+    """,
+    # Replace old unique(clinic_id, phone) with unique(clinic_id, phone, first_name)
+    "ALTER TABLE scheduler.leads DROP CONSTRAINT IF EXISTS leads_clinic_id_phone_key",
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'leads_clinic_id_phone_first_name_key'
+        ) THEN
+            ALTER TABLE scheduler.leads
+                ADD CONSTRAINT leads_clinic_id_phone_first_name_key UNIQUE (clinic_id, phone, first_name);
+        END IF;
+    END $$
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_leads_identity ON scheduler.leads(clinic_id, phone, first_name)",
+
+    # Clinic -> Google Ads mapping for offline conversion upload
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS google_ads_customer_id VARCHAR(20)",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS offline_conversion_action_id VARCHAR(30)",
+    # Note: scheduler.lead_conversions is defined (CREATE IF NOT EXISTS) in the tables
+    # section above, which also covers existing DBs on re-run.
 ]
 
 
