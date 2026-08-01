@@ -236,12 +236,15 @@ class AppointmentService:
                     phone=phone,
                     appointment_id=appointment_id,
                     appointment_value=final_price_cents / 100.0 if final_price_cents else None,
+                    name=full_name,
                 )
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao atualizar lead: {e}")
 
             # Record this appointment as a conversion tied to the lead's gclid
             # (recurring return: every appointment counts). No-op if no gclid lead.
+            # conversion_date carries the appointment start time in clinic tz (BRT, -03:00)
+            # so Google gets the real moment, not midnight.
             try:
                 self.lead_service.record_conversion(
                     clinic_id=clinic_id,
@@ -249,7 +252,7 @@ class AppointmentService:
                     name=full_name,
                     appointment_id=appointment_id,
                     value_cents=final_price_cents,
-                    conversion_date=date,
+                    conversion_date=f"{date} {time}-03:00",
                 )
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao registrar conversao do lead: {e}")
@@ -355,6 +358,16 @@ class AppointmentService:
                 self.reminder_service.schedule_reminder(updated_appointment)
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao agendar novo lembrete: {e}")
+
+        # Keep any pending conversion aligned with the moved appointment
+        if self.lead_service:
+            try:
+                self.lead_service.update_conversion_date(
+                    appointment_id=appointment_id,
+                    conversion_date=f"{new_date} {new_time}-03:00",
+                )
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao atualizar conversao (reschedule): {e}")
 
         logger.info(
             f"[AppointmentService] Agendamento remarcado: id={appointment_id} "

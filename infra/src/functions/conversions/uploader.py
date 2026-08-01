@@ -12,7 +12,8 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import boto3
 
@@ -23,6 +24,23 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 dynamodb = boto3.resource("dynamodb")
+
+# Google Ads aceita no máximo 2000 operações por UploadClickConversions
+UPLOAD_CHUNK_SIZE = 2000
+_SP_TZ = ZoneInfo("America/Sao_Paulo")
+
+
+def _format_conversion_dt(conv_dt: datetime) -> str:
+    """Formata para "YYYY-MM-DD HH:MM:SS+/-HH:MM" no fuso da clínica (BRT).
+
+    conversion_date é TIMESTAMPTZ; o psycopg2 devolve tz-aware (UTC no Supabase).
+    Converte para America/Sao_Paulo e usa o offset real, em vez de carimbar
+    -03:00 sobre a hora UTC (o que deslocaria toda conversão).
+    """
+    if conv_dt.tzinfo is None:
+        conv_dt = conv_dt.replace(tzinfo=timezone.utc)
+    s = conv_dt.astimezone(_SP_TZ).strftime("%Y-%m-%d %H:%M:%S%z")  # ...-0300
+    return s[:-2] + ":" + s[-2:]  # insere o ':' no offset -> -03:00
 
 
 def _get_mapped_clinics(db: PostgresService):
@@ -105,36 +123,43 @@ def handler(event, context):
 
         conversions = []
         for row in pending:
-            conv_dt = row["conversion_date"]
-            # Google exige "YYYY-MM-DD HH:MM:SS+/-HH:MM"; usa BRT (-03:00)
-            conversion_date_time = conv_dt.strftime("%Y-%m-%d %H:%M:%S") + "-03:00"
             conversions.append({
                 "identifier": str(row["id"]),
                 "gclid": row["gclid"],
-                "conversion_date_time": conversion_date_time,
+                "conversion_date_time": _format_conversion_dt(row["conversion_date"]),
                 "conversion_value": (row["value_cents"] or 0) / 100.0,
             })
 
-        result = ads_service.upload_offline_conversions(
-            customer_id=customer_id,
-            conversion_action_id=conversion_action_id,
-            conversions=conversions,
-        )
+        # Envia em lotes de até 2000 (limite do Google) para não estourar o request
+        # inteiro num backlog grande — cada lote é marcado assim que confirmado.
+        clinic_uploaded = 0
+        clinic_failed = 0
+        errors = []
+        for start in range(0, len(conversions), UPLOAD_CHUNK_SIZE):
+            chunk = conversions[start:start + UPLOAD_CHUNK_SIZE]
+            result = ads_service.upload_offline_conversions(
+                customer_id=customer_id,
+                conversion_action_id=conversion_action_id,
+                conversions=chunk,
+            )
+            uploaded_ids = result.get("uploaded_identifiers", [])
+            _mark_uploaded(db, uploaded_ids)
+            clinic_uploaded += len(uploaded_ids)
+            clinic_failed += result.get("failed", 0) if result.get("success") else len(chunk)
+            if result.get("error"):
+                errors.append(result["error"])
 
-        uploaded_ids = result.get("uploaded_identifiers", [])
-        _mark_uploaded(db, uploaded_ids)
-
-        summary["uploaded"] += len(uploaded_ids)
-        summary["failed"] += result.get("failed", 0) if result.get("success") else len(conversions)
+        summary["uploaded"] += clinic_uploaded
+        summary["failed"] += clinic_failed
         summary["details"].append({
             "clinicId": clinic_id,
             "pending": len(pending),
-            "uploaded": len(uploaded_ids),
-            "success": result.get("success", False),
-            "error": result.get("error"),
+            "uploaded": clinic_uploaded,
+            "failed": clinic_failed,
+            "errors": errors or None,
         })
         logger.info(
-            f"[traceId: {trace_id}] Clínica {clinic_id}: {len(uploaded_ids)}/{len(pending)} enviadas"
+            f"[traceId: {trace_id}] Clínica {clinic_id}: {clinic_uploaded}/{len(pending)} enviadas"
         )
 
     _record_execution(trace_id, summary)

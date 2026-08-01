@@ -5,6 +5,7 @@ import unicodedata
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
+from src.utils.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,28 @@ class LeadService:
     def __init__(self, db: PostgresService):
         self.db = db
 
+    def _resolve_lead(
+        self, clinic_id: str, phone: str, first_name: str, require_gclid: bool
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve a single lead for (clinic_id, phone) with consistent preference.
+
+        Prefers an exact first_name match, then an empty first_name (WhatsApp leads
+        that never carried a name), then the most recent. `phone` must already be
+        normalized. When require_gclid is True, only leads carrying a gclid match.
+        """
+        gclid_filter = "AND gclid IS NOT NULL AND gclid <> ''" if require_gclid else ""
+        rows = self.db.execute_query(
+            f"""
+            SELECT id, gclid, created_at, first_name
+            FROM scheduler.leads
+            WHERE clinic_id = %s AND phone = %s {gclid_filter}
+            ORDER BY (first_name = %s) DESC, (first_name = '') DESC, created_at DESC
+            LIMIT 1
+            """,
+            (clinic_id, phone, first_name),
+        )
+        return rows[0] if rows else None
+
     def upsert_lead(
         self,
         clinic_id: str,
@@ -55,10 +78,13 @@ class LeadService:
         """
         Insert a new lead or update an existing one (by clinic_id + phone + first_name).
 
-        The identity key includes first_name (normalized) to distinguish people
-        who share a phone number. On conflict: updates gclid (if provided and not
-        already set), name/email (if provided), and updated_at.
+        Phone is normalized to the canonical form so the lead identity matches the
+        one used on the appointment/patient side. The identity key includes first_name
+        (normalized) to distinguish people who share a phone number. On conflict:
+        a newly provided gclid OVERWRITES the stored one (last-click attribution),
+        name/email are updated when provided, and updated_at is bumped.
         """
+        phone = normalize_phone(phone)
         first_name = normalize_first_name(name)
         result = self.db.execute_write_returning(
             """
@@ -90,8 +116,20 @@ class LeadService:
         phone: str,
         appointment_id: str,
         appointment_value: Optional[float] = None,
+        name: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Mark an existing lead as booked with the first appointment details."""
+        """Mark the lead behind an appointment as booked (first appointment details).
+
+        Resolves exactly one lead (same preference as record_conversion) and updates
+        it by id, so the relaxed (clinic_id, phone, first_name) key never causes a
+        shared-phone appointment to mark multiple lead rows.
+        """
+        phone = normalize_phone(phone)
+        first_name = normalize_first_name(name)
+        lead = self._resolve_lead(clinic_id, phone, first_name, require_gclid=False)
+        if not lead:
+            return None
+
         result = self.db.execute_write_returning(
             """
             UPDATE scheduler.leads
@@ -99,10 +137,10 @@ class LeadService:
                 first_appointment_id = %s::uuid,
                 first_appointment_value = %s,
                 updated_at = NOW()
-            WHERE clinic_id = %s AND phone = %s AND booked = FALSE
+            WHERE id = %s::uuid AND booked = FALSE
             RETURNING *
             """,
-            (appointment_id, appointment_value, clinic_id, phone),
+            (appointment_id, appointment_value, str(lead["id"])),
         )
 
         if result:
@@ -113,7 +151,8 @@ class LeadService:
         return result
 
     def get_lead(self, clinic_id: str, phone: str) -> Optional[Dict[str, Any]]:
-        """Get a lead by clinic_id and phone."""
+        """Get a lead by clinic_id and (normalized) phone."""
+        phone = normalize_phone(phone)
         rows = self.db.execute_query(
             "SELECT * FROM scheduler.leads WHERE clinic_id = %s AND phone = %s",
             (clinic_id, phone),
@@ -173,6 +212,9 @@ class LeadService:
         if name is not None:
             sets.append("name = %s")
             params.append(name)
+            # Keep first_name (part of the identity key) in sync with name
+            sets.append("first_name = %s")
+            params.append(normalize_first_name(name))
         if email is not None:
             sets.append("email = %s")
             params.append(email)
@@ -202,40 +244,42 @@ class LeadService:
     ) -> Optional[Dict[str, Any]]:
         """Register an appointment as a conversion tied to a gclid lead.
 
-        Resolves the gclid lead among rows for (clinic_id, phone): prefers an exact
-        first_name match, then a lead with empty first_name (e.g. WhatsApp-originated
-        leads that never carried a name), then the most recent. Only records when a
-        matching lead carries a gclid (organic patients are ignored). Idempotent per
-        appointment via UNIQUE(appointment_id). Upload eligibility (status/window) is
-        re-checked live in get_pending_conversions.
+        `phone` is normalized to match the lead identity. Resolves the gclid lead
+        among rows for (clinic_id, phone): prefers an exact first_name match, then a
+        lead with empty first_name (WhatsApp-originated leads that never carried a
+        name), then the most recent. Only records when a matching lead carries a gclid
+        (organic patients are ignored). `conversion_date` should be a tz-aware
+        timestamp string (e.g. "2026-07-20 18:00-03:00"); it is clamped to just after
+        the click so Google never sees a conversion preceding its click. Idempotent
+        per appointment via UNIQUE(appointment_id).
         """
+        phone = normalize_phone(phone)
         first_name = normalize_first_name(name)
-        lead = self.db.execute_query(
-            """
-            SELECT id, gclid, created_at
-            FROM scheduler.leads
-            WHERE clinic_id = %s AND phone = %s
-              AND gclid IS NOT NULL AND gclid <> ''
-            ORDER BY (first_name = %s) DESC, (first_name = '') DESC, created_at DESC
-            LIMIT 1
-            """,
-            (clinic_id, phone, first_name),
-        )
-        if not lead:
+        lead_row = self._resolve_lead(clinic_id, phone, first_name, require_gclid=True)
+        if not lead_row:
+            logger.debug(
+                f"[LeadService] No gclid lead for conversion: clinic={clinic_id} "
+                f"phone={phone} first_name={first_name} appointment={appointment_id}"
+            )
             return None
 
-        lead_row = lead[0]
         result = self.db.execute_write_returning(
             """
             INSERT INTO scheduler.lead_conversions
                 (clinic_id, lead_id, appointment_id, gclid, value_cents, conversion_date, click_date)
-            VALUES (%s, %s::uuid, %s::uuid, %s, %s, %s, %s)
+            VALUES (
+                %s, %s::uuid, %s::uuid, %s, %s,
+                GREATEST(%s::timestamptz, %s::timestamptz + INTERVAL '1 minute'),
+                %s::timestamptz
+            )
             ON CONFLICT (appointment_id) DO NOTHING
             RETURNING *
             """,
             (
                 clinic_id, str(lead_row["id"]), appointment_id, lead_row["gclid"],
-                value_cents or 0, conversion_date, lead_row["created_at"],
+                value_cents or 0,
+                conversion_date, lead_row["created_at"],  # GREATEST(conversion, click+1min)
+                lead_row["created_at"],                     # click_date column
             ),
         )
         if result:
@@ -244,6 +288,22 @@ class LeadService:
                 f"appointment={appointment_id} value_cents={value_cents} gclid={lead_row['gclid']}"
             )
         return result
+
+    def update_conversion_date(self, appointment_id: str, conversion_date: str) -> None:
+        """Refresh a pending conversion's date after a reschedule (clamped to click).
+
+        Only touches conversions not yet uploaded, so already-sent conversions are
+        left immutable. Keeps conversion_date consistent with the moved appointment
+        and avoids reporting a session on a date it no longer occurs.
+        """
+        self.db.execute_write(
+            """
+            UPDATE scheduler.lead_conversions
+            SET conversion_date = GREATEST(%s::timestamptz, click_date + INTERVAL '1 minute')
+            WHERE appointment_id = %s::uuid AND uploaded_at IS NULL
+            """,
+            (conversion_date, appointment_id),
+        )
 
     def get_pending_conversions(self, clinic_id: str) -> List[Dict[str, Any]]:
         """Return conversions ready to upload to Google Ads for a clinic.

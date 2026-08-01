@@ -68,14 +68,20 @@ class FakeDB:
             return dict(row)
 
         if "INSERT INTO scheduler.lead_conversions" in query:
-            clinic_id, lead_id, appointment_id, gclid, value_cents, conversion_date, click_date = params
+            # params: (clinic_id, lead_id, appointment_id, gclid, value_cents,
+            #          conversion_date, click_date[for GREATEST], click_date[column])
+            clinic_id, lead_id, appointment_id, gclid, value_cents = params[0:5]
+            conversion_date, click_date = params[5], params[7]
             if any(c["appointment_id"] == appointment_id for c in self.conversions):
                 return None  # ON CONFLICT (appointment_id) DO NOTHING
             self._conv_seq += 1
+            click_dt = _to_dt(click_date)
+            # mirror SQL GREATEST(conversion, click_date + 1 minute)
+            conv_dt = max(_to_dt(conversion_date), click_dt + timedelta(minutes=1))
             row = {
                 "id": f"conv-{self._conv_seq}", "clinic_id": clinic_id, "lead_id": lead_id,
                 "appointment_id": appointment_id, "gclid": gclid, "value_cents": value_cents,
-                "conversion_date": _to_dt(conversion_date), "click_date": _to_dt(click_date),
+                "conversion_date": conv_dt, "click_date": click_dt,
                 "uploaded_at": None,
             }
             self.conversions.append(row)
@@ -246,6 +252,42 @@ class TestLeadConversionFlow(unittest.TestCase):
             appointment_id="appt-1", value_cents=15000, conversion_date=self.yesterday,
         )
         self.assertEqual(self.service.get_pending_conversions(self.clinic), [])
+
+    def test_phone_format_mismatch_still_matches(self):
+        # Regression: LP creates the lead with a formatted phone; the appointment
+        # flow uses the digits-only canonical form. Both must resolve to one lead.
+        self.service.upsert_lead(
+            clinic_id=self.clinic, phone="(11) 90000-0001", source="landing-page",
+            name="Maria Silva", gclid="G1",
+        )
+        self.db.add_appointment("appt-1", "CONFIRMED", self.yesterday)
+        conv = self.service.record_conversion(
+            clinic_id=self.clinic, phone="5511900000001", name="Maria Silva",
+            appointment_id="appt-1", value_cents=15000, conversion_date=self.yesterday,
+        )
+        self.assertIsNotNone(conv)
+        self.assertEqual(len(self.service.get_pending_conversions(self.clinic)), 1)
+
+    def test_upsert_normalizes_phone_no_duplicate(self):
+        self.service.upsert_lead(
+            clinic_id=self.clinic, phone="(11) 90000-0001", name="Maria Silva", gclid="G1",
+        )
+        self.service.upsert_lead(
+            clinic_id=self.clinic, phone="5511900000001", name="Maria Silva", gclid="G1",
+        )
+        self.assertEqual(len(self.db.leads), 1)
+
+    def test_conversion_never_precedes_click(self):
+        # Click after the appointment date -> conversion must be clamped past the click
+        # so Google never sees CONVERSION_PRECEDES_EVENT.
+        lead = self._create_gclid_lead()  # created_at = now
+        self.db.add_appointment("appt-1", "CONFIRMED", self.yesterday)
+        conv = self.service.record_conversion(
+            clinic_id=self.clinic, phone=self.phone, name="Maria Silva",
+            appointment_id="appt-1", value_cents=15000, conversion_date=self.yesterday,
+        )
+        click = next(l for l in self.db.leads if l["id"] == lead["id"])["created_at"]
+        self.assertGreater(conv["conversion_date"], click)
 
     def test_whatsapp_lead_without_name_still_matches(self):
         # WhatsApp lead created without a name (first_name = ''), carries gclid

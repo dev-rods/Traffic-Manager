@@ -1172,7 +1172,17 @@ class GoogleAdsClientService:
                                         f"Falha no upload de conversão [idx {elem.index}]: {error.message}"
                                     )
                     except Exception as parse_err:
-                        logger.error(f"Erro ao interpretar partial_failure: {parse_err}")
+                        # Se não conseguimos interpretar o erro parcial, NÃO assumir que
+                        # o resto foi aceito — trata o lote inteiro como falho para que
+                        # nada seja marcado como enviado e tudo seja retentado.
+                        logger.error(
+                            f"Erro ao interpretar partial_failure; tratando lote como falho: {parse_err}"
+                        )
+                        return {
+                            "success": False,
+                            "error": f"partial_failure não interpretável: {parse_err}",
+                            "uploaded_identifiers": [],
+                        }
 
             uploaded_identifiers = [
                 conversions[i].get("identifier")
