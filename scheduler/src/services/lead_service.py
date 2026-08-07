@@ -185,8 +185,9 @@ class LeadService:
         where = " AND ".join(conditions)
         params.extend([limit, offset])
 
+        # id tiebreaker keeps OFFSET pages from overlapping/skipping when created_at ties
         return self.db.execute_query(
-            f"SELECT * FROM scheduler.leads WHERE {where} ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            f"SELECT * FROM scheduler.leads WHERE {where} ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s",
             tuple(params),
         )
 

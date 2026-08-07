@@ -27,3 +27,6 @@ Thumbs.db
 
 # Service account credentials
 *service_account*.json
+
+# Audit/report exports — contain patient names and phone numbers
+*.csv

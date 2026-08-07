@@ -102,7 +102,11 @@ def handler(event, context):
         """, tuple(params + having_params))
         total = count_rows[0]["total"] if count_rows else 0
 
-        # Fetch patients with appointment stats
+        # Fetch patients with appointment stats.
+        # ORDER BY needs the p.id tiebreaker: bulk-imported patients share the exact same
+        # created_at, and Postgres orders ties differently per page (page 1 uses top-N
+        # heapsort, later pages quicksort), so OFFSET slices would overlap and skip rows —
+        # patients silently missing from every page never got batch messages.
         rows = db.execute_query(f"""
             SELECT
                 p.id,
@@ -122,7 +126,7 @@ def handler(event, context):
             {where}
             GROUP BY p.id
             {having}
-            ORDER BY p.created_at DESC
+            ORDER BY p.created_at DESC, p.id DESC
             LIMIT %s OFFSET %s
         """, tuple(params + having_params + [per_page, offset]))
 
