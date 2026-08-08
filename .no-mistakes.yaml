@@ -1,0 +1,51 @@
+# .no-mistakes.yaml — configuração do gate de validação do Traffic-Manager
+#
+# ATENÇÃO: `commands` e `document.instructions` são lidos SEMPRE de origin/main
+# (a default branch), nunca do SHA enviado no push. É uma proteção contra
+# supply-chain: um contribuidor não consegue injetar shell no host do daemon
+# via feature branch. Consequência prática: alterar este arquivo numa branch
+# não tem efeito nenhum — só passa a valer depois de commitado e enviado à main.
+
+commands:
+  # Validação ALVO, não paridade com CI. A documentação do no-mistakes é
+  # explícita: regressão ampla pertence ao CI remoto, não a este comando.
+  #
+  # Os testes unitários do scheduler são a única suíte automatizada do repo:
+  # infra/ não tem testes, e o vitest do frontend não é relevante para as
+  # mudanças de backend que passam por este gate.
+  #
+  # Verificado: 66 testes, exit 0. Requer boto3 no Python do host — ele não
+  # está em scheduler/requirements.txt porque o runtime do Lambda o fornece,
+  # então precisa ser instalado à parte para os testes rodarem localmente.
+  test: 'cd scheduler && python -m unittest discover -s tests/unit -p "test_*.py"'
+
+  # `lint` fica deliberadamente ausente: não há linter Python configurado neste
+  # repositório, e o eslint do frontend não deve rodar em mudanças de backend.
+  # Com o campo vazio, o no-mistakes dobra a responsabilidade de lint no passo
+  # de document — um único agente cobre documentação e lint juntos, sem que
+  # nenhuma das duas seja pulada.
+
+document:
+  instructions: |
+    Monorepo com três subsistemas independentes que não compartilham código:
+    infra/ (Lambdas Python de otimização de Google Ads), scheduler/ (Lambdas
+    Python de agendamento de clínica via WhatsApp) e frontend/ (painel React).
+
+    Mapa de propriedade da documentação:
+    - CLAUDE.md (raiz) — dono dos fatos de arquitetura, comandos de build e
+      deploy, convenções de nomenclatura e padrões de código de todos os
+      subsistemas.
+    - frontend/CLAUDE.md — dono dos padrões específicos do frontend.
+    - docs/work/prd/XXX-nome.md — PRD por task.
+    - docs/work/spec/XXX-nome.md — spec por task, mesmo ID do PRD.
+    - TASKS_LOG.md — registro de tasks concluídas.
+    - scheduler/tests/integration/{feature}.md — casos de teste de integração.
+    - scheduler/tests/postman/{feature}.postman_requests.json — requests Postman.
+
+    Não crie novas superfícies de documentação para fechar lacunas percebidas.
+    Quando um fato de arquitetura mudar, atualize o CLAUDE.md que já o descreve
+    em vez de abrir arquivo novo. Documentação e comentários em português,
+    seguindo o padrão vigente do repositório.
+
+ignore_patterns:
+  - "**/package-lock.json"
