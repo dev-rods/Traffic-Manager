@@ -5,3 +5,5 @@ frontend/.env.local
 frontend/.env*.local
 infra/src/scripts/client_secret*.json
 infra/src/scripts/tokens/
+__pycache__/
+*.pyc
