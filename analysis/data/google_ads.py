@@ -1,4 +1,5 @@
 """GAQL por dimensão + click_view (gclid -> dimensões finas), via GoogleAdsService."""
+from datetime import date, timedelta
 from typing import Dict, List
 
 DIMENSIONS = [
@@ -58,8 +59,19 @@ _ID_NAME_PATHS = {
 
 _CLICK_VIEW_QUERY = (
     "SELECT click_view.gclid, campaign.id, ad_group.id, segments.device, segments.date "
-    "FROM click_view WHERE segments.date BETWEEN '{start}' AND '{end}'"
+    "FROM click_view WHERE segments.date = '{day}'"
 )
+
+
+def _date_range(start: str, end: str) -> List[str]:
+    start_date = date.fromisoformat(start)
+    end_date = date.fromisoformat(end)
+    days = []
+    current = start_date
+    while current <= end_date:
+        days.append(current.isoformat())
+        current += timedelta(days=1)
+    return days
 
 
 def _resolve(row, path: str):
@@ -104,20 +116,24 @@ def fetch_all_dimensions(client, customer_id: str, start: str, end: str) -> Dict
 def click_view_gclid_map(client, customer_id: str, start: str, end: str) -> Dict[str, Dict]:
     """Mapeia gclid -> {campaign_id, ad_group_id, device, date}, janela de até 90 dias.
 
+    click_view exige segments.date filtrado a um único dia por query (limitação da
+    API), então iteramos dia a dia dentro do intervalo pedido e agregamos.
+
     click_view não cobre keyword nem geo diretamente — dimensões finas sem
     cobertura ficam de fora deste mapa (o chamador trata como null).
     """
-    query = _CLICK_VIEW_QUERY.format(start=start, end=end)
     ga_service = client.get_service("GoogleAdsService")
-    stream = ga_service.search_stream(customer_id=customer_id, query=query)
-
     gclid_map = {}
-    for batch in stream:
-        for row in batch.results:
-            gclid_map[row.click_view.gclid] = {
-                "campaign_id": str(row.campaign.id),
-                "ad_group_id": str(row.ad_group.id),
-                "device": row.segments.device.name,
-                "date": row.segments.date,
-            }
+
+    for day in _date_range(start, end):
+        query = _CLICK_VIEW_QUERY.format(day=day)
+        stream = ga_service.search_stream(customer_id=customer_id, query=query)
+        for batch in stream:
+            for row in batch.results:
+                gclid_map[row.click_view.gclid] = {
+                    "campaign_id": str(row.campaign.id),
+                    "ad_group_id": str(row.ad_group.id),
+                    "device": row.segments.device.name,
+                    "date": row.segments.date,
+                }
     return gclid_map

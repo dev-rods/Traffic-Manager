@@ -89,7 +89,7 @@ def test_click_view_gclid_map_keys_by_gclid():
     row.segments.device.name = "DESKTOP"
     client, service = _client_with_rows([row])
 
-    result = click_view_gclid_map(client, "4601912200", "2026-04-01", "2026-07-31")
+    result = click_view_gclid_map(client, "4601912200", "2026-06-15", "2026-06-15")
 
     assert result == {
         "gclid-a": {
@@ -101,3 +101,18 @@ def test_click_view_gclid_map_keys_by_gclid():
     }
     query = service.search_stream.call_args.kwargs["query"]
     assert "click_view" in query
+    assert "segments.date = '2026-06-15'" in query
+
+
+def test_click_view_gclid_map_issues_one_query_per_day():
+    client, service = _client_with_rows([])
+
+    click_view_gclid_map(client, "4601912200", "2026-06-01", "2026-06-03")
+
+    assert service.search_stream.call_count == 3
+    queried_days = [
+        call.kwargs["query"] for call in service.search_stream.call_args_list
+    ]
+    assert any("2026-06-01" in q for q in queried_days)
+    assert any("2026-06-02" in q for q in queried_days)
+    assert any("2026-06-03" in q for q in queried_days)
