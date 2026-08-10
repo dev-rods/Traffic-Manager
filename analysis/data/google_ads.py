@@ -53,7 +53,7 @@ _ID_NAME_PATHS = {
     "keywords": ("ad_group_criterion.criterion_id", "ad_group_criterion.keyword.text"),
     "search_terms": ("search_term_view.search_term", "search_term_view.search_term"),
     "geo": ("geographic_view.country_criterion_id", "geographic_view.country_criterion_id"),
-    "devices": ("segments.device", "segments.device"),
+    "devices": ("segments.device.name", "segments.device.name"),
     "audiences": ("campaign_audience_view.resource_name", "campaign_audience_view.resource_name"),
 }
 

@@ -59,6 +59,24 @@ def test_fetch_dimension_maps_campaign_rows():
     assert "2026-07-01" in query and "2026-07-31" in query
 
 
+def test_fetch_dimension_resolves_device_enum_name_not_raw_int():
+    row = _make_row(
+        **{
+            "metrics.impressions": 100,
+            "metrics.clicks": 5,
+            "metrics.cost_micros": 10_000_000,
+            "metrics.conversions": 1.0,
+        }
+    )
+    row.segments.device.name = "MOBILE"
+    client, _ = _client_with_rows([row])
+
+    result = fetch_dimension(client, "4601912200", "devices", "2026-08-01", "2026-08-09")
+
+    assert result[0]["id"] == "MOBILE"
+    assert result[0]["name"] == "MOBILE"
+
+
 def test_fetch_dimension_rejects_unknown_dimension():
     client = MagicMock()
     try:
