@@ -9,7 +9,7 @@ description: Contexto de negócio da Essência (depilação a laser) para análi
 Clínica de depilação a laser (Soprano Ice Platinum), sessão avulsa, ticket médio informado pelo dono do negócio. Intervalo médio de 30 dias entre sessões por área.
 
 ## Orçamento
-Orçamento mensal de mídia: **até R$ 2.000,00** (teto informado pelo dono do negócio). Verba enxuta - qualquer recomendação de campanha/lance precisa respeitar esse teto, priorizando eficiência (CPA/ROAS) sobre volume.
+Orçamento mensal de mídia: **até R$ 3.000,00** (teto informado pelo dono do negócio). Equivale a ~R$ 98,70/dia. Qualquer recomendação de campanha/lance precisa respeitar esse teto, priorizando eficiência (CPA/ROAS) sobre volume.
 
 ## Público que converte (dados observados)
 
