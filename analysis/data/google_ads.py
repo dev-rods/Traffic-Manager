@@ -5,6 +5,7 @@ from typing import Dict, List
 DIMENSIONS = [
     "campaigns", "ad_groups", "ads", "keywords",
     "search_terms", "geo", "devices", "audiences",
+    "age_ranges", "genders",
 ]
 
 _METRICS_FIELDS = (
@@ -44,6 +45,14 @@ _DIMENSION_QUERIES = {
         "SELECT campaign_audience_view.resource_name, campaign_audience_view.resource_name, {metrics} "
         "FROM campaign_audience_view WHERE segments.date BETWEEN '{start}' AND '{end}'"
     ),
+    "age_ranges": (
+        "SELECT ad_group_criterion.age_range.type, ad_group_criterion.age_range.type, {metrics} "
+        "FROM age_range_view WHERE segments.date BETWEEN '{start}' AND '{end}'"
+    ),
+    "genders": (
+        "SELECT ad_group_criterion.gender.type, ad_group_criterion.gender.type, {metrics} "
+        "FROM gender_view WHERE segments.date BETWEEN '{start}' AND '{end}'"
+    ),
 }
 
 _ID_NAME_PATHS = {
@@ -55,6 +64,8 @@ _ID_NAME_PATHS = {
     "geo": ("geographic_view.country_criterion_id", "geographic_view.country_criterion_id"),
     "devices": ("segments.device.name", "segments.device.name"),
     "audiences": ("campaign_audience_view.resource_name", "campaign_audience_view.resource_name"),
+    "age_ranges": ("ad_group_criterion.age_range.type.name", "ad_group_criterion.age_range.type.name"),
+    "genders": ("ad_group_criterion.gender.type.name", "ad_group_criterion.gender.type.name"),
 }
 
 _CLICK_VIEW_QUERY = (
