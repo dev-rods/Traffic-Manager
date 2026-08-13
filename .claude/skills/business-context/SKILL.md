@@ -13,21 +13,79 @@ Orçamento mensal de mídia: **até R$ 3.000,00** (teto informado pelo dono do n
 
 ## Público que converte (dados observados)
 
-Duas fontes, propositalmente separadas porque medem coisas diferentes:
+### Fonte primária: base de pacientes do sistema da clínica
 
-**1. Google Ads (`age_range_view` / `gender_view`, `customer=4601912200`, todo o histórico da conta até 2026-08-12)** — reflete quem clica/converte no anúncio (conversões do Ads, não agendamento confirmado):
+Export de 2026-08-12, 329 pacientes. É a **única fonte com idade real de quem vira
+paciente** - `scheduler.patients` e `scheduler.leads` não têm data de nascimento.
 
-- Gênero: **61% feminino**, 19% masculino, 20% indeterminado (Ads não identifica gênero de todo clique)
-- Faixa etária: **25-34 anos concentra a maior fatia (31%)**, seguida por 18-24 (18,5%) e 35-44 (17,5%). A partir de 45 anos o volume cai bastante (45-54: 9%, 55-64: 3,5%, 65+: 0,5%). ~20% do tráfego fica "indeterminado" (Google não identifica idade).
+- **Gênero: 90,4% feminino** (227 F / 24 M entre os 251 com registro; 78 sem preenchimento).
+- **Idade: média 31,5 anos** (mín. 18, máx. 73), n=251.
 
-**2. Banco do scheduler (`patients`, clínica `clinicaessenciaestetica-9668a4`, pacientes reais cadastrados)** — reflete quem de fato vira paciente, não só quem clica:
+| Faixa | Pacientes | % |
+|---|---|---|
+| 18-24 | 50 | 19,9% |
+| **25-34** | **130** | **51,8%** |
+| 35-44 | 53 | 21,1% |
+| 45-54 | 9 | 3,6% |
+| 55-64 | 7 | 2,8% |
+| 65+ | 2 | 0,8% |
 
-- Gênero: **84% feminino** (178), 8% masculino (17), 8% sem registro (17)
-- Região (DDD do telefone, proxy geográfico): **75% DDD 11 (São Paulo capital/Grande SP)**, o resto pulverizado em DDDs do interior de SP (19-Campinas, 12-Vale do Paraíba, 16-Ribeirão Preto) e outros estados — cauda longa, sem segundo polo relevante.
+- **Região:** DDD 11 (São Paulo capital / Grande SP) = 201 de 269 telefones válidos
+  (**74,7%**). Resto pulverizado no interior de SP (19-Campinas, 12-Vale do Paraíba,
+  16-Ribeirão Preto) e outros estados. Sem segundo polo relevante.
 
-**Leitura:** o anúncio já atrai público mais jovem (18-34) do que quem de fato agenda — o gap entre o gênero do clique (61% F) e o gênero de quem vira paciente (84% F) sugere que mulheres convertem em taxa bem maior que homens depois do clique. Não temos idade de quem agenda de verdade (não existe campo de data de nascimento em `patients`/`leads` no banco do scheduler) — a faixa etária acima é só do lado do anúncio.
+> **Contaminação conhecida - excluir dos baselines:** 51 dos 329 registros (15,5%) têm
+> DDD 74 (Bahia), todos cadastrados entre 24/04 e 14/05/2026, **todos sem idade e sem
+> sexo**, nenhum presente no scheduler, vários com o sobrenome "Dourado" (o mesmo da LP
+> `draclaradourado.com.br`). Têm cara de carga manual de contatos pessoais, não de
+> pacientes adquiridos por campanha. Os números de idade/gênero acima já os excluem
+> naturalmente (vêm vazios); os de DDD foram calculados sem eles.
 
-> Falta validar com o dono do negócio se esse padrão bate com a percepção dele e se há algum recorte de público que ele prioriza que os dados não capturam (ex: motivo de escolha do serviço, ocupação, etc).
+> `HowDidMeet` está vazio em 328 dos 329 registros - não serve como fonte de atribuição.
+
+### Fonte secundária: Google Ads (quem clica)
+
+`age_range_view` / `gender_view`, `customer=4601912200`, histórico completo até 2026-08-12.
+Reflete quem clica no anúncio, não quem vira paciente.
+
+- Gênero: 61% feminino, 19% masculino, 20% indeterminado.
+- Faixa etária: ~20% do tráfego fica "indeterminado" (Google não identifica idade).
+
+### O gap entre o que a campanha compra e quem converte
+
+Comparação por **cliques**, ambos os lados excluindo "indeterminado":
+
+| Faixa | Cliques no Ads | Pacientes reais | Leitura |
+|---|---|---|---|
+| 18-24 | 22,2% | 19,9% | equilibrado |
+| **25-34** | 32,3% | **51,8%** | **converte ~1,6x acima da fatia comprada** |
+| 35-44 | 23,9% | 21,1% | equilibrado |
+| 45-54 | 15,0% | 3,6% | converte ~4x abaixo |
+| 55-64 | 5,6% | 2,8% | converte 2x abaixo |
+| 65+ | 1,0% | 0,8% | irrelevante |
+
+**45+ consome 21,6% dos cliques e entrega 7,2% dos pacientes.** É a alavanca mais direta
+de ajuste de lance por faixa etária identificada até agora.
+
+No gênero o gap é ainda maior: 61% dos cliques são femininos, mas 90,4% dos pacientes.
+Mulheres convertem em taxa bem superior depois do clique.
+
+### Funil medido (leads da LP x base real da clínica, 2026-08-12)
+
+| Etapa | Qtd | Taxa |
+|---|---|---|
+| Leads reais únicos (sem teste/interno) | 91 | - |
+| viraram paciente | 25 | 27,5% |
+| **realizaram o procedimento** | **21** | **23,1%** |
+
+Recorte só de `origem=depilacao`, que é o que a campanha alimenta: **21 de 82 = 25,6%**.
+Dos 9 leads reais de `origem=harmonizacao`, **nenhum** virou paciente.
+
+### Fonte obsoleta: `scheduler.patients`
+
+Não usar para perfil demográfico. É um snapshot congelado: a cobertura sobre a base real
+da clínica caiu de 95,4% (mar/2026) para 0% (jul e ago/2026). Números antigos desta skill
+(84% feminino, 75% DDD 11) vinham daí e foram substituídos pelos da base primária.
 
 ## Posicionamento e Diferenciais (visão do dono do negócio)
 
