@@ -78,15 +78,30 @@ janela nova.
 
 ## Alvos
 
-- **CPA alvo: R$ 78,00** - métrica-mestre, definida pelo dono do negócio.
-- **ROAS alvo: 5,13** - derivado, não definido de forma independente: é o ROAS que o
-  CPA de R$ 78 produz sob a fórmula acima (400 ÷ 78). Se `ticket_medio`, `ltv_meses` ou
-  `taxa_conversao_agendamento` mudarem, este número precisa ser recalculado.
+- **CPA alvo: R$ 78,00** - meta de melhoria, definida pelo dono do negócio. É a métrica
+  que puxa a operação para frente.
+- **ROAS alvo: 4,52** - piso de não-regressão, igual ao ROAS observado na janela de 90
+  dias (2026-05-15 a 2026-08-12). Cair abaixo disso significa piorar frente ao que a
+  campanha já entrega hoje.
 - **CTR alvo: 0,052** (~5,2%) - do baseline real calculado em `analysis/`.
 
-> O ROAS alvo anterior (2,0) foi substituído por ser incoerente com o CPA alvo:
-> permitiria CPA de até R$ 200, ou seja, ~2,5x mais folgado que o alvo real. Sob a
-> fórmula atual, o CPA é a única restrição que morde.
+> **CPA e ROAS são a mesma métrica sob a fórmula atual**, ligados por
+> `ROAS = 400 ÷ CPA`. Por isso não são dois alvos independentes, e sim os dois extremos
+> da faixa de operação aceitável:
+>
+> | | CPA | ROAS |
+> |---|---|---|
+> | Piso (não regredir) | R$ 88,50 | **4,52** |
+> | Meta (melhorar até) | **R$ 78,00** | 5,13 |
+>
+> Hoje a campanha opera em CPA R$ 88,57 / ROAS 4,52, ou seja, **exatamente no piso**.
+> Fechar a lacuna até R$ 78 exige ~12% de redução de CPA.
+>
+> Alvo anterior de ROAS (2,0) foi descartado: permitiria CPA de até R$ 200, ~2,5x mais
+> folgado que o alvo real, o que o tornava inócuo como guarda-corpo.
+>
+> Se `ticket_medio`, `ltv_meses` ou `taxa_conversao_agendamento` mudarem, os dois valores
+> de ROAS precisam ser recalculados - o CPA não.
 
 Posição em 2026-08-12 (campanha `[Gestor]Depilacao_primeira_jardins`, customer 4601912200):
 
