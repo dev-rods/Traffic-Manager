@@ -1,6 +1,6 @@
 ---
 name: business-context
-description: Contexto de negócio da Essência (depilação a laser) para análise e otimização de campanhas Google Ads — orçamento, público-alvo, diferenciais e alvos de ROAS/CPA/CTR. Use ao analisar ou recomendar mudanças em campanhas da Essência.
+description: Contexto de negócio da Essência (depilação a laser) para análise e otimização de campanhas Google Ads - orçamento, público-alvo, diferenciais, fórmula de revenue_projected e alvos de CPA/ROAS/CTR. Use ao analisar ou recomendar mudanças em campanhas da Essência.
 ---
 
 # Contexto de Negócio — Essência
@@ -49,23 +49,71 @@ Duas fontes, propositalmente separadas porque medem coisas diferentes:
 
 **Filosofia comercial:** a venda é consequência da confiança. Ordem: educar → tirar dúvidas → construir confiança → converter. Nunca inverter essa ordem (ex: peças de campanha/copy não devem pressionar conversão antes de gerar confiança).
 
+## Receita: `revenue_projected` (métrica corrente)
+
+Enquanto `revenue_real` não tiver fonte confiável (ver "Por que não usamos `revenue_real`"),
+a métrica de receita usada em análise e otimização é **`revenue_projected`**:
+
+```
+revenue_projected = conversoes_google_ads * taxa_conversao_agendamento * ticket_medio * ltv_meses
+```
+
+Parâmetros definidos pelo dono do negócio (2026-08-12):
+
+| Parâmetro | Valor | Origem |
+|---|---|---|
+| `taxa_conversao_agendamento` | **0,20** (20%) | definido pelo dono; medido em 23,1% no cruzamento leads x base de pacientes |
+| `ticket_medio` | **R$ 250,00** | definido pelo dono |
+| `ltv_meses` | **8** | definido pelo dono; 1 sessão/mês por área, intervalo médio de 30 dias |
+
+**Cada conversão do Google Ads vale R$ 400,00 de receita projetada.**
+
+Validade da entrada: `conversoes_google_ads` só é um proxy honesto de lead enquanto
+`metrics.conversions` estiver contando ação de lead. Verificado em 2026-08-12: nos
+últimos 90 dias, 100% das conversões vêm de `Lead - Formulário` (`SUBMIT_LEAD_FORM`).
+O histórico all-time está inflado por dupla contagem da ação `Viu Obrigado Laser`
+(hoje `REMOVED`), que registrava o mesmo evento do formulário - descontá-la ao usar
+períodos longos. Reverificar essa composição antes de confiar no número em qualquer
+janela nova.
+
 ## Alvos
 
-- ROAS alvo: **2.0** (definido pelo dono do negócio)
-- CPA alvo: **R$ 78,00** (definido pelo dono do negócio)
-- CTR alvo: **0.052** (~5,2%, calculado a partir do baseline real - ver nota abaixo)
+- **CPA alvo: R$ 78,00** - métrica-mestre, definida pelo dono do negócio.
+- **ROAS alvo: 5,13** - derivado, não definido de forma independente: é o ROAS que o
+  CPA de R$ 78 produz sob a fórmula acima (400 ÷ 78). Se `ticket_medio`, `ltv_meses` ou
+  `taxa_conversao_agendamento` mudarem, este número precisa ser recalculado.
+- **CTR alvo: 0,052** (~5,2%) - do baseline real calculado em `analysis/`.
 
-> ROAS e CPA acima são metas operacionais definidas pelo dono do negócio, não o
-> baseline calculado (que veio vazio - ver nota). CTR segue vindo do baseline
-> real do `snapshot.json`, por enquanto sem meta definida pelo dono.
->
-> **Nota sobre o baseline calculado em `analysis/`:** no pull rodado em
-> 2026-08-09 contra prod (`customer=4601912200`, período de 90 dias:
-> 2026-05-11 a 2026-08-09), o ROAS/CPA do baseline vieram vazios porque a
-> coorte histórica de conversões reais (`scheduler.lead_conversions` cruzado
-> com `appointments` `CONFIRMED` e já ocorridos) está vazia para essa clínica
-> no banco de produção no momento desse pull — só 3 leads no período, 2 com
-> `gclid`, e nenhuma conversão confirmada e já ocorrida ainda. Rode
-> `python -m analysis.pull --customer 4601912200 --period 90d --stage prod`
-> de novo depois que houver mais agendamentos confirmados no passado, para
-> obter um baseline com sinal real.
+> O ROAS alvo anterior (2,0) foi substituído por ser incoerente com o CPA alvo:
+> permitiria CPA de até R$ 200, ou seja, ~2,5x mais folgado que o alvo real. Sob a
+> fórmula atual, o CPA é a única restrição que morde.
+
+Posição em 2026-08-12 (campanha `[Gestor]Depilacao_primeira_jardins`, customer 4601912200):
+
+| Janela | Custo | Conv. | CPA | `revenue_projected` | ROAS |
+|---|---|---|---|---|---|
+| Últimos 30 dias | R$ 1.784,36 | 21 | R$ 84,97 | R$ 8.400 | 4,71 |
+| Últimos 90 dias | R$ 3.631,31 | 41 | R$ 88,57 | R$ 16.400 | 4,52 |
+| All-time (corrigido) | R$ 27.647,70 | ~243 | R$ 113,78 | R$ 97.200 | 3,52 |
+
+Custo por paciente que efetivamente realiza: **R$ 425 a R$ 443**. Contra LTV de
+R$ 2.000, o payback não é imediato - a 1ª sessão (R$ 250) não cobre a aquisição;
+break-even por volta da 2ª sessão, ~2 meses após o clique.
+
+## Por que não usamos `revenue_real` (ainda)
+
+`revenue_real` segue no contrato do `snapshot.json` como receita **confirmada**, mas está
+suspenso até existir fonte de verdade para "o paciente realizou a sessão". Dois bloqueios
+identificados em 2026-08-12:
+
+1. **A definição atual conta no-show como conversão.** A regra da Fatia 0 (`appointments.status
+   = 'CONFIRMED'` com `appointment_date` no passado), também usada pelo `ConversionUploader`,
+   assume que dia passado = sessão realizada. No cruzamento com a base real da clínica, as duas
+   únicas pacientes com agendamento `CONFIRMED` passado (Alyne, 2026-04-15; Rebeca, 2026-04-28)
+   **não realizaram o procedimento**. O schema do scheduler não tem estado de comparecimento.
+2. **A base do scheduler está dessincronizada.** Cobertura de `scheduler.patients` sobre a base
+   real da clínica caiu de 95,4% (mar/2026) para 0% (jul e ago/2026). Nenhum paciente novo entra
+   no scheduler desde julho.
+
+Enquanto isso não for resolvido, qualquer ROAS/CPA calculado sobre `lead_conversions` é
+inválido - não por falta de volume, mas por erro de sinal.
