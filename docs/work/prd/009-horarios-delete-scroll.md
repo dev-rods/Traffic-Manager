@@ -223,5 +223,5 @@ Isso tem três implicações diretas nesta task:
 
 - [x] Pendente
 - [x] Spec gerada: `spec/009-horarios-delete-scroll.md`
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 2026-08-29
+- [x] Registrado em `TASKS_LOG.md`
