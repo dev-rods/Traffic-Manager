@@ -185,12 +185,19 @@ def handler(event, context):
             sent += 1
             logger.info(f"{prefixo} Conversa aberta com {phone} ({message_id})")
 
+            # Depois deste ponto a mensagem já saiu: uma falha aqui não pode
+            # marcar o item como FAILED, senão o log diz que não enviou quando
+            # enviou. execute_write, não execute_query: query espera SELECT e
+            # levanta "no results to fetch" num UPDATE.
             if item.get("leadId"):
-                db.execute_query(
-                    "UPDATE scheduler.leads SET first_contact_status = 'SENT', "
-                    "first_contact_at = NOW(), updated_at = NOW() WHERE id = %s::uuid",
-                    (item["leadId"],),
-                )
+                try:
+                    db.execute_write(
+                        "UPDATE scheduler.leads SET first_contact_status = 'SENT', "
+                        "first_contact_at = NOW(), updated_at = NOW() WHERE id = %s::uuid",
+                        (item["leadId"],),
+                    )
+                except Exception as e:
+                    logger.error(f"{prefixo} Mensagem enviada, mas falhou ao marcar o lead: {e}")
 
         except Exception as e:
             logger.error(f"{prefixo} Erro ao processar {message_id}: {e}", exc_info=True)

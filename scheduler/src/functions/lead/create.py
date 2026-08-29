@@ -173,7 +173,9 @@ def _enfileira_contato_ativo(log_prefix, db, lead, clinic_id):
             business_hours=clinic.get("business_hours") or {},
         )
         if item:
-            db.execute_query(
+            # execute_write, não execute_query: query espera SELECT e levanta
+            # "no results to fetch" num UPDATE.
+            db.execute_write(
                 "UPDATE scheduler.leads SET first_contact_status = 'QUEUED', updated_at = NOW() "
                 "WHERE id = %s::uuid",
                 (str(lead["id"]),),
