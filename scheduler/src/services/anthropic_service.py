@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+DEFAULT_MODEL = "claude-sonnet-5"
 
 
 class AnthropicService:
@@ -23,8 +24,8 @@ class AnthropicService:
         system,
         messages,
         tools=None,
-        model="claude-sonnet-4-20250514",
-        temperature=0.7,
+        model=DEFAULT_MODEL,
+        temperature=None,
         max_tokens=1024,
     ):
         """
@@ -32,6 +33,10 @@ class AnthropicService:
 
         Returns the parsed JSON response dict.
         Retries up to 5 times on 429/5xx with exponential backoff (3s base).
+
+        `temperature` só entra no payload quando o chamador informa um valor.
+        Enviá-lo sempre quebrava o modelo atual, que responde
+        400 "`temperature` is deprecated for this model."
         """
         headers = {
             "x-api-key": self.api_key,
@@ -42,10 +47,12 @@ class AnthropicService:
         payload = {
             "model": model,
             "max_tokens": max_tokens,
-            "temperature": temperature,
             "system": system,
             "messages": messages,
         }
+
+        if temperature is not None:
+            payload["temperature"] = temperature
 
         if tools:
             payload["tools"] = tools
