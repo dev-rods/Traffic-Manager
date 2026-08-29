@@ -70,6 +70,7 @@ functions:
   - ${file(sls/functions/patient/interface.yml)}
   - ${file(sls/functions/lead/interface.yml)}
   - ${file(sls/functions/attendant/interface.yml)}
+  - ${file(sls/functions/outbound/interface.yml)}
 
 resources:
   - ${file(sls/resources/dynamodb/conversation-sessions-table.yml)}
