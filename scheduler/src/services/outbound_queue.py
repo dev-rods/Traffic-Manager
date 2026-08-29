@@ -28,7 +28,7 @@ TTL_DIAS = 30
 # Espera antes de abordar um lead recém-cadastrado. Boa parte procura a clínica
 # por conta própria logo depois de preencher o formulário; abordar na hora
 # atropelaria essa conversa. Passado esse tempo sem contato, o bot inicia.
-ATRASO_PRIMEIRO_CONTATO_MINUTOS = 15
+ATRASO_PRIMEIRO_CONTATO_MINUTOS = 10
 
 
 class OutboundQueueService:

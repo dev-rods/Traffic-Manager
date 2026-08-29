@@ -8,7 +8,7 @@ ficaria mudo para todo mundo, silenciosamente. Por isso a marca entra dentro de
 
 Lê, mescla e grava em vez de usar UpdateExpression com caminho aninhado: o
 `session` pode ainda não existir, e a leitura extra é irrelevante no volume aqui
-(uma abordagem a cada 15 minutos).
+(uma abordagem a cada 10 minutos).
 """
 import logging
 import time

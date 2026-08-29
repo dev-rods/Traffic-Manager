@@ -1,6 +1,6 @@
 """Dispatcher da fila de abordagens ativas.
 
-Roda a cada 15 minutos e envia no máximo uma mensagem por clínica por execução.
+Roda a cada 10 minutos e envia no máximo uma mensagem por clínica por execução.
 Esse limite é a proteção contra bloqueio do número: o provider é o z-api, que é
 não-oficial, e a linha é compartilhada com os atendentes humanos, então um
 bloqueio derruba a operação inteira e não só o bot. O próprio intervalo do cron é

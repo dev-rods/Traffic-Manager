@@ -51,12 +51,12 @@ class TestAtraso(unittest.TestCase):
         item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
 
         self.assertEqual(item["status"], "PENDING")
-        # 16:46 + 15min = 17:01 BRT = 20:01 UTC
-        self.assertEqual(item["sendAfter"], "2026-08-17T20:01:00Z")
+        # 16:46 + 10min = 16:56 BRT = 19:56 UTC
+        self.assertEqual(item["sendAfter"], "2026-08-17T19:56:00Z")
 
     def test_atraso_que_cruza_o_fechamento_cai_no_dia_seguinte(self):
         table = FakeTable()
-        agora = TZ.localize(datetime(2026, 8, 17, 20, 50))  # +15min = 21:05, já fechou
+        agora = TZ.localize(datetime(2026, 8, 17, 20, 55))  # +10min = 21:05, já fechou
 
         item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
 
@@ -79,8 +79,8 @@ class TestAtraso(unittest.TestCase):
             "clinica-x", "5511999999999", business_hours=com_sabado, now=agora_utc
         )
 
-        # 16:32 + 15min = 16:47 BRT = 19:47 UTC, no mesmo sábado
-        self.assertEqual(item["sendAfter"], "2026-08-29T19:47:00Z")
+        # 16:32 + 10min = 16:42 BRT = 19:42 UTC, no mesmo sábado
+        self.assertEqual(item["sendAfter"], "2026-08-29T19:42:00Z")
 
     def test_utc_fora_do_horario_salta_para_a_abertura_local_correta(self):
         table = FakeTable()
@@ -135,8 +135,8 @@ class TestEnqueue(unittest.TestCase):
         self.assertEqual(item["leadId"], "lead-1")
         self.assertEqual(item["kind"], "FIRST_CONTACT")
         self.assertEqual(item["pk"], "CLINIC#clinica-x")
-        # 16:46 + 15min de atraso = 17:01 BRT = 20:01 UTC
-        self.assertTrue(item["sk"].startswith("OUT#2026-08-17T20:01:00Z#"))
+        # 16:46 + 10min de atraso = 16:56 BRT = 19:56 UTC
+        self.assertTrue(item["sk"].startswith("OUT#2026-08-17T19:56:00Z#"))
         self.assertEqual(len(table.items), 1)
 
     def test_nao_guarda_texto(self):
