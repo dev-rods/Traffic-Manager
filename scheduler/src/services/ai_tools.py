@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
@@ -142,7 +143,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "book_appointment",
-            "description": "Book an appointment. Requires all data to be collected: service areas, date, time, and patient full name. Always call check_availability and get_time_slots before booking. Always call calculate_discount before booking to get the correct pricing.",
+            "description": "Book an appointment. Requires all data to be collected: service areas, date, time, and the patient registration data (full name, birth date, CPF, email). Always call check_availability and get_time_slots before booking. Always call calculate_discount before booking to get the correct pricing.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -169,6 +170,18 @@ TOOL_DEFINITIONS = [
                     "full_name": {
                         "type": "string",
                         "description": "Patient's full name",
+                    },
+                    "birth_date": {
+                        "type": "string",
+                        "description": "Patient's birth date in YYYY-MM-DD format",
+                    },
+                    "cpf": {
+                        "type": "string",
+                        "description": "Patient's CPF, digits only or formatted",
+                    },
+                    "email": {
+                        "type": "string",
+                        "description": "Patient's email address",
                     },
                     "discount_pct": {
                         "type": "integer",
@@ -553,6 +566,34 @@ class ToolExecutor:
 
     # ── Write tools ──
 
+    def _salva_cadastro_do_paciente(self, clinic_id, phone, *, birth_date=None, cpf=None, email=None):
+        """Grava os dados de cadastro no paciente, se vieram.
+
+        COALESCE preserva o que já existe: se a pessoa informar só parte dos dados
+        numa conversa e o resto em outra, nada é apagado. Nunca propaga erro —
+        perder o agendamento por causa de um CPF mal formatado seria pior.
+        """
+        if not any([birth_date, cpf, email]):
+            return
+        try:
+            from src.utils.phone import normalize_phone
+
+            cpf_digitos = re.sub(r"\D", "", cpf) if cpf else None
+            self.db.execute_write(
+                """
+                UPDATE scheduler.patients
+                SET birth_date = COALESCE(%s::date, birth_date),
+                    cpf = COALESCE(%s, cpf),
+                    email = COALESCE(%s, email),
+                    updated_at = NOW()
+                WHERE clinic_id = %s AND phone = %s
+                """,
+                (birth_date or None, cpf_digitos or None, email or None,
+                 clinic_id, normalize_phone(phone)),
+            )
+        except Exception as e:
+            logger.warning(f"[ToolExecutor] Falha ao gravar cadastro do paciente: {e}")
+
     def _tool_book_appointment(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
@@ -588,6 +629,16 @@ class ToolExecutor:
         discount_reason = args.get("discount_reason")
         original_price_cents = args.get("original_price_cents")
         final_price_cents = args.get("final_price_cents")
+
+        # Dados de cadastro: gravados no paciente, não no agendamento. São opcionais
+        # na tool para o agendamento não falhar se a pessoa se recusar a informar,
+        # mas o prompt instrui a pedir todos antes de chamar.
+        self._salva_cadastro_do_paciente(
+            clinic_id, phone,
+            birth_date=args.get("birth_date"),
+            cpf=args.get("cpf"),
+            email=args.get("email"),
+        )
 
         result = self.appointment_service.create_appointment(
             clinic_id=clinic_id,

@@ -108,6 +108,9 @@ SQL_STATEMENTS = [
         phone VARCHAR(20) NOT NULL,
         name VARCHAR(255),
         gender VARCHAR(1) CHECK (gender IN ('M', 'F')),
+        birth_date DATE,
+        cpf VARCHAR(14),
+        email VARCHAR(255),
         last_message_at TIMESTAMPTZ,
         deleted_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -513,6 +516,13 @@ SQL_STATEMENTS = [
     # Separado de ALLOWED_PHONES do SSM de propósito: aquela governa também lembretes
     # de consulta e disparos do painel, e restringi-la deixaria pacientes sem lembrete.
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}'",
+
+    # Dados de cadastro coletados na confirmação do agendamento.
+    # Sem estas colunas o bot pediria CPF e data de nascimento e descartaria a
+    # resposta, que além de inútil é ruim para dado pessoal.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS birth_date DATE",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS cpf VARCHAR(14)",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
 
     # Rastreio do primeiro contato ativo com o lead.
     # first_contact_at é "falamos com ele"; conversation_started_at é "ele respondeu".
