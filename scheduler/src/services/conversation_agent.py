@@ -19,6 +19,33 @@ MAX_HISTORY_PAIRS = 20
 ATTENDANT_TTL_SECONDS = 24 * 60 * 60
 
 
+def events_to_history(events):
+    """Converte eventos de mensagem em turnos de conversa para o agente.
+
+    Usado quando a sessão está sem `agent_history` mas o MessageEvents ainda tem a
+    conversa (retenção de 90 dias). Só texto: blocos de tool_use não são
+    reconstruídos, porque o resultado das ferramentas já está refletido no que foi
+    dito. Turnos consecutivos do mesmo papel são unidos, porque a API da Anthropic
+    exige alternância entre user e assistant.
+    """
+    history = []
+    for event in events or []:
+        content = (event.get("content") or "").strip()
+        if not content:
+            continue
+        papel = "assistant" if event.get("direction") == "OUTBOUND" else "user"
+        if history and history[-1]["role"] == papel:
+            history[-1]["content"] = f"{history[-1]['content']}\n{content}"
+        else:
+            history.append({"role": papel, "content": content})
+
+    # A API rejeita histórico que começa com assistant.
+    while history and history[0]["role"] == "assistant":
+        history.pop(0)
+
+    return history
+
+
 class DecimalEncoder(json.JSONEncoder):
     """Handle Decimal types from DynamoDB."""
     def default(self, obj):
@@ -80,6 +107,12 @@ class ConversationAgent:
         # start with an orphan tool_result block (no preceding tool_use), which
         # the Anthropic API rejects with 400.
         history = self._truncate_history(session.get("agent_history", []))
+        if not history:
+            # Sessão sem histórico não significa conversa nova: a pessoa pode já ter
+            # escrito antes de o bot assumir, ou a sessão pode ter expirado. O
+            # MessageEvents guarda 90 dias, então dá para retomar de onde parou em
+            # vez de recomeçar por cima de uma conversa em andamento.
+            history = self._truncate_history(self.rebuild_history_from_events(clinic_id, phone))
         user_content = incoming.content or ""
         if incoming.button_id:
             user_content = incoming.button_text or incoming.button_id
@@ -396,6 +429,21 @@ class ConversationAgent:
         if isinstance(obj, list):
             return [ConversationAgent._convert_decimals(i) for i in obj]
         return obj
+
+    def rebuild_history_from_events(self, clinic_id, phone, limit=20):
+        """Reconstrói o histórico do MessageEvents quando a sessão está vazia."""
+        try:
+            eventos = self.message_tracker.get_conversation_messages(clinic_id, phone, limit=limit)
+            history = events_to_history(eventos)
+            if history:
+                logger.info(
+                    f"[ConversationAgent] Histórico reconstruído do MessageEvents para {phone}: "
+                    f"{len(history)} turnos"
+                )
+            return history
+        except Exception as e:
+            logger.warning(f"[ConversationAgent] Falha ao reconstruir histórico de {phone}: {e}")
+            return []
 
     def _truncate_history(self, history):
         """Keep the last MAX_HISTORY_PAIRS message pairs to stay within DynamoDB limits.

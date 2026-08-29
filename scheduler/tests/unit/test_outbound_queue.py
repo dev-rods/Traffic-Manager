@@ -40,17 +40,40 @@ def _service(table):
     return service
 
 
-class TestEnqueue(unittest.TestCase):
-    def test_dentro_do_horario_sai_imediatamente(self):
+class TestAtraso(unittest.TestCase):
+    """Boa parte dos leads procura a clínica sozinha logo após preencher o
+    formulário. Abordar na hora atropelaria essa conversa, então o bot espera."""
+
+    def test_espera_30_minutos_mesmo_dentro_do_horario(self):
         table = FakeTable()
         agora = TZ.localize(datetime(2026, 8, 17, 16, 46))
 
         item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
 
         self.assertEqual(item["status"], "PENDING")
-        # 16:46 BRT = 19:46 UTC
+        # 16:46 + 30min = 17:16 BRT = 20:16 UTC
+        self.assertEqual(item["sendAfter"], "2026-08-17T20:16:00Z")
+
+    def test_atraso_que_cruza_o_fechamento_cai_no_dia_seguinte(self):
+        table = FakeTable()
+        agora = TZ.localize(datetime(2026, 8, 17, 20, 50))  # +30min = 21:20, já fechou
+
+        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
+
+        # terça 07:15 BRT = 10:15 UTC
+        self.assertEqual(item["sendAfter"], "2026-08-18T10:15:00Z")
+
+    def test_atraso_configuravel(self):
+        table = FakeTable()
+        agora = TZ.localize(datetime(2026, 8, 17, 16, 46))
+
+        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA,
+                                       now=agora, atraso_minutos=0)
+
         self.assertEqual(item["sendAfter"], "2026-08-17T19:46:00Z")
 
+
+class TestEnqueue(unittest.TestCase):
     def test_fora_do_horario_espera_a_proxima_abertura(self):
         """Caso real: lead Fernanda, sábado 06:45."""
         table = FakeTable()
@@ -58,7 +81,7 @@ class TestEnqueue(unittest.TestCase):
 
         item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
 
-        # segunda 07:15 BRT = 10:15 UTC
+        # segunda 07:15 BRT = 10:15 UTC; o atraso de 30min não muda nada aqui
         self.assertEqual(item["sendAfter"], "2026-08-17T10:15:00Z")
 
     def test_sem_horario_configurado_nao_enfileira(self):
@@ -82,7 +105,8 @@ class TestEnqueue(unittest.TestCase):
         self.assertEqual(item["leadId"], "lead-1")
         self.assertEqual(item["kind"], "FIRST_CONTACT")
         self.assertEqual(item["pk"], "CLINIC#clinica-x")
-        self.assertTrue(item["sk"].startswith("OUT#2026-08-17T19:46:00Z#"))
+        # 16:46 + 30min de atraso = 17:16 BRT = 20:16 UTC
+        self.assertTrue(item["sk"].startswith("OUT#2026-08-17T20:16:00Z#"))
         self.assertEqual(len(table.items), 1)
 
     def test_nao_guarda_texto(self):

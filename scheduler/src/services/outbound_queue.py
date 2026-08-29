@@ -13,7 +13,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 import boto3
@@ -24,6 +24,11 @@ from src.services.business_hours import next_opening
 logger = logging.getLogger(__name__)
 
 TTL_DIAS = 30
+
+# Espera antes de abordar um lead recém-cadastrado. Boa parte procura a clínica
+# por conta própria logo depois de preencher o formulário; abordar na hora
+# atropelaria essa conversa. Passados 30 minutos sem contato, o bot inicia.
+ATRASO_PRIMEIRO_CONTATO_MINUTOS = 30
 
 
 class OutboundQueueService:
@@ -40,14 +45,19 @@ class OutboundQueueService:
         kind: str = "FIRST_CONTACT",
         business_hours: Optional[Dict] = None,
         now: Optional[datetime] = None,
+        atraso_minutos: int = ATRASO_PRIMEIRO_CONTATO_MINUTOS,
     ) -> Optional[Dict]:
-        """Enfileira uma abordagem para o próximo horário em que a clínica atende.
+        """Enfileira uma abordagem para depois do atraso, dentro do horário de atendimento.
+
+        O atraso vem primeiro e a janela comercial depois: o instante de saída é a
+        próxima abertura contada a partir de `agora + atraso`, nunca antes disso.
 
         Devolve None quando a clínica não tem nenhum dia configurado: sem janela
         não há quando enviar, e enfileirar criaria um item que nunca sai.
         """
         agora = now or datetime.now(timezone.utc)
-        saida = next_opening(business_hours or {}, agora)
+        elegivel_a_partir_de = agora + timedelta(minutes=atraso_minutos)
+        saida = next_opening(business_hours or {}, elegivel_a_partir_de)
         if saida is None:
             logger.warning(
                 f"[OutboundQueue] Clínica {clinic_id} sem horário comercial configurado, "
