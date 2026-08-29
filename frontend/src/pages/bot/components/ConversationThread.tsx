@@ -2,17 +2,30 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useConversationMessages } from '@/hooks/useBot'
 import { formatPhone } from '@/utils/formatPhone'
 import { Button } from '@/components/ui/Button'
-import type { MessageStatus } from '@/types'
+import type { MessageStatus, PauseReason } from '@/types'
 
 interface ConversationThreadProps {
   phone: string
   senderName?: string
   botPaused?: boolean
+  /** Por que o bot não responde: muda o texto do botão e explica o motivo. */
+  pauseReason?: PauseReason
   onPause: () => void
   onResume: () => void
   onClose: () => void
   pauseLoading?: boolean
   resumeLoading?: boolean
+}
+
+/**
+ * "Pausado" e "não elegível" parecem iguais na tela mas têm causas diferentes:
+ * o primeiro alguém fez, o segundo é o padrão da clínica para quem não veio da
+ * landing page. Sem distinguir, o botão prometia uma ação que não teria efeito.
+ */
+const MOTIVO_DA_PAUSA: Record<NonNullable<PauseReason>, string> = {
+  attendant: 'Atendimento humano em andamento',
+  clinic_paused: 'Bot desligado para toda a clínica',
+  not_eligible: 'Fora da regra de resposta automática',
 }
 
 const READ_STATUSES: MessageStatus[] = ['READ', 'READ_BY_ME', 'PLAYED']
@@ -59,7 +72,7 @@ function DeliveryTicks({ status }: { status: MessageStatus }) {
   )
 }
 
-export function ConversationThread({ phone, senderName, botPaused, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
+export function ConversationThread({ phone, senderName, botPaused, pauseReason, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
   const { data, isLoading } = useConversationMessages(phone)
   const messages = useMemo(() => data?.messages ?? [], [data])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -86,9 +99,14 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
             <p className="text-xs text-gray-400">{formatPhone(phone)}</p>
           </div>
         </div>
-        <div>
+        <div className="flex items-center gap-3">
+          {botPaused && pauseReason && (
+            <span className="text-xs text-gray-400">{MOTIVO_DA_PAUSA[pauseReason]}</span>
+          )}
           {botPaused ? (
-            <Button size="sm" onClick={onResume} loading={resumeLoading}>Retomar bot</Button>
+            <Button size="sm" onClick={onResume} loading={resumeLoading}>
+              {pauseReason === 'not_eligible' ? 'Ativar bot' : 'Retomar bot'}
+            </Button>
           ) : (
             <Button size="sm" variant="secondary" onClick={onPause} loading={pauseLoading}>Pausar bot</Button>
           )}

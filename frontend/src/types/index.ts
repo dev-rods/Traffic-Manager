@@ -264,10 +264,14 @@ export interface ApiError {
 }
 
 // ── Bot / Conversations ──────────────────────────────────────
+/** Por que o bot não responde uma conversa. null quando ele está respondendo. */
+export type PauseReason = 'attendant' | 'clinic_paused' | 'not_eligible' | null
+
 export interface ActiveConversation {
   phone: string
   state: string
   bot_paused: boolean
+  pause_reason: PauseReason
   attendant_active_until: number | null
   updated_at: string
 }

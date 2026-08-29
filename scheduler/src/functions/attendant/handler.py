@@ -7,11 +7,29 @@ import boto3
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_query_param
 from src.services.conversation_engine import ConversationState
+from src.services.bot_policy import should_bot_reply
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 ATTENDANT_TTL_SECONDS = 24 * 60 * 60
+
+
+def _get_clinic(clinic_id):
+    """Clínica com a política de resposta. Falha vira dict vazio, que o
+    should_bot_reply trata como política ALL — o comportamento histórico."""
+    try:
+        from src.services.db.postgres import PostgresService
+
+        rows = PostgresService().execute_query(
+            "SELECT bot_autoreply_policy, bot_pilot_phones, bot_paused "
+            "FROM scheduler.clinics WHERE clinic_id = %s",
+            (clinic_id,),
+        )
+        return rows[0] if rows else {}
+    except Exception as e:
+        logger.warning(f"[Attendant] Não consegui ler a política de {clinic_id}: {e}")
+        return {}
 
 
 def _get_sessions_table():
@@ -150,7 +168,7 @@ def _handle_status(event):
     session = item.get("session", {})
 
     state = session.get("state", "")
-    is_paused = state in (
+    atendente_ativo = state in (
         ConversationState.HUMAN_ATTENDANT_ACTIVE.value,
         ConversationState.HUMAN_HANDOFF.value,
     )
@@ -159,15 +177,27 @@ def _handle_status(event):
     now = int(time.time())
     expired = ttl > 0 and now >= ttl
 
-    if is_paused and expired:
-        is_paused = False
+    if atendente_ativo and expired:
+        atendente_ativo = False
+
+    # A política da clínica também decide. Sem consultá-la, o painel mostrava
+    # "Pausar bot" numa conversa que o bot já não atendia — o botão prometia uma
+    # ação sem efeito. Esta é a mesma decisão que o webhook toma.
+    clinic = _get_clinic(clinic_id)
+    responde = should_bot_reply(clinic, session, phone) and not clinic.get("bot_paused", False)
 
     return http_response(200, {
         "status": "OK",
-        "bot_paused": is_paused,
+        "bot_paused": not responde,
+        "pause_reason": (
+            "attendant" if atendente_ativo
+            else "clinic_paused" if clinic.get("bot_paused", False)
+            else "not_eligible" if not responde
+            else None
+        ),
         "conversation_state": state,
-        "attendant_active_until": ttl if is_paused else None,
-        "ttl_remaining_seconds": max(0, ttl - now) if is_paused and ttl else 0,
+        "attendant_active_until": ttl if atendente_ativo else None,
+        "ttl_remaining_seconds": max(0, ttl - now) if atendente_ativo and ttl else 0,
     })
 
 

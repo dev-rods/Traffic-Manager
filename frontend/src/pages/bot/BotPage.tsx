@@ -26,6 +26,9 @@ export function BotPage() {
   const [selectedName, setSelectedName] = useState('')
 
   const pausedConversations = (activeData?.conversations ?? []).filter((c) => c.bot_paused)
+  // A conversa selecionada carrega o motivo da pausa; sem ela o botão não sabe
+  // se deve dizer "Retomar" (alguém pausou) ou "Ativar" (nunca foi elegível).
+  const selectedConversation = (activeData?.conversations ?? []).find((c) => c.phone === selectedPhone)
 
   const handleToggleBotGlobal = async (active: boolean) => {
     await updateClinic.mutateAsync({ bot_paused: !active })
@@ -144,7 +147,8 @@ export function BotPage() {
                 <ConversationThread
                   phone={selectedPhone}
                   senderName={selectedName}
-                  botPaused={pausedConversations.some((c) => c.phone === selectedPhone)}
+                  botPaused={selectedConversation?.bot_paused ?? false}
+                  pauseReason={selectedConversation?.pause_reason ?? null}
                   onPause={() => pauseBot.mutate(selectedPhone)}
                   onResume={() => resumeBot.mutate(selectedPhone)}
                   onClose={() => setSelectedPhone(null)}
