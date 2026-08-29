@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 import boto3
 from boto3.dynamodb.conditions import Key
 
-from src.services.business_hours import next_opening
+from src.services.business_hours import CLINIC_TZ, next_opening
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +27,8 @@ TTL_DIAS = 30
 
 # Espera antes de abordar um lead recém-cadastrado. Boa parte procura a clínica
 # por conta própria logo depois de preencher o formulário; abordar na hora
-# atropelaria essa conversa. Passados 30 minutos sem contato, o bot inicia.
-ATRASO_PRIMEIRO_CONTATO_MINUTOS = 30
+# atropelaria essa conversa. Passado esse tempo sem contato, o bot inicia.
+ATRASO_PRIMEIRO_CONTATO_MINUTOS = 15
 
 
 class OutboundQueueService:
@@ -56,7 +56,11 @@ class OutboundQueueService:
         não há quando enviar, e enfileirar criaria um item que nunca sai.
         """
         agora = now or datetime.now(timezone.utc)
-        elegivel_a_partir_de = agora + timedelta(minutes=atraso_minutos)
+        # O horário comercial é expresso no fuso da clínica, então o instante tem
+        # que chegar em CLINIC_TZ. Passar UTC faz next_opening ler o dia da semana
+        # e montar a abertura no fuso errado: um lead de sábado 16:32 saía "segunda
+        # 07:15" que na verdade era 04:15 da manhã em Brasília.
+        elegivel_a_partir_de = (agora + timedelta(minutes=atraso_minutos)).astimezone(CLINIC_TZ)
         saida = next_opening(business_hours or {}, elegivel_a_partir_de)
         if saida is None:
             logger.warning(

@@ -9,7 +9,7 @@ escreve primeiro. Por isso `enqueue` não recebe conteúdo.
 """
 import os
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytz
 
@@ -44,24 +44,54 @@ class TestAtraso(unittest.TestCase):
     """Boa parte dos leads procura a clínica sozinha logo após preencher o
     formulário. Abordar na hora atropelaria essa conversa, então o bot espera."""
 
-    def test_espera_30_minutos_mesmo_dentro_do_horario(self):
+    def test_espera_o_atraso_mesmo_dentro_do_horario(self):
         table = FakeTable()
         agora = TZ.localize(datetime(2026, 8, 17, 16, 46))
 
         item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
 
         self.assertEqual(item["status"], "PENDING")
-        # 16:46 + 30min = 17:16 BRT = 20:16 UTC
-        self.assertEqual(item["sendAfter"], "2026-08-17T20:16:00Z")
+        # 16:46 + 15min = 17:01 BRT = 20:01 UTC
+        self.assertEqual(item["sendAfter"], "2026-08-17T20:01:00Z")
 
     def test_atraso_que_cruza_o_fechamento_cai_no_dia_seguinte(self):
         table = FakeTable()
-        agora = TZ.localize(datetime(2026, 8, 17, 20, 50))  # +30min = 21:20, já fechou
+        agora = TZ.localize(datetime(2026, 8, 17, 20, 50))  # +15min = 21:05, já fechou
 
         item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
 
         # terça 07:15 BRT = 10:15 UTC
         self.assertEqual(item["sendAfter"], "2026-08-18T10:15:00Z")
+
+    def test_instante_em_utc_e_convertido_para_o_fuso_da_clinica(self):
+        """O caso real que quebrou em produção.
+
+        O enqueue recebe datetime.now(timezone.utc). Sem converter para CLINIC_TZ,
+        next_opening lia o dia da semana e montava a abertura no fuso errado: um
+        lead de sábado 16:32 BRT virava "segunda 07:15" que era 04:15 da manhã em
+        Brasília — fora do horário comercial, de madrugada.
+        """
+        table = FakeTable()
+        com_sabado = dict(ESSENCIA, sat={"start": "07:15", "end": "18:00"})
+        agora_utc = datetime(2026, 8, 29, 19, 32, tzinfo=timezone.utc)  # sábado 16:32 BRT
+
+        item = _service(table).enqueue(
+            "clinica-x", "5511999999999", business_hours=com_sabado, now=agora_utc
+        )
+
+        # 16:32 + 15min = 16:47 BRT = 19:47 UTC, no mesmo sábado
+        self.assertEqual(item["sendAfter"], "2026-08-29T19:47:00Z")
+
+    def test_utc_fora_do_horario_salta_para_a_abertura_local_correta(self):
+        table = FakeTable()
+        agora_utc = datetime(2026, 8, 30, 14, 0, tzinfo=timezone.utc)  # domingo 11:00 BRT
+
+        item = _service(table).enqueue(
+            "clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora_utc
+        )
+
+        # segunda 07:15 BRT = 10:15 UTC, não 07:15 UTC
+        self.assertEqual(item["sendAfter"], "2026-08-31T10:15:00Z")
 
     def test_atraso_configuravel(self):
         table = FakeTable()
@@ -81,7 +111,7 @@ class TestEnqueue(unittest.TestCase):
 
         item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
 
-        # segunda 07:15 BRT = 10:15 UTC; o atraso de 30min não muda nada aqui
+        # segunda 07:15 BRT = 10:15 UTC; o atraso não muda nada aqui
         self.assertEqual(item["sendAfter"], "2026-08-17T10:15:00Z")
 
     def test_sem_horario_configurado_nao_enfileira(self):
@@ -105,8 +135,8 @@ class TestEnqueue(unittest.TestCase):
         self.assertEqual(item["leadId"], "lead-1")
         self.assertEqual(item["kind"], "FIRST_CONTACT")
         self.assertEqual(item["pk"], "CLINIC#clinica-x")
-        # 16:46 + 30min de atraso = 17:16 BRT = 20:16 UTC
-        self.assertTrue(item["sk"].startswith("OUT#2026-08-17T20:16:00Z#"))
+        # 16:46 + 15min de atraso = 17:01 BRT = 20:01 UTC
+        self.assertTrue(item["sk"].startswith("OUT#2026-08-17T20:01:00Z#"))
         self.assertEqual(len(table.items), 1)
 
     def test_nao_guarda_texto(self):
