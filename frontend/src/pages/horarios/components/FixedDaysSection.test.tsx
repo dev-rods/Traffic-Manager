@@ -24,7 +24,16 @@ const RULES = [
   makeRule('r3', '2026-09-16', '09:00:00'),
 ]
 
-function renderSection(overrides: Partial<React.ComponentProps<typeof FixedDaysSection>> = {}) {
+interface RenderOverrides {
+  rules?: AvailabilityRule[]
+  deletingIds?: Set<string>
+}
+
+// Overrides restrito aos campos de dados, nao aos callbacks: tipar via
+// Partial<ComponentProps> apaga o tipo Mock dos vi.fn() no retorno, quebrando
+// o acesso a .mock.calls so no tsc -b (vitest nao faz type-check completo,
+// entao esse erro so aparece no build real).
+function renderSection(overrides: RenderOverrides = {}) {
   const props = {
     rules: RULES,
     maxHeight: 320,
