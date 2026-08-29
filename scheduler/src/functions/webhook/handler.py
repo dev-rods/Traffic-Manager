@@ -13,6 +13,7 @@ from src.services.template_service import TemplateService
 from src.services.conversation_engine import ConversationEngine, ConversationState
 from src.services.message_tracker import MessageTracker
 from src.services.lead_service import LeadService, extract_gclid
+from src.services.bot_policy import should_bot_reply
 from src.providers.whatsapp_provider import get_provider
 
 logger = logging.getLogger(__name__)
@@ -121,44 +122,15 @@ def handler(event, context):
         clinic = clinics[0]
         clinic_id = clinic["clinic_id"]
 
-        # Global bot pause — clinic owner disabled the bot
-        if clinic.get("bot_paused", False):
-            logger.info(f"[Webhook] Bot paused globally for clinic {clinic_id}, ignoring message")
-            return http_response(200, {"status": "OK"})
+        # A decisão de responder foi movida para depois do track_inbound (passo 5c).
+        # Antes ela ficava aqui e saía da função sem registrar nada: por isso a
+        # Essência acumulou 7.200 eventos com zero INBOUND. Suprimir a resposta
+        # não pode significar perder a mensagem — ela precisa aparecer no painel
+        # do atendente de qualquer forma.
 
         # 3. Setup services
         provider = get_provider(clinic)
         tracker = MessageTracker()
-        template_service = TemplateService(db)
-
-        # availability_engine and appointment_service are optional (Phase 8)
-        availability_engine = _get_availability_engine(db)
-        appointment_service = _get_appointment_service(db)
-
-        # Feature flag: use LLM agent or legacy state machine
-        use_agent = clinic.get("use_agent", False) or os.environ.get("USE_AGENT_MODE") == "true"
-
-        if use_agent:
-            from src.services.conversation_agent import ConversationAgent
-            engine = ConversationAgent(
-                db=db,
-                template_service=template_service,
-                availability_engine=availability_engine,
-                appointment_service=appointment_service,
-                provider=provider,
-                message_tracker=tracker,
-            )
-        else:
-            intent_classifier = _get_intent_classifier()
-            engine = ConversationEngine(
-                db=db,
-                template_service=template_service,
-                availability_engine=availability_engine,
-                appointment_service=appointment_service,
-                provider=provider,
-                message_tracker=tracker,
-                intent_classifier=intent_classifier,
-            )
 
         # 4. Parse incoming message
         incoming = provider.parse_incoming_message(body)
@@ -217,6 +189,45 @@ def handler(event, context):
             conversation_id=conversation_id,
             incoming_message=incoming,
         )
+
+        # 5c. Decidir se o bot responde. A mensagem já está registrada acima, então
+        # sair aqui suprime a resposta sem perder a conversa.
+        session = _load_session(_get_sessions_table(), clinic_id, incoming.phone)
+        if clinic.get("bot_paused", False) or not should_bot_reply(clinic, session, incoming.phone):
+            logger.info(
+                f"[Webhook] Resposta automática suprimida para {incoming.phone} "
+                f"(paused={clinic.get('bot_paused', False)}, "
+                f"policy={clinic.get('bot_autoreply_policy') or 'ALL'})"
+            )
+            return http_response(200, {"status": "OK"})
+
+        # 5d. Montar o engine só agora: construir o agente instancia cliente HTTP e
+        # recursos do boto3, trabalho jogado fora quando a resposta é suprimida.
+        template_service = TemplateService(db)
+        availability_engine = _get_availability_engine(db)
+        appointment_service = _get_appointment_service(db)
+        use_agent = clinic.get("use_agent", False) or os.environ.get("USE_AGENT_MODE") == "true"
+
+        if use_agent:
+            from src.services.conversation_agent import ConversationAgent
+            engine = ConversationAgent(
+                db=db,
+                template_service=template_service,
+                availability_engine=availability_engine,
+                appointment_service=appointment_service,
+                provider=provider,
+                message_tracker=tracker,
+            )
+        else:
+            engine = ConversationEngine(
+                db=db,
+                template_service=template_service,
+                availability_engine=availability_engine,
+                appointment_service=appointment_service,
+                provider=provider,
+                message_tracker=tracker,
+                intent_classifier=_get_intent_classifier(),
+            )
 
         # 6. Process through conversation engine
         outgoing_messages = engine.process_message(clinic_id, incoming)
