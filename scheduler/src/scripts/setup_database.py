@@ -36,6 +36,8 @@ SQL_STATEMENTS = [
         display_name VARCHAR(255),
         use_agent BOOLEAN DEFAULT FALSE,
         bot_paused BOOLEAN DEFAULT FALSE,
+        bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL',
+        bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}',
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -491,6 +493,23 @@ SQL_STATEMENTS = [
 
     # Bot pause flag per clinic
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_paused BOOLEAN DEFAULT FALSE",
+
+    # Política de resposta automática do bot, por clínica.
+    # ALL preserva o comportamento atual de quem já usa o bot; as demais restringem.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL'",
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_bot_autoreply_policy') THEN
+            ALTER TABLE scheduler.clinics ADD CONSTRAINT chk_bot_autoreply_policy
+            CHECK (bot_autoreply_policy IN ('ALL', 'PILOT', 'LEADS_ONLY', 'OFF'));
+        END IF;
+    END $$
+    """,
+    # Telefones do piloto, normalizados (55DDDNNNNNNNNN). Só usado com policy=PILOT.
+    # Separado de ALLOWED_PHONES do SSM de propósito: aquela governa também lembretes
+    # de consulta e disparos do painel, e restringi-la deixaria pacientes sem lembrete.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}'",
 
     # Configurable default message template for batch WhatsApp sends
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS batch_message_template TEXT",
