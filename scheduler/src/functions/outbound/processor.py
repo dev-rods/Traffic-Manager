@@ -99,7 +99,15 @@ def handler(event, context):
             # A política é reconferida no envio, não só no enfileiramento: o piloto
             # pode ter mudado depois que o item entrou na fila, e ninguém deve
             # receber abordagem de uma clínica que voltou atrás.
-            if clinic.get("bot_paused", False) or not should_bot_reply(clinic, {}, phone):
+            #
+            # bot_enabled=True porque a elegibilidade já foi estabelecida no
+            # enfileiramento (origem landing-page + as quatro guardas). A sessão
+            # ainda não existe: é este envio que vai criá-la. Passar sessão vazia
+            # fazia LEADS_ONLY recusar todo item — o cenário de abordagem ativa
+            # nunca enviava nada.
+            if clinic.get("bot_paused", False) or not should_bot_reply(
+                clinic, {"bot_enabled": True}, phone
+            ):
                 logger.info(
                     f"{prefixo} Política não permite falar com {phone}, descartando {message_id}"
                 )
