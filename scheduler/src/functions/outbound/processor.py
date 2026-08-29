@@ -14,12 +14,17 @@ import time
 import uuid
 from datetime import datetime, timezone
 
+import os
+
+import boto3
+
 from src.providers.whatsapp_provider import IncomingMessage, get_provider
 from src.services.bot_policy import should_bot_reply
 from src.services.business_hours import CLINIC_TZ, is_open
 from src.services.db.postgres import PostgresService
 from src.services.message_tracker import MessageTracker
 from src.services.outbound_queue import OutboundQueueService
+from src.services.session_store import mark_conversation_eligible
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -30,6 +35,10 @@ MAX_ENVIOS_POR_CLINICA_POR_EXECUCAO = 1
 # INBOUND: ninguém escreveu isso, é só o gatilho. O AI_SYSTEM_PROMPT tem uma
 # seção ensinando o agente a reconhecê-la.
 GATILHO_ABERTURA = "__INICIAR_CONVERSA__"
+
+
+def _sessions_table():
+    return boto3.resource("dynamodb").Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
 
 
 def _monta_agente(db, provider, tracker):
@@ -159,6 +168,11 @@ def handler(event, context):
                 continue
 
             queue.mark_sent(message_id, item["pk"], item["sk"])
+
+            # A conversa nasce elegível: quem foi abordado pela clínica tem direito
+            # a resposta automática mesmo com a política LEADS_ONLY.
+            mark_conversation_eligible(_sessions_table(), clinic_id, phone, item.get("leadId"))
+
             enviados_por_clinica[clinic_id] = enviados_por_clinica.get(clinic_id, 0) + 1
             sent += 1
             logger.info(f"{prefixo} Conversa aberta com {phone} ({message_id})")

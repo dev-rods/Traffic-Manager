@@ -14,6 +14,7 @@ from src.services.conversation_engine import ConversationEngine, ConversationSta
 from src.services.message_tracker import MessageTracker
 from src.services.lead_service import LeadService, extract_gclid
 from src.services.bot_policy import should_bot_reply
+from src.services.session_store import mark_conversation_eligible
 from src.providers.whatsapp_provider import get_provider
 
 logger = logging.getLogger(__name__)
@@ -193,6 +194,21 @@ def handler(event, context):
         # 5c. Decidir se o bot responde. A mensagem já está registrada acima, então
         # sair aqui suprime a resposta sem perder a conversa.
         session = _load_session(_get_sessions_table(), clinic_id, incoming.phone)
+
+        # Quem veio da landing page tem direito a resposta automática mesmo com a
+        # política LEADS_ONLY, tenha o bot falado primeiro ou não. A marca é gravada
+        # uma vez só: nas mensagens seguintes ela já está na sessão.
+        if not session.get("bot_enabled"):
+            leads_lp = db.execute_query(
+                "SELECT id FROM scheduler.leads WHERE clinic_id = %s AND phone = %s "
+                "AND source = 'landing-page' LIMIT 1",
+                (clinic_id, incoming.phone),
+            )
+            if leads_lp:
+                mark_conversation_eligible(
+                    _get_sessions_table(), clinic_id, incoming.phone, str(leads_lp[0]["id"])
+                )
+                session["bot_enabled"] = True
         if clinic.get("bot_paused", False) or not should_bot_reply(clinic, session, incoming.phone):
             logger.info(
                 f"[Webhook] Resposta automática suprimida para {incoming.phone} "
