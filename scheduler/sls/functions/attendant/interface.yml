@@ -140,3 +140,4 @@ ActiveConversations:
         path: clinics/{clinicId}/conversations/active
         method: get
         cors: true
+

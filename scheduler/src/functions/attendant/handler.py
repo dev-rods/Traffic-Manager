@@ -122,6 +122,11 @@ def _handle_deactivate(event):
     session.pop("attendant_active_until", None)
     session.pop("human_handoff_requested_at", None)
     session.pop("_previous_state_before_attendant", None)
+    # Marca a conversa como elegível. Sem isso, retomar o bot não teria efeito nas
+    # clínicas com política LEADS_ONLY: limpar o modo atendente libera a conversa,
+    # mas o bot só responde quem está marcado. Retomar tem que valer em qualquer
+    # política, senão o botão do painel mente para quem clica.
+    session["bot_enabled"] = True
     item["session"] = session
 
     _save_session(table, clinic_id, phone, item)
