@@ -3,6 +3,7 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
+from src.services.duration_rules import duration_for_areas, get_duration_rules
 
 logger = logging.getLogger(__name__)
 
@@ -63,24 +64,17 @@ class AppointmentService:
         # Build a lookup by id for ordering and data
         svc_lookup = {str(s["id"]): s for s in services}
 
+        # A duração vem da QUANTIDADE de áreas, não da soma das durações
+        # cadastradas: o laser é aplicado em sequência e o preparo não se repete
+        # a cada área, então somar produzia sessões irreais (6 áreas de 10min
+        # viravam 60min quando o atendimento leva 35). Ver duration_rules.py.
         if total_duration_minutes:
             duration_minutes = int(total_duration_minutes)
-        elif service_area_pairs:
-            # Sum duration for each (service, area) pair with area-specific override
-            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
-            params = ()
-            for pair in service_area_pairs:
-                params += (pair["service_id"], pair["area_id"])
-            rows = self.db.execute_query(
-                f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
-                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
-                JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
-                LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
-                params,
-            )
-            duration_minutes = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else sum(s["duration_minutes"] for s in services)
         else:
-            duration_minutes = sum(s["duration_minutes"] for s in services)
+            quantidade_areas = len(service_area_pairs) if service_area_pairs else len(all_service_ids)
+            duration_minutes = duration_for_areas(
+                quantidade_areas, get_duration_rules(self.db, clinic_id)
+            )
 
         # 2b. Auto-calculate prices when not provided by caller
         if original_price_cents is None:
@@ -414,18 +408,21 @@ class AppointmentService:
             params: tuple = ()
             for pair in service_area_pairs:
                 params += (pair["serviceId"], pair["areaId"])
+            # O preço continua sendo a soma por área; só a duração passou a vir
+            # da quantidade de áreas. Ver duration_rules.py.
             rows = self.db.execute_query(
-                f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration,
-                       SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price
+                f"""SELECT SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price
                 FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
                 JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
                 LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
                 params,
             )
-            duration_minutes = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else svc["duration_minutes"]
+            duration_minutes = duration_for_areas(
+                len(service_area_pairs), get_duration_rules(self.db, appointment["clinic_id"])
+            )
             original_price_cents = int(rows[0]["total_price"]) if rows and rows[0]["total_price"] else svc.get("price_cents")
         else:
-            duration_minutes = svc["duration_minutes"]
+            duration_minutes = duration_for_areas(1, get_duration_rules(self.db, appointment["clinic_id"]))
             original_price_cents = svc.get("price_cents")
 
         final_price_cents = original_price_cents * (100 - discount_pct) // 100 if original_price_cents else original_price_cents

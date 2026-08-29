@@ -17,6 +17,8 @@ from src.services.template_service import TemplateService
 from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
 
+from src.services.duration_rules import duration_for_areas, get_duration_rules
+
 logger = logging.getLogger(__name__)
 
 class ConversationState(str, Enum):
@@ -1395,18 +1397,19 @@ class ConversationEngine:
                     params = ()
                     for pair in service_area_pairs:
                         params += (pair["service_id"], pair["area_id"])
+                    # O preço continua sendo soma por área; a duração passou a vir
+                    # da quantidade de áreas. Ver duration_rules.py.
                     rows = self.db.execute_query(
-                        f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration,
-                               SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price_cents
+                        f"""SELECT SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price_cents
                         FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
                         JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
                         LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
                         params,
                     )
-                    total_duration = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else 0
                     total_price = int(rows[0]["total_price_cents"]) if rows and rows[0]["total_price_cents"] else 0
 
-                    # Add duration/price for services without area pairs (no areas configured)
+                    # Serviços sem área configurada somam preço, mas não duração:
+                    # a duração é uma só, calculada pela contagem total de áreas.
                     paired_service_ids = {pair["service_id"] for pair in service_area_pairs}
                     unpaired_service_ids = [sid for sid in selected_service_ids if sid not in paired_service_ids]
                     if unpaired_service_ids:
@@ -1416,14 +1419,20 @@ class ConversationEngine:
                             tuple(unpaired_service_ids),
                         )
                         for row in unpaired_rows:
-                            total_duration += int(row["duration_minutes"] or 0)
                             total_price += int(row["price_cents"] or 0)
+
+                    quantidade_areas = len(service_area_pairs) + len(unpaired_service_ids)
+                    total_duration = duration_for_areas(
+                        quantidade_areas, get_duration_rules(self.db, clinic_id)
+                    )
                 else:
                     services = self.db.execute_query(
                         f"SELECT id, duration_minutes, price_cents FROM scheduler.services WHERE id::text IN ({svc_placeholders}) AND active = TRUE",
                         tuple(selected_service_ids),
                     )
-                    total_duration = sum(s["duration_minutes"] for s in services)
+                    total_duration = duration_for_areas(
+                        len(services), get_duration_rules(self.db, clinic_id)
+                    )
                     total_price = sum(s.get("price_cents") or 0 for s in services)
                 # Cap duration at max_session_minutes (default 60)
                 clinic = self._get_clinic(clinic_id)
