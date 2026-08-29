@@ -450,6 +450,9 @@ SQL_STATEMENTS = [
         first_appointment_id UUID REFERENCES scheduler.appointments(id),
         first_appointment_value DECIMAL(10,2),
         raw_message TEXT,
+        first_contact_status VARCHAR(20),
+        first_contact_at TIMESTAMPTZ,
+        conversation_started_at TIMESTAMPTZ,
         metadata JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -510,6 +513,14 @@ SQL_STATEMENTS = [
     # Separado de ALLOWED_PHONES do SSM de propósito: aquela governa também lembretes
     # de consulta e disparos do painel, e restringi-la deixaria pacientes sem lembrete.
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}'",
+
+    # Rastreio do primeiro contato ativo com o lead.
+    # first_contact_at é "falamos com ele"; conversation_started_at é "ele respondeu".
+    # Sem separar não dá para medir a taxa de resposta da abordagem.
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_status VARCHAR(20)",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_at TIMESTAMPTZ",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS conversation_started_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS idx_leads_first_contact ON scheduler.leads(clinic_id, first_contact_status)",
 
     # Configurable default message template for batch WhatsApp sends
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS batch_message_template TEXT",

@@ -9,6 +9,12 @@ CreateLead:
         - ssm:GetParameter
       Resource:
         - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    # Enfileira a abertura de conversa quando o lead é novo e elegível.
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-outbound-queue"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
