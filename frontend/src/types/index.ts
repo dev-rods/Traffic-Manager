@@ -321,6 +321,12 @@ export interface Lead {
   first_appointment_id: string | null
   first_appointment_value: number | null
   raw_message: string | null
+  /** Estado da abordagem ativa do bot: QUEUED enfileirada, SENT enviada, FAILED falhou. */
+  first_contact_status: 'QUEUED' | 'SENT' | 'FAILED' | null
+  /** Quando o bot falou com o lead. */
+  first_contact_at: string | null
+  /** Quando o lead respondeu. Distinto de first_contact_at: é o que mede a taxa de resposta. */
+  conversation_started_at: string | null
   created_at: string
   updated_at: string
 }

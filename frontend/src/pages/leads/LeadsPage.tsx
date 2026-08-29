@@ -23,7 +23,9 @@ export function LeadsPage() {
   const totalLeads = data?.total ?? 0
   const bookedCount = leads.filter((l) => l.booked).length
   const notBookedCount = leads.filter((l) => !l.booked).length
-  const conversionRate = totalLeads > 0 ? Math.round((bookedCount / totalLeads) * 100) : 0
+  // Divide pelo mesmo conjunto que gerou bookedCount. Usar data.total aqui daria
+  // percentual errado em silêncio assim que houvesse mais leads que o limit.
+  const conversionRate = leads.length > 0 ? Math.round((bookedCount / leads.length) * 100) : 0
 
   if (isLoading) return <div className="p-6"><SkeletonTable rows={8} /></div>
   if (isError) {
@@ -41,7 +43,9 @@ export function LeadsPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Leads</h1>
-        <p className="text-sm text-gray-400 mt-1">Contatos que iniciaram conversa com o bot</p>
+        <p className="text-sm text-gray-400 mt-1">
+          Contatos capturados pela landing page e pelo WhatsApp
+        </p>
       </div>
 
       {/* KPI Cards */}
@@ -76,7 +80,7 @@ export function LeadsPage() {
       {leads.length === 0 ? (
         <EmptyState
           title="Nenhum lead encontrado"
-          description={status !== 'all' ? 'Tente mudar o filtro.' : 'Leads aparecem quando pacientes entram em contato via WhatsApp.'}
+          description={status !== 'all' ? 'Tente mudar o filtro.' : 'Leads aparecem quando alguém preenche o formulário da landing page ou chama no WhatsApp.'}
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -86,6 +90,7 @@ export function LeadsPage() {
                 <th className="px-5 py-3">Contato</th>
                 <th className="px-3 py-3">Telefone</th>
                 <th className="px-3 py-3">Fonte</th>
+                <th className="px-3 py-3">Conversa</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Valor 1o agend.</th>
                 <th className="px-3 py-3">Data</th>
@@ -102,6 +107,9 @@ export function LeadsPage() {
                   </td>
                   <td className="px-3 py-3">
                     <Badge variant="neutral">{lead.source}</Badge>
+                  </td>
+                  <td className="px-3 py-3">
+                    <ConversationBadge lead={lead} />
                   </td>
                   <td className="px-3 py-3">
                     <Badge variant={lead.booked ? 'success' : 'warning'}>
@@ -124,6 +132,20 @@ export function LeadsPage() {
       )}
     </div>
   )
+}
+
+/**
+ * Estado da conversa do lead com o bot.
+ *
+ * A ordem das checagens importa: quem respondeu já foi contatado, então
+ * "Respondeu" tem precedência sobre "Contatado".
+ */
+function ConversationBadge({ lead }: { lead: Lead }) {
+  if (lead.conversation_started_at) return <Badge variant="success">Respondeu</Badge>
+  if (lead.first_contact_status === 'SENT') return <Badge variant="neutral">Contatado</Badge>
+  if (lead.first_contact_status === 'QUEUED') return <Badge variant="warning">Na fila</Badge>
+  if (lead.first_contact_status === 'FAILED') return <Badge variant="danger">Falhou</Badge>
+  return <Badge variant="neutral">Sem contato</Badge>
 }
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {

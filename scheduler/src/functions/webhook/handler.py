@@ -191,6 +191,22 @@ def handler(event, context):
             incoming_message=incoming,
         )
 
+        # 5b-bis. Marcar que o lead respondeu. COALESCE com o filtro IS NULL garante
+        # que só a primeira resposta conta e que reprocessar o webhook não sobrescreve
+        # a data original. first_contact_at é "falamos com ele";
+        # conversation_started_at é "ele respondeu" — sem separar não dá para medir
+        # a taxa de resposta da abordagem.
+        try:
+            db.execute_write(
+                "UPDATE scheduler.leads "
+                "SET conversation_started_at = COALESCE(conversation_started_at, NOW()), "
+                "    updated_at = NOW() "
+                "WHERE clinic_id = %s AND phone = %s AND conversation_started_at IS NULL",
+                (clinic_id, incoming.phone),
+            )
+        except Exception as e:
+            logger.warning(f"[Webhook] Falha ao marcar conversation_started_at: {e}")
+
         # 5c. Decidir se o bot responde. A mensagem já está registrada acima, então
         # sair aqui suprime a resposta sem perder a conversa.
         session = _load_session(_get_sessions_table(), clinic_id, incoming.phone)
