@@ -55,12 +55,15 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     per_page: 8,
   })
 
-  // Auto-select service when there's only one
-  useEffect(() => {
+  // Serviço único é escolha automática. Feito no render, como o reset de áreas
+  // abaixo, para o campo não piscar vazio antes de ser preenchido.
+  const [prevServices, setPrevServices] = useState(services)
+  if (services !== prevServices) {
+    setPrevServices(services)
     if (services?.length === 1 && !serviceId) {
       setServiceId(services[0].id)
     }
-  }, [services, serviceId])
+  }
 
   // Fetch areas for selected service
   const { data: serviceAreas } = useServiceAreas(serviceId || undefined)
@@ -86,10 +89,14 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     setSelectedAreaIds([])
   }
 
-  // Clear selected time when date, service, or areas change (slots will change)
-  useEffect(() => {
+  // Mudou data, serviço ou áreas, os horários disponíveis mudam junto: manter a
+  // hora escolhida deixaria selecionado um horário que pode não existir mais.
+  const chaveDosHorarios = `${date}|${serviceId}|${totalDuration ?? ''}`
+  const [prevChaveDosHorarios, setPrevChaveDosHorarios] = useState(chaveDosHorarios)
+  if (chaveDosHorarios !== prevChaveDosHorarios) {
+    setPrevChaveDosHorarios(chaveDosHorarios)
     if (!initialTime) setTime('')
-  }, [date, serviceId, totalDuration, initialTime])
+  }
 
   // Close dropdown on outside click
   useEffect(() => {

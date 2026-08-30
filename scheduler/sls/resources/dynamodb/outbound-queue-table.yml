@@ -1,0 +1,32 @@
+Resources:
+  OutboundQueueTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-outbound-queue
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: sendAfter
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: status-sendAfter-index
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: sendAfter
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true

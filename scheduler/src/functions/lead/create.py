@@ -19,7 +19,7 @@ PII (telefone/email) é sempre mascarada nos logs.
 import logging
 import os
 import time
-from datetime import datetime, date, time as dtime
+from datetime import datetime, date, time as dtime, timedelta, timezone
 from decimal import Decimal
 
 import psycopg2
@@ -98,6 +98,94 @@ def _log_pg_error(prefix, exc):
         f"hint={getattr(diag, 'message_hint', None)} table={getattr(diag, 'table_name', None)} "
         f"constraint={getattr(diag, 'constraint_name', None)} raw={str(exc).strip()}"
     )
+
+
+SOURCES_COM_CONTATO_ATIVO = {"landing-page"}
+
+# Janela máxima entre a criação do lead e o disparo. É a guarda que impede que
+# qualquer reprocessamento ou backfill dispare mensagem para lead antigo: mesmo
+# que created_at == updated_at, um lead de horas atrás não é abordado.
+IDADE_MAXIMA_MINUTOS = 10
+
+
+def should_start_conversation(lead, clinic, *, agora=None) -> bool:
+    """O bot deve abrir conversa com este lead?
+
+    Quatro guardas independentes, todas precisam passar. A mensagem chega no
+    WhatsApp de uma pessoa real e não tem desfazer, e há 44 leads cadastrados
+    com conversa em andamento que jamais podem ser abordados por engano.
+    """
+    if not lead or not clinic:
+        return False
+
+    if lead.get("source") not in SOURCES_COM_CONTATO_ATIVO:
+        return False
+
+    if not lead.get("phone"):
+        return False
+
+    # Lead recorrente cai em UPDATE no upsert: não é primeiro contato.
+    if lead.get("created_at") != lead.get("updated_at"):
+        return False
+
+    criado = lead.get("created_at")
+    if criado is None:
+        return False
+    if criado.tzinfo is None:
+        criado = criado.replace(tzinfo=timezone.utc)
+    referencia = agora or datetime.now(timezone.utc)
+    if referencia - criado > timedelta(minutes=IDADE_MAXIMA_MINUTOS):
+        return False
+
+    from src.services.bot_policy import should_bot_reply
+
+    # A sessão ainda não existe: é ela que este disparo vai criar. Passamos
+    # bot_enabled=True porque a origem landing-page já foi conferida acima, e é
+    # exatamente isso que a política LEADS_ONLY exige da conversa.
+    return should_bot_reply(clinic, {"bot_enabled": True}, lead["phone"])
+
+
+def _enfileira_contato_ativo(log_prefix, db, lead, clinic_id):
+    """Enfileira a abertura de conversa. Nunca propaga erro: capturar o lead vale mais."""
+    try:
+        clinics = db.execute_query(
+            "SELECT * FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
+            (clinic_id,),
+        )
+        if not clinics:
+            logger.warning(f"{log_prefix} Clínica {clinic_id} não encontrada, sem contato ativo")
+            return
+        clinic = clinics[0]
+
+        if not should_start_conversation(lead, clinic):
+            logger.info(
+                f"{log_prefix} Contato ativo não elegível: source={lead.get('source')!r} "
+                f"policy={clinic.get('bot_autoreply_policy') or 'ALL'}"
+            )
+            return
+
+        from src.services.outbound_queue import OutboundQueueService
+
+        item = OutboundQueueService().enqueue(
+            clinic_id,
+            lead["phone"],
+            lead_id=str(lead["id"]),
+            business_hours=clinic.get("business_hours") or {},
+        )
+        if item:
+            # execute_write, não execute_query: query espera SELECT e levanta
+            # "no results to fetch" num UPDATE.
+            db.execute_write(
+                "UPDATE scheduler.leads SET first_contact_status = 'QUEUED', updated_at = NOW() "
+                "WHERE id = %s::uuid",
+                (str(lead["id"]),),
+            )
+            logger.info(
+                f"{log_prefix} Contato ativo enfileirado: {item['messageId']} "
+                f"sai a partir de {item['sendAfter']}"
+            )
+    except Exception as e:
+        logger.error(f"{log_prefix} Falha ao enfileirar contato ativo: {e}", exc_info=True)
 
 
 def handler(event, context):
@@ -233,6 +321,9 @@ def handler(event, context):
                         f"{log_prefix} Read-back pós-commit FALHOU: id={lead.get('id')} não encontrado "
                         f"após o commit — escrita revertida ou banco/schema diferente do lido. {_db_target()}"
                     )
+
+        if lead:
+            _enfileira_contato_ativo(log_prefix, db, lead, body["clinicId"])
 
         logger.info(f"{log_prefix} 201 Lead registrado ({elapsed_ms()}ms total)")
         return http_response(201, {

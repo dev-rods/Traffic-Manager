@@ -36,6 +36,8 @@ SQL_STATEMENTS = [
         display_name VARCHAR(255),
         use_agent BOOLEAN DEFAULT FALSE,
         bot_paused BOOLEAN DEFAULT FALSE,
+        bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL',
+        bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}',
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -106,6 +108,9 @@ SQL_STATEMENTS = [
         phone VARCHAR(20) NOT NULL,
         name VARCHAR(255),
         gender VARCHAR(1) CHECK (gender IN ('M', 'F')),
+        birth_date DATE,
+        cpf VARCHAR(14),
+        email VARCHAR(255),
         last_message_at TIMESTAMPTZ,
         deleted_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -448,6 +453,9 @@ SQL_STATEMENTS = [
         first_appointment_id UUID REFERENCES scheduler.appointments(id),
         first_appointment_value DECIMAL(10,2),
         raw_message TEXT,
+        first_contact_status VARCHAR(20),
+        first_contact_at TIMESTAMPTZ,
+        conversation_started_at TIMESTAMPTZ,
         metadata JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -491,6 +499,38 @@ SQL_STATEMENTS = [
 
     # Bot pause flag per clinic
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_paused BOOLEAN DEFAULT FALSE",
+
+    # Política de resposta automática do bot, por clínica.
+    # ALL preserva o comportamento atual de quem já usa o bot; as demais restringem.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL'",
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_bot_autoreply_policy') THEN
+            ALTER TABLE scheduler.clinics ADD CONSTRAINT chk_bot_autoreply_policy
+            CHECK (bot_autoreply_policy IN ('ALL', 'PILOT', 'LEADS_ONLY', 'OFF'));
+        END IF;
+    END $$
+    """,
+    # Telefones do piloto, normalizados (55DDDNNNNNNNNN). Só usado com policy=PILOT.
+    # Separado de ALLOWED_PHONES do SSM de propósito: aquela governa também lembretes
+    # de consulta e disparos do painel, e restringi-la deixaria pacientes sem lembrete.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}'",
+
+    # Dados de cadastro coletados na confirmação do agendamento.
+    # Sem estas colunas o bot pediria CPF e data de nascimento e descartaria a
+    # resposta, que além de inútil é ruim para dado pessoal.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS birth_date DATE",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS cpf VARCHAR(14)",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+
+    # Rastreio do primeiro contato ativo com o lead.
+    # first_contact_at é "falamos com ele"; conversation_started_at é "ele respondeu".
+    # Sem separar não dá para medir a taxa de resposta da abordagem.
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_status VARCHAR(20)",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_at TIMESTAMPTZ",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS conversation_started_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS idx_leads_first_contact ON scheduler.leads(clinic_id, first_contact_status)",
 
     # Configurable default message template for batch WhatsApp sends
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS batch_message_template TEXT",

@@ -264,10 +264,14 @@ export interface ApiError {
 }
 
 // ── Bot / Conversations ──────────────────────────────────────
+/** Por que o bot não responde uma conversa. null quando ele está respondendo. */
+export type PauseReason = 'attendant' | 'clinic_paused' | 'not_eligible' | null
+
 export interface ActiveConversation {
   phone: string
   state: string
   bot_paused: boolean
+  pause_reason: PauseReason
   attendant_active_until: number | null
   updated_at: string
 }
@@ -321,6 +325,12 @@ export interface Lead {
   first_appointment_id: string | null
   first_appointment_value: number | null
   raw_message: string | null
+  /** Estado da abordagem ativa do bot: QUEUED enfileirada, SENT enviada, FAILED falhou. */
+  first_contact_status: 'QUEUED' | 'SENT' | 'FAILED' | null
+  /** Quando o bot falou com o lead. */
+  first_contact_at: string | null
+  /** Quando o lead respondeu. Distinto de first_contact_at: é o que mede a taxa de resposta. */
+  conversation_started_at: string | null
   created_at: string
   updated_at: string
 }

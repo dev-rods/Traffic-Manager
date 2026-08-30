@@ -5,7 +5,7 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { Button } from '@/components/ui/Button'
 import { Switch } from '@/components/ui/Switch'
 import type { UpdateClinicPayload } from '@/types'
-import { buildDefaultMessage } from '@/pages/pacientes/components/BatchMessageModal'
+import { buildDefaultMessage } from '@/utils/buildDefaultMessage'
 
 function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['data']>): UpdateClinicPayload {
   return {

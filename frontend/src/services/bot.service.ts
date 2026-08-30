@@ -28,6 +28,8 @@ interface BotMetricsResponse {
 interface AttendantResponse {
   status: string
   message: string
+  /** Ao retomar: o bot encontrou uma pergunta sem resposta e vai respondê-la. */
+  answering_open_question?: boolean
 }
 
 interface AttendantStatusResponse {

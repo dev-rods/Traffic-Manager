@@ -35,6 +35,7 @@ provider:
     CONVERSATION_SESSIONS_TABLE: ${self:custom.resourcePrefix}-conversation-sessions
     MESSAGE_EVENTS_TABLE: ${self:custom.resourcePrefix}-message-events
     SCHEDULED_REMINDERS_TABLE: ${self:custom.resourcePrefix}-scheduled-reminders
+    OUTBOUND_QUEUE_TABLE: ${self:custom.resourcePrefix}-outbound-queue
     RDS_HOST: ${ssm:/${self:custom.stage}/SUPABASE_DB_HOST}
     RDS_PORT: ${ssm:/${self:custom.stage}/SUPABASE_DB_PORT}
     RDS_DATABASE: ${ssm:/${self:custom.stage}/SUPABASE_DB_NAME}
@@ -69,11 +70,13 @@ functions:
   - ${file(sls/functions/patient/interface.yml)}
   - ${file(sls/functions/lead/interface.yml)}
   - ${file(sls/functions/attendant/interface.yml)}
+  - ${file(sls/functions/outbound/interface.yml)}
 
 resources:
   - ${file(sls/resources/dynamodb/conversation-sessions-table.yml)}
   - ${file(sls/resources/dynamodb/message-events-table.yml)}
   - ${file(sls/resources/dynamodb/scheduled-reminders-table.yml)}
+  - ${file(sls/resources/dynamodb/outbound-queue-table.yml)}
 
 plugins:
   - serverless-python-requirements

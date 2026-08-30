@@ -3,6 +3,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useSendBatchMessages, type BatchMessageResult } from '@/hooks/useMessages'
 import { formatPhone } from '@/utils/formatPhone'
+import { buildDefaultMessage } from '@/utils/buildDefaultMessage'
 import type { PatientWithStats } from '@/types'
 import type { SendMessagePayload } from '@/services/messages.service'
 
@@ -24,17 +25,6 @@ interface BatchMessageModalProps {
   clinicTemplate?: string | null
   onClose: () => void
   onDone: () => void
-}
-
-export function buildDefaultMessage(availableDates: string[]): string {
-  const datesText = availableDates.length > 0
-    ? availableDates.map((d) => {
-        const [, m, day] = d.split('-')
-        return `${day}/${m}`
-      }).join(', ')
-    : 'em breve'
-
-  return `Oi {nome}! Tudo bem?\n\nEstamos com novas datas disponíveis para agendamento: *${datesText}*.\n\nGostaria de agendar sua sessão? Responda aqui que te ajudamos!`
 }
 
 export function BatchMessageModal({ open, patients, availableDates, clinicTemplate, onClose, onDone }: BatchMessageModalProps) {
