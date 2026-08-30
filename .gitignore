@@ -3,3 +3,16 @@ scheduler/sa.json
 frontend/.env
 frontend/.env.local
 frontend/.env*.local
+
+# Python
+__pycache__/
+*.pyc
+
+# Credenciais e tokens: nunca versionar, em nenhum diretório do monorepo.
+# Os padrões abaixo valem para o repo inteiro; infra/.gitignore tem as regras
+# específicas do Google Ads. client_secret.json e o refresh token do Google Ads
+# ficavam de fora dos dois: um `git add -A` distraído publicaria a credencial.
+client_secret*.json
+*refresh_token*.txt
+*access_token*.txt
+infra/src/scripts/tokens/
