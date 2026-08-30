@@ -78,7 +78,8 @@ SQL_STATEMENTS = [
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
         professional_id UUID REFERENCES scheduler.professionals(id),
-        day_of_week INTEGER NOT NULL,
+        day_of_week INTEGER,
+        rule_date DATE,
         start_time TIME NOT NULL,
         end_time TIME NOT NULL,
         active BOOLEAN DEFAULT TRUE,
@@ -258,6 +259,15 @@ SQL_STATEMENTS = [
             ADD CONSTRAINT uq_availability_rules_clinic_day UNIQUE (clinic_id, day_of_week);
         END IF;
     END $$
+    """,
+
+    # Impede data fixa duplicada (mesma data + mesmo horario de inicio).
+    # Indice parcial: nao afeta regras recorrentes, onde rule_date e NULL.
+    # Inclui start_time para permitir faixas distintas na mesma data (manha e tarde).
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_availability_rules_clinic_date
+    ON scheduler.availability_rules (clinic_id, rule_date, start_time)
+    WHERE rule_date IS NOT NULL
     """,
 
     # Índices

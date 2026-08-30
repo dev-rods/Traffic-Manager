@@ -1,0 +1,12 @@
+{
+  "httpMethod": "PATCH",
+  "path": "/clinics/clinic-test/availability-rules/00000000-0000-0000-0000-000000000001",
+  "pathParameters": {
+    "clinicId": "clinic-test",
+    "ruleId": "00000000-0000-0000-0000-000000000001"
+  },
+  "headers": {
+    "x-api-key": "REPLACE_WITH_ENV_KEY"
+  },
+  "body": "{\"start_time\":\"08:00\",\"end_time\":\"17:00\"}"
+}

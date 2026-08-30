@@ -209,6 +209,11 @@ export interface CreateAvailabilityRulePayload {
   end_time: string
 }
 
+export interface UpdateAvailabilityRulePayload {
+  start_time?: string
+  end_time?: string
+}
+
 export interface AvailabilityException {
   id: string
   clinic_id: string
@@ -217,7 +222,6 @@ export interface AvailabilityException {
   start_time: string | null
   end_time: string | null
   reason: string | null
-  active: boolean
 }
 
 export interface CreateAvailabilityExceptionPayload {

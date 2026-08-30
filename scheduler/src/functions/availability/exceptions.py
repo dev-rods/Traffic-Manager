@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime, date, time
+from psycopg2 import errors as pg_errors
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 
@@ -120,4 +121,51 @@ def list_handler(event, context):
 
     except Exception as e:
         logger.error(f"Error listing availability exceptions: {str(e)}")
+        return http_response(500, {"status": "ERROR", "message": str(e)})
+
+
+def delete_handler(event, context):
+    """
+    DELETE /clinics/{clinicId}/availability-exceptions/{exceptionId}
+
+    Hard delete: a tabela nao tem coluna active e nada referencia excecoes por FK.
+    """
+    try:
+        api_key, error_response = require_api_key(event)
+        if error_response:
+            return error_response
+
+        clinic_id = extract_path_param(event, "clinicId")
+        exception_id = extract_path_param(event, "exceptionId")
+        if not clinic_id or not exception_id:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "clinicId e exceptionId sao obrigatorios"
+            })
+
+        db = PostgresService()
+        deleted = db.execute_write_returning(
+            """
+            DELETE FROM scheduler.availability_exceptions
+            WHERE id = %s::uuid AND clinic_id = %s
+            RETURNING id
+            """,
+            (exception_id, clinic_id)
+        )
+
+        # Mesma resposta para "nao existe" e "pertence a outra clinica".
+        if not deleted:
+            return http_response(404, {
+                "status": "ERROR",
+                "message": "Excecao nao encontrada"
+            })
+
+        logger.info(f"[clinicId: {clinic_id}] Availability exception deleted: {exception_id}")
+
+        return http_response(200, {"status": "SUCCESS", "message": "Excecao excluida"})
+
+    except pg_errors.InvalidTextRepresentation:
+        return http_response(400, {"status": "ERROR", "message": "exceptionId invalido"})
+    except Exception as e:
+        logger.error(f"Error deleting availability exception: {str(e)}")
         return http_response(500, {"status": "ERROR", "message": str(e)})
