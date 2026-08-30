@@ -19,6 +19,43 @@ MAX_HISTORY_PAIRS = 20
 ATTENDANT_TTL_SECONDS = 24 * 60 * 60
 
 
+# Mensagens sintéticas que fazem o agente falar sem ninguém ter escrito. Ficam
+# aqui, e não no módulo de cada fluxo, porque quem precisa reconhecê-las é o
+# agente - importar de volta criaria ciclo.
+GATILHOS_SINTETICOS = ("__INICIAR_CONVERSA__", "__RETOMAR_CONVERSA__")
+
+
+def eh_gatilho_sintetico(conteudo):
+    """A mensagem é um gatilho da clínica, e não fala de alguém?"""
+    return (conteudo or "").strip() in GATILHOS_SINTETICOS
+
+
+def limpar_gatilhos(history):
+    """Tira os gatilhos do histórico antes de salvar.
+
+    Gatilho não é fala de ninguém: persistido, reaparece como turno da pessoa na
+    conversa seguinte. Removê-lo deixaria dois turnos de assistant colados, que a
+    API da Anthropic recusa, então os vizinhos são unidos.
+    """
+    limpo = []
+    for turno in history or []:
+        conteudo = turno.get("content")
+        if turno.get("role") == "user" and isinstance(conteudo, str) and eh_gatilho_sintetico(conteudo):
+            continue
+        if limpo and limpo[-1]["role"] == turno.get("role"):
+            anterior, atual = limpo[-1].get("content"), conteudo
+            if isinstance(anterior, str) and isinstance(atual, str):
+                limpo[-1] = {"role": turno["role"], "content": anterior + chr(10) + atual}
+            else:
+                # Conteúdo em blocos (tool_use, thinking): concatena as listas.
+                a = anterior if isinstance(anterior, list) else [{"type": "text", "text": str(anterior)}]
+                b = atual if isinstance(atual, list) else [{"type": "text", "text": str(atual)}]
+                limpo[-1] = {"role": turno["role"], "content": a + b}
+            continue
+        limpo.append(turno)
+    return limpo
+
+
 def events_to_history(events):
     """Converte eventos de mensagem em turnos de conversa para o agente.
 
@@ -106,13 +143,21 @@ class ConversationAgent:
         # Sanitize loaded history: sessions saved by older code versions may
         # start with an orphan tool_result block (no preceding tool_use), which
         # the Anthropic API rejects with 400.
+        gatilho = eh_gatilho_sintetico(incoming.content)
         history = self._truncate_history(session.get("agent_history", []))
-        if not history:
+        if gatilho or not history:
             # Sessão sem histórico não significa conversa nova: a pessoa pode já ter
             # escrito antes de o bot assumir, ou a sessão pode ter expirado. O
             # MessageEvents guarda 90 dias, então dá para retomar de onde parou em
             # vez de recomeçar por cima de uma conversa em andamento.
-            history = self._truncate_history(self.rebuild_history_from_events(clinic_id, phone))
+            #
+            # Num gatilho a reconstrução é obrigatória, mesmo com histórico na
+            # sessão: com o bot pausado o webhook grava no MessageEvents mas não
+            # chama o agente, então o agent_history está velho justamente nas
+            # mensagens que motivaram a retomada. Uma cliente perguntou duas vezes
+            # com o bot pausado e recebeu "tudo certo por aqui" ao retomar.
+            do_events = self._truncate_history(self.rebuild_history_from_events(clinic_id, phone))
+            history = do_events or history
         user_content = incoming.content or ""
         if incoming.button_id:
             user_content = incoming.button_text or incoming.button_id
@@ -188,7 +233,7 @@ class ConversationAgent:
             # message) so the next attempt has the full context. Without this,
             # the user's message is silently dropped and they have to repeat it.
             try:
-                session["agent_history"] = self._truncate_history(history)
+                session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
                 session["mode"] = "agent"
                 self._save_session(clinic_id, phone, session)
             except Exception as save_err:
@@ -209,7 +254,7 @@ class ConversationAgent:
         outgoing = self._build_outgoing(final_text, pending_buttons)
 
         # 8. Save history (truncated)
-        session["agent_history"] = self._truncate_history(history)
+        session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
         session["mode"] = "agent"
         self._save_session(clinic_id, phone, session)
 
