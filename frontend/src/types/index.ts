@@ -99,6 +99,28 @@ export interface DiscountRule {
   is_active: boolean
 }
 
+/**
+ * Duração da sessão por quantidade de áreas.
+ *
+ * A duração não é a soma das durações por área: o laser é aplicado em sequência
+ * e o preparo não se repete, então seis áreas levam 35 minutos e não 60.
+ */
+export interface DurationRule {
+  clinic_id: string
+  /** 1 área, e piso de qualquer atendimento. */
+  base_duration_minutes: number
+  tier_2_min_areas: number
+  tier_2_max_areas: number
+  tier_2_duration_minutes: number
+  tier_3_min_areas: number
+  tier_3_max_areas: number
+  tier_3_duration_minutes: number
+  /** Última faixa: vale de tier_4_min_areas para cima, sem teto. */
+  tier_4_min_areas: number
+  tier_4_duration_minutes: number
+  is_active: boolean
+}
+
 export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'partnership' | 'custom' | null
 
 export interface DiscountBreakdown {

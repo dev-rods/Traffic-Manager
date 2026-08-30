@@ -4,6 +4,8 @@ import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
+from src.services.duration_rules import duration_for_areas, get_duration_rules
+
 logger = logging.getLogger(__name__)
 
 
@@ -606,21 +608,11 @@ class ToolExecutor:
         if not all([service_area_pairs, date, time_str, full_name]):
             return {"error": "Missing required fields: service_area_pairs, date, time, full_name"}
 
-        # Calculate total duration from service_area_pairs
-        total_duration = 0
-        for pair in service_area_pairs:
-            rows = self.db.execute_query(
-                """
-                SELECT COALESCE(sa.duration_minutes, s.duration_minutes) as duration_minutes,
-                       COALESCE(sa.price_cents, s.price_cents) as price_cents
-                FROM scheduler.service_areas sa
-                JOIN scheduler.services s ON s.id = sa.service_id
-                WHERE sa.service_id = %s AND sa.area_id = %s
-                """,
-                (pair["service_id"], pair["area_id"]),
-            )
-            if rows:
-                total_duration += rows[0]["duration_minutes"] or 0
+        # Duração pela quantidade de áreas, não pela soma das durações cadastradas.
+        # Ver duration_rules.py para o porquê.
+        total_duration = duration_for_areas(
+            len(service_area_pairs), get_duration_rules(self.db, clinic_id)
+        )
 
         primary_service_id = service_area_pairs[0]["service_id"]
 

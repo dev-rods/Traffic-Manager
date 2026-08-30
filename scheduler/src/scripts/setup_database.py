@@ -304,6 +304,26 @@ SQL_STATEMENTS = [
 
     # Discount rules per clinic (configurable progressive discounts)
     """
+    CREATE TABLE IF NOT EXISTS scheduler.duration_rules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        base_duration_minutes INTEGER NOT NULL DEFAULT 15,
+        tier_2_min_areas INTEGER NOT NULL DEFAULT 2,
+        tier_2_max_areas INTEGER NOT NULL DEFAULT 3,
+        tier_2_duration_minutes INTEGER NOT NULL DEFAULT 20,
+        tier_3_min_areas INTEGER NOT NULL DEFAULT 4,
+        tier_3_max_areas INTEGER NOT NULL DEFAULT 6,
+        tier_3_duration_minutes INTEGER NOT NULL DEFAULT 35,
+        tier_4_min_areas INTEGER NOT NULL DEFAULT 7,
+        tier_4_duration_minutes INTEGER NOT NULL DEFAULT 45,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(clinic_id)
+    )
+    """,
+
+    """
     CREATE TABLE IF NOT EXISTS scheduler.discount_rules (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
@@ -580,6 +600,15 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS offline_conversion_action_id VARCHAR(30)",
     # Note: scheduler.lead_conversions is defined (CREATE IF NOT EXISTS) in the tables
     # section above, which also covers existing DBs on re-run.
+
+    # Regras de duração da sessão por quantidade de áreas.
+    # Semeia uma linha por clínica com o padrão da Essência: quem já opera não
+    # fica sem regra, e quem quiser ajusta pelo painel.
+    """
+    INSERT INTO scheduler.duration_rules (clinic_id)
+    SELECT clinic_id FROM scheduler.clinics
+    ON CONFLICT (clinic_id) DO NOTHING
+    """,
 ]
 
 
