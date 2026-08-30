@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useDiscountRules, useUpsertDiscountRules } from '@/hooks/useDiscountRules'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -18,10 +18,12 @@ export function DescontosPage() {
   const [t3Pct, setT3Pct] = useState(0)
   const [saved, setSaved] = useState(false)
 
-  // Populate form when data loads
+  // Popular o form durante o render, e não num effect: com effect o React
+  // renderiza uma vez com os valores vazios antes de aplicar os do servidor.
   const rules = data?.discount_rules
-  useEffect(() => {
-    if (!rules) return
+  const [prevRules, setPrevRules] = useState(rules)
+  if (rules && rules !== prevRules) {
+    setPrevRules(rules)
     setIsActive(rules.is_active)
     setFirstSessionPct(rules.first_session_discount_pct)
     setT2Min(rules.tier_2_min_areas)
@@ -29,7 +31,7 @@ export function DescontosPage() {
     setT2Pct(rules.tier_2_discount_pct)
     setT3Min(rules.tier_3_min_areas)
     setT3Pct(rules.tier_3_discount_pct)
-  }, [rules])
+  }
 
   const handleSave = async () => {
     setSaved(false)
