@@ -14,6 +14,9 @@ logger.setLevel(logging.INFO)
 
 ATTENDANT_TTL_SECONDS = 24 * 60 * 60
 
+# Payload da auto-invocação assíncrona. Não vem do API Gateway.
+TAREFA_RETOMADA = "responder_retomada"
+
 
 def _get_clinic(clinic_id):
     """Clínica com a política de resposta. Falha vira dict vazio, que o
@@ -74,6 +77,13 @@ def handler(event, context):
     POST /attendant/deactivate — resume bot for a phone
     GET  /attendant/status     — check bot status for a phone
     """
+    # Execução assíncrona que a própria função agendou. Chega sem httpMethod:
+    # não passou pelo API Gateway, então não tem o teto de 29s.
+    if event.get("internal_task") == TAREFA_RETOMADA:
+        from src.services.conversation_resume import responder_se_ficou_em_aberto
+
+        return {"replied": responder_se_ficou_em_aberto(event["clinic_id"], event["phone"])}
+
     method = event.get("httpMethod", "").upper()
     path = event.get("path", "")
 
@@ -86,7 +96,7 @@ def handler(event, context):
     elif method == "POST" and path.endswith("/activate"):
         return _handle_activate(event)
     elif method == "POST" and path.endswith("/deactivate"):
-        return _handle_deactivate(event)
+        return _handle_deactivate(event, context)
     else:
         return http_response(404, {"status": "ERROR", "message": "Rota nao encontrada"})
 
@@ -121,7 +131,7 @@ def _handle_activate(event):
     })
 
 
-def _handle_deactivate(event):
+def _handle_deactivate(event, context):
     body = parse_body(event)
     if not body:
         return http_response(400, {"status": "ERROR", "message": "Body obrigatorio"})
@@ -150,10 +160,55 @@ def _handle_deactivate(event):
     _save_session(table, clinic_id, phone, item)
     logger.info(f"[Attendant] Bot retomado para {phone} na clinica {clinic_id}")
 
+    respondendo = _agendar_retomada(clinic_id, phone, context)
+
     return http_response(200, {
         "status": "OK",
         "message": f"Bot retomado para {phone}",
+        "answering_open_question": respondendo,
     })
+
+
+def _agendar_retomada(clinic_id, phone, context):
+    """Faz o bot responder o que ficou em aberto. Devolve se há o que responder.
+
+    O guard roda aqui, e não no agente, por dois motivos: a tela precisa saber na
+    hora se o bot vai falar, e chamar o LLM para ele concluir que não há nada a
+    dizer custa caro e arrisca uma mensagem indevida.
+
+    O envio vai para uma execução assíncrona porque o agente leva de 3 a 15s e o
+    API Gateway corta em 29 - falhar ali mostraria erro na tela depois de a
+    mensagem já ter saído.
+    """
+    try:
+        from src.services.conversation_resume import (
+            EVENTOS_PARA_CONTEXTO,
+            ha_pergunta_em_aberto,
+        )
+        from src.services.message_tracker import MessageTracker
+
+        eventos = MessageTracker().get_conversation_messages(
+            clinic_id, phone, limit=EVENTOS_PARA_CONTEXTO
+        )
+        if not ha_pergunta_em_aberto(eventos):
+            logger.info(f"[Attendant] Nada pendente com {phone}, bot só ativado")
+            return False
+
+        boto3.client("lambda").invoke(
+            FunctionName=context.invoked_function_arn,
+            InvocationType="Event",
+            Payload=json.dumps({
+                "internal_task": TAREFA_RETOMADA,
+                "clinic_id": clinic_id,
+                "phone": phone,
+            }),
+        )
+        logger.info(f"[Attendant] Retomada agendada para {phone}")
+        return True
+    except Exception as e:
+        # Ativar o bot já funcionou e foi salvo; responder o pendente é um extra.
+        logger.error(f"[Attendant] Não consegui agendar a retomada de {phone}: {e}")
+        return False
 
 
 def _handle_status(event):

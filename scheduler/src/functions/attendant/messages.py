@@ -56,13 +56,16 @@ def handler(event, context):
         dynamodb = boto3.resource("dynamodb")
         table = dynamodb.Table(TABLE_NAME)
 
+        # Descendente e depois invertido: com Limit, ascendente traria o COMEÇO da
+        # conversa. Em conversa longa o painel mostrava mensagens antigas e
+        # escondia as de hoje, com a última pergunta aparecendo como sem resposta.
         response = table.query(
             KeyConditionExpression=Key("pk").eq(f"CLINIC#{clinic_id}#PHONE#{clean_phone}"),
-            ScanIndexForward=True,
+            ScanIndexForward=False,
             Limit=limit,
         )
 
-        items = response.get("Items", [])
+        items = list(reversed(response.get("Items", [])))
 
         # First pass: collapse QUEUED/SENT rows per messageId (they share the same pk)
         # and collect providerMessageIds so we can look up delivery updates via the GSI.

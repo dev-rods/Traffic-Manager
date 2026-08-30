@@ -1,7 +1,10 @@
 AttendantControl:
   handler: src.functions.attendant.handler.handler
   memorySize: 512
-  timeout: 30
+  # 60s vale para a execução assíncrona que responde o que ficou em aberto: o
+  # agente leva de 3 a 15s. O caminho HTTP continua limitado a 29s pelo API
+  # Gateway, mas retorna em menos de 1s porque não espera o agente.
+  timeout: 60
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-AttendantControl-lambdaRole
   iamRoleStatements:
     - Effect: Allow
@@ -10,6 +13,22 @@ AttendantControl:
         - dynamodb:PutItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
+    # Lê a conversa para saber se ficou pergunta sem resposta e registra o que o
+    # bot responder ao retomar.
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:PutItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events/index/*"
+    # Auto-invocação: o envio roda fora do request para não esbarrar no teto do
+    # API Gateway.
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+      Resource:
+        - "arn:aws:lambda:${self:provider.region}:${self:custom.accountId}:function:${self:service}-${self:custom.stage}-AttendantControl"
     - Effect: Allow
       Action:
         - ssm:GetParameter

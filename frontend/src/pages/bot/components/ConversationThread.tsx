@@ -10,6 +10,8 @@ interface ConversationThreadProps {
   botPaused?: boolean
   /** Por que o bot não responde: muda o texto do botão e explica o motivo. */
   pauseReason?: PauseReason
+  /** O bot foi ativado sobre uma pergunta sem resposta e está escrevendo. */
+  answering?: boolean
   onPause: () => void
   onResume: () => void
   onClose: () => void
@@ -72,7 +74,7 @@ function DeliveryTicks({ status }: { status: MessageStatus }) {
   )
 }
 
-export function ConversationThread({ phone, senderName, botPaused, pauseReason, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
+export function ConversationThread({ phone, senderName, botPaused, pauseReason, answering, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
   const { data, isLoading } = useConversationMessages(phone)
   const messages = useMemo(() => data?.messages ?? [], [data])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -82,7 +84,7 @@ export function ConversationThread({ phone, senderName, botPaused, pauseReason, 
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, answering])
 
   return (
     <div className="flex flex-col h-full">
@@ -148,6 +150,19 @@ export function ConversationThread({ phone, senderName, botPaused, pauseReason, 
               </div>
             </div>
           ))
+        )}
+
+        {/* A resposta leva alguns segundos: sem sinal, a tela parece inerte e
+            quem clicou clica de novo. */}
+        {answering && (
+          <div className="ml-auto flex max-w-[75%] items-center gap-2 rounded-2xl rounded-br-sm bg-brand-50 px-3.5 py-2.5 text-sm text-brand-700">
+            <span className="flex gap-1" aria-hidden="true">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-400 motion-safe:animate-pulse" />
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-400 motion-safe:animate-pulse [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-400 motion-safe:animate-pulse [animation-delay:300ms]" />
+            </span>
+            Respondendo o que ficou em aberto
+          </div>
         )}
       </div>
     </div>

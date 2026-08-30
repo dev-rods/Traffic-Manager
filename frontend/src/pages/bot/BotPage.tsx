@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
-import { useActiveConversations, useRecentConversations, useBotMetrics, usePauseBot, useResumeBot } from '@/hooks/useBot'
+import { useActiveConversations, useRecentConversations, useBotMetrics, usePauseBot, useResumeBot, ESPERA_RESPOSTA_RETOMADA_MS } from '@/hooks/useBot'
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -24,6 +24,10 @@ export function BotPage() {
 
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
   const [selectedName, setSelectedName] = useState('')
+  // Telefone que o bot está respondendo agora. Guardar o telefone, e não um
+  // booleano, evita mostrar o indicador na conversa errada se o usuário trocar
+  // de conversa enquanto a resposta é escrita.
+  const [answeringPhone, setAnsweringPhone] = useState<string | null>(null)
 
   const pausedConversations = (activeData?.conversations ?? []).filter((c) => c.bot_paused)
   // A conversa selecionada carrega o motivo da pausa; sem ela o botão não sabe
@@ -150,7 +154,20 @@ export function BotPage() {
                   botPaused={selectedConversation?.bot_paused ?? false}
                   pauseReason={selectedConversation?.pause_reason ?? null}
                   onPause={() => pauseBot.mutate(selectedPhone)}
-                  onResume={() => resumeBot.mutate(selectedPhone)}
+                  answering={answeringPhone === selectedPhone}
+                  onResume={() => {
+                    const phone = selectedPhone
+                    resumeBot.mutate(phone, {
+                      onSuccess: (data) => {
+                        if (!data.answering_open_question) return
+                        setAnsweringPhone(phone)
+                        window.setTimeout(
+                          () => setAnsweringPhone((atual) => (atual === phone ? null : atual)),
+                          ESPERA_RESPOSTA_RETOMADA_MS,
+                        )
+                      },
+                    })
+                  }}
                   onClose={() => setSelectedPhone(null)}
                   pauseLoading={pauseBot.isPending}
                   resumeLoading={resumeBot.isPending}

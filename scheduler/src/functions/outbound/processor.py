@@ -18,7 +18,8 @@ import os
 
 import boto3
 
-from src.providers.whatsapp_provider import IncomingMessage, get_provider
+from src.providers.whatsapp_provider import get_provider
+from src.services.agent_runner import falar
 from src.services.bot_policy import should_bot_reply
 from src.services.business_hours import CLINIC_TZ, is_open
 from src.services.db.postgres import PostgresService
@@ -39,22 +40,6 @@ GATILHO_ABERTURA = "__INICIAR_CONVERSA__"
 
 def _sessions_table():
     return boto3.resource("dynamodb").Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
-
-
-def _monta_agente(db, provider, tracker):
-    from src.services.appointment_service import AppointmentService
-    from src.services.availability_engine import AvailabilityEngine
-    from src.services.conversation_agent import ConversationAgent
-    from src.services.template_service import TemplateService
-
-    return ConversationAgent(
-        db=db,
-        template_service=TemplateService(db),
-        availability_engine=AvailabilityEngine(db),
-        appointment_service=AppointmentService(db),
-        provider=provider,
-        message_tracker=tracker,
-    )
 
 
 def handler(event, context):
@@ -122,53 +107,17 @@ def handler(event, context):
                 continue
 
             provider = get_provider(clinic)
-            agente = _monta_agente(db, provider, tracker)
-
-            abertura = IncomingMessage(
-                message_id=str(uuid.uuid4()),
-                phone=phone,
-                sender_name="",
-                timestamp=int(time.time()),
-                message_type="TEXT",
-                content=GATILHO_ABERTURA,
+            enviou_alguma, quantas = falar(
+                clinic_id, phone, GATILHO_ABERTURA,
+                db=db, provider=provider, tracker=tracker,
+                metadata={"kind": item.get("kind"), "leadId": item.get("leadId")},
             )
-            saidas = agente.process_message(clinic_id, abertura)
 
-            if not saidas:
+            if not quantas:
                 logger.error(f"{prefixo} Agente não gerou texto para {phone} ({message_id})")
                 queue.mark_failed(message_id, item["pk"], item["sk"], "agente_nao_gerou_texto")
                 failed += 1
                 continue
-
-            conversation_id = f"{clinic_id}#{phone}"
-            enviou_alguma = False
-            for msg in saidas:
-                msg_id = str(uuid.uuid4())
-                tracker.track_outbound(
-                    clinic_id=clinic_id, phone=phone, message_id=msg_id,
-                    conversation_id=conversation_id, message_type=msg.message_type.upper(),
-                    content=msg.content, status="QUEUED",
-                    metadata={"kind": item.get("kind"), "leadId": item.get("leadId")},
-                )
-                if msg.message_type == "buttons" and msg.buttons:
-                    response = provider.send_buttons(phone, msg.content, msg.buttons)
-                elif msg.message_type == "list" and msg.sections:
-                    response = provider.send_list(
-                        phone, msg.content, msg.button_text or "Selecione", msg.sections
-                    )
-                else:
-                    response = provider.send_text(phone, msg.content)
-
-                tracker.track_outbound(
-                    clinic_id=clinic_id, phone=phone, message_id=msg_id,
-                    conversation_id=conversation_id, message_type=msg.message_type.upper(),
-                    content=msg.content,
-                    status="SENT" if response.success else "FAILED",
-                    provider_message_id=getattr(response, "provider_message_id", None),
-                    provider_response=getattr(response, "raw_response", None),
-                    metadata=None if response.success else {"error": response.error},
-                )
-                enviou_alguma = enviou_alguma or response.success
 
             if not enviou_alguma:
                 queue.mark_failed(message_id, item["pk"], item["sk"], "provider_recusou_envio")
