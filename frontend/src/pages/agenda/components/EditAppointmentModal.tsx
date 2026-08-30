@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
-import { Input } from '@/components/ui/Input'
+import { DateSelect } from '@/components/ui/DateSelect'
 import { Button } from '@/components/ui/Button'
 import { useUpdateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
@@ -195,12 +195,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
         </div>
 
         {/* Date */}
-        <Input
-          label="Data"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <DateSelect value={date} onChange={setDate}
+          includePast />
 
         {/* Service */}
         <div>
