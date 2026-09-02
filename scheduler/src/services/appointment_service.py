@@ -3,7 +3,8 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
-from src.services.duration_rules import duration_for_areas, get_duration_rules
+from src.services.duration_rules import (
+    calcula_duracao, duracao_da_sessao, get_duration_rules)
 
 logger = logging.getLogger(__name__)
 
@@ -64,16 +65,23 @@ class AppointmentService:
         # Build a lookup by id for ordering and data
         svc_lookup = {str(s["id"]): s for s in services}
 
-        # A duração vem da QUANTIDADE de áreas, não da soma das durações
-        # cadastradas: o laser é aplicado em sequência e o preparo não se repete
-        # a cada área, então somar produzia sessões irreais (6 áreas de 10min
-        # viravam 60min quando o atendimento leva 35). Ver duration_rules.py.
-        if total_duration_minutes:
-            duration_minutes = int(total_duration_minutes)
+        # A duração é sempre derivada, nunca informada. O parâmetro
+        # total_duration_minutes continua na assinatura para não quebrar quem
+        # chama, mas não decide nada: o agente já pediu horário para uma sessão
+        # de 4 minutos com ele. Ver duration_rules.py.
+        if service_area_pairs:
+            duration_minutes = calcula_duracao(self.db, clinic_id, service_area_pairs)
         else:
-            quantidade_areas = len(service_area_pairs) if service_area_pairs else len(all_service_ids)
-            duration_minutes = duration_for_areas(
-                quantidade_areas, get_duration_rules(self.db, clinic_id)
+            # Serviço sem área detalhada: a soma bruta são as durações dos
+            # próprios serviços, e passa pelos mesmos piso, teto e passo.
+            bruto = sum(int(svc_lookup[sid]["duration_minutes"] or 0)
+                        for sid in all_service_ids if sid in svc_lookup)
+            duration_minutes = duracao_da_sessao(bruto, get_duration_rules(self.db, clinic_id))
+
+        if total_duration_minutes and int(total_duration_minutes) != duration_minutes:
+            logger.info(
+                f"[Duracao] {clinic_id}: ignorando total_duration_minutes="
+                f"{total_duration_minutes} do chamador; calculado={duration_minutes}"
             )
 
         # 2b. Auto-calculate prices when not provided by caller
@@ -295,7 +303,11 @@ class AppointmentService:
                     duration_minutes = services[0]["duration_minutes"] if services else 60
 
         # 3. Calculate new end_time
-        duration_minutes = int(duration_minutes)
+        # Passa pelo cálculo mesmo quando o valor veio gravado: agendamento
+        # criado sob a regra antiga (faixas por quantidade de áreas) é
+        # normalizado aqui em vez de arrastar a duração velha para a agenda nova.
+        duration_minutes = duracao_da_sessao(
+            duration_minutes, get_duration_rules(self.db, clinic_id))
         start_parts = new_time.split(":")
         start_hour, start_min = int(start_parts[0]), int(start_parts[1])
         total_minutes = start_hour * 60 + start_min + duration_minutes
@@ -417,12 +429,12 @@ class AppointmentService:
                 LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
                 params,
             )
-            duration_minutes = duration_for_areas(
-                len(service_area_pairs), get_duration_rules(self.db, appointment["clinic_id"])
-            )
+            duration_minutes = calcula_duracao(
+                self.db, appointment["clinic_id"], service_area_pairs)
             original_price_cents = int(rows[0]["total_price"]) if rows and rows[0]["total_price"] else svc.get("price_cents")
         else:
-            duration_minutes = duration_for_areas(1, get_duration_rules(self.db, appointment["clinic_id"]))
+            duration_minutes = duracao_da_sessao(
+                svc.get("duration_minutes"), get_duration_rules(self.db, appointment["clinic_id"]))
             original_price_cents = svc.get("price_cents")
 
         final_price_cents = original_price_cents * (100 - discount_pct) // 100 if original_price_cents else original_price_cents

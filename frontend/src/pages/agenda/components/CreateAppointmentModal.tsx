@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { useCreateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
+import { calculaDuracao } from '@/lib/duracao'
+import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { usePatients, useCreatePatient } from '@/hooks/usePatients'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
@@ -68,13 +70,17 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
 
   // Fetch areas for selected service
   const { data: serviceAreas } = useServiceAreas(serviceId || undefined)
+  const { data: durationRulesData } = useDurationRules()
+  const durationRules = durationRulesData?.duration_rules
 
-  // Compute total duration from selected areas (if any), for accurate slot calculation
-  const totalDuration = selectedAreaIds.length > 0 && serviceAreas
+  const somaDasAreas = selectedAreaIds.length > 0 && serviceAreas
     ? serviceAreas
         .filter((a) => selectedAreaIds.includes(a.area_id))
         .reduce((sum, a) => sum + a.effective_duration_minutes, 0)
     : undefined
+  // Preview: o backend reaplica a mesma regra antes de devolver horários.
+  const totalDuration =
+    somaDasAreas === undefined ? undefined : calculaDuracao(somaDasAreas, durationRules)
 
   // Fetch available slots when date + service are set
   const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(

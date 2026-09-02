@@ -9,61 +9,40 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 ALLOWED_FIELDS = {
-    "base_duration_minutes",
-    "tier_2_min_areas",
-    "tier_2_max_areas",
-    "tier_2_duration_minutes",
-    "tier_3_min_areas",
-    "tier_3_max_areas",
-    "tier_3_duration_minutes",
-    "tier_4_min_areas",
-    "tier_4_duration_minutes",
+    "floor_minutes",
+    "ceiling_minutes",
+    "step_minutes",
     "is_active",
 }
 
-# Campos de duração precisam ser positivos: minuto zero ou negativo geraria
-# agendamento com fim antes do início, e a agenda aceitaria sobreposição infinita.
-CAMPOS_DE_MINUTOS = {
-    "base_duration_minutes",
-    "tier_2_duration_minutes",
-    "tier_3_duration_minutes",
-    "tier_4_duration_minutes",
-}
-CAMPOS_DE_AREAS = {
-    "tier_2_min_areas",
-    "tier_2_max_areas",
-    "tier_3_min_areas",
-    "tier_3_max_areas",
-    "tier_4_min_areas",
-}
+# Minuto zero ou negativo geraria agendamento com fim antes do início, e a
+# agenda aceitaria sobreposição infinita.
+CAMPOS_DE_MINUTOS = {"floor_minutes", "ceiling_minutes", "step_minutes"}
 
 
-def _valida(campos):
-    """Devolve a primeira mensagem de erro encontrada, ou None."""
+def _valida(campos, atuais=None):
+    """Devolve a primeira mensagem de erro encontrada, ou None.
+
+    `atuais` são os valores já gravados: sem eles, alterar só o piso deixaria
+    passar um piso acima do teto vigente, e a validação só pareceria funcionar.
+    """
     for campo, valor in campos.items():
-        if campo in CAMPOS_DE_MINUTOS or campo in CAMPOS_DE_AREAS:
+        if campo in CAMPOS_DE_MINUTOS:
             if not isinstance(valor, int) or isinstance(valor, bool):
                 return f"{campo} deve ser um número inteiro"
             if valor < 1:
                 return f"{campo} deve ser maior que zero"
 
-    # As faixas precisam subir: 2 antes de 3, 3 antes de 4. Fora de ordem, a
-    # busca da faixa devolveria sempre a mais alta e todo mundo teria 45 minutos.
-    fronteiras = [
-        ("tier_2_min_areas", "tier_2_max_areas"),
-        ("tier_3_min_areas", "tier_3_max_areas"),
-    ]
-    for min_campo, max_campo in fronteiras:
-        minimo, maximo = campos.get(min_campo), campos.get(max_campo)
-        if minimo is not None and maximo is not None and maximo < minimo:
-            return f"{max_campo} nao pode ser menor que {min_campo}"
+    efetivo = dict(atuais or {})
+    efetivo.update(campos)
 
-    ordem = ["tier_2_min_areas", "tier_3_min_areas", "tier_4_min_areas"]
-    valores = [campos.get(c) for c in ordem]
-    informados = [(c, v) for c, v in zip(ordem, valores) if v is not None]
-    for (campo_a, valor_a), (campo_b, valor_b) in zip(informados, informados[1:]):
-        if valor_b <= valor_a:
-            return f"{campo_b} deve ser maior que {campo_a}"
+    piso, teto = efetivo.get("floor_minutes"), efetivo.get("ceiling_minutes")
+    if piso is not None and teto is not None and int(piso) > int(teto):
+        return "floor_minutes nao pode ser maior que ceiling_minutes"
+
+    passo = efetivo.get("step_minutes")
+    if passo is not None and teto is not None and int(passo) > int(teto):
+        return "step_minutes nao pode ser maior que ceiling_minutes"
 
     return None
 
@@ -85,8 +64,9 @@ def handler(event, context):
     PUT /clinics/{clinicId}/duration-rules
     Body esperado (todos os campos sao opcionais):
     {
-        "first_session_discount_pct": 25,
-        "tier_2_discount_pct": 12,
+        "floor_minutes": 15,
+        "ceiling_minutes": 50,
+        "step_minutes": 5,
         "is_active": false
     }
     """
@@ -116,8 +96,17 @@ def handler(event, context):
         set_clauses = []
         params = []
 
+        db = PostgresService()
+
+        atuais_rows = db.execute_query(
+            "SELECT floor_minutes, ceiling_minutes, step_minutes "
+            "FROM scheduler.duration_rules WHERE clinic_id = %s",
+            (clinic_id,),
+        )
+        atuais = atuais_rows[0] if atuais_rows else {}
+
         informados = {c: body[c] for c in ALLOWED_FIELDS if c in body}
-        erro = _valida(informados)
+        erro = _valida(informados, atuais)
         if erro:
             return http_response(400, {"status": "ERROR", "message": erro})
 
@@ -141,8 +130,6 @@ def handler(event, context):
             WHERE clinic_id = %s
             RETURNING *
         """
-
-        db = PostgresService()
 
         result = db.execute_write_returning(query, tuple(params))
 

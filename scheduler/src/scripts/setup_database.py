@@ -31,7 +31,6 @@ SQL_STATEMENTS = [
         google_spreadsheet_id VARCHAR(255),  -- DEPRECATED: will be dropped by migration
         google_sheet_name VARCHAR(100) DEFAULT 'Agenda',  -- DEPRECATED: will be dropped by migration
         owner_email VARCHAR(255),
-        max_session_minutes INTEGER DEFAULT 60,
         welcome_intro_message TEXT,
         display_name VARCHAR(255),
         use_agent BOOLEAN DEFAULT FALSE,
@@ -317,15 +316,9 @@ SQL_STATEMENTS = [
     CREATE TABLE IF NOT EXISTS scheduler.duration_rules (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
-        base_duration_minutes INTEGER NOT NULL DEFAULT 15,
-        tier_2_min_areas INTEGER NOT NULL DEFAULT 2,
-        tier_2_max_areas INTEGER NOT NULL DEFAULT 3,
-        tier_2_duration_minutes INTEGER NOT NULL DEFAULT 20,
-        tier_3_min_areas INTEGER NOT NULL DEFAULT 4,
-        tier_3_max_areas INTEGER NOT NULL DEFAULT 6,
-        tier_3_duration_minutes INTEGER NOT NULL DEFAULT 35,
-        tier_4_min_areas INTEGER NOT NULL DEFAULT 7,
-        tier_4_duration_minutes INTEGER NOT NULL DEFAULT 45,
+        floor_minutes INTEGER NOT NULL DEFAULT 15,
+        ceiling_minutes INTEGER NOT NULL DEFAULT 50,
+        step_minutes INTEGER NOT NULL DEFAULT 5,
         is_active BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
@@ -351,7 +344,6 @@ SQL_STATEMENTS = [
     """,
 
     # Max session minutes and welcome intro message for clinics
-    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS max_session_minutes INTEGER DEFAULT 60",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS welcome_intro_message TEXT",
 
     # Discount fields on appointments
@@ -619,6 +611,26 @@ SQL_STATEMENTS = [
     SELECT clinic_id FROM scheduler.clinics
     ON CONFLICT (clinic_id) DO NOTHING
     """,
+
+    # A duracao deixou de ser faixa por quantidade de areas e passou a ser a
+    # soma das duracoes das areas, limitada por piso e teto e arredondada ao
+    # passo. As colunas de faixa nao decidem mais nada. Ver duration_rules.py.
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS floor_minutes INTEGER NOT NULL DEFAULT 15",
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS ceiling_minutes INTEGER NOT NULL DEFAULT 50",
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS step_minutes INTEGER NOT NULL DEFAULT 5",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS base_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_max_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_max_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_4_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_4_duration_minutes",
+
+    # clinics.max_session_minutes era um segundo teto, aplicado so no engine
+    # antigo e em desacordo com ceiling_minutes. O teto agora e um so.
+    "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS max_session_minutes",
 ]
 
 

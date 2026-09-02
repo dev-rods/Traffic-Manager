@@ -1,8 +1,8 @@
 """Validação das regras de duração vindas do painel.
 
 Uma configuração inválida não estoura na hora: ela vaza para a agenda. Duração
-zero cria agendamento com fim antes do início, e faixas fora de ordem fazem todo
-mundo cair na última faixa. Por isso a validação é no endpoint, não no cálculo.
+zero cria agendamento com fim antes do início, e piso acima do teto produz uma
+regra que se contradiz. Por isso a validação é no endpoint, não no cálculo.
 """
 import os
 import unittest
@@ -11,58 +11,60 @@ os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
 from src.functions.duration_rules.update import _valida
 
+ATUAIS = {"floor_minutes": 15, "ceiling_minutes": 50, "step_minutes": 5}
+
 
 class TestMinutos(unittest.TestCase):
     def test_configuracao_valida_passa(self):
-        self.assertIsNone(_valida({"base_duration_minutes": 15, "tier_2_duration_minutes": 20}))
+        self.assertIsNone(_valida({"floor_minutes": 15, "ceiling_minutes": 50}, ATUAIS))
 
     def test_duracao_zero_e_recusada(self):
-        erro = _valida({"base_duration_minutes": 0})
+        erro = _valida({"floor_minutes": 0}, ATUAIS)
 
+        self.assertIsNotNone(erro)
         self.assertIn("maior que zero", erro)
 
-    def test_duracao_negativa_e_recusada(self):
-        self.assertIsNotNone(_valida({"tier_3_duration_minutes": -10}))
+    def test_negativo_e_recusado(self):
+        self.assertIsNotNone(_valida({"ceiling_minutes": -10}, ATUAIS))
 
     def test_texto_e_recusado(self):
-        erro = _valida({"base_duration_minutes": "quinze"})
+        erro = _valida({"step_minutes": "cinco"}, ATUAIS)
 
         self.assertIn("inteiro", erro)
 
-    def test_booleano_nao_passa_como_inteiro(self):
-        """True é int em Python; sem checagem explícita viraria 1 minuto."""
-        self.assertIsNotNone(_valida({"base_duration_minutes": True}))
+    def test_booleano_nao_passa_por_inteiro(self):
+        """True é int em Python; aceitar viraria passo de 1 minuto."""
+        self.assertIsNotNone(_valida({"step_minutes": True}, ATUAIS))
 
 
-class TestFronteiras(unittest.TestCase):
-    def test_max_menor_que_min_e_recusado(self):
-        erro = _valida({"tier_2_min_areas": 5, "tier_2_max_areas": 3})
+class TestCoerencia(unittest.TestCase):
+    def test_piso_acima_do_teto_e_recusado(self):
+        erro = _valida({"floor_minutes": 60, "ceiling_minutes": 50}, ATUAIS)
 
-        self.assertIn("nao pode ser menor", erro)
+        self.assertIn("floor_minutes", erro)
 
-    def test_faixas_em_ordem_crescente_passam(self):
-        self.assertIsNone(_valida({
-            "tier_2_min_areas": 2, "tier_3_min_areas": 4, "tier_4_min_areas": 7,
-        }))
+    def test_piso_isolado_e_conferido_contra_o_teto_gravado(self):
+        """Sem os valores atuais, mudar só o piso escaparia da checagem."""
+        erro = _valida({"floor_minutes": 90}, ATUAIS)
 
-    def test_faixa_3_antes_da_faixa_2_e_recusada(self):
-        erro = _valida({"tier_2_min_areas": 5, "tier_3_min_areas": 3})
+        self.assertIsNotNone(erro)
 
-        self.assertIn("deve ser maior", erro)
+    def test_passo_maior_que_o_teto_e_recusado(self):
+        """Passo de 60 com teto de 50 não produz nenhum valor possível."""
+        self.assertIsNotNone(_valida({"step_minutes": 60}, ATUAIS))
 
-    def test_faixas_iguais_sao_recusadas(self):
-        """Empate deixaria uma faixa inalcançável."""
-        self.assertIsNotNone(_valida({"tier_3_min_areas": 4, "tier_4_min_areas": 4}))
+    def test_piso_igual_ao_teto_e_valido(self):
+        """Sessão de duração fixa é configuração legítima."""
+        self.assertIsNone(_valida({"floor_minutes": 30, "ceiling_minutes": 30}, ATUAIS))
 
-    def test_valida_so_o_que_foi_informado(self):
-        """O update é parcial: campo ausente não pode invalidar o payload."""
-        self.assertIsNone(_valida({"tier_4_min_areas": 7}))
+    def test_sem_valores_atuais_nao_quebra(self):
+        """Clínica sem linha gravada ainda pode receber a primeira config."""
+        self.assertIsNone(_valida({"floor_minutes": 15, "ceiling_minutes": 50}, None))
 
-    def test_payload_vazio_passa(self):
-        self.assertIsNone(_valida({}))
 
-    def test_is_active_nao_e_tratado_como_numero(self):
-        self.assertIsNone(_valida({"is_active": False}))
+class TestIsActive(unittest.TestCase):
+    def test_is_active_nao_e_validado_como_minuto(self):
+        self.assertIsNone(_valida({"is_active": False}, ATUAIS))
 
 
 if __name__ == "__main__":

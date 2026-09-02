@@ -17,7 +17,8 @@ from src.services.template_service import TemplateService
 from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
 
-from src.services.duration_rules import duration_for_areas, get_duration_rules
+from src.services.duration_rules import (
+    calcula_duracao, duracao_da_sessao, get_duration_rules)
 
 logger = logging.getLogger(__name__)
 
@@ -1421,29 +1422,27 @@ class ConversationEngine:
                         for row in unpaired_rows:
                             total_price += int(row["price_cents"] or 0)
 
-                    quantidade_areas = len(service_area_pairs) + len(unpaired_service_ids)
-                    total_duration = duration_for_areas(
-                        quantidade_areas, get_duration_rules(self.db, clinic_id)
-                    )
+                    # As áreas mandam; serviços sem área somam a própria duração.
+                    bruto = 0
+                    if service_area_pairs:
+                        from src.services.duration_rules import soma_das_areas
+                        bruto += soma_das_areas(self.db, service_area_pairs)
+                    bruto += sum(int(r["duration_minutes"] or 0) for r in unpaired_rows) if unpaired_service_ids else 0
+                    total_duration = duracao_da_sessao(bruto, get_duration_rules(self.db, clinic_id))
                 else:
                     services = self.db.execute_query(
                         f"SELECT id, duration_minutes, price_cents FROM scheduler.services WHERE id::text IN ({svc_placeholders}) AND active = TRUE",
                         tuple(selected_service_ids),
                     )
-                    total_duration = duration_for_areas(
-                        len(services), get_duration_rules(self.db, clinic_id)
-                    )
+                    total_duration = duracao_da_sessao(
+                        sum(int(s.get("duration_minutes") or 0) for s in services),
+                        get_duration_rules(self.db, clinic_id))
                     total_price = sum(s.get("price_cents") or 0 for s in services)
-                # Cap duration at max_session_minutes (default 60)
+                # O teto agora vive em duration_rules.ceiling_minutes, aplicado
+                # dentro de duracao_da_sessao. clinics.max_session_minutes era um
+                # segundo teto, que discordava do primeiro; deixou de decidir.
                 clinic = self._get_clinic(clinic_id)
-                max_session = (clinic.get("max_session_minutes") or 60) if clinic else 60
                 buffer_minutes = int(clinic.get("buffer_minutes") or 0) if clinic else 0
-
-                if total_duration > max_session:
-                    logger.info(
-                        f"[ConversationEngine] _on_enter_available_days: capping duration {total_duration}min -> {max_session}min (max_session_minutes)"
-                    )
-                    total_duration = max_session
 
                 session["service_duration_minutes"] = total_duration
                 session["buffer_minutes"] = buffer_minutes

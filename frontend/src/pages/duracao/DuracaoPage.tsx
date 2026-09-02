@@ -3,28 +3,21 @@ import { useDurationRules, useUpdateDurationRules } from '@/hooks/useDurationRul
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Button } from '@/components/ui/Button'
+import { calculaDuracao, DURACAO_PADRAO } from '@/lib/duracao'
 import type { DurationRule } from '@/types'
 
 /** Padrão usado quando a clínica ainda não tem regra cadastrada. */
 const PADRAO: Omit<DurationRule, 'clinic_id'> = {
-  base_duration_minutes: 15,
-  tier_2_min_areas: 2,
-  tier_2_max_areas: 3,
-  tier_2_duration_minutes: 20,
-  tier_3_min_areas: 4,
-  tier_3_max_areas: 6,
-  tier_3_duration_minutes: 35,
-  tier_4_min_areas: 7,
-  tier_4_duration_minutes: 45,
+  ...DURACAO_PADRAO,
   is_active: true,
 }
 
 /**
- * Configuração da duração da sessão por quantidade de áreas.
+ * Configuração da duração da sessão.
  *
- * A duração não é a soma das durações cadastradas por área: o laser é aplicado
- * em sequência e o preparo não se repete a cada área, então seis áreas levam
- * 35 minutos e não 60.
+ * A duração é a soma das durações cadastradas por área, arredondada para cima
+ * ao passo e limitada por piso e teto. Antes havia faixas por quantidade de
+ * áreas aqui, que discordavam da soma usada no resto do sistema.
  */
 export function DuracaoPage() {
   const { data, isLoading, isError, error, refetch } = useDurationRules()
@@ -32,7 +25,7 @@ export function DuracaoPage() {
   if (isLoading)
     return (
       <div className="p-6">
-        <SkeletonTable rows={5} />
+        <SkeletonTable rows={4} />
       </div>
     )
 
@@ -63,135 +56,96 @@ export function DuracaoPage() {
 function DuracaoForm({ rules }: { rules: Omit<DurationRule, 'clinic_id'> }) {
   const update = useUpdateDurationRules()
 
-  const [base, setBase] = useState(rules.base_duration_minutes)
-  const [t2Min, setT2Min] = useState(rules.tier_2_min_areas)
-  const [t2Max, setT2Max] = useState(rules.tier_2_max_areas)
-  const [t2Dur, setT2Dur] = useState(rules.tier_2_duration_minutes)
-  const [t3Min, setT3Min] = useState(rules.tier_3_min_areas)
-  const [t3Max, setT3Max] = useState(rules.tier_3_max_areas)
-  const [t3Dur, setT3Dur] = useState(rules.tier_3_duration_minutes)
-  const [t4Min, setT4Min] = useState(rules.tier_4_min_areas)
-  const [t4Dur, setT4Dur] = useState(rules.tier_4_duration_minutes)
+  const [piso, setPiso] = useState(rules.floor_minutes)
+  const [teto, setTeto] = useState(rules.ceiling_minutes)
+  const [passo, setPasso] = useState(rules.step_minutes)
   const [saved, setSaved] = useState(false)
 
-  // As faixas precisam subir e não podem se sobrepor: fora de ordem, uma delas
-  // fica inalcançável e todo agendamento cai na faixa errada. O backend recusa,
-  // mas avisar aqui evita o usuário descobrir só ao salvar.
-  const erroFaixas =
-    t2Max < t2Min
-      ? 'O máximo da faixa 2 não pode ser menor que o mínimo.'
-      : t3Max < t3Min
-        ? 'O máximo da faixa 3 não pode ser menor que o mínimo.'
-        : t3Min <= t2Min
-          ? 'A faixa 3 precisa começar depois da faixa 2.'
-          : t4Min <= t3Min
-            ? 'A faixa 4 precisa começar depois da faixa 3.'
-            : t3Min !== t2Max + 1
-              ? `Áreas entre ${t2Max + 1} e ${t3Min - 1} ficariam sem faixa própria.`
-              : t4Min !== t3Max + 1
-                ? `Áreas entre ${t3Max + 1} e ${t4Min - 1} ficariam sem faixa própria.`
-                : null
+  // O backend recusa as mesmas combinações, mas avisar aqui evita o usuário
+  // descobrir só ao salvar.
+  const erro =
+    piso > teto
+      ? 'A duração mínima não pode ser maior que a máxima.'
+      : passo > teto
+        ? 'O arredondamento não pode ser maior que a duração máxima.'
+        : null
 
   const handleSave = async () => {
     setSaved(false)
     await update.mutateAsync({
-      base_duration_minutes: base,
-      tier_2_min_areas: t2Min,
-      tier_2_max_areas: t2Max,
-      tier_2_duration_minutes: t2Dur,
-      tier_3_min_areas: t3Min,
-      tier_3_max_areas: t3Max,
-      tier_3_duration_minutes: t3Dur,
-      tier_4_min_areas: t4Min,
-      tier_4_duration_minutes: t4Dur,
+      floor_minutes: piso,
+      ceiling_minutes: teto,
+      step_minutes: passo,
     })
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
+
+  const regrasAtuais = { floor_minutes: piso, ceiling_minutes: teto, step_minutes: passo }
 
   return (
     <div className="p-6">
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Duração da sessão</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Quanto tempo reservar na agenda conforme a quantidade de áreas tratadas
+          Quanto tempo reservar na agenda, a partir das áreas escolhidas
         </p>
       </div>
 
       <div className="max-w-2xl space-y-8">
         <section className="space-y-3">
           <div>
-            <h2 className="text-sm font-semibold text-gray-800">Sessão de 1 área</h2>
+            <h2 className="text-sm font-semibold text-gray-800">Limites</h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              Também é a duração mínima de qualquer atendimento
+              A duração é a soma das áreas escolhidas, sempre dentro destes limites
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-32">
-              <NumberInput value={base} onChange={setBase} min={1} max={480} suffix="min" />
-            </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <Campo label="Duração mínima">
+              <NumberInput value={piso} onChange={setPiso} min={1} max={480} suffix="min" />
+            </Campo>
+            <Campo label="Duração máxima">
+              <NumberInput value={teto} onChange={setTeto} min={1} max={480} suffix="min" />
+            </Campo>
           </div>
         </section>
 
         <hr className="border-gray-100" />
 
-        <section className="space-y-6">
+        <section className="space-y-3">
           <div>
-            <h2 className="text-sm font-semibold text-gray-800">Faixas por quantidade de áreas</h2>
+            <h2 className="text-sm font-semibold text-gray-800">Arredondamento</h2>
             <p className="text-xs text-gray-400 mt-0.5">
-              O tempo de preparo não se repete a cada área, por isso a duração não é a soma
+              Toda duração vira um múltiplo deste valor, sempre para cima — reservar a mais
+              desperdiça um vão, reservar a menos sobrepõe dois atendimentos
             </p>
           </div>
-
-          <TierCard titulo="Faixa 2">
-            <Campo label="De (áreas)">
-              <NumberInput value={t2Min} onChange={setT2Min} min={1} max={99} />
+          <div className="w-40">
+            <Campo label="Múltiplos de">
+              <NumberInput value={passo} onChange={setPasso} min={1} max={60} suffix="min" />
             </Campo>
-            <Campo label="Até (áreas)">
-              <NumberInput value={t2Max} onChange={setT2Max} min={1} max={99} />
-            </Campo>
-            <Campo label="Duração">
-              <NumberInput value={t2Dur} onChange={setT2Dur} min={1} max={480} suffix="min" />
-            </Campo>
-          </TierCard>
-
-          <TierCard titulo="Faixa 3">
-            <Campo label="De (áreas)">
-              <NumberInput value={t3Min} onChange={setT3Min} min={1} max={99} />
-            </Campo>
-            <Campo label="Até (áreas)">
-              <NumberInput value={t3Max} onChange={setT3Max} min={1} max={99} />
-            </Campo>
-            <Campo label="Duração">
-              <NumberInput value={t3Dur} onChange={setT3Dur} min={1} max={480} suffix="min" />
-            </Campo>
-          </TierCard>
-
-          <TierCard titulo="Faixa 4 — sem limite">
-            <Campo label="A partir de (áreas)">
-              <NumberInput value={t4Min} onChange={setT4Min} min={1} max={99} />
-            </Campo>
-            <Campo label="Duração">
-              <NumberInput value={t4Dur} onChange={setT4Dur} min={1} max={480} suffix="min" />
-            </Campo>
-          </TierCard>
+          </div>
         </section>
 
         <hr className="border-gray-100" />
 
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-gray-800">Como fica na agenda</h2>
+          <p className="text-xs text-gray-400">
+            Exemplos a partir da soma das durações cadastradas nas áreas
+          </p>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
-            <Resumo areas="1 área" minutos={base} />
-            <Resumo areas={`${t2Min} a ${t2Max} áreas`} minutos={t2Dur} />
-            <Resumo areas={`${t3Min} a ${t3Max} áreas`} minutos={t3Dur} />
-            <Resumo areas={`${t4Min}+ áreas`} minutos={t4Dur} />
+            {[8, 24, 42, 90].map((soma) => (
+              <Resumo
+                key={soma}
+                soma={`${soma} min de áreas`}
+                minutos={calculaDuracao(soma, regrasAtuais)}
+              />
+            ))}
           </dl>
         </section>
 
-        {erroFaixas && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">{erroFaixas}</p>
-        )}
+        {erro && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">{erro}</p>}
 
         {update.isError && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -200,21 +154,12 @@ function DuracaoForm({ rules }: { rules: Omit<DurationRule, 'clinic_id'> }) {
         )}
 
         <div className="flex items-center gap-3">
-          <Button onClick={handleSave} loading={update.isPending} disabled={!!erroFaixas}>
+          <Button onClick={handleSave} loading={update.isPending} disabled={!!erro}>
             Salvar
           </Button>
           {saved && <span className="text-xs text-green-600">Salvo</span>}
         </div>
       </div>
-    </div>
-  )
-}
-
-function TierCard({ titulo, children }: { titulo: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">{titulo}</p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{children}</div>
     </div>
   )
 }
@@ -228,10 +173,10 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-function Resumo({ areas, minutos }: { areas: string; minutos: number }) {
+function Resumo({ soma, minutos }: { soma: string; minutos: number }) {
   return (
     <>
-      <dt className="text-gray-400">{areas}</dt>
+      <dt className="text-gray-400">{soma}</dt>
       <dd className="font-medium text-gray-800">{minutos} min</dd>
     </>
   )

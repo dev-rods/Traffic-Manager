@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from src.services.duration_rules import duration_for_areas, get_duration_rules
+from src.services.duration_rules import calcula_duracao
 
 logger = logging.getLogger(__name__)
 
@@ -66,16 +66,24 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "check_availability",
-            "description": "Check which days have available slots for the given total duration. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts. Returns objects with `date` (YYYY-MM-DD, used internally) and `label` (PT-BR formatted, ALWAYS use this for display — never compute the weekday yourself).",
+            "description": "Check which days have available slots for the selected areas. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts. Returns objects with `date` (YYYY-MM-DD, used internally) and `label` (PT-BR formatted, ALWAYS use this for display — never compute the weekday yourself).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "total_duration_minutes": {
-                        "type": "integer",
-                        "description": "Total duration of all selected areas combined (in minutes)",
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected. The session duration is derived from these — never state or estimate a duration yourself.",
                     },
                 },
-                "required": ["total_duration_minutes"],
+                "required": ["service_area_pairs"],
             },
         },
     },
@@ -83,7 +91,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_time_slots",
-            "description": "Get available time slots for a specific date and total duration. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
+            "description": "Get available time slots for a specific date and the selected areas. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -91,12 +99,20 @@ TOOL_DEFINITIONS = [
                         "type": "string",
                         "description": "Date in YYYY-MM-DD format",
                     },
-                    "total_duration_minutes": {
-                        "type": "integer",
-                        "description": "Total duration of all selected areas combined (in minutes)",
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected. The session duration is derived from these — never state or estimate a duration yourself.",
                     },
                 },
-                "required": ["date", "total_duration_minutes"],
+                "required": ["date", "service_area_pairs"],
             },
         },
     },
@@ -465,9 +481,11 @@ class ToolExecutor:
         return {"areas": areas}
 
     def _tool_check_availability(self, args, clinic_id, phone, ctx):
-        total_duration = args.get("total_duration_minutes", 60)
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
+        # A duração é derivada das áreas, nunca do que o modelo informa. Ver
+        # duration_rules.py: ele já pediu horário para uma sessão de 4 minutos.
+        total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
         days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
         return {
             "available_dates": [
@@ -477,11 +495,11 @@ class ToolExecutor:
 
     def _tool_get_time_slots(self, args, clinic_id, phone, ctx):
         target_date = args.get("date")
-        total_duration = args.get("total_duration_minutes", 60)
         if not target_date:
             return {"error": "date is required"}
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
+        total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
         slots = self.availability_engine.get_available_slots_multi(clinic_id, target_date, total_duration)
         return {
             "date": target_date,
@@ -608,11 +626,7 @@ class ToolExecutor:
         if not all([service_area_pairs, date, time_str, full_name]):
             return {"error": "Missing required fields: service_area_pairs, date, time, full_name"}
 
-        # Duração pela quantidade de áreas, não pela soma das durações cadastradas.
-        # Ver duration_rules.py para o porquê.
-        total_duration = duration_for_areas(
-            len(service_area_pairs), get_duration_rules(self.db, clinic_id)
-        )
+        total_duration = calcula_duracao(self.db, clinic_id, service_area_pairs)
 
         primary_service_id = service_area_pairs[0]["service_id"]
 
