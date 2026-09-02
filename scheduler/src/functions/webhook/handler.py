@@ -15,10 +15,16 @@ from src.services.message_tracker import MessageTracker
 from src.services.lead_service import LeadService, extract_gclid
 from src.services.bot_policy import should_bot_reply
 from src.services.session_store import mark_conversation_eligible
+from src.services.autoria_mensagem import foi_enviada_pelo_bot
 from src.providers.whatsapp_provider import get_provider
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# Quantas mensagens da conversa consultar para reconhecer o eco do bot. O eco
+# chega segundos depois do envio, então a janela só precisa cobrir a rajada de
+# respostas de uma mesma execução.
+ECO_JANELA_DE_BUSCA = 20
 
 
 def handler(event, context):
@@ -67,27 +73,32 @@ def handler(event, context):
                 f"phone={body.get('phone')} | messageId={body.get('messageId')} | "
                 f"payload_keys={list(body.keys())}"
             )
-            # Messages sent via API/bot arrive with status=SENT; ignore them
-            if body.get("status") == "SENT":
-                logger.info("[Webhook] Ignorando fromMe com status=SENT (mensagem enviada via API/bot)")
-                return http_response(200, {"status": "OK"})
-
-            # status != SENT → manual attendant message
+            # O status não separa bot de gente: os dois chegam como SENT. Quem
+            # separa é o id que o provider devolveu no envio, e que o bot grava
+            # no MessageEvents. Antes daqui havia um `return` para todo
+            # status=SENT, o que tornava inalcançável o código abaixo — o bot
+            # respondeu por cima de um atendimento humano em 01/09/2026.
             phone = body.get("phone", "")
             if phone and instance_id:
                 content = _extract_text_content(body)
                 db = PostgresService()
                 clinic_id = _resolve_clinic_id(db, instance_id)
                 if clinic_id:
-                    DEACTIVATION_COMMANDS = {
-                        "#encerrar", "#fim",
-                        "encerrar atendimento", "finalizar atendimento",
-                        "atendimento encerrado", "atendimento finalizado",
-                    }
-                    if content and content.strip().lower() in DEACTIVATION_COMMANDS:
-                        _deactivate_attendant_mode(clinic_id, phone)
-                    else:
-                        _activate_attendant_mode(clinic_id, phone)
+                    provider_id = body.get("messageId", "")
+                    eventos = MessageTracker().get_conversation_messages(
+                        clinic_id, phone, limit=ECO_JANELA_DE_BUSCA
+                    )
+                    if foi_enviada_pelo_bot(eventos, provider_id):
+                        logger.info(
+                            f"[Webhook] Eco do próprio bot ({provider_id}), ignorando"
+                        )
+                        return http_response(200, {"status": "OK"})
+
+                    logger.info(
+                        f"[Webhook] Atendente humano respondeu {phone} pelo celular; "
+                        f"pausando o bot por 24h"
+                    )
+                    _activate_attendant_mode(clinic_id, phone)
 
                     # Track attendant message so it appears in the conversation view
                     if content:
@@ -416,13 +427,6 @@ def _activate_attendant_mode(clinic_id: str, phone: str) -> None:
     logger.info(f"[Webhook] Modo atendente ativado/renovado para {phone} (TTL 24h)")
 
 
-def _deactivate_attendant_mode(clinic_id: str, phone: str) -> None:
-    table = _get_sessions_table()
-    session = _load_session(table, clinic_id, phone)
-
-    session["state"] = ConversationState.WELCOME.value
-    session.pop("attendant_active_until", None)
-    session.pop("human_handoff_requested_at", None)
-    session.pop("_previous_state_before_attendant", None)
-    _save_session(table, clinic_id, phone, session)
-    logger.info(f"[Webhook] Modo atendente encerrado para {phone}")
+# A desativação por comando no WhatsApp ("#encerrar", "#fim") foi removida em
+# 02/09/2026: a reativação antecipada passa a ser só pelo painel. Sem o painel,
+# o bot volta sozinho quando o TTL de 24h expira.
