@@ -32,6 +32,9 @@ _DATA_EXTENSO = re.compile(
     r"\b(\d{1,2})\s+de\s+([a-zç]+)(?:\s+de\s+(\d{4}))?\b", re.IGNORECASE
 )
 _HORA = re.compile(r"\b(\d{1,2})\s*(?:h|:)\s*(\d{2})?\b")
+# "35 minutos", "35 min". Duração era o único fato sensível sem extrator, e
+# por isso uma duração inventada passava pelo verificador como se fosse ok.
+_DURACAO = re.compile(r"\b(\d{1,3})\s*(?:min\b|minutos?\b)", re.IGNORECASE)
 _DINHEIRO = re.compile(r"R\$\s*(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{2}))?", re.IGNORECASE)
 
 
@@ -58,8 +61,8 @@ def _data(dia, mes, ano, ano_padrao):
 def fatos_sensiveis(texto, ano=None):
     """Os fatos de banco afirmados neste texto, normalizados.
 
-    Datas viram YYYY-MM-DD, horários HH:MM, dinheiro R$0.00 e status
-    'status:confirmado'. A normalização é o que permite comparar "23/09" da
+    Datas viram YYYY-MM-DD, horários HH:MM, dinheiro R$0.00, durações
+    'duracao:35' e status 'status:confirmado'. A normalização é o que permite comparar "23/09" da
     resposta com "2026-09-23" da tool.
 
     Perguntas não entram: quem pergunta não está afirmando nada.
@@ -87,6 +90,9 @@ def fatos_sensiveis(texto, ano=None):
             h = int(hora)
             if 0 <= h <= 23:
                 achados.add(f"{h:02d}:{int(minuto or 0):02d}")
+
+        for minutos in _DURACAO.findall(trecho):
+            achados.add(f"duracao:{int(minutos)}")
 
         for inteiro, centavos in _DINHEIRO.findall(trecho):
             valor = float(inteiro.replace(".", "")) + int(centavos or 0) / 100
@@ -143,6 +149,8 @@ def _valor_simples(chave, valor, encontrados):
         encontrados.add(f"R${int(valor) / 100:.2f}")
     elif chave_plana.endswith("price") and str(valor).replace(".", "").isdigit():
         encontrados.add(f"R${float(valor):.2f}")
+    elif "duration" in chave_plana and str(valor).isdigit():
+        encontrados.add(f"duracao:{int(valor)}")
     elif chave_plana == "status":
         mapa = {"CONFIRMED": "confirmado", "CANCELLED": "cancelado",
                 "RESCHEDULED": "reagendado"}

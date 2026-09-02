@@ -18,6 +18,7 @@ import unicodedata
 AGENDAMENTO_PROPRIO = "AGENDAMENTO_PROPRIO"
 PRECO = "PRECO"
 DISPONIBILIDADE = "DISPONIBILIDADE"
+DURACAO = "DURACAO"
 
 # Cada padrão foi conferido contra as conversas reais. Ampliar sem esse
 # lastro aumenta a latência de todas as respostas sem ganho conhecido.
@@ -36,6 +37,16 @@ PADROES = {
         r"|\bpreco(s|)\b"
         r"|tabela\s+de\s+preco"
     ),
+    # "Quanto tempo dura?" não casava com nada, e o agente respondia de memória.
+    # A pergunta é comum e a resposta é derivada: tem que passar por tool.
+    DURACAO: (
+        r"quanto\s+tempo"
+        r"|\bdura(cao|)\b"
+        r"|\bdemora\b"
+        r"|\bleva\s+quanto"
+        r"|\bduram\b"
+        r"|quantos?\s+minutos"
+    ),
     DISPONIBILIDADE: (
         r"\b(tem|teria|tem alguma|ha)\s+(horario|vaga|data|dia)"
         r"|quais\s+(as\s+)?(datas|horarios|dias)"
@@ -45,10 +56,15 @@ PADROES = {
     ),
 }
 
+# Só entram aqui tools que respondem sem argumento. check_availability e
+# calculate_duration dependem das áreas que a pessoa escolheu, que só existem na
+# conversa - pré-carregá-las com argumento vazio devolveria o piso de 15 minutos
+# como se fosse a duração real, que é mentira com cara de dado consultado.
 TOOLS_POR_INTENCAO = {
     AGENDAMENTO_PROPRIO: ["lookup_appointments"],
     PRECO: ["list_services", "list_areas"],
-    DISPONIBILIDADE: ["check_availability"],
+    DISPONIBILIDADE: ["list_areas"],
+    DURACAO: ["list_areas"],
 }
 
 

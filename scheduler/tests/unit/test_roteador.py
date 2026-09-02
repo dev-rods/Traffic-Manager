@@ -95,8 +95,18 @@ class TestToolsObrigatorias(unittest.TestCase):
         tools = tools_obrigatorias({PRECO})
         self.assertTrue({"list_services", "list_areas"} & set(tools))
 
-    def test_disponibilidade_exige_consulta_de_agenda(self):
-        self.assertIn("check_availability", tools_obrigatorias({DISPONIBILIDADE}))
+    def test_disponibilidade_pre_carrega_o_catalogo_e_nao_a_agenda(self):
+        """check_availability passou a exigir as áreas escolhidas.
+
+        A pré-carga chama as tools com argumento vazio. Pré-carregá-la agora
+        devolveria os dias de uma sessão de 15 minutos - o piso - entregues ao
+        modelo como dado consultado. A agenda de verdade o agente consulta
+        depois, com as áreas em mãos.
+        """
+        tools = tools_obrigatorias({DISPONIBILIDADE})
+
+        self.assertNotIn("check_availability", tools)
+        self.assertIn("list_areas", tools)
 
     def test_sem_intencao_nao_exige_nada(self):
         self.assertEqual(tools_obrigatorias(set()), [])
