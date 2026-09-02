@@ -10,6 +10,8 @@ import boto3
 
 from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
+from src.services.proveniencia import fatos_sem_origem
+from src.services.roteador import intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
 
 logger = logging.getLogger(__name__)
@@ -144,6 +146,9 @@ class ConversationAgent:
         # start with an orphan tool_result block (no preceding tool_use), which
         # the Anthropic API rejects with 400.
         gatilho = eh_gatilho_sintetico(incoming.content)
+        # Tudo que as tools devolveram nesta execução. É contra isto que a
+        # resposta é conferida antes de sair.
+        respaldo_das_tools = []
         history = self._truncate_history(session.get("agent_history", []))
         if gatilho or not history:
             # Sessão sem histórico não significa conversa nova: a pessoa pode já ter
@@ -164,6 +169,40 @@ class ConversationAgent:
         history.append({"role": "user", "content": user_content})
 
         # 5. Agent loop
+        # ── Pré-carga determinística ────────────────────────────────────
+        # O agente decide sozinho quando consultar, e em 02/09/2026 decidiu que
+        # não precisava: respondeu sobre um agendamento pelo que ele mesmo
+        # dissera dias antes, já cancelado. Aqui a decisão sai do modelo: se a
+        # pergunta é sobre agenda, preço ou disponibilidade, a consulta acontece
+        # antes de ele escrever, e o resultado entra como fonte única.
+        dados_consultados = []
+        if not gatilho:
+            for nome_tool in tools_obrigatorias(intencoes(user_content)):
+                try:
+                    resultado = self.tool_executor.execute(
+                        nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone}
+                    )
+                    dados_consultados.append((nome_tool, resultado))
+                    respaldo_das_tools.append(resultado)
+                except Exception as e:
+                    logger.error(f"[PreCarga] {nome_tool} falhou para {phone}: {e}")
+
+        if dados_consultados:
+            nomes = ", ".join(n for n, _ in dados_consultados)
+            logger.info(f"[PreCarga] {phone}: {nomes}")
+            blocos = ("\n\n").join(
+                f"[{nome}]\n{json.dumps(self._convert_decimals(res), ensure_ascii=False, default=str)[:1500]}"
+                for nome, res in dados_consultados
+            )
+            system_prompt += (
+                "\n\n═══ DADOS CONSULTADOS AGORA ═══\n"
+                "Consultei o banco antes de te passar esta conversa. O que está "
+                "abaixo é o estado real neste momento e é a ÚNICA fonte válida "
+                "sobre agenda, preço e disponibilidade. O que não estiver aqui, "
+                "você não sabe - nem que tenha dito antes nesta conversa.\n\n"
+                + blocos
+            )
+
         tools = get_tool_definitions(format="anthropic")
         pending_buttons = None
         handoff_requested = False
@@ -209,6 +248,7 @@ class ConversationAgent:
                         tool_use["input"],
                         context={"clinic_id": clinic_id, "phone": phone},
                     )
+                    respaldo_das_tools.append(result)
 
                     # Intercept special tools
                     if tool_use["name"] == "present_options" and result.get("presented"):
@@ -251,6 +291,26 @@ class ConversationAgent:
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
+        # Modelo no meio, determinismo em volta. O prompt já proíbe afirmar
+        # data, preço ou status sem consultar - e em 02/09/2026 o bot disse que
+        # um agendamento cancelado estava confirmado mesmo assim, relendo a
+        # própria mensagem de três dias antes. Instrução não segura isso.
+        #
+        # MODO OBSERVAÇÃO: por ora só registra. 75% das respostas de produção
+        # contêm afirmação factual, então bloquear sem medir a taxa real de
+        # violação arriscaria calar o bot na maioria das conversas.
+        try:
+            sem_origem = fatos_sem_origem(final_text, respaldo_das_tools)
+            if sem_origem:
+                logger.warning(
+                    f"[Proveniencia] {phone} afirmou sem respaldo: {sorted(sem_origem)} "
+                    f"| tools={len(respaldo_das_tools)} | resposta={final_text[:120]!r}"
+                )
+            else:
+                logger.info(f"[Proveniencia] {phone} ok | tools={len(respaldo_das_tools)}")
+        except Exception as e:
+            logger.error(f"[Proveniencia] Falha ao conferir resposta de {phone}: {e}")
+
         outgoing = self._build_outgoing(final_text, pending_buttons)
 
         # 8. Save history (truncated)
