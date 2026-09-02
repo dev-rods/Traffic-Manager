@@ -16,6 +16,8 @@ from src.services.lead_service import LeadService, extract_gclid
 from src.services.bot_policy import should_bot_reply
 from src.services.session_store import mark_conversation_eligible
 from src.services.autoria_mensagem import foi_enviada_pelo_bot
+from src.services.identidade_whatsapp import chat_lid, deve_vincular_lid, telefone_da_conversa
+from src.services.session_store import telefone_do_lid, vincula_lid
 from src.providers.whatsapp_provider import get_provider
 
 logger = logging.getLogger(__name__)
@@ -53,18 +55,36 @@ def handler(event, context):
             logger.warning("[Webhook] Payload sem instanceId")
             return http_response(200, {"status": "OK"})
 
-        # 1a. Self-chat / LID guard — drop any message addressed to a non-PSTN
-        # WhatsApp identity (LID, group, broadcast) or to the bot's own connected
-        # number. These can't be normal patient conversations and ignoring them
-        # prevents echo loops where the bot replies to itself.
+        # 1a. De quem é esta conversa. Grupo, broadcast e self-chat saem aqui.
+        #
+        # A mensagem que a atendente digita no celular chega com o LID no lugar
+        # do número, e antes era descartada junto com os grupos - por isso o bot
+        # não sabia que havia gente atendendo e respondia por cima. O LID é
+        # resolvido pelo vínculo que as mensagens normais da conversa deixam.
         raw_phone = body.get("phone", "") or ""
-        connected_phone = body.get("connectedPhone", "") or ""
-        if "@" in raw_phone or raw_phone.endswith("-group") or raw_phone.endswith("-broadcast"):
-            logger.info(f"[Webhook] Ignorando mensagem de identidade não-PSTN: phone={raw_phone}")
+        lid = chat_lid(body)
+        clinica_do_webhook = _resolve_clinic_id(PostgresService(), instance_id)
+
+        telefone_conhecido = None
+        if lid and "@" in raw_phone and clinica_do_webhook:
+            telefone_conhecido = telefone_do_lid(
+                _get_sessions_table(), clinica_do_webhook, lid
+            )
+
+        phone_resolvido = telefone_da_conversa(body, telefone_do_lid=telefone_conhecido)
+        if not phone_resolvido:
+            logger.info(
+                f"[Webhook] Ignorando mensagem sem conversa individual: phone={raw_phone}"
+            )
             return http_response(200, {"status": "OK"})
-        if connected_phone and normalize_phone(raw_phone) == normalize_phone(connected_phone):
-            logger.info(f"[Webhook] Ignorando self-chat: phone={raw_phone} == connectedPhone")
-            return http_response(200, {"status": "OK"})
+
+        if phone_resolvido != raw_phone:
+            logger.info(f"[Webhook] LID {lid} resolvido para {phone_resolvido}")
+            body["phone"] = phone_resolvido
+        elif clinica_do_webhook and deve_vincular_lid(body):
+            # Mensagem que traz número e chatLid: é ela que ensina o vínculo
+            # usado quando a atendente responder pelo celular.
+            vincula_lid(_get_sessions_table(), clinica_do_webhook, lid, phone_resolvido)
 
         # 1b. Handle fromMe (attendant messages or bot echo)
         if body.get("fromMe", False):

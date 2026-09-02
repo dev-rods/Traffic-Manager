@@ -48,3 +48,37 @@ def mark_conversation_eligible(table, clinic_id: str, phone: str,
     except Exception as e:
         logger.error(f"[SessionStore] Falha ao marcar {phone} como elegível: {e}")
         return False
+
+
+def vincula_lid(table, clinic_id: str, chat_lid: str, phone: str) -> None:
+    """Guarda a quem pertence um LID do WhatsApp.
+
+    Quando a atendente responde pelo celular, o z-api manda o LID no lugar do
+    número e a mensagem não teria dono. As mensagens normais da mesma conversa
+    trazem os dois campos juntos - é delas que o vínculo sai.
+
+    Vive na tabela de sessões com sk=LID#..., ao lado de PHONE#...: mesma
+    partição da clínica, sem tabela nova.
+    """
+    try:
+        table.put_item(Item={
+            "pk": f"CLINIC#{clinic_id}",
+            "sk": f"LID#{chat_lid}",
+            "phone": phone,
+            "clinicId": clinic_id,
+            "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        })
+    except Exception as e:
+        logger.warning(f"[SessionStore] Não consegui vincular {chat_lid} a {phone}: {e}")
+
+
+def telefone_do_lid(table, clinic_id: str, chat_lid: str) -> Optional[str]:
+    """O telefone vinculado a um LID, se já tivermos visto a conversa."""
+    try:
+        item = table.get_item(
+            Key={"pk": f"CLINIC#{clinic_id}", "sk": f"LID#{chat_lid}"}
+        ).get("Item") or {}
+        return item.get("phone") or None
+    except Exception as e:
+        logger.warning(f"[SessionStore] Não consegui resolver o LID {chat_lid}: {e}")
+        return None
