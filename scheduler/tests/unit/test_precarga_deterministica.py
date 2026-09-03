@@ -41,10 +41,12 @@ class AnthropicFalso:
 
     def __init__(self, texto="Sua sessão está confirmada para amanhã."):
         self.prompts = []
+        self.forcados = []
         self._texto = texto
 
-    def create_message(self, system, messages, tools, max_tokens):
+    def create_message(self, system, messages, tools, max_tokens, tool_choice=None):
         self.prompts.append(system)
+        self.forcados.append(tool_choice)
         return {
             "content": [{"type": "text", "text": self._texto}],
             "stop_reason": "end_turn",
@@ -70,9 +72,9 @@ def monta_agente(tool_executor, anthropic, registro_de_ordem=None):
 
         original = anthropic.create_message
 
-        def create_message(system, messages, tools, max_tokens):
+        def create_message(system, messages, tools, max_tokens, tool_choice=None):
             registro_de_ordem.append("MODELO")
-            return original(system, messages, tools, max_tokens)
+            return original(system, messages, tools, max_tokens, tool_choice)
 
         anthropic.create_message = create_message
 

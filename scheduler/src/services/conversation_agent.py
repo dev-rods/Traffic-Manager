@@ -121,6 +121,18 @@ class ConversationAgent:
         dynamodb = boto3.resource("dynamodb")
         self.sessions_table = dynamodb.Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
 
+    def _agenda_sem_respaldo(self, texto, respaldo_das_tools):
+        """Data ou horário afirmados que nenhuma tool desta execução devolveu.
+
+        Nunca levanta: uma falha na conferência não pode derrubar a resposta,
+        senão o guardrail vira o motivo de o bot calar.
+        """
+        try:
+            return fatos_de_agenda(fatos_sem_origem(texto, respaldo_das_tools))
+        except Exception as e:
+            logger.error(f"[Proveniencia] Falha ao conferir resposta: {e}")
+            return set()
+
     def process_message(self, clinic_id, incoming):
         """
         Process an incoming WhatsApp message and return outgoing messages.
@@ -176,8 +188,9 @@ class ConversationAgent:
         # pergunta é sobre agenda, preço ou disponibilidade, a consulta acontece
         # antes de ele escrever, e o resultado entra como fonte única.
         dados_consultados = []
+        intencoes_detectadas = set() if gatilho else intencoes(user_content)
         if not gatilho:
-            for nome_tool in tools_obrigatorias(intencoes(user_content)):
+            for nome_tool in tools_obrigatorias(intencoes_detectadas):
                 try:
                     resultado = self.tool_executor.execute(
                         nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone}
@@ -207,16 +220,30 @@ class ConversationAgent:
         pending_buttons = None
         handoff_requested = False
         text_parts = []
+        # Perguntou sobre agenda? Então a primeira jogada é consultar, não
+        # escrever. Deixar a escolha com o modelo fez o bot listar nove horários
+        # da manhã com tools=0, mesmo com o prompt mandando consultar - duas
+        # vezes no mesmo dia. Ele escolhe QUAL tool; não escolhe se consulta.
+        forcar_proxima = bool(intencoes_detectadas) and not gatilho
+        ja_refez = False
 
         try:
             for iteration in range(MAX_AGENT_ITERATIONS):
                 logger.info(f"[ConversationAgent] Iteration {iteration + 1} for {phone}")
+
+                # Consumido a cada volta: forçar sempre deixaria o modelo sem
+                # como encerrar, já que toda resposta exigiria mais uma tool.
+                forcar_tool = {"type": "any"} if forcar_proxima else None
+                forcar_proxima = False
+                if forcar_tool:
+                    logger.info(f"[ConversationAgent] Consulta obrigatória para {phone}")
 
                 response = self.anthropic.create_message(
                     system=system_prompt,
                     messages=history,
                     tools=tools,
                     max_tokens=1024,
+                    tool_choice=forcar_tool,
                 )
 
                 # Parse response content blocks
@@ -236,7 +263,30 @@ class ConversationAgent:
                 stop_reason = response.get("stop_reason", "end_turn")
 
                 if not tool_uses:
-                    # No tool calls — final response
+                    # Resposta final: confere antes de aceitar. Data e horário
+                    # afirmados sem respaldo não viram mensagem - mas a primeira
+                    # reação é mandar consultar, não desistir da conversa.
+                    texto_provisorio = "\n".join(current_text_parts).strip()
+                    inventado = self._agenda_sem_respaldo(texto_provisorio, respaldo_das_tools)
+
+                    if inventado and not ja_refez:
+                        ja_refez = True
+                        logger.warning(
+                            f"[Proveniencia] {phone} afirmou {sorted(inventado)} sem consultar; "
+                            f"refazendo com consulta obrigatória"
+                        )
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            "PARE. Você acabou de afirmar data ou horário que não veio de "
+                            "nenhuma tool nesta conversa. Não repita, não deduza a partir de "
+                            "horários que você mesma deu antes e não complete a lista. "
+                            "Chame agora a tool que traz esse dado e responda apenas com o "
+                            "que ela devolver."
+                        )})
+                        forcar_proxima = True
+                        text_parts = []
+                        continue
+
                     history.append({"role": "assistant", "content": content_blocks})
                     break
 
@@ -312,11 +362,11 @@ class ConversationAgent:
                 logger.error(
                     f"[Proveniencia] BLOQUEADO {phone}: agenda sem respaldo "
                     f"{sorted(inventado)} | tools={len(respaldo_das_tools)} "
-                    f"| resposta={final_text[:200]!r}"
+                    f"| refez={ja_refez} | resposta={final_text[:200]!r}"
                 )
-                # Cai para a especialista em vez de arriscar outra tentativa: se
-                # ele inventou com o prompt inteiro mandando consultar, insistir
-                # gasta o tempo de quem está esperando.
+                # Só chega aqui quem já foi mandado consultar e mesmo assim
+                # inventou de novo. Aí a especialista é o caminho certo: a
+                # alternativa é ficar tentando enquanto a pessoa espera.
                 final_text = (
                     "Deixa eu confirmar os horários certinho com uma especialista "
                     "para não te passar nada errado. Já te falo 😊"

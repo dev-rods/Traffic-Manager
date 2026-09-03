@@ -27,6 +27,7 @@ class AnthropicService:
         model=DEFAULT_MODEL,
         temperature=None,
         max_tokens=1024,
+        tool_choice=None,
     ):
         """
         Call Anthropic Messages API with optional tool use.
@@ -56,6 +57,12 @@ class AnthropicService:
 
         if tools:
             payload["tools"] = tools
+
+        # Obriga o modelo a chamar uma tool específica nesta rodada. Usado quando
+        # a pergunta é sobre agenda: deixar a escolha com ele fez o bot listar
+        # horários inventados com tools=0, mesmo com o prompt mandando consultar.
+        if tool_choice:
+            payload["tool_choice"] = tool_choice
 
         max_retries = 5
 

@@ -55,8 +55,12 @@ class ToolExecutorFalso:
 class AnthropicFalso:
     def __init__(self, texto):
         self._texto = texto
+        self.chamadas = 0
+        self.forcados = []
 
-    def create_message(self, system, messages, tools, max_tokens):
+    def create_message(self, system, messages, tools, max_tokens, tool_choice=None):
+        self.chamadas += 1
+        self.forcados.append(tool_choice)
         return {"content": [{"type": "text", "text": self._texto}], "stop_reason": "end_turn"}
 
 
@@ -138,6 +142,123 @@ class TestNaoBloqueiaDemais(unittest.TestCase):
 
         self.assertIn("250", " ".join(m.content for m in saida))
         self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+
+
+class AnthropicRoteirizado:
+    """Responde uma coisa diferente a cada chamada, na ordem do roteiro."""
+
+    def __init__(self, roteiro):
+        self._roteiro = list(roteiro)
+        self.forcados = []
+        self.correcoes = []
+
+    def create_message(self, system, messages, tools, max_tokens, tool_choice=None):
+        self.forcados.append(tool_choice)
+        ultima = messages[-1].get("content") if messages else ""
+        if isinstance(ultima, str) and ultima.startswith("PARE."):
+            self.correcoes.append(ultima)
+        return self._roteiro.pop(0) if self._roteiro else {
+            "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn",
+        }
+
+
+def texto(t):
+    return {"content": [{"type": "text", "text": t}], "stop_reason": "end_turn"}
+
+
+def usa_tool(nome, args):
+    return {
+        "content": [{"type": "tool_use", "id": "t1", "name": nome, "input": args}],
+        "stop_reason": "tool_use",
+    }
+
+
+class TestConsultaObrigatoria(unittest.TestCase):
+    """Pergunta sobre agenda não sai sem consulta: o modelo escolhe QUAL tool,
+    não escolhe SE consulta. Deixar isso com ele produziu tools=0 duas vezes."""
+
+    def test_intencao_de_agenda_forca_tool_na_primeira_rodada(self):
+        anthropic = AnthropicRoteirizado([texto("Claro!")])
+        agente = monta_agente("ignorado")
+        agente.anthropic = anthropic
+
+        agente.process_message(CLINIC, mensagem("quais horarios tem?"))
+
+        self.assertEqual(anthropic.forcados[0], {"type": "any"})
+
+    def test_conversa_comum_nao_forca_nada(self):
+        """Forçar sempre gastaria uma tool em "oi, tudo bem?"."""
+        anthropic = AnthropicRoteirizado([texto("Oi! Tudo ótimo 😊")])
+        agente = monta_agente("ignorado")
+        agente.anthropic = anthropic
+
+        agente.process_message(CLINIC, mensagem("oi, tudo bem?"))
+
+        self.assertIsNone(anthropic.forcados[0])
+
+
+class TestSeCorrigeAntesDeTransferir(unittest.TestCase):
+    """Inventar uma vez não pode custar a conversa.
+
+    A primeira versão transferia direto, e transformava um erro recuperável em
+    trabalho manual para a clínica.
+    """
+
+    def test_inventou_e_depois_consultou_responde_normalmente(self):
+        anthropic = AnthropicRoteirizado([
+            texto("Para 23/09 tenho 13:00 e 13:30."),          # inventou
+            usa_tool("get_time_slots", {"date": "2026-09-23"}),  # foi mandado consultar
+            texto("Nesse dia tenho 18:00 e 18:15."),            # respondeu com o que voltou
+        ])
+        agente = monta_agente("ignorado", resultado_da_tool={"available_slots": ["18:00", "18:15"]})
+        agente.anthropic = anthropic
+
+        saida = agente.process_message(CLINIC, mensagem("e horários à tarde?"))
+        enviado = " ".join(m.content for m in saida)
+
+        self.assertIn("18:00", enviado)
+        self.assertNotIn("13:00", enviado)
+        self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+
+    def test_a_correcao_e_explicita_para_o_modelo(self):
+        anthropic = AnthropicRoteirizado([
+            texto("Para 23/09 tenho 13:00."),
+            texto("Nesse dia tenho 18:00."),
+        ])
+        agente = monta_agente("ignorado", resultado_da_tool={"available_slots": ["18:00"]})
+        agente.anthropic = anthropic
+
+        agente.process_message(CLINIC, mensagem("e horários à tarde?"))
+
+        self.assertTrue(anthropic.correcoes)
+        self.assertIn("Chame agora a tool", anthropic.correcoes[0])
+
+    def test_insistiu_em_inventar_ai_sim_transfere(self):
+        anthropic = AnthropicRoteirizado([
+            texto("Para 23/09 tenho 13:00."),
+            texto("Para 23/09 tenho 13:00 mesmo."),
+        ])
+        agente = monta_agente("ignorado")
+        agente.anthropic = anthropic
+
+        saida = agente.process_message(CLINIC, mensagem("e horários à tarde?"))
+
+        self.assertEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertNotIn("13:00", " ".join(m.content for m in saida))
+
+    def test_refaz_no_maximo_uma_vez(self):
+        """Sem teto, uma conversa ruim viraria cinco chamadas de modelo."""
+        anthropic = AnthropicRoteirizado([
+            texto("Para 23/09 tenho 13:00."),
+            texto("Para 23/09 tenho 13:00."),
+            texto("Para 23/09 tenho 13:00."),
+        ])
+        agente = monta_agente("ignorado")
+        agente.anthropic = anthropic
+
+        agente.process_message(CLINIC, mensagem("e horários à tarde?"))
+
+        self.assertEqual(len(anthropic.forcados), 2)
 
 
 if __name__ == "__main__":
