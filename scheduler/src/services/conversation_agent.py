@@ -11,7 +11,7 @@ import boto3
 from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
-from src.services.roteador import intencoes, tools_obrigatorias
+from src.services.roteador import exige_consulta, intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
 
 logger = logging.getLogger(__name__)
@@ -158,9 +158,15 @@ class ConversationAgent:
         # start with an orphan tool_result block (no preceding tool_use), which
         # the Anthropic API rejects with 400.
         gatilho = eh_gatilho_sintetico(incoming.content)
-        # Tudo que as tools devolveram nesta execução. É contra isto que a
-        # resposta é conferida antes de sair.
-        respaldo_das_tools = []
+        # Tudo que as tools devolveram - nesta execução E na anterior. O
+        # respaldo só valia por execução, e a confirmação de agendamento repete
+        # o valor consultado na mensagem passada: o preço voltava de
+        # calculate_discount numa rodada e era acusado de invenção na seguinte.
+        # Repetir o que acabou de ser consultado é o comportamento correto.
+        # Só uma rodada para trás: carregar a conversa inteira devolveria o bug
+        # de origem, em que uma afirmação velha respaldava uma nova.
+        respaldo_das_tools = list(session.get("respaldo_anterior") or [])
+        inicio_desta_rodada = len(respaldo_das_tools)
         history = self._truncate_history(session.get("agent_history", []))
         if gatilho or not history:
             # Sessão sem histórico não significa conversa nova: a pessoa pode já ter
@@ -224,7 +230,11 @@ class ConversationAgent:
         # escrever. Deixar a escolha com o modelo fez o bot listar nove horários
         # da manhã com tools=0, mesmo com o prompt mandando consultar - duas
         # vezes no mesmo dia. Ele escolhe QUAL tool; não escolhe se consulta.
-        forcar_proxima = bool(intencoes_detectadas) and not gatilho
+        # Consultar é o padrão; não consultar é a exceção. O desenho anterior
+        # forçava só quando o regex reconhecia o assunto, e a lista de assuntos
+        # factuais não tem fim: "E horários à tarde?" não casava com nada e o
+        # bot inventou dez horários. Agora a lista curta é a de conversa fiada.
+        forcar_proxima = exige_consulta(user_content) and not gatilho
         ja_refez = False
 
         try:
@@ -393,6 +403,12 @@ class ConversationAgent:
         # 8. Save history (truncated)
         session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
         session["mode"] = "agent"
+        # Guarda só o que esta rodada consultou, para a próxima poder repetir o
+        # valor sem ser acusada de inventá-lo. Truncado: a sessão vive no
+        # DynamoDB e resultado de tool cresce rápido.
+        session["respaldo_anterior"] = self._convert_decimals(
+            respaldo_das_tools[inicio_desta_rodada:][-6:]
+        )
         self._save_session(clinic_id, phone, session)
 
         elapsed = time.time() - start_time
@@ -468,28 +484,27 @@ class ConversationAgent:
         system_prompt = self.template_service.get_and_render(clinic_id, "AI_SYSTEM_PROMPT", variables)
         system_prompt += discount_context
 
-        # Load ALL FAQ items into the system prompt as knowledge base
-        faq_rows = self.db.execute_query(
-            "SELECT question_label, answer FROM scheduler.faq_items WHERE clinic_id = %s AND active = true ORDER BY display_order",
-            (clinic_id,),
-        )
-        if faq_rows:
-            faq_context = "\n═══ BASE DE CONHECIMENTO (FAQ) ═══\n"
-            faq_context += "Use estas informações para responder dúvidas dos clientes. "
-            faq_context += "Você pode reformular e adaptar as respostas ao contexto da conversa.\n\n"
-            for faq in faq_rows:
-                faq_context += f"P: {faq['question_label']}\nR: {faq['answer']}\n\n"
-            system_prompt += faq_context
-
+        # O FAQ SAIU DAQUI de propósito.
+        #
+        # Despejar a base inteira no prompt fazia com que responder de memória
+        # fosse o caminho normal: para toda dúvida, `tools=0` era o esperado, e
+        # com isso não havia como distinguir "repetiu o FAQ" de "completou o FAQ
+        # com o que parecia plausível". O verificador ficava cego justamente na
+        # maior classe de respostas.
+        #
+        # Agora get_faq_answer é o único caminho até a resposta. Custa uma
+        # rodada de latência por dúvida e devolve o sinal: sem tool, sem fato.
         system_prompt += (
             "\n═══ COMO RESPONDER DÚVIDAS ═══\n"
-            "1. Primeiro, tente responder usando a BASE DE CONHECIMENTO acima.\n"
-            "2. Se a pergunta não está coberta exatamente mas a base de conhecimento tem "
-            "informações relacionadas, use-as para formular uma resposta útil.\n"
-            "3. Use get_faq_answer APENAS se precisar buscar algo específico não coberto acima.\n"
-            "4. Só chame request_human_handoff se, após tentar as opções acima, "
-            "você realmente não tiver informação suficiente para ajudar.\n"
-            "5. NUNCA transfira para humano na primeira tentativa — sempre tente ajudar primeiro.\n"
+            "1. Toda dúvida sobre o procedimento começa com get_faq_answer. Você não tem\n"
+            "   a base de conhecimento na memória: ela vem da tool, e só de lá.\n"
+            "2. Responda com o que a tool devolveu. Pode resumir e adaptar o tom, nunca\n"
+            "   acrescentar informação que não veio nela.\n"
+            "3. Se get_faq_answer não devolver resposta, você NÃO SABE. Não complete com\n"
+            "   conhecimento geral sobre depilação a laser, por mais seguro que pareça:\n"
+            "   diga que vai confirmar com uma especialista e chame request_human_handoff.\n"
+            "4. Isso vale mesmo para o que parece óbvio - intervalo entre sessões, número\n"
+            "   de sessões, cuidados, contraindicações. Cada clínica tem o seu protocolo.\n"
         )
 
         system_prompt += (

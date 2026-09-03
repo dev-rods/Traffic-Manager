@@ -68,9 +68,60 @@ TOOLS_POR_INTENCAO = {
 }
 
 
+# A lista do que NÃO exige consulta. É o inverso do desenho anterior, e de
+# propósito: classificar todo assunto factual é uma lista infinita - "E horários
+# à tarde?" não casava com nada e o bot inventou dez horários. Classificar
+# conversa fiada é uma lista curta e estável, e errar para o lado de consultar
+# custa uma chamada de tool, não uma paciente na porta em dia que não existe.
+SOCIAL = (
+    r"^(oi|ola|opa|eae|e ai|bom dia|boa tarde|boa noite|tudo bem|tudo bom|"
+    r"sim|nao|ok|okay|blz|beleza|certo|claro|perfeito|otimo|show|fechado|"
+    r"isso|isso mesmo|exato|combinado|entendi|entendido|uhum|aham|"
+    r"obrigad[ao]|vlw|valeu|brigad[ao]|de nada|imagina|"
+    r"tchau|ate mais|ate logo|abraco|bjs|bjos|falou)"
+    r"[\s!.,?]*$"
+)
+
+# Respostas de cadastro: nome, data, CPF, e-mail. A pessoa está entregando um
+# dado, não perguntando nada - forçar tool aqui faria o agente consultar a
+# agenda no meio do preenchimento do formulário.
+#
+# O nome é reconhecido pelas MAIÚSCULAS no texto original, não pelo texto
+# normalizado: "André Felipe" é nome, "quero agendar" não é, e sem essa
+# distinção qualquer frase minúscula de até 60 letras passava por cadastro.
+# Nome em minúscula cai no lado de consultar, que custa uma tool e não uma
+# alucinação.
+_DATA_CPF_OU_EMAIL = re.compile(r"^[\d\s./\-]{1,20}$|^\S+@\S+\.\S+$")
+_NOME_PROPRIO = re.compile(r"^(?:[A-ZÀ-Þ][a-zà-ÿ'\-]+\s*){1,4}$")
+
+
 def _normaliza(texto):
     plano = unicodedata.normalize("NFKD", (texto or "").lower())
     return "".join(c for c in plano if not unicodedata.combining(c))
+
+
+def exige_consulta(mensagem):
+    """A mensagem precisa que o agente consulte antes de responder?
+
+    Verdadeiro por padrão. Só é falso para saudação, agradecimento, confirmação
+    social e entrega de dado de cadastro - o resto do mundo pode envolver fato,
+    e fato vem de tool.
+    """
+    original = (mensagem or "").strip()
+    plano = _normaliza(original).strip()
+    if not plano:
+        return False
+    # "oi, tudo bem?" são duas expressões sociais emendadas: a mensagem só é
+    # conversa fiada se TODOS os pedaços forem.
+    pedacos = [p.strip() for p in re.split(r"[,;]|\se\s", plano) if p.strip()]
+    if pedacos and all(re.match(SOCIAL, p) for p in pedacos):
+        return False
+    # Pergunta é sempre consulta, mesmo curta ("e amanhã?").
+    if "?" in plano:
+        return True
+    if _DATA_CPF_OU_EMAIL.match(plano) or _NOME_PROPRIO.match(original):
+        return False
+    return True
 
 
 def intencoes(mensagem):

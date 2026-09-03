@@ -605,7 +605,19 @@ class ToolExecutor:
             if rows:
                 return {"answers": [{"question": r["question_label"], "answer": r["answer"]} for r in rows]}
 
-        return {"answers": [], "message": "Nenhuma resposta encontrada no FAQ. Use seu conhecimento sobre depilação a laser para responder, ou ofereça transferir para um atendente."}
+        # A mensagem anterior aqui mandava "use seu conhecimento sobre depilação
+        # a laser para responder" - a própria tool autorizando a invenção que o
+        # resto do sistema existe para impedir. Cada clínica tem protocolo
+        # próprio: intervalo entre sessões, cuidados e contraindicações não são
+        # conhecimento geral, são política da casa.
+        return {
+            "answers": [],
+            "message": (
+                "Nenhuma resposta encontrada no FAQ desta clínica. Você NÃO SABE a "
+                "resposta. Não use conhecimento geral. Diga que vai confirmar com uma "
+                "especialista e chame request_human_handoff."
+            ),
+        }
 
     def _tool_get_clinic_info(self, args, clinic_id, phone, ctx):
         rows = self.db.execute_query(
@@ -710,6 +722,10 @@ class ToolExecutor:
             "time": time_str,
             "full_name": full_name,
             "total_duration_minutes": total_duration,
+            # Sem isto, dizer "agendamento confirmado" logo depois de criar o
+            # agendamento era acusado de afirmação sem respaldo - o fato tinha
+            # acabado de acontecer, mas a tool não o devolvia.
+            "status": result.get("status") or "CONFIRMED",
         }
 
     def _tool_reschedule_appointment(self, args, clinic_id, phone, ctx):
