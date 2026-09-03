@@ -82,17 +82,24 @@ SOCIAL = (
     r"[\s!.,?]*$"
 )
 
-# Respostas de cadastro: nome, data, CPF, e-mail. A pessoa está entregando um
-# dado, não perguntando nada - forçar tool aqui faria o agente consultar a
-# agenda no meio do preenchimento do formulário.
+# NÃO tente adivinhar "dado de cadastro" pelo formato da mensagem.
 #
-# O nome é reconhecido pelas MAIÚSCULAS no texto original, não pelo texto
-# normalizado: "André Felipe" é nome, "quero agendar" não é, e sem essa
-# distinção qualquer frase minúscula de até 60 letras passava por cadastro.
-# Nome em minúscula cai no lado de consultar, que custa uma tool e não uma
-# alucinação.
-_DATA_CPF_OU_EMAIL = re.compile(r"^[\d\s./\-]{1,20}$|^\S+@\S+\.\S+$")
-_NOME_PROPRIO = re.compile(r"^(?:[A-ZÀ-Þ][a-zà-ÿ'\-]+\s*){1,4}$")
+# A tentativa anterior classificava por maiúscula e por conter só dígitos, e
+# errava exatamente onde mais custa:
+#
+#   "Buço Completo", "Axilas", "Perna Completa"  -> escolha de área, virava
+#                                                   "nome próprio", sem consulta
+#   "23/09", "15/10"                             -> escolha de data, virava
+#                                                   "CPF/data de nascimento"
+#   "andre felipe", "maria"                      -> nome de verdade, forçava tool
+#
+# Nomes de área nesta clínica são capitalizados e datas de agendamento têm a
+# mesma cara de data de nascimento. O formato não carrega a intenção, e quem
+# sabe o que a mensagem significa é o modelo, que tem a conversa inteira.
+#
+# Por isso a saída é a tool `sem_consulta_necessaria`: em vez de adivinharmos
+# aqui, ele declara que não precisa consultar. Continua obrigado a agir antes de
+# escrever, e a declaração fica no log.
 
 
 def _normaliza(texto):
@@ -101,25 +108,20 @@ def _normaliza(texto):
 
 
 def exige_consulta(mensagem):
-    """A mensagem precisa que o agente consulte antes de responder?
+    """A mensagem precisa que o agente aja antes de responder?
 
-    Verdadeiro por padrão. Só é falso para saudação, agradecimento, confirmação
-    social e entrega de dado de cadastro - o resto do mundo pode envolver fato,
-    e fato vem de tool.
+    Verdadeiro por padrão, e a exceção é só saudação e agradecimento. Não tenta
+    inferir mais nada do texto: quando a mensagem realmente não pede dado, quem
+    declara isso é o modelo, chamando `sem_consulta_necessaria`.
     """
-    original = (mensagem or "").strip()
-    plano = _normaliza(original).strip()
+    plano = _normaliza(mensagem).strip()
     if not plano:
         return False
-    # "oi, tudo bem?" são duas expressões sociais emendadas: a mensagem só é
-    # conversa fiada se TODOS os pedaços forem.
+    # A única exceção é um conjunto fechado de expressões sociais, casadas
+    # contra a mensagem inteira. "oi, tudo bem?" são duas emendadas: a mensagem
+    # só escapa se TODOS os pedaços forem sociais.
     pedacos = [p.strip() for p in re.split(r"[,;]|\se\s", plano) if p.strip()]
     if pedacos and all(re.match(SOCIAL, p) for p in pedacos):
-        return False
-    # Pergunta é sempre consulta, mesmo curta ("e amanhã?").
-    if "?" in plano:
-        return True
-    if _DATA_CPF_OU_EMAIL.match(plano) or _NOME_PROPRIO.match(original):
         return False
     return True
 

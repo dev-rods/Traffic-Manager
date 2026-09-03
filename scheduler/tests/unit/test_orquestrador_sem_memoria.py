@@ -56,19 +56,61 @@ class TestExcecoes(unittest.TestCase):
         """Basta um pedaço não ser conversa fiada."""
         self.assertTrue(exige_consulta("oi, quanto custa?"))
 
-    def test_dado_de_cadastro(self):
-        for frase in ["André Felipe", "1999", "12/05/1990", "andre@gmail.com",
-                      "123.456.789-00"]:
-            with self.subTest(frase=frase):
-                self.assertFalse(exige_consulta(frase))
+    def test_nao_adivinha_dado_de_cadastro_pelo_formato(self):
+        """Quem declara que não precisa consultar é o modelo, não o regex.
 
-    def test_nome_em_minusculo_erra_para_o_lado_de_consultar(self):
-        """Custa uma tool. O erro contrário custa uma alucinação."""
-        self.assertTrue(exige_consulta("andre felipe"))
+        A tentativa de reconhecer cadastro pelo formato errava dos dois lados:
+        "Buço Completo" tem cara de nome próprio e "23/09" tem cara de data de
+        nascimento. Ambos exigem consulta. Agora todos entram como consulta e o
+        modelo usa `sem_consulta_necessaria` quando for mesmo cadastro.
+        """
+        for frase in ["André Felipe", "andre felipe", "1999", "12/05/1990",
+                      "andre@gmail.com", "123.456.789-00"]:
+            with self.subTest(frase=frase):
+                self.assertTrue(exige_consulta(frase))
+
+    def test_maiuscula_nao_muda_a_classificacao(self):
+        """O cliente escreve como quiser; o formato não carrega a intenção."""
+        self.assertEqual(exige_consulta("André Felipe"), exige_consulta("andre felipe"))
+        self.assertEqual(exige_consulta("AXILAS"), exige_consulta("axilas"))
+
+    def test_escolha_de_area_exige_consulta(self):
+        """O caso que a heurística de maiúscula quebrava - e o mais caro."""
+        for frase in ["Buço Completo", "Axilas", "Perna Completa", "Virilha Cavada"]:
+            with self.subTest(frase=frase):
+                self.assertTrue(exige_consulta(frase))
+
+    def test_escolha_de_data_exige_consulta(self):
+        for frase in ["23/09", "15/10"]:
+            with self.subTest(frase=frase):
+                self.assertTrue(exige_consulta(frase))
 
     def test_vazio_nao_consulta(self):
         self.assertFalse(exige_consulta(""))
         self.assertFalse(exige_consulta(None))
+
+
+class TestSaidaSemAdivinhacao(unittest.TestCase):
+    """A tool que substituiu a inferência por formato."""
+
+    def test_tool_esta_exposta_ao_modelo(self):
+        from src.services.ai_tools import get_tool_definitions
+
+        nomes = {t["name"] for t in get_tool_definitions(format="anthropic")}
+
+        self.assertIn("sem_consulta_necessaria", nomes)
+
+    def test_nao_respalda_afirmacao_factual(self):
+        """Devolve vazio: declarar que não consultou não pode virar respaldo."""
+        from src.services.ai_tools import ToolExecutor
+
+        executor = object.__new__(ToolExecutor)
+        resultado = executor._tool_sem_consulta_necessaria(
+            {"motivo": "paciente mandou o nome"}, "clinica", "5511999990000", {}
+        )
+
+        self.assertEqual(resultado, {})
+        self.assertIn("18:00", fatos_sem_origem("Tenho 18:00.", [resultado]))
 
 
 class TestFalsosPositivosCorrigidos(unittest.TestCase):
