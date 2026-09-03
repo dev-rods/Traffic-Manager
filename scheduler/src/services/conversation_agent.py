@@ -10,6 +10,8 @@ import boto3
 
 from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
+from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
+from src.services.roteador import intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
 
 logger = logging.getLogger(__name__)
@@ -119,6 +121,18 @@ class ConversationAgent:
         dynamodb = boto3.resource("dynamodb")
         self.sessions_table = dynamodb.Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
 
+    def _agenda_sem_respaldo(self, texto, respaldo_das_tools):
+        """Data ou horário afirmados que nenhuma tool desta execução devolveu.
+
+        Nunca levanta: uma falha na conferência não pode derrubar a resposta,
+        senão o guardrail vira o motivo de o bot calar.
+        """
+        try:
+            return fatos_de_agenda(fatos_sem_origem(texto, respaldo_das_tools))
+        except Exception as e:
+            logger.error(f"[Proveniencia] Falha ao conferir resposta: {e}")
+            return set()
+
     def process_message(self, clinic_id, incoming):
         """
         Process an incoming WhatsApp message and return outgoing messages.
@@ -144,6 +158,9 @@ class ConversationAgent:
         # start with an orphan tool_result block (no preceding tool_use), which
         # the Anthropic API rejects with 400.
         gatilho = eh_gatilho_sintetico(incoming.content)
+        # Tudo que as tools devolveram nesta execução. É contra isto que a
+        # resposta é conferida antes de sair.
+        respaldo_das_tools = []
         history = self._truncate_history(session.get("agent_history", []))
         if gatilho or not history:
             # Sessão sem histórico não significa conversa nova: a pessoa pode já ter
@@ -164,20 +181,69 @@ class ConversationAgent:
         history.append({"role": "user", "content": user_content})
 
         # 5. Agent loop
+        # ── Pré-carga determinística ────────────────────────────────────
+        # O agente decide sozinho quando consultar, e em 02/09/2026 decidiu que
+        # não precisava: respondeu sobre um agendamento pelo que ele mesmo
+        # dissera dias antes, já cancelado. Aqui a decisão sai do modelo: se a
+        # pergunta é sobre agenda, preço ou disponibilidade, a consulta acontece
+        # antes de ele escrever, e o resultado entra como fonte única.
+        dados_consultados = []
+        intencoes_detectadas = set() if gatilho else intencoes(user_content)
+        if not gatilho:
+            for nome_tool in tools_obrigatorias(intencoes_detectadas):
+                try:
+                    resultado = self.tool_executor.execute(
+                        nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone}
+                    )
+                    dados_consultados.append((nome_tool, resultado))
+                    respaldo_das_tools.append(resultado)
+                except Exception as e:
+                    logger.error(f"[PreCarga] {nome_tool} falhou para {phone}: {e}")
+
+        if dados_consultados:
+            nomes = ", ".join(n for n, _ in dados_consultados)
+            logger.info(f"[PreCarga] {phone}: {nomes}")
+            blocos = ("\n\n").join(
+                f"[{nome}]\n{json.dumps(self._convert_decimals(res), ensure_ascii=False, default=str)[:1500]}"
+                for nome, res in dados_consultados
+            )
+            system_prompt += (
+                "\n\n═══ DADOS CONSULTADOS AGORA ═══\n"
+                "Consultei o banco antes de te passar esta conversa. O que está "
+                "abaixo é o estado real neste momento e é a ÚNICA fonte válida "
+                "sobre agenda, preço e disponibilidade. O que não estiver aqui, "
+                "você não sabe - nem que tenha dito antes nesta conversa.\n\n"
+                + blocos
+            )
+
         tools = get_tool_definitions(format="anthropic")
         pending_buttons = None
         handoff_requested = False
         text_parts = []
+        # Perguntou sobre agenda? Então a primeira jogada é consultar, não
+        # escrever. Deixar a escolha com o modelo fez o bot listar nove horários
+        # da manhã com tools=0, mesmo com o prompt mandando consultar - duas
+        # vezes no mesmo dia. Ele escolhe QUAL tool; não escolhe se consulta.
+        forcar_proxima = bool(intencoes_detectadas) and not gatilho
+        ja_refez = False
 
         try:
             for iteration in range(MAX_AGENT_ITERATIONS):
                 logger.info(f"[ConversationAgent] Iteration {iteration + 1} for {phone}")
+
+                # Consumido a cada volta: forçar sempre deixaria o modelo sem
+                # como encerrar, já que toda resposta exigiria mais uma tool.
+                forcar_tool = {"type": "any"} if forcar_proxima else None
+                forcar_proxima = False
+                if forcar_tool:
+                    logger.info(f"[ConversationAgent] Consulta obrigatória para {phone}")
 
                 response = self.anthropic.create_message(
                     system=system_prompt,
                     messages=history,
                     tools=tools,
                     max_tokens=1024,
+                    tool_choice=forcar_tool,
                 )
 
                 # Parse response content blocks
@@ -197,7 +263,30 @@ class ConversationAgent:
                 stop_reason = response.get("stop_reason", "end_turn")
 
                 if not tool_uses:
-                    # No tool calls — final response
+                    # Resposta final: confere antes de aceitar. Data e horário
+                    # afirmados sem respaldo não viram mensagem - mas a primeira
+                    # reação é mandar consultar, não desistir da conversa.
+                    texto_provisorio = "\n".join(current_text_parts).strip()
+                    inventado = self._agenda_sem_respaldo(texto_provisorio, respaldo_das_tools)
+
+                    if inventado and not ja_refez:
+                        ja_refez = True
+                        logger.warning(
+                            f"[Proveniencia] {phone} afirmou {sorted(inventado)} sem consultar; "
+                            f"refazendo com consulta obrigatória"
+                        )
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            "PARE. Você acabou de afirmar data ou horário que não veio de "
+                            "nenhuma tool nesta conversa. Não repita, não deduza a partir de "
+                            "horários que você mesma deu antes e não complete a lista. "
+                            "Chame agora a tool que traz esse dado e responda apenas com o "
+                            "que ela devolver."
+                        )})
+                        forcar_proxima = True
+                        text_parts = []
+                        continue
+
                     history.append({"role": "assistant", "content": content_blocks})
                     break
 
@@ -209,6 +298,7 @@ class ConversationAgent:
                         tool_use["input"],
                         context={"clinic_id": clinic_id, "phone": phone},
                     )
+                    respaldo_das_tools.append(result)
 
                     # Intercept special tools
                     if tool_use["name"] == "present_options" and result.get("presented"):
@@ -251,6 +341,53 @@ class ConversationAgent:
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
+        # Modelo no meio, determinismo em volta. O prompt já proíbe afirmar
+        # data, preço ou status sem consultar - e em 02/09/2026 o bot disse que
+        # um agendamento cancelado estava confirmado mesmo assim, relendo a
+        # própria mensagem de três dias antes. Instrução não segura isso.
+        #
+        # Data e horário sem respaldo BLOQUEIAM a resposta. Em 02/09/2026, à
+        # pergunta "E horários à tarde?", o agente listou dez horários sem
+        # chamar tool nenhuma - extrapolou da lista da noite que ele mesmo
+        # dera minutos antes. O modo observação só registrou.
+        #
+        # Só data e horário derrubam a mensagem. Preço, duração e status
+        # continuam apenas registrados: erram para o lado do constrangimento,
+        # não o da paciente que vem num dia que não existe.
+        try:
+            sem_origem = fatos_sem_origem(final_text, respaldo_das_tools)
+            inventado = fatos_de_agenda(sem_origem)
+
+            if inventado:
+                logger.error(
+                    f"[Proveniencia] BLOQUEADO {phone}: agenda sem respaldo "
+                    f"{sorted(inventado)} | tools={len(respaldo_das_tools)} "
+                    f"| refez={ja_refez} | resposta={final_text[:200]!r}"
+                )
+                # Só chega aqui quem já foi mandado consultar e mesmo assim
+                # inventou de novo. Aí a especialista é o caminho certo: a
+                # alternativa é ficar tentando enquanto a pessoa espera.
+                final_text = (
+                    "Deixa eu confirmar os horários certinho com uma especialista "
+                    "para não te passar nada errado. Já te falo 😊"
+                )
+                pending_buttons = None
+                handoff_requested = True
+                session["state"] = "HUMAN_HANDOFF"
+                session["human_handoff_requested_at"] = int(time.time())
+                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+            elif sem_origem:
+                logger.warning(
+                    f"[Proveniencia] {phone} afirmou sem respaldo: {sorted(sem_origem)} "
+                    f"| tools={len(respaldo_das_tools)} | resposta={final_text[:120]!r}"
+                )
+            else:
+                logger.info(f"[Proveniencia] {phone} ok | tools={len(respaldo_das_tools)}")
+        except Exception as e:
+            # A conferência nunca pode derrubar o atendimento: falhando ela, a
+            # resposta segue como estava, que é o comportamento de antes dela.
+            logger.error(f"[Proveniencia] Falha ao conferir resposta de {phone}: {e}")
+
         outgoing = self._build_outgoing(final_text, pending_buttons)
 
         # 8. Save history (truncated)

@@ -1,99 +1,160 @@
-"""Duração da sessão por quantidade de áreas.
+"""Quanto tempo dura uma sessão.
 
-Antes a duração era a soma das durações cadastradas por área, o que dava números
-irreais: 6 áreas de 10 minutos viravam 60 minutos de sessão quando na prática o
-atendimento leva 35. A regra passa a ser por faixa de quantidade.
-
-Padrão da clínica: 1 área 15min, 2-3 áreas 20min, 4-6 áreas 35min, 7+ áreas 45min.
-As faixas são editáveis por clínica, como já acontece com discount_rules.
+Havia cinco respostas para a mesma pergunta: as faixas por quantidade de áreas,
+a soma das durações cadastradas, o SUM do fallback de reagendamento, o
+max_session_minutes da clínica e o número que o agente inventava - em
+02/09/2026 ele pediu horário para uma sessão de 4 minutos. Agora é uma só.
 """
 import os
 import unittest
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
-from src.services.duration_rules import DEFAULT_DURATION_RULES, duration_for_areas
+from src.services.duration_rules import (
+    DEFAULT_DURATION_RULES,
+    arredonda_para_passo,
+    calcula_duracao,
+    duracao_da_sessao,
+    soma_das_areas,
+)
 
 
-class TestPadraoDaClinica(unittest.TestCase):
-    def test_uma_area(self):
-        self.assertEqual(duration_for_areas(1, DEFAULT_DURATION_RULES), 15)
+class DbFalso:
+    """Devolve a soma que o teste mandar, sem tocar em banco."""
 
-    def test_duas_areas(self):
-        self.assertEqual(duration_for_areas(2, DEFAULT_DURATION_RULES), 20)
+    def __init__(self, total=0, regras=None):
+        self._total = total
+        self._regras = regras
+        self.consultas = []
 
-    def test_tres_areas(self):
-        self.assertEqual(duration_for_areas(3, DEFAULT_DURATION_RULES), 20)
-
-    def test_quatro_areas(self):
-        self.assertEqual(duration_for_areas(4, DEFAULT_DURATION_RULES), 35)
-
-    def test_cinco_areas(self):
-        self.assertEqual(duration_for_areas(5, DEFAULT_DURATION_RULES), 35)
-
-    def test_seis_areas(self):
-        self.assertEqual(duration_for_areas(6, DEFAULT_DURATION_RULES), 35)
-
-    def test_sete_areas(self):
-        self.assertEqual(duration_for_areas(7, DEFAULT_DURATION_RULES), 45)
-
-    def test_muitas_areas(self):
-        self.assertEqual(duration_for_areas(20, DEFAULT_DURATION_RULES), 45)
+    def execute_query(self, query, params=None):
+        self.consultas.append(query)
+        if "duration_rules" in query:
+            return [self._regras] if self._regras else []
+        return [{"total": self._total}]
 
 
-class TestBordas(unittest.TestCase):
-    def test_zero_areas_usa_a_duracao_base(self):
-        """Não deveria acontecer, mas agendamento sem área não pode ter duração 0."""
-        self.assertEqual(duration_for_areas(0, DEFAULT_DURATION_RULES), 15)
+class TestArredondamento(unittest.TestCase):
+    def test_arredonda_para_cima(self):
+        """Para cima de propósito: subestimar sobrepõe agendamentos."""
+        self.assertEqual(arredonda_para_passo(21, 5), 25)
+        self.assertEqual(arredonda_para_passo(24, 5), 25)
 
-    def test_quantidade_negativa_usa_a_base(self):
-        self.assertEqual(duration_for_areas(-3, DEFAULT_DURATION_RULES), 15)
+    def test_multiplo_exato_nao_muda(self):
+        self.assertEqual(arredonda_para_passo(25, 5), 25)
 
-    def test_regras_none_usa_o_padrao(self):
-        """Clínica sem regra cadastrada continua agendando."""
-        self.assertEqual(duration_for_areas(5, None), 35)
-
-    def test_regras_vazias_usa_o_padrao(self):
-        self.assertEqual(duration_for_areas(2, {}), 20)
+    def test_passo_invalido_devolve_intacto(self):
+        """Configuração ruim não pode zerar a duração."""
+        self.assertEqual(arredonda_para_passo(23, 0), 23)
+        self.assertEqual(arredonda_para_passo(23, -5), 23)
 
 
-class TestFaixasCustomizadas(unittest.TestCase):
-    def test_clinica_pode_redefinir_os_minutos(self):
-        regras = dict(DEFAULT_DURATION_RULES, base_duration_minutes=25, tier_2_duration_minutes=40)
+class TestPisoTetoPasso(unittest.TestCase):
+    def test_abaixo_do_piso_sobe_para_o_piso(self):
+        self.assertEqual(duracao_da_sessao(4), 15)
+        self.assertEqual(duracao_da_sessao(10), 15)
 
-        self.assertEqual(duration_for_areas(1, regras), 25)
-        self.assertEqual(duration_for_areas(3, regras), 40)
+    def test_acima_do_teto_desce_para_o_teto(self):
+        self.assertEqual(duracao_da_sessao(60), 50)
+        self.assertEqual(duracao_da_sessao(600), 50)
 
-    def test_clinica_pode_redefinir_as_fronteiras(self):
-        """Faixa 2 vira 2-5 e faixa 3 vira 6-10."""
-        regras = dict(
-            DEFAULT_DURATION_RULES,
-            tier_2_min_areas=2, tier_2_max_areas=5,
-            tier_3_min_areas=6, tier_3_max_areas=10,
-            tier_4_min_areas=11,
-        )
+    def test_no_meio_arredonda_para_multiplo_de_cinco(self):
+        self.assertEqual(duracao_da_sessao(24), 25)
+        self.assertEqual(duracao_da_sessao(31), 35)
+        self.assertEqual(duracao_da_sessao(35), 35)
 
-        self.assertEqual(duration_for_areas(5, regras), 20)
-        self.assertEqual(duration_for_areas(6, regras), 35)
-        self.assertEqual(duration_for_areas(11, regras), 45)
+    def test_resultado_e_sempre_multiplo_do_passo(self):
+        for bruto in range(0, 121):
+            self.assertEqual(duracao_da_sessao(bruto) % 5, 0, f"bruto={bruto}")
 
-    def test_quantidade_em_buraco_entre_faixas_cai_na_faixa_anterior(self):
-        """Se a clínica configurar faixas com lacuna, a duração não pode zerar.
+    def test_resultado_esta_sempre_entre_piso_e_teto(self):
+        for bruto in range(0, 121):
+            self.assertGreaterEqual(duracao_da_sessao(bruto), 15)
+            self.assertLessEqual(duracao_da_sessao(bruto), 50)
 
-        Ex.: faixa 2 vai até 3 e faixa 3 começa em 6. O que fazer com 4 e 5?
-        Cai na última faixa cuja abertura já foi ultrapassada — nunca na base,
-        que subestimaria a sessão e criaria conflito de horário na agenda.
+    def test_zero_e_none_caem_no_piso(self):
+        self.assertEqual(duracao_da_sessao(0), 15)
+        self.assertEqual(duracao_da_sessao(None), 15)
+
+    def test_negativo_cai_no_piso(self):
+        self.assertEqual(duracao_da_sessao(-30), 15)
+
+    def test_idempotente(self):
+        """Reaplicar sobre um valor já calculado não muda nada.
+
+        O reagendamento passa a duração gravada por aqui de novo; se não fosse
+        idempotente, cada remarcação esticaria a sessão.
         """
-        regras = dict(DEFAULT_DURATION_RULES, tier_3_min_areas=6, tier_3_max_areas=8, tier_4_min_areas=9)
+        for bruto in (4, 24, 37, 60, 600):
+            uma = duracao_da_sessao(bruto)
+            self.assertEqual(duracao_da_sessao(uma), uma)
 
-        self.assertEqual(duration_for_areas(4, regras), 20)
-        self.assertEqual(duration_for_areas(5, regras), 20)
 
-    def test_faixa_inativa_nao_e_aplicada(self):
-        regras = dict(DEFAULT_DURATION_RULES, is_active=False)
+class TestRegrasDaClinica(unittest.TestCase):
+    def test_regra_propria_vence_o_padrao(self):
+        regras = {"floor_minutes": 30, "ceiling_minutes": 90, "step_minutes": 10, "is_active": True}
 
-        # com a regra desligada, cai no padrão do código
-        self.assertEqual(duration_for_areas(5, regras), 35)
+        self.assertEqual(duracao_da_sessao(12, regras), 30)
+        self.assertEqual(duracao_da_sessao(62, regras), 70)
+        self.assertEqual(duracao_da_sessao(200, regras), 90)
+
+    def test_regra_inativa_cai_no_padrao(self):
+        regras = {"floor_minutes": 30, "ceiling_minutes": 90, "step_minutes": 10, "is_active": False}
+
+        self.assertEqual(duracao_da_sessao(60, regras), 50)
+
+    def test_campo_nulo_cai_no_padrao_daquele_campo(self):
+        """Coluna nova em linha antiga não pode zerar a duração."""
+        regras = {"floor_minutes": None, "ceiling_minutes": None, "step_minutes": None}
+
+        self.assertEqual(duracao_da_sessao(24, regras), 25)
+
+    def test_piso_acima_do_teto_o_piso_vence(self):
+        """Configuração impossível degrada para sessão longa, nunca curta."""
+        regras = {"floor_minutes": 40, "ceiling_minutes": 20, "step_minutes": 5}
+
+        self.assertEqual(duracao_da_sessao(10, regras), 40)
+
+
+class TestSomaDasAreas(unittest.TestCase):
+    def test_sem_pares_soma_zero_sem_consultar(self):
+        db = DbFalso()
+
+        self.assertEqual(soma_das_areas(db, []), 0)
+        self.assertEqual(soma_das_areas(db, None), 0)
+        self.assertEqual(db.consultas, [])
+
+    def test_ignora_par_incompleto(self):
+        db = DbFalso(total=40)
+
+        soma_das_areas(db, [{"service_id": "s1"}, {"area_id": "a1"}])
+
+        self.assertEqual(db.consultas, [])
+
+
+class TestCalculaDuracao(unittest.TestCase):
+    def test_soma_das_areas_passa_por_piso_teto_e_passo(self):
+        """6 áreas de 10min somam 60 e o teto corta em 50."""
+        db = DbFalso(total=60)
+
+        self.assertEqual(calcula_duracao(db, "clinica", [{"service_id": "s", "area_id": f"a{i}"} for i in range(6)]), 50)
+
+    def test_area_unica_curta_sobe_para_o_piso(self):
+        db = DbFalso(total=8)
+
+        self.assertEqual(calcula_duracao(db, "clinica", [{"service_id": "s", "area_id": "a"}]), 15)
+
+    def test_sem_areas_devolve_o_piso(self):
+        db = DbFalso(total=0)
+
+        self.assertEqual(calcula_duracao(db, "clinica", []), 15)
+
+
+class TestPadrao(unittest.TestCase):
+    def test_padrao_e_o_combinado(self):
+        self.assertEqual(DEFAULT_DURATION_RULES["floor_minutes"], 15)
+        self.assertEqual(DEFAULT_DURATION_RULES["ceiling_minutes"], 50)
+        self.assertEqual(DEFAULT_DURATION_RULES["step_minutes"], 5)
 
 
 if __name__ == "__main__":

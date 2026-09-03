@@ -4,6 +4,7 @@ from datetime import datetime, date
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
+from src.services.duration_rules import duracao_da_sessao, get_duration_rules
 from src.services.availability_engine import AvailabilityEngine
 
 logger = logging.getLogger()
@@ -44,7 +45,12 @@ def handler(event, context):
         engine = AvailabilityEngine(db)
 
         if total_duration_param:
-            slots = engine.get_available_slots_multi(clinic_id, date_param, int(total_duration_param))
+            # O painel manda a soma bruta das áreas; piso, teto e passo são
+            # aplicados aqui para a agenda não depender de o front acertar a
+            # conta. Ver duration_rules.py.
+            duracao = duracao_da_sessao(
+                int(total_duration_param), get_duration_rules(db, clinic_id))
+            slots = engine.get_available_slots_multi(clinic_id, date_param, duracao)
         else:
             slots = engine.get_available_slots(clinic_id, date_param, service_id)
 

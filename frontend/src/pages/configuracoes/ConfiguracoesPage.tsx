@@ -15,7 +15,6 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     address: clinic.address ?? '',
     buffer_minutes: clinic.buffer_minutes ?? 10,
     max_future_dates: clinic.max_future_dates ?? 5,
-    max_session_minutes: clinic.max_session_minutes ?? 120,
     pre_session_instructions: clinic.pre_session_instructions ?? '',
     zapi_instance_id: clinic.zapi_instance_id ?? '',
     zapi_instance_token: clinic.zapi_instance_token ?? '',
@@ -101,14 +100,6 @@ export function ConfiguracoesPage() {
               min={1}
               max={90}
               help="Máx. dias que o paciente vê"
-            />
-            <NumberField
-              label="Sessão máx. (min)"
-              value={form.max_session_minutes as number}
-              onChange={(v) => set('max_session_minutes', v)}
-              min={15}
-              max={480}
-              help="Duração máxima de uma sessão"
             />
           </div>
         </Section>

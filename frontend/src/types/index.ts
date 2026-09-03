@@ -8,7 +8,6 @@ export interface Clinic {
   timezone: string | null
   buffer_minutes: number | null
   max_future_dates: number | null
-  max_session_minutes: number | null
   display_name: string | null
   welcome_message: string | null
   welcome_intro_message: string | null
@@ -28,7 +27,6 @@ export interface UpdateClinicPayload {
   address?: string
   buffer_minutes?: number
   max_future_dates?: number
-  max_session_minutes?: number
   welcome_message?: string
   welcome_intro_message?: string
   pre_session_instructions?: string
@@ -102,22 +100,18 @@ export interface DiscountRule {
 /**
  * Duração da sessão por quantidade de áreas.
  *
- * A duração não é a soma das durações por área: o laser é aplicado em sequência
- * e o preparo não se repete, então seis áreas levam 35 minutos e não 60.
+ * A duração é a soma das durações por área, arredondada para cima ao passo e
+ * limitada por piso e teto. O backend é a autoridade: o que o painel calcula
+ * é preview, e é reaplicado no servidor antes de virar agenda.
  */
 export interface DurationRule {
   clinic_id: string
-  /** 1 área, e piso de qualquer atendimento. */
-  base_duration_minutes: number
-  tier_2_min_areas: number
-  tier_2_max_areas: number
-  tier_2_duration_minutes: number
-  tier_3_min_areas: number
-  tier_3_max_areas: number
-  tier_3_duration_minutes: number
-  /** Última faixa: vale de tier_4_min_areas para cima, sem teto. */
-  tier_4_min_areas: number
-  tier_4_duration_minutes: number
+  /** Nenhuma sessão é mais curta que isto. */
+  floor_minutes: number
+  /** Nenhuma sessão é mais longa que isto. */
+  ceiling_minutes: number
+  /** Toda duração é múltiplo disto. */
+  step_minutes: number
   is_active: boolean
 }
 

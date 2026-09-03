@@ -26,7 +26,6 @@ ALLOWED_FIELDS = {
     "max_future_dates",
     "active",
     "display_name",
-    "max_session_minutes",
     "welcome_intro_message",
     "bot_paused",
     "batch_message_template",

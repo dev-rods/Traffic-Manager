@@ -1,65 +1,113 @@
-"""Duração da sessão calculada pela quantidade de áreas.
+"""Quanto tempo dura uma sessão. Única autoridade sobre isso.
 
-Antes a duração era a soma das durações cadastradas em `service_areas`, o que
-produzia números irreais: seis áreas de 10 minutos viravam uma sessão de 60,
-quando na prática o atendimento leva 35. O laser é aplicado em sequência e boa
-parte do tempo é de preparo, que não se repete a cada área.
+Antes havia quatro respostas diferentes para a mesma pergunta: as faixas por
+quantidade de áreas, a soma das durações cadastradas por área, o `SUM` do
+fallback de reagendamento e o número que o próprio agente inventava. Em
+02/09/2026 o agente pediu horários para uma sessão de *4 minutos* e nada barrou.
 
-As faixas são editáveis por clínica em `scheduler.duration_rules`, no mesmo
-formato de `discount_rules` — inclusive as fronteiras, não só os minutos.
+Agora a resposta é uma só, e é derivada, nunca informada:
+
+    soma das durações das áreas → arredonda para cima ao passo → aplica piso e teto
+
+Arredonda para CIMA de propósito. Subestimar a duração agenda duas pessoas em
+cima da mesma janela; superestimar só desperdiça um vão. Entre os dois erros, o
+segundo é o barato.
+
+O agente não opina sobre duração: as tools recebem quais áreas a pessoa
+escolheu, que é o que ele de fato sabe, e a duração sai daqui.
 """
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 # Padrão da Essência, usado quando a clínica não tem regra própria cadastrada.
 DEFAULT_DURATION_RULES = {
-    "base_duration_minutes": 15,     # 1 área, e piso de qualquer atendimento
-    "tier_2_min_areas": 2,
-    "tier_2_max_areas": 3,
-    "tier_2_duration_minutes": 20,
-    "tier_3_min_areas": 4,
-    "tier_3_max_areas": 6,
-    "tier_3_duration_minutes": 35,
-    "tier_4_min_areas": 7,           # sem máximo: é a última faixa
-    "tier_4_duration_minutes": 45,
+    "floor_minutes": 15,     # nenhuma sessão é mais curta que isto
+    "ceiling_minutes": 50,   # nenhuma sessão é mais longa que isto
+    "step_minutes": 5,       # toda duração é múltiplo disto
     "is_active": True,
 }
 
 
-def duration_for_areas(area_count: int, rules: Optional[Dict]) -> int:
-    """Minutos de sessão para uma quantidade de áreas.
+def arredonda_para_passo(minutos: int, passo: int) -> int:
+    """O menor múltiplo de `passo` que não é menor que `minutos`.
 
-    Percorre as faixas da maior para a menor e devolve a primeira cuja abertura
-    já foi alcançada. Ler de cima para baixo faz a configuração com lacuna cair
-    na faixa anterior em vez de escorregar para a base: subestimar a duração
-    criaria conflito de horário na agenda, que é o pior dos dois erros.
+    Passo inválido devolve o valor intacto: uma configuração ruim não pode
+    zerar a duração de um agendamento.
+    """
+    if passo <= 0:
+        return int(minutos)
+    return -(-int(minutos) // int(passo)) * int(passo)
 
-    `rules` ausente, vazio ou inativo cai no padrão do código — clínica sem
-    configuração continua agendando.
+
+def duracao_da_sessao(soma_minutos, rules: Optional[Dict] = None) -> int:
+    """A duração final, a partir da soma bruta das áreas.
+
+    Arredonda antes de aplicar piso e teto: assim os limites saem exatos, e não
+    empurrados para o próximo múltiplo. Piso e teto configurados fora do passo
+    são respeitados como estão - quem escreveu 47 no painel quis 47.
     """
     if not rules or not rules.get("is_active", True):
         rules = DEFAULT_DURATION_RULES
 
     def valor(chave):
         v = rules.get(chave)
-        return DEFAULT_DURATION_RULES[chave] if v is None else v
+        return DEFAULT_DURATION_RULES[chave] if v is None else int(v)
 
-    base = int(valor("base_duration_minutes"))
-    if area_count <= 1:
-        return base
+    piso, teto, passo = valor("floor_minutes"), valor("ceiling_minutes"), valor("step_minutes")
 
-    faixas = (
-        (int(valor("tier_4_min_areas")), int(valor("tier_4_duration_minutes"))),
-        (int(valor("tier_3_min_areas")), int(valor("tier_3_duration_minutes"))),
-        (int(valor("tier_2_min_areas")), int(valor("tier_2_duration_minutes"))),
+    # Piso acima do teto é configuração impossível: o piso vence, porque uma
+    # sessão curta demais quebra o atendimento e uma longa demais só ocupa agenda.
+    if piso > teto:
+        logger.warning(f"[DurationRules] piso {piso} > teto {teto}; usando o piso")
+        teto = piso
+
+    bruto = max(int(soma_minutos or 0), 0)
+    return max(piso, min(teto, arredonda_para_passo(bruto, passo)))
+
+
+def soma_das_areas(db, service_area_pairs: List[Dict]) -> int:
+    """Soma bruta das durações das áreas escolhidas, antes de qualquer limite.
+
+    Usa a duração específica da área quando existe e cai na do serviço quando
+    não - o mesmo COALESCE que a listagem de áreas expõe como
+    `effective_duration_minutes`, para a tela e a agenda não discordarem.
+
+    Par que não casar com nenhuma linha simplesmente não soma: é área removida
+    do catálogo, e derrubar o agendamento por isso seria pior.
+    """
+    pares = [p for p in (service_area_pairs or []) if p.get("service_id") and p.get("area_id")]
+    if not pares:
+        return 0
+
+    valores = ", ".join(["(%s::uuid, %s::uuid)"] * len(pares))
+    params: tuple = ()
+    for p in pares:
+        params += (p["service_id"], p["area_id"])
+
+    rows = db.execute_query(
+        f"""SELECT COALESCE(SUM(COALESCE(sa.duration_minutes, s.duration_minutes)), 0) AS total
+        FROM (VALUES {valores}) AS pares(service_id, area_id)
+        JOIN scheduler.services s ON s.id = pares.service_id AND s.active = TRUE
+        LEFT JOIN scheduler.service_areas sa
+               ON sa.service_id = pares.service_id
+              AND sa.area_id = pares.area_id
+              AND sa.active = TRUE""",
+        params,
     )
-    for minimo, minutos in faixas:
-        if area_count >= minimo:
-            return minutos
+    return int(rows[0]["total"]) if rows and rows[0]["total"] else 0
 
-    return base
+
+def calcula_duracao(db, clinic_id: str, service_area_pairs: List[Dict]) -> int:
+    """A duração de uma sessão para as áreas escolhidas. Ponto de entrada único.
+
+    Todo caminho de agendamento - chat, painel, criação, reagendamento - passa
+    por aqui. Sem áreas, devolve o piso: é o caso do serviço sem área detalhada,
+    que continua ocupando o mínimo de agenda.
+    """
+    rules = get_duration_rules(db, clinic_id)
+    return duracao_da_sessao(soma_das_areas(db, service_area_pairs), rules)
 
 
 def get_duration_rules(db, clinic_id: str) -> Dict:

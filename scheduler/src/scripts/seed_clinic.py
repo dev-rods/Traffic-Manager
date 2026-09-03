@@ -50,16 +50,15 @@ def main():
 
     cursor.execute(
         """
-        INSERT INTO clinics (clinic_id, name, phone, business_hours, buffer_minutes, max_session_minutes, welcome_intro_message, pre_session_instructions)
-        VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s)
+        INSERT INTO clinics (clinic_id, name, phone, business_hours, buffer_minutes, welcome_intro_message, pre_session_instructions)
+        VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s)
         ON CONFLICT (clinic_id) DO UPDATE SET
-            max_session_minutes = EXCLUDED.max_session_minutes,
             welcome_intro_message = EXCLUDED.welcome_intro_message,
             pre_session_instructions = EXCLUDED.pre_session_instructions,
             updated_at = NOW()
         RETURNING id, clinic_id
         """,
-        ("laser-beauty-sp", "Laser Beauty SP", "5511988880000", json.dumps(business_hours), 10, 60, welcome_intro, pre_session_instructions),
+        ("laser-beauty-sp", "Laser Beauty SP", "5511988880000", json.dumps(business_hours), 10, welcome_intro, pre_session_instructions),
     )
     conn.commit()
     row = cursor.fetchone()

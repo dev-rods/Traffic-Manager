@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from src.services.duration_rules import duration_for_areas, get_duration_rules
+from src.services.duration_rules import calcula_duracao
 
 logger = logging.getLogger(__name__)
 
@@ -66,16 +66,24 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "check_availability",
-            "description": "Check which days have available slots for the given total duration. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts. Returns objects with `date` (YYYY-MM-DD, used internally) and `label` (PT-BR formatted, ALWAYS use this for display — never compute the weekday yourself).",
+            "description": "Check which days have available slots for the selected areas. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts. Returns objects with `date` (YYYY-MM-DD, used internally) and `label` (PT-BR formatted, ALWAYS use this for display — never compute the weekday yourself).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "total_duration_minutes": {
-                        "type": "integer",
-                        "description": "Total duration of all selected areas combined (in minutes)",
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected. The session duration is derived from these — never state or estimate a duration yourself.",
                     },
                 },
-                "required": ["total_duration_minutes"],
+                "required": ["service_area_pairs"],
             },
         },
     },
@@ -83,7 +91,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_time_slots",
-            "description": "Get available time slots for a specific date and total duration. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
+            "description": "Get available time slots for a specific date and the selected areas. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -91,12 +99,45 @@ TOOL_DEFINITIONS = [
                         "type": "string",
                         "description": "Date in YYYY-MM-DD format",
                     },
-                    "total_duration_minutes": {
-                        "type": "integer",
-                        "description": "Total duration of all selected areas combined (in minutes)",
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected. The session duration is derived from these — never state or estimate a duration yourself.",
                     },
                 },
-                "required": ["date", "total_duration_minutes"],
+                "required": ["date", "service_area_pairs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_duration",
+            "description": "How long the session will take for the selected areas, in minutes. Call this before stating ANY duration to the patient — never add up area durations yourself and never answer from memory. Returns `total_duration_minutes`, already rounded and within the clinic limits.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected.",
+                    },
+                },
+                "required": ["service_area_pairs"],
             },
         },
     },
@@ -458,16 +499,22 @@ class ToolExecutor:
                 "area_id": str(r["area_id"]),
                 "service_name": r["service_name"],
                 "area_name": r["area_name"],
-                "duration_minutes": r["duration_minutes"],
+                # A duração por área não é exposta ao modelo de propósito. Ela é
+                # insumo do cálculo, não resposta: vendo 10 min por área, ele
+                # soma seis e diz 60, ou repete o 10 de uma área como se fosse a
+                # sessão inteira - que na verdade é 15, o piso. A duração da
+                # sessão vem de calculate_duration, e só de lá.
                 "price_display": f"R$ {price_cents / 100:.2f}" if price_cents else None,
                 "price_cents": price_cents,
             })
         return {"areas": areas}
 
     def _tool_check_availability(self, args, clinic_id, phone, ctx):
-        total_duration = args.get("total_duration_minutes", 60)
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
+        # A duração é derivada das áreas, nunca do que o modelo informa. Ver
+        # duration_rules.py: ele já pediu horário para uma sessão de 4 minutos.
+        total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
         days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
         return {
             "available_dates": [
@@ -477,16 +524,30 @@ class ToolExecutor:
 
     def _tool_get_time_slots(self, args, clinic_id, phone, ctx):
         target_date = args.get("date")
-        total_duration = args.get("total_duration_minutes", 60)
         if not target_date:
             return {"error": "date is required"}
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
+        total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
         slots = self.availability_engine.get_available_slots_multi(clinic_id, target_date, total_duration)
         return {
             "date": target_date,
             "date_label": _format_pt_br_date_label(target_date),
             "available_slots": slots,
+        }
+
+    def _tool_calculate_duration(self, args, clinic_id, phone, ctx):
+        """A duração da sessão para as áreas escolhidas.
+
+        Existe para o agente poder AFIRMAR uma duração com respaldo. Sem ela,
+        em 02/09/2026 ele respondeu "quanto tempo dura?" de memória, sem
+        chamar tool nenhuma - não havia o que chamar.
+        """
+        pares = args.get("service_area_pairs") or []
+        minutos = calcula_duracao(self.db, clinic_id, pares)
+        return {
+            "total_duration_minutes": minutos,
+            "area_count": len(pares),
         }
 
     def _tool_lookup_appointments(self, args, clinic_id, phone, ctx):
@@ -608,11 +669,7 @@ class ToolExecutor:
         if not all([service_area_pairs, date, time_str, full_name]):
             return {"error": "Missing required fields: service_area_pairs, date, time, full_name"}
 
-        # Duração pela quantidade de áreas, não pela soma das durações cadastradas.
-        # Ver duration_rules.py para o porquê.
-        total_duration = duration_for_areas(
-            len(service_area_pairs), get_duration_rules(self.db, clinic_id)
-        )
+        total_duration = calcula_duracao(self.db, clinic_id, service_area_pairs)
 
         primary_service_id = service_area_pairs[0]["service_id"]
 
