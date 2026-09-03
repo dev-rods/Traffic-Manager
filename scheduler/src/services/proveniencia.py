@@ -173,6 +173,23 @@ def _valor_simples(chave, valor, encontrados):
                 encontrados.add(achado)
 
 
+_FATO_DE_AGENDA = re.compile(r"^(?:\d{4}-\d{2}-\d{2}|\d{2}:\d{2})$")
+
+
+def fatos_de_agenda(fatos):
+    """Dos fatos sem origem, os que marcam um compromisso: data e horário.
+
+    São os únicos que a pessoa anota e organiza o dia em volta. Um preço errado
+    se corrige na mensagem seguinte; uma paciente que aparece numa quarta que
+    não existe perdeu a tarde dela.
+
+    Duração, preço e status ficam de fora do bloqueio de propósito: erram para
+    o lado do constrangimento, não da viagem perdida, e barrar tudo calaria o
+    bot na maioria das respostas.
+    """
+    return {f for f in fatos or () if _FATO_DE_AGENDA.match(str(f))}
+
+
 def fatos_sem_origem(resposta, resultados_de_tools, ano=None):
     """Os fatos afirmados na resposta que nenhuma tool respaldou.
 
