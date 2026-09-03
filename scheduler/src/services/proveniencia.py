@@ -116,22 +116,30 @@ def _frases_afirmativas(texto):
             yield frase
 
 
-def _valores_das_tools(resultado, encontrados):
+def _valores_das_tools(resultado, encontrados, chave_pai=None):
     """Percorre o resultado da tool em qualquer profundidade.
 
     Os retornos chegam embrulhados de formas diferentes por tool; procurar por
     caminho fixo deixaria passar valor legítimo e o guardrail barraria resposta
     correta.
+
+    Escalar solto dentro de lista herda a chave de quem o contém. Sem isso,
+    `available_slots: ["18:00", "18:15"]` ficava invisível - os horários não
+    tinham chave própria e nunca chegavam ao extrator, então o bot listava os
+    horários que a tool devolveu e era acusado de tê-los inventado.
     """
     if isinstance(resultado, dict):
         for chave, valor in resultado.items():
             if isinstance(valor, (dict, list)):
-                _valores_das_tools(valor, encontrados)
+                _valores_das_tools(valor, encontrados, chave)
             else:
                 _valor_simples(chave, valor, encontrados)
     elif isinstance(resultado, list):
         for item in resultado:
-            _valores_das_tools(item, encontrados)
+            if isinstance(item, (dict, list)):
+                _valores_das_tools(item, encontrados, chave_pai)
+            else:
+                _valor_simples(chave_pai or "", item, encontrados)
 
 
 def _valor_simples(chave, valor, encontrados):

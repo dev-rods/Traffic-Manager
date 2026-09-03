@@ -110,3 +110,21 @@ class TestConferencia(unittest.TestCase):
         """Os resultados chegam embrulhados; o valor pode estar em qualquer nível."""
         tools = [{"appointments": [{"appointment_date": "2026-09-23", "status": "CONFIRMED"}]}]
         self.assertEqual(fatos_sem_origem("Dia 23/09/2026, confirmada", tools), set())
+
+    def test_lista_de_strings_soltas_e_lida(self):
+        """get_time_slots devolve os horários sem chave própria.
+
+        Em 02/09/2026 o bot listou exatamente os horários que a tool retornou e
+        foi acusado de inventá-los: escalar dentro de lista não chegava ao
+        extrator. Falso positivo aqui é caro - se um dia isto passar a bloquear,
+        cala o bot na resposta mais comum que ele dá.
+        """
+        tools = [{"available_slots": ["18:00", "18:15", "18:30"]}]
+
+        self.assertEqual(fatos_sem_origem("Tenho 18:00, 18:15 e 18:30.", tools), set())
+
+    def test_horario_fora_da_lista_continua_barrado(self):
+        """Ler a lista não pode virar carta branca para qualquer horário."""
+        tools = [{"available_slots": ["18:00", "18:15"]}]
+
+        self.assertIn("19:00", fatos_sem_origem("Tenho 18:00 e 19:00.", tools))
