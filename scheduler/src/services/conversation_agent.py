@@ -10,7 +10,7 @@ import boto3
 
 from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
-from src.services.proveniencia import fatos_sem_origem
+from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
 from src.services.roteador import intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
 
@@ -296,12 +296,37 @@ class ConversationAgent:
         # um agendamento cancelado estava confirmado mesmo assim, relendo a
         # própria mensagem de três dias antes. Instrução não segura isso.
         #
-        # MODO OBSERVAÇÃO: por ora só registra. 75% das respostas de produção
-        # contêm afirmação factual, então bloquear sem medir a taxa real de
-        # violação arriscaria calar o bot na maioria das conversas.
+        # Data e horário sem respaldo BLOQUEIAM a resposta. Em 02/09/2026, à
+        # pergunta "E horários à tarde?", o agente listou dez horários sem
+        # chamar tool nenhuma - extrapolou da lista da noite que ele mesmo
+        # dera minutos antes. O modo observação só registrou.
+        #
+        # Só data e horário derrubam a mensagem. Preço, duração e status
+        # continuam apenas registrados: erram para o lado do constrangimento,
+        # não o da paciente que vem num dia que não existe.
         try:
             sem_origem = fatos_sem_origem(final_text, respaldo_das_tools)
-            if sem_origem:
+            inventado = fatos_de_agenda(sem_origem)
+
+            if inventado:
+                logger.error(
+                    f"[Proveniencia] BLOQUEADO {phone}: agenda sem respaldo "
+                    f"{sorted(inventado)} | tools={len(respaldo_das_tools)} "
+                    f"| resposta={final_text[:200]!r}"
+                )
+                # Cai para a especialista em vez de arriscar outra tentativa: se
+                # ele inventou com o prompt inteiro mandando consultar, insistir
+                # gasta o tempo de quem está esperando.
+                final_text = (
+                    "Deixa eu confirmar os horários certinho com uma especialista "
+                    "para não te passar nada errado. Já te falo 😊"
+                )
+                pending_buttons = None
+                handoff_requested = True
+                session["state"] = "HUMAN_HANDOFF"
+                session["human_handoff_requested_at"] = int(time.time())
+                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+            elif sem_origem:
                 logger.warning(
                     f"[Proveniencia] {phone} afirmou sem respaldo: {sorted(sem_origem)} "
                     f"| tools={len(respaldo_das_tools)} | resposta={final_text[:120]!r}"
@@ -309,6 +334,8 @@ class ConversationAgent:
             else:
                 logger.info(f"[Proveniencia] {phone} ok | tools={len(respaldo_das_tools)}")
         except Exception as e:
+            # A conferência nunca pode derrubar o atendimento: falhando ela, a
+            # resposta segue como estava, que é o comportamento de antes dela.
             logger.error(f"[Proveniencia] Falha ao conferir resposta de {phone}: {e}")
 
         outgoing = self._build_outgoing(final_text, pending_buttons)

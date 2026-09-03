@@ -32,6 +32,9 @@ _DATA_EXTENSO = re.compile(
     r"\b(\d{1,2})\s+de\s+([a-zç]+)(?:\s+de\s+(\d{4}))?\b", re.IGNORECASE
 )
 _HORA = re.compile(r"\b(\d{1,2})\s*(?:h|:)\s*(\d{2})?\b")
+# "35 minutos", "35 min". Duração era o único fato sensível sem extrator, e
+# por isso uma duração inventada passava pelo verificador como se fosse ok.
+_DURACAO = re.compile(r"\b(\d{1,3})\s*(?:min\b|minutos?\b)", re.IGNORECASE)
 _DINHEIRO = re.compile(r"R\$\s*(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{2}))?", re.IGNORECASE)
 
 
@@ -58,8 +61,8 @@ def _data(dia, mes, ano, ano_padrao):
 def fatos_sensiveis(texto, ano=None):
     """Os fatos de banco afirmados neste texto, normalizados.
 
-    Datas viram YYYY-MM-DD, horários HH:MM, dinheiro R$0.00 e status
-    'status:confirmado'. A normalização é o que permite comparar "23/09" da
+    Datas viram YYYY-MM-DD, horários HH:MM, dinheiro R$0.00, durações
+    'duracao:35' e status 'status:confirmado'. A normalização é o que permite comparar "23/09" da
     resposta com "2026-09-23" da tool.
 
     Perguntas não entram: quem pergunta não está afirmando nada.
@@ -88,6 +91,9 @@ def fatos_sensiveis(texto, ano=None):
             if 0 <= h <= 23:
                 achados.add(f"{h:02d}:{int(minuto or 0):02d}")
 
+        for minutos in _DURACAO.findall(trecho):
+            achados.add(f"duracao:{int(minutos)}")
+
         for inteiro, centavos in _DINHEIRO.findall(trecho):
             valor = float(inteiro.replace(".", "")) + int(centavos or 0) / 100
             achados.add(f"R${valor:.2f}")
@@ -110,22 +116,30 @@ def _frases_afirmativas(texto):
             yield frase
 
 
-def _valores_das_tools(resultado, encontrados):
+def _valores_das_tools(resultado, encontrados, chave_pai=None):
     """Percorre o resultado da tool em qualquer profundidade.
 
     Os retornos chegam embrulhados de formas diferentes por tool; procurar por
     caminho fixo deixaria passar valor legítimo e o guardrail barraria resposta
     correta.
+
+    Escalar solto dentro de lista herda a chave de quem o contém. Sem isso,
+    `available_slots: ["18:00", "18:15"]` ficava invisível - os horários não
+    tinham chave própria e nunca chegavam ao extrator, então o bot listava os
+    horários que a tool devolveu e era acusado de tê-los inventado.
     """
     if isinstance(resultado, dict):
         for chave, valor in resultado.items():
             if isinstance(valor, (dict, list)):
-                _valores_das_tools(valor, encontrados)
+                _valores_das_tools(valor, encontrados, chave)
             else:
                 _valor_simples(chave, valor, encontrados)
     elif isinstance(resultado, list):
         for item in resultado:
-            _valores_das_tools(item, encontrados)
+            if isinstance(item, (dict, list)):
+                _valores_das_tools(item, encontrados, chave_pai)
+            else:
+                _valor_simples(chave_pai or "", item, encontrados)
 
 
 def _valor_simples(chave, valor, encontrados):
@@ -143,6 +157,8 @@ def _valor_simples(chave, valor, encontrados):
         encontrados.add(f"R${int(valor) / 100:.2f}")
     elif chave_plana.endswith("price") and str(valor).replace(".", "").isdigit():
         encontrados.add(f"R${float(valor):.2f}")
+    elif "duration" in chave_plana and str(valor).isdigit():
+        encontrados.add(f"duracao:{int(valor)}")
     elif chave_plana == "status":
         mapa = {"CONFIRMED": "confirmado", "CANCELLED": "cancelado",
                 "RESCHEDULED": "reagendado"}
@@ -155,6 +171,23 @@ def _valor_simples(chave, valor, encontrados):
             achado = _data(d, m, a, date.today().year)
             if achado:
                 encontrados.add(achado)
+
+
+_FATO_DE_AGENDA = re.compile(r"^(?:\d{4}-\d{2}-\d{2}|\d{2}:\d{2})$")
+
+
+def fatos_de_agenda(fatos):
+    """Dos fatos sem origem, os que marcam um compromisso: data e horário.
+
+    São os únicos que a pessoa anota e organiza o dia em volta. Um preço errado
+    se corrige na mensagem seguinte; uma paciente que aparece numa quarta que
+    não existe perdeu a tarde dela.
+
+    Duração, preço e status ficam de fora do bloqueio de propósito: erram para
+    o lado do constrangimento, não da viagem perdida, e barrar tudo calaria o
+    bot na maioria das respostas.
+    """
+    return {f for f in fatos or () if _FATO_DE_AGENDA.match(str(f))}
 
 
 def fatos_sem_origem(resposta, resultados_de_tools, ano=None):

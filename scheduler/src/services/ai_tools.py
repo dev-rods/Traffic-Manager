@@ -119,6 +119,31 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "calculate_duration",
+            "description": "How long the session will take for the selected areas, in minutes. Call this before stating ANY duration to the patient — never add up area durations yourself and never answer from memory. Returns `total_duration_minutes`, already rounded and within the clinic limits.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected.",
+                    },
+                },
+                "required": ["service_area_pairs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "lookup_appointments",
             "description": "Look up active appointments for the current patient by phone number.",
             "parameters": {
@@ -474,7 +499,11 @@ class ToolExecutor:
                 "area_id": str(r["area_id"]),
                 "service_name": r["service_name"],
                 "area_name": r["area_name"],
-                "duration_minutes": r["duration_minutes"],
+                # A duração por área não é exposta ao modelo de propósito. Ela é
+                # insumo do cálculo, não resposta: vendo 10 min por área, ele
+                # soma seis e diz 60, ou repete o 10 de uma área como se fosse a
+                # sessão inteira - que na verdade é 15, o piso. A duração da
+                # sessão vem de calculate_duration, e só de lá.
                 "price_display": f"R$ {price_cents / 100:.2f}" if price_cents else None,
                 "price_cents": price_cents,
             })
@@ -505,6 +534,20 @@ class ToolExecutor:
             "date": target_date,
             "date_label": _format_pt_br_date_label(target_date),
             "available_slots": slots,
+        }
+
+    def _tool_calculate_duration(self, args, clinic_id, phone, ctx):
+        """A duração da sessão para as áreas escolhidas.
+
+        Existe para o agente poder AFIRMAR uma duração com respaldo. Sem ela,
+        em 02/09/2026 ele respondeu "quanto tempo dura?" de memória, sem
+        chamar tool nenhuma - não havia o que chamar.
+        """
+        pares = args.get("service_area_pairs") or []
+        minutos = calcula_duracao(self.db, clinic_id, pares)
+        return {
+            "total_duration_minutes": minutos,
+            "area_count": len(pares),
         }
 
     def _tool_lookup_appointments(self, args, clinic_id, phone, ctx):
