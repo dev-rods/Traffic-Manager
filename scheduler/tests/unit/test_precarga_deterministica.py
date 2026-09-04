@@ -42,14 +42,32 @@ class AnthropicFalso:
     def __init__(self, texto="Sua sessão está confirmada para amanhã."):
         self.prompts = []
         self.forcados = []
+        self.conversas = []
         self._texto = texto
 
     def create_message(self, system, messages, tools, max_tokens, tool_choice=None):
         self.prompts.append(system)
+        self.conversas.append(list(messages))
         self.forcados.append(tool_choice)
         return {
             "content": [{"type": "text", "text": self._texto}],
             "stop_reason": "end_turn",
+        }
+
+
+class AnthropicRoteiro(AnthropicFalso):
+    """Responde uma coisa por chamada, na ordem do roteiro."""
+
+    def __init__(self, roteiro):
+        super().__init__()
+        self._roteiro = list(roteiro)
+
+    def create_message(self, system, messages, tools, max_tokens, tool_choice=None):
+        self.prompts.append(system)
+        self.conversas.append(list(messages))
+        self.forcados.append(tool_choice)
+        return self._roteiro.pop(0) if self._roteiro else {
+            "content": [{"type": "text", "text": "ok"}], "stop_reason": "end_turn",
         }
 
 
@@ -110,17 +128,49 @@ class TestPreCarga(unittest.TestCase):
 
         self.assertEqual(executor.chamadas, ["lookup_appointments"])
 
-    def test_resultado_entra_no_prompt_como_fonte_unica(self):
+    def test_resultado_chega_ao_modelo_como_fonte_unica(self):
         anthropic = AnthropicFalso()
         executor = ToolExecutorFalso(resultado={"appointments": [{"status": "CANCELLED"}]})
         agente = monta_agente(executor, anthropic)
 
         agente.process_message(CLINIC, mensagem("meu agendamento está confirmado?"))
 
-        prompt = anthropic.prompts[0]
-        self.assertIn("DADOS CONSULTADOS AGORA", prompt)
-        self.assertIn("CANCELLED", prompt)
-        self.assertIn("ÚNICA fonte válida", prompt)
+        turno = anthropic.conversas[0][-1]["content"]
+        self.assertIn("DADOS CONSULTADOS AGORA", turno)
+        self.assertIn("CANCELLED", turno)
+        self.assertIn("ÚNICA fonte válida", turno)
+        self.assertIn("meu agendamento está confirmado?", turno)
+
+    def test_system_prompt_nao_carrega_dado_volatil(self):
+        """O invariante que faz o cache funcionar.
+
+        O prefixo cacheado é tools + system. Um byte que mude a cada mensagem
+        ali dentro invalida tudo depois dele, e voltamos a pagar os ~17k chars
+        de prompt inteiros por mensagem. O dado da consulta vive no turno da
+        pessoa, depois do breakpoint - de propósito.
+        """
+        anthropic = AnthropicFalso()
+        executor = ToolExecutorFalso(resultado={"appointments": [{"status": "CANCELLED"}]})
+        agente = monta_agente(executor, anthropic)
+
+        agente.process_message(CLINIC, mensagem("meu agendamento está confirmado?"))
+
+        self.assertNotIn("DADOS CONSULTADOS AGORA", anthropic.prompts[0])
+        self.assertNotIn("CANCELLED", anthropic.prompts[0])
+
+    def test_prefixo_identico_entre_as_chamadas_da_mesma_mensagem(self):
+        """2 a 4 chamadas por mensagem: da segunda em diante tem que ser leitura."""
+        anthropic = AnthropicRoteiro([
+            {"content": [{"type": "tool_use", "id": "t1", "name": "list_areas", "input": {}}],
+             "stop_reason": "tool_use"},
+            {"content": [{"type": "text", "text": "Pronto!"}], "stop_reason": "end_turn"},
+        ])
+        agente = monta_agente(ToolExecutorFalso(), anthropic)
+
+        agente.process_message(CLINIC, mensagem("quais áreas vocês atendem?"))
+
+        self.assertGreaterEqual(len(anthropic.prompts), 2)
+        self.assertEqual(anthropic.prompts[0], anthropic.prompts[1])
 
     def test_conversa_comum_nao_consulta_nem_polui_o_prompt(self):
         """Sem intenção que exija dado, nenhuma latência extra."""

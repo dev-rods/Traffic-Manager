@@ -45,10 +45,24 @@ class AnthropicService:
             "content-type": "application/json",
         }
 
+        # O system vai como bloco com cache_control, nao como string solta.
+        #
+        # A ordem de render e tools -> system -> messages, entao um breakpoint no
+        # ultimo bloco de system cobre tools + system: os ~17k chars de prompt
+        # mais as definicoes das 15 tools, que sao identicos em toda requisicao.
+        # O agent loop faz de 2 a 4 chamadas por mensagem e reenviava esse
+        # prefixo inteiro a preco cheio em cada uma.
+        #
+        # Leitura de cache custa ~0,1x; a escrita custa 1,25x e se paga na
+        # segunda chamada - ou seja, ja na primeira mensagem que use uma tool.
         payload = {
             "model": model,
             "max_tokens": max_tokens,
-            "system": system,
+            "system": [{
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"},
+            }] if system else system,
             "messages": messages,
         }
 

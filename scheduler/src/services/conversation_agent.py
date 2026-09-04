@@ -222,14 +222,24 @@ class ConversationAgent:
                 f"[{nome}]\n{json.dumps(self._convert_decimals(res), ensure_ascii=False, default=str)[:1500]}"
                 for nome, res in dados_consultados
             )
-            system_prompt += (
-                "\n\n═══ DADOS CONSULTADOS AGORA ═══\n"
+            # O bloco vai no TURNO DA PESSOA, não no system prompt.
+            #
+            # O conteúdo muda a cada mensagem (são os dados desta consulta). No
+            # system ele ficava dentro do prefixo cacheado, e mudar um byte do
+            # prefixo invalida tudo depois dele - o cache morria a cada mensagem
+            # e pagávamos os ~17k chars de prompt inteiros de novo.
+            #
+            # Aqui embaixo o prefixo (tools + system) fica byte-idêntico durante
+            # a conversa toda, e o dado volátil vive depois do breakpoint.
+            history[-1] = {"role": "user", "content": (
+                "═══ DADOS CONSULTADOS AGORA ═══\n"
                 "Consultei o banco antes de te passar esta conversa. O que está "
                 "abaixo é o estado real neste momento e é a ÚNICA fonte válida "
                 "sobre agenda, preço e disponibilidade. O que não estiver aqui, "
                 "você não sabe - nem que tenha dito antes nesta conversa.\n\n"
                 + blocos
-            )
+                + f"\n\n═══ MENSAGEM DA PESSOA ═══\n{user_content}"
+            )}
 
         tools = get_tool_definitions(format="anthropic")
         pending_buttons = None
