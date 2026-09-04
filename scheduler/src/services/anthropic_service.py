@@ -118,11 +118,22 @@ class AnthropicService:
                     f"Anthropic API error {response.status_code}: {response.text[:200]}"
                 )
 
-            except requests.exceptions.Timeout:
+            # Timeout e conexão derrubada são a mesma classe de problema: falha
+            # transitória de rede, que uma segunda tentativa resolve. Só o
+            # timeout era retentado; ConnectionError caía no ramo genérico
+            # abaixo e estourava de primeira, e a pessoa recebia "estou com
+            # dificuldades" por um reset que ia passar sozinho.
+            #
+            # Apareceu no eval: 130 de 300 chamadas seguidas morreram com
+            # ConnectionResetError. Em produção o volume é menor, mas o caminho
+            # é o mesmo - e ali quem paga é a paciente esperando resposta.
+            except (requests.exceptions.Timeout,
+                    requests.exceptions.ConnectionError) as e:
                 wait_time = min(random.uniform(2.0, 2.0 * (3 ** (attempt + 1))), 60.0)
                 logger.warning(
-                    f"[AnthropicService] Request timeout, retrying in {wait_time:.1f}s "
-                    f"(attempt {attempt + 1}/{max_retries})"
+                    f"[AnthropicService] Falha de rede ({type(e).__name__}), "
+                    f"retentando em {wait_time:.1f}s "
+                    f"(tentativa {attempt + 1}/{max_retries})"
                 )
                 time.sleep(wait_time)
             except AnthropicError:
