@@ -26,6 +26,15 @@ ATTENDANT_TTL_SECONDS = 24 * 60 * 60
 # agente - importar de volta criaria ciclo.
 GATILHOS_SINTETICOS = ("__INICIAR_CONVERSA__", "__RETOMAR_CONVERSA__")
 
+# Tools que mudam o mundo. Depois de uma delas, o agendamento existe no banco e
+# a pessoa PRECISA saber - trocar a mensagem por "vou confirmar com uma
+# especialista" a deixaria com uma sessão marcada que ela não sabe que tem.
+TOOLS_COM_EFEITO = frozenset({
+    "book_appointment",
+    "reschedule_appointment",
+    "cancel_appointment",
+})
+
 
 def eh_gatilho_sintetico(conteudo):
     """A mensagem é um gatilho da clínica, e não fala de alguém?"""
@@ -236,6 +245,7 @@ class ConversationAgent:
         # bot inventou dez horários. Agora a lista curta é a de conversa fiada.
         forcar_proxima = exige_consulta(user_content) and not gatilho
         ja_refez = False
+        efeito_cometido = None
 
         try:
             for iteration in range(MAX_AGENT_ITERATIONS):
@@ -279,7 +289,9 @@ class ConversationAgent:
                     texto_provisorio = "\n".join(current_text_parts).strip()
                     inventado = self._agenda_sem_respaldo(texto_provisorio, respaldo_das_tools)
 
-                    if inventado and not ja_refez:
+                    # Efeito já cometido não se refaz: mandar consultar de novo
+                    # convida o modelo a chamar book_appointment outra vez.
+                    if inventado and not ja_refez and not efeito_cometido:
                         ja_refez = True
                         logger.warning(
                             f"[Proveniencia] {phone} afirmou {sorted(inventado)} sem consultar; "
@@ -316,6 +328,9 @@ class ConversationAgent:
 
                     if tool_use["name"] == "request_human_handoff" and result.get("handoff_requested"):
                         handoff_requested = True
+
+                    if tool_use["name"] in TOOLS_COM_EFEITO and not result.get("error"):
+                        efeito_cometido = tool_use["name"]
 
                     tool_results.append({
                         "type": "tool_result",
@@ -377,10 +392,26 @@ class ConversationAgent:
                 # Só chega aqui quem já foi mandado consultar e mesmo assim
                 # inventou de novo. Aí a especialista é o caminho certo: a
                 # alternativa é ficar tentando enquanto a pessoa espera.
-                final_text = (
-                    "Deixa eu confirmar os horários certinho com uma especialista "
-                    "para não te passar nada errado. Já te falo 😊"
-                )
+                #
+                # Mas se uma tool já mudou o mundo nesta execução, a mensagem
+                # não pode fingir que nada aconteceu: o agendamento existe no
+                # banco, e sumir com ele deixaria a pessoa sem saber que tem
+                # uma sessão marcada. "Efeito só no fim" - quando o efeito
+                # escapa para o meio, a mensagem tem que contá-lo.
+                if efeito_cometido:
+                    logger.error(
+                        f"[Proveniencia] {phone}: bloqueio APÓS {efeito_cometido} já "
+                        f"executado. A ação está no banco e a mensagem foi trocada."
+                    )
+                    final_text = (
+                        "Registrei aqui e uma especialista vai te confirmar os "
+                        "detalhes em instantes, para não te passar nada errado 😊"
+                    )
+                else:
+                    final_text = (
+                        "Deixa eu confirmar os horários certinho com uma especialista "
+                        "para não te passar nada errado. Já te falo 😊"
+                    )
                 pending_buttons = None
                 handoff_requested = True
                 session["state"] = "HUMAN_HANDOFF"
