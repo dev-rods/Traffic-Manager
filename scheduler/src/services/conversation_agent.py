@@ -20,6 +20,12 @@ MAX_AGENT_ITERATIONS = 5
 MAX_HISTORY_PAIRS = 20
 ATTENDANT_TTL_SECONDS = 24 * 60 * 60
 
+# Quantos resultados de tool a sessão carrega adiante para respaldar repetição
+# de fato já consultado. Alto o bastante para uma negociação de data (a pessoa
+# volta ao mesmo horário por vários turnos), baixo o bastante para não estourar
+# o item do DynamoDB.
+RESPALDO_GUARDADO = 16
+
 
 # Mensagens sintéticas que fazem o agente falar sem ninguém ter escrito. Ficam
 # aqui, e não no módulo de cada fluxo, porque quem precisa reconhecê-las é o
@@ -167,15 +173,18 @@ class ConversationAgent:
         # start with an orphan tool_result block (no preceding tool_use), which
         # the Anthropic API rejects with 400.
         gatilho = eh_gatilho_sintetico(incoming.content)
-        # Tudo que as tools devolveram - nesta execução E na anterior. O
-        # respaldo só valia por execução, e a confirmação de agendamento repete
-        # o valor consultado na mensagem passada: o preço voltava de
-        # calculate_discount numa rodada e era acusado de invenção na seguinte.
-        # Repetir o que acabou de ser consultado é o comportamento correto.
-        # Só uma rodada para trás: carregar a conversa inteira devolveria o bug
-        # de origem, em que uma afirmação velha respaldava uma nova.
+        # Tudo que as tools devolveram ao longo da conversa, não só nesta
+        # rodada. Uma janela de uma rodada era curta demais para conversa real:
+        # a pessoa negocia data por vários turnos ("pode dia 27?", "e sábado?",
+        # "então fica 23 mesmo") e o bot repete as MESMAS datas consultadas. Da
+        # segunda repetição em diante o fato consultado virava "sem respaldo" e
+        # a resposta era bloqueada.
+        #
+        # Isso não reabre o bug de origem: aquele era o modelo repetindo a
+        # própria FALA. Resultado de tool é fato consultado, e a pré-carga mais
+        # o tool_choice obrigatório já forçam reconsulta quando a intenção é
+        # factual - o respaldo aqui é rede, não fonte.
         respaldo_das_tools = list(session.get("respaldo_anterior") or [])
-        inicio_desta_rodada = len(respaldo_das_tools)
         history = self._truncate_history(session.get("agent_history", []))
         if gatilho or not history:
             # Sessão sem histórico não significa conversa nova: a pessoa pode já ter
@@ -444,11 +453,13 @@ class ConversationAgent:
         # 8. Save history (truncated)
         session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
         session["mode"] = "agent"
-        # Guarda só o que esta rodada consultou, para a próxima poder repetir o
-        # valor sem ser acusada de inventá-lo. Truncado: a sessão vive no
-        # DynamoDB e resultado de tool cresce rápido.
+        # Guarda o que a conversa INTEIRA consultou, não só esta rodada: a
+        # pessoa negocia data por vários turnos e o bot repete o mesmo fato
+        # consultado. Cortado nos últimos RESPALDO_GUARDADO porque a sessão vive
+        # no DynamoDB (limite de 400KB por item) e resultado de tool cresce
+        # rápido - list_areas de uma clínica grande já são alguns KB.
         session["respaldo_anterior"] = self._convert_decimals(
-            respaldo_das_tools[inicio_desta_rodada:][-6:]
+            respaldo_das_tools[-RESPALDO_GUARDADO:]
         )
         self._save_session(clinic_id, phone, session)
 

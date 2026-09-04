@@ -103,7 +103,10 @@ def monta_agente(anthropic=None, tool_executor=None, resultado_da_tool=None,
     agente.tool_executor = tool_executor or ToolExecutorFalso(resultado_da_tool)
     agente.anthropic = anthropic or AnthropicFalso()
     agente.sessao_salva = {}
-    agente._load_session = lambda c, p: {}
+    # Devolve a sessão salva, não um dict novo: sem isso nada sobrevive entre
+    # turnos e um teste de conversa multi-turno mediria três conversas de um
+    # turno. Foi o que escondeu a janela curta de respaldo.
+    agente._load_session = lambda c, p: dict(agente.sessao_salva)
     agente._is_attendant_active = lambda s: False
     agente._build_system_prompt = lambda c, p: "PROMPT BASE"
     agente._save_session = lambda c, p, s: agente.sessao_salva.update(s)

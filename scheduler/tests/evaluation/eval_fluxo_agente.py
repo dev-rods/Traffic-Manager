@@ -54,7 +54,7 @@ os.environ.setdefault("MESSAGE_EVENTS_TABLE", "eval-sem-dynamo")
 
 from tests.evaluation.corpus_conversas import carrega  # noqa: E402
 from src.providers.whatsapp_provider import IncomingMessage  # noqa: E402
-from src.services.conversation_agent import ConversationAgent  # noqa: E402
+from src.services.conversation_agent import RESPALDO_GUARDADO, ConversationAgent  # noqa: E402
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem, fatos_sensiveis  # noqa: E402
 
 RESULTADOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados")
@@ -182,10 +182,21 @@ class AnthropicMedido:
 
 
 class DbFalso:
-    """O agente toca o banco para montar o prompt. Aqui isso e fixture."""
+    """O agente toca o banco para montar o prompt. Aqui isso e fixture.
+
+    O system prompt NAO e fixture: vem do prompt sob teste. Sem isso o
+    TemplateService cai em DEFAULT_TEMPLATES - 6.115 chars de um texto que nao
+    esta em producao - e o eval mede um agente que ninguem deploya.
+    """
+
+    def __init__(self, prompt):
+        self._prompt = prompt
 
     def execute_query(self, query, params=None):
         q = query.lower()
+        if "message_templates" in q:
+            return [{"template_key": "AI_SYSTEM_PROMPT",
+                     "content": self._prompt, "buttons": None}]
         if "from scheduler.clinics" in q:
             return [{"clinic_id": "eval", "name": "Clínica Essência",
                      "display_name": "Clínica Essência", "phone": "+5511999999999",
@@ -205,7 +216,37 @@ class DbFalso:
         return 1
 
 
-def monta_agente(anthropic, tools):
+def carrega_prompt(caminho=None):
+    """O prompt sob teste: de um arquivo, ou o que esta em producao.
+
+    O arquivo permite medir uma versao ANTES de grava-la no banco - medir
+    primeiro, aplicar depois.
+    """
+    if caminho:
+        with open(caminho, encoding="utf-8") as f:
+            return f.read()
+
+    import boto3
+    from src.services.db.postgres import PostgresService
+
+    sessao = boto3.Session(profile_name="dev-andre", region_name="us-east-1")
+    ssm = sessao.client("ssm")
+    for env, param in [("RDS_HOST", "SUPABASE_DB_HOST"), ("RDS_PORT", "SUPABASE_DB_PORT"),
+                       ("RDS_DATABASE", "SUPABASE_DB_NAME"), ("RDS_USERNAME", "SUPABASE_DB_USER"),
+                       ("RDS_PASSWORD", "SUPABASE_DB_PASSWORD")]:
+        os.environ[env] = ssm.get_parameter(
+            Name=f"/prod/{param}", WithDecryption=True)["Parameter"]["Value"]
+
+    linhas = PostgresService().execute_query(
+        "SELECT content FROM scheduler.message_templates "
+        "WHERE clinic_id=%s AND template_key='AI_SYSTEM_PROMPT'",
+        ("clinicaessenciaestetica-9668a4",))
+    if not linhas:
+        raise SystemExit("Prompt de producao nao encontrado no banco.")
+    return linhas[0]["content"]
+
+
+def monta_agente(anthropic, tools, prompt):
     """ConversationAgent real, sem AWS e sem Postgres.
 
     __init__ abre DynamoDB e o cliente HTTP, entao o objeto e criado direto e
@@ -213,7 +254,7 @@ def monta_agente(anthropic, tools):
     do corpus comeca limpa, como uma pessoa nova escrevendo.
     """
     agente = object.__new__(ConversationAgent)
-    agente.db = DbFalso()
+    agente.db = DbFalso(prompt)
     agente.tool_executor = tools
     agente.anthropic = anthropic
     agente.sessao = {}
@@ -228,24 +269,42 @@ def monta_agente(anthropic, tools):
     return agente
 
 
-def avalia_turno(texto, tools_da_rodada, estado_sessao):
-    """Os quatro invariantes, para uma resposta."""
-    respaldo = [FIXTURES.get(n, {}) for n in tools_da_rodada]
+HANDOFF_PEDIDO = "request_human_handoff"
+
+
+def avalia_turno(texto, tools_da_rodada, tools_da_conversa, estado_antes, estado_depois):
+    """Os quatro invariantes, para uma resposta.
+
+    I3 conta a TRANSICAO para HUMAN_HANDOFF, nao o estado: o estado fica na
+    sessao, e medir o estado marcaria como bloqueio todos os turnos seguintes
+    ao primeiro. Na primeira versao uma conversa com um bloqueio no turno 6
+    contava 6 violacoes.
+
+    E so conta bloqueio do GUARDRAIL: quando o proprio modelo chama
+    request_human_handoff a transferencia e acerto dele, nao custo da rede.
+    """
+    # I1 confere contra a MESMA janela que o agente usa (RESPALDO_GUARDADO
+    # resultados carregados pela sessao), nao so contra a rodada. Medir uma
+    # janela mais estrita que a de producao contava violacao onde o agente nao
+    # bloquearia - a regua tem que ser a mesma coisa que o codigo faz.
+    respaldo = [FIXTURES.get(n, {}) for n in tools_da_conversa[-RESPALDO_GUARDADO:]]
     sem_origem = fatos_sem_origem(texto, respaldo)
 
     consultou = [t for t in tools_da_rodada if t != SEM_CONSULTA]
     afirmou_fato = bool(fatos_sensiveis(texto))
+    virou_handoff = estado_antes != "HUMAN_HANDOFF" and estado_depois == "HUMAN_HANDOFF"
 
     return {
         "I1_agenda_sem_respaldo": sorted(fatos_de_agenda(sem_origem)),
         "I2_fato_sem_consulta": afirmou_fato and not consultou,
-        "I3_bloqueio": estado_sessao == "HUMAN_HANDOFF",
+        "I3_bloqueio": virou_handoff and HANDOFF_PEDIDO not in tools_da_rodada,
         "I4_fuga_pela_saida": SEM_CONSULTA in tools_da_rodada and afirmou_fato,
         "tools": consultou,
+        "handoff_pedido_pelo_modelo": virou_handoff and HANDOFF_PEDIDO in tools_da_rodada,
     }
 
 
-def roda(conversas, verboso):
+def roda(conversas, verboso, prompt):
     achados = []
     tipos = Counter()
     anthropic = AnthropicMedido()
@@ -253,12 +312,13 @@ def roda(conversas, verboso):
 
     for c in conversas:
         tools = ToolsMockadas()
-        agente = monta_agente(anthropic, tools)
+        agente = monta_agente(anthropic, tools, prompt)
         if verboso:
             print(f"\n=== {c['id']} ===")
 
         for n, texto_usuario in enumerate(c["turnos"]):
             antes = len(tools.chamadas)
+            estado_antes = agente.sessao.get("state")
             entrada = IncomingMessage(
                 message_id=f"{c['id']}-{n}", phone="5511900000000",
                 sender_name="Eval", timestamp=0, message_type="TEXT",
@@ -272,7 +332,10 @@ def roda(conversas, verboso):
                 break
 
             resposta = " ".join(m.content for m in saida)
-            v = avalia_turno(resposta, tools.chamadas[antes:], agente.sessao.get("state"))
+            v = avalia_turno(resposta, tools.chamadas[antes:], tools.chamadas,
+                             estado_antes, agente.sessao.get("state"))
+            if v["handoff_pedido_pelo_modelo"]:
+                tipos["handoff_pedido_pelo_modelo"] += 1
 
             for chave in ("I1_agenda_sem_respaldo", "I2_fato_sem_consulta",
                           "I3_bloqueio", "I4_fuga_pela_saida"):
@@ -283,6 +346,10 @@ def roda(conversas, verboso):
                                     "resposta": resposta[:140]})
             tipos["turnos"] += 1
             tipos["tools_chamadas"] += len(v["tools"])
+
+            if agente.sessao.get("state") == "HUMAN_HANDOFF":
+                # Em producao o atendente assume aqui e o bot para de responder.
+                break
 
             if verboso:
                 marca = "".join(k[1] for k in ("I1_agenda_sem_respaldo", "I2_fato_sem_consulta",
@@ -297,6 +364,7 @@ def roda(conversas, verboso):
                       ("I1_agenda_sem_respaldo", "I2_fato_sem_consulta",
                        "I3_bloqueio", "I4_fuga_pela_saida")},
         "falhas_execucao": tipos["falha_execucao"],
+        "handoff_pedido_pelo_modelo": tipos["handoff_pedido_pelo_modelo"],
         "chamadas_modelo": anthropic.chamadas,
         "tools_chamadas": tipos["tools_chamadas"],
         "tokens_in": anthropic.tokens_in,
@@ -305,6 +373,7 @@ def roda(conversas, verboso):
         "erros_de_api": anthropic.erros,
         "primeiro_erro": anthropic.primeiro_erro,
         "segundos": round(time.time() - inicio, 1),
+        "prompt_chars": len(prompt),
         "achados": achados[:40],
     }
 
@@ -312,7 +381,8 @@ def roda(conversas, verboso):
 def imprime(nome, r):
     t = max(r["turnos"], 1)
     print(f"\n===== {nome} =====")
-    print(f"conversas {r['conversas']} | turnos {t} | {r['segundos']}s")
+    print(f"conversas {r['conversas']} | turnos {t} | {r['segundos']}s "
+          f"| prompt {r.get('prompt_chars', '?')} chars")
     print(f"chamadas de modelo {r['chamadas_modelo']} ({r['chamadas_modelo']/t:.2f}/turno)")
     print(f"tools              {r['tools_chamadas']} ({r['tools_chamadas']/t:.2f}/turno)")
     print(f"tokens in {r['tokens_in']} | cache_read {r['tokens_cache_read']} "
@@ -350,6 +420,7 @@ def main():
     ap.add_argument("--conversas", type=int, default=0, help="0 = todas")
     ap.add_argument("--verboso", action="store_true")
     ap.add_argument("--comparar", nargs=2, metavar=("A", "B"))
+    ap.add_argument("--prompt-arquivo", help="mede este prompt em vez do de producao")
     args = ap.parse_args()
 
     if args.comparar:
@@ -370,7 +441,10 @@ def main():
     if args.conversas:
         conversas = conversas[:args.conversas]
 
-    r = roda(conversas, args.verboso)
+    prompt = carrega_prompt(args.prompt_arquivo)
+    print(f"[eval] prompt sob teste: {len(prompt)} chars "
+          f"({args.prompt_arquivo or 'producao'})")
+    r = roda(conversas, args.verboso, prompt)
     imprime(args.nome, r)
 
     valida, motivo = nota_valida(r)

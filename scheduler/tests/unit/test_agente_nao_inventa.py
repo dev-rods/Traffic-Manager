@@ -118,6 +118,58 @@ class TestPrefixoCacheavel(unittest.TestCase):
         self.assertEqual(anthropic.prompts[0], anthropic.prompts[1])
 
 
+class TestRespaldoAtravessaAConversa(unittest.TestCase):
+    """Fato consultado continua respaldado nos turnos seguintes.
+
+    A janela era de uma rodada só, e o eval mostrou o custo em conversa real:
+    a pessoa negocia data por vários turnos ("pode dia 27?", "e sábado?",
+    "então fica 23 mesmo") e o bot repete as MESMAS datas que consultou. Da
+    segunda repetição em diante o fato consultado virava "sem respaldo" e a
+    resposta era bloqueada.
+
+    Não reabre o bug de origem: aquele era o modelo repetindo a própria fala.
+    Resultado de tool é fato consultado.
+    """
+
+    def test_horario_consultado_ha_tres_turnos_ainda_respalda(self):
+        anthropic = AnthropicRoteiro([
+            usa_tool("get_time_slots", {"date": "2026-09-23"}),
+            texto_do_modelo("Tenho 18:00 nesse dia."),   # turno 1: consultou
+            texto_do_modelo("Sobre a virilha, sim 😊"),   # turno 2: assunto outro
+            texto_do_modelo("Como falei, tenho 18:00."),  # turno 3: repete o consultado
+        ])
+        agente = monta_agente(anthropic, resultado_da_tool={"available_slots": ["18:00"]})
+
+        agente.process_message(CLINIC, mensagem("quais horários tem?"))
+        agente.process_message(CLINIC, mensagem("a virilha também?"))
+        saida = agente.process_message(CLINIC, mensagem("qual era o horário mesmo?"))
+
+        self.assertIn("18:00", " ".join(m.content for m in saida))
+        self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+
+    def test_a_janela_e_limitada(self):
+        """Sem teto, a sessão cresce sem parar e estoura o item do DynamoDB."""
+        from src.services.conversation_agent import RESPALDO_GUARDADO
+
+        self.assertLessEqual(RESPALDO_GUARDADO, 32)
+        self.assertGreaterEqual(RESPALDO_GUARDADO, 8)
+
+    def test_horario_nunca_consultado_continua_barrado(self):
+        """Carregar respaldo adiante não pode virar carta branca."""
+        anthropic = AnthropicRoteiro([
+            usa_tool("get_time_slots", {"date": "2026-09-23"}),
+            texto_do_modelo("Tenho 18:00 nesse dia."),
+            texto_do_modelo("Também tenho 21:30."),   # nunca voltou de tool
+            texto_do_modelo("Também tenho 21:30, sim."),
+        ])
+        agente = monta_agente(anthropic, resultado_da_tool={"available_slots": ["18:00"]})
+
+        agente.process_message(CLINIC, mensagem("quais horários tem?"))
+        saida = agente.process_message(CLINIC, mensagem("e mais tarde?"))
+
+        self.assertNotIn("21:30", " ".join(m.content for m in saida))
+
+
 class TestConsultaObrigatoria(unittest.TestCase):
     """2. O modelo escolhe QUAL tool, não escolhe SE consulta.
 
