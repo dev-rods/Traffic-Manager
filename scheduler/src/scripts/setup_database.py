@@ -36,6 +36,7 @@ SQL_STATEMENTS = [
         use_agent BOOLEAN DEFAULT FALSE,
         bot_paused BOOLEAN DEFAULT FALSE,
         bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL',
+        debounce_seconds INTEGER NOT NULL DEFAULT 68,
         bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}',
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
@@ -525,6 +526,11 @@ SQL_STATEMENTS = [
     # Política de resposta automática do bot, por clínica.
     # ALL preserva o comportamento atual de quem já usa o bot; as demais restringem.
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL'",
+
+    # Segundos que o bot espera juntando a rajada antes de comecar a pensar.
+    # 68s veio da medicao das conversas reais: junta 49% dos turnos e fica no
+    # joelho da curva (90s so acrescenta 0,6pp). 0 desliga o agrupamento.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS debounce_seconds INTEGER NOT NULL DEFAULT 68",
     """
     DO $$
     BEGIN
