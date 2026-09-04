@@ -13,6 +13,13 @@ from src.services.template_service import TemplateService
 from src.services.conversation_engine import ConversationEngine, ConversationState
 from src.services.message_tracker import MessageTracker
 from src.services.lead_service import LeadService, extract_gclid
+from src.services.agregador_de_mensagens import (
+    JANELA_PADRAO_SEGUNDOS,
+    chegou_mensagem_nova,
+    drena,
+    enfileira,
+    junta_conteudo,
+)
 from src.services.bot_policy import should_bot_reply
 from src.services.session_store import mark_conversation_eligible
 from src.services.autoria_mensagem import foi_enviada_pelo_bot
@@ -30,6 +37,11 @@ ECO_JANELA_DE_BUSCA = 20
 
 
 TAREFA_PROCESSAR = "processar_mensagem"
+
+# Teto da espera. A Lambda tem 120s de timeout e o agente leva de 6 a 12s: o
+# teto existe para uma configuracao errada na clinica nao derrubar a invocacao
+# por timeout, que apareceria como silencio do bot.
+JANELA_MAXIMA_SEGUNDOS = 90
 
 
 def handler(event, context):
@@ -278,19 +290,52 @@ def handler(event, context):
             )
             return http_response(200, {"status": "OK"})
 
-        # 5d. Devolver 200 AGORA e processar fora do request.
+        # 5d. Guardar a mensagem e devolver 200 AGORA.
         #
-        # O agente leva de 6 a 12s e o z-api reenvia o webhook em ~8s. Segurar a
-        # resposta até o fim fazia toda conversa lenta gerar entrega duplicada -
-        # a dedup barrava, mas o custo era invocação dobrada e risco permanente
-        # de o retry chegar depois do TTL de 5 min do marcador.
+        # Duas coisas acontecem aqui. A resposta imediata resolve o retry do
+        # z-api (ele reenvia em ~8s e o agente leva de 6 a 12s). O balde resolve
+        # a rajada: quem escreve no WhatsApp manda "oi", "queria agendar", "pra
+        # semana que vem" em três balões, e o bot respondia cada um. Pior que
+        # feio - o roteador classificava cada pedaço sozinho, e "queria agendar"
+        # ia consultar agenda sem saber que a data vinha depois.
+        janela = _janela_da_clinica(clinic)
+        try:
+            versao, processar_em, abriu_a_janela = enfileira(
+                _get_sessions_table(), clinic_id, incoming.phone,
+                {
+                    "content": incoming.content or "",
+                    "message_id": incoming.message_id,
+                    "button_id": incoming.button_id or "",
+                    "recebida_em": int(time.time()),
+                },
+                janela,
+            )
+        except Exception as e:
+            # Sem balde, o comportamento é o de antes: responde a esta mensagem.
+            logger.error(f"[Webhook] Falha ao agrupar, seguindo sem janela: {e}")
+            versao, processar_em, abriu_a_janela = 0, int(time.time()), True
+
+        if not abriu_a_janela:
+            # Já existe execução agendada para esta conversa; ela leva esta
+            # mensagem junto. Agendar outra aqui traria de volta uma resposta
+            # por mensagem, que é exatamente o defeito.
+            logger.info(
+                f"[Webhook] {incoming.phone} entrou na janela aberta "
+                f"(versao={versao}, processa em {max(0, processar_em - int(time.time()))}s)"
+            )
+            return http_response(200, {"status": "OK", "agrupada": True})
+
         try:
             boto3.client("lambda").invoke(
                 FunctionName=context.invoked_function_arn,
                 InvocationType="Event",
                 Payload=json.dumps({
                     "internal_task": TAREFA_PROCESSAR,
-                    "payload": {"body": body, "phone": incoming.phone},
+                    "payload": {
+                        "body": body,
+                        "phone": incoming.phone,
+                        "processar_em": processar_em,
+                    },
                 }).encode(),
             )
             return http_response(200, {"status": "OK", "queued": True})
@@ -299,12 +344,57 @@ def handler(event, context):
             # processamento síncrono, que é o comportamento de antes.
             logger.error(f"[Webhook] Falha ao agendar processamento, seguindo síncrono: {e}")
 
+        # Esvazia o balde antes de seguir. Sem isso a mensagem ficaria guardada
+        # sem ninguém agendado para buscá-la, e as próximas veriam a janela já
+        # aberta - a conversa travaria até o TTL de 15 min.
+        try:
+            drena(_get_sessions_table(), clinic_id, incoming.phone)
+        except Exception as e:
+            logger.error(f"[Webhook] Falha ao esvaziar o balde de {incoming.phone}: {e}")
+
         return _executar_engine(db, clinic, clinic_id, provider, tracker, incoming)
 
     except Exception as e:
         logger.error(f"[Webhook] Erro interno: {e}")
         # Always return 200 to prevent z-api from retrying
         return http_response(200, {"status": "OK", "error": "internal"})
+
+
+def _janela_da_clinica(clinic):
+    """Segundos de espera antes de o bot pensar. 0 desliga o agrupamento.
+
+    Vem da clínica para poder ser ajustado sem deploy: o valor certo é empírico
+    e muda com o perfil de quem escreve.
+    """
+    valor = clinic.get("debounce_seconds")
+    if valor is None:
+        return JANELA_PADRAO_SEGUNDOS
+    try:
+        return max(0, min(int(valor), JANELA_MAXIMA_SEGUNDOS))
+    except (TypeError, ValueError):
+        return JANELA_PADRAO_SEGUNDOS
+
+
+def _pode_descartar(clinic_id, phone):
+    """Chegou mensagem nova E nada foi gravado no banco nesta rodada.
+
+    Falha fechada: qualquer erro na conferência devolve False, e a resposta é
+    enviada. Perder uma resposta é pior que mandar uma desatualizada.
+    """
+    try:
+        if not chegou_mensagem_nova(_get_sessions_table(), clinic_id, phone):
+            return False
+        sessao = _load_session(_get_sessions_table(), clinic_id, phone)
+        if sessao.get("efeito_na_ultima_rodada"):
+            logger.info(
+                f"[Agregador] {phone} tem efeito gravado nesta rodada; "
+                f"resposta segue mesmo com mensagem nova"
+            )
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"[Agregador] Falha ao decidir descarte de {phone}: {e}")
+        return False
 
 
 def _processar_mensagem(payload):
@@ -315,6 +405,14 @@ def _processar_mensagem(payload):
     resolvido a partir do LID - re-derivar aqui arriscaria divergir.
     """
     try:
+        # Espera a janela fechar. O sono acontece aqui, e não no request do
+        # z-api, que já recebeu 200. A Lambda tem 120s de timeout e a janela é
+        # limitada por construção (não reinicia), então isso não pode estourar.
+        espera = int(payload.get("processar_em") or 0) - int(time.time())
+        if espera > 0:
+            logger.info(f"[Webhook] Aguardando {espera}s a janela de {payload.get('phone')}")
+            time.sleep(min(espera, JANELA_MAXIMA_SEGUNDOS))
+
         body = payload["body"]
         db = PostgresService()
         instance_id = body.get("instanceId")
@@ -327,19 +425,39 @@ def _processar_mensagem(payload):
             return {"status": "ERROR"}
 
         clinic = clinics[0]
+        clinic_id = clinic["clinic_id"]
         provider = get_provider(clinic)
         incoming = provider.parse_incoming_message(body)
         incoming.phone = payload["phone"]
 
+        # Tira do balde tudo que chegou na janela e responde a rajada inteira de
+        # uma vez. Sem isso o agente leria só a mensagem que abriu a janela.
+        agrupadas, versao = drena(_get_sessions_table(), clinic_id, incoming.phone)
+        if agrupadas:
+            juntado = junta_conteudo(agrupadas)
+            if juntado:
+                incoming.content = juntado
+            # O botão vale como escolha explícita mesmo vindo no meio da rajada.
+            for m in agrupadas:
+                if m.get("button_id"):
+                    incoming.button_id = m["button_id"]
+            if len(agrupadas) > 1:
+                logger.info(
+                    f"[Agregador] {incoming.phone}: {len(agrupadas)} mensagens "
+                    f"num turno só (versao={versao})"
+                )
+
         return _executar_engine(
-            db, clinic, clinic["clinic_id"], provider, MessageTracker(), incoming
+            db, clinic, clinic_id, provider, MessageTracker(), incoming,
+            versao_da_janela=versao,
         )
     except Exception as e:
         logger.error(f"[Webhook] Erro no processamento assíncrono: {e}")
         return {"status": "ERROR"}
 
 
-def _executar_engine(db, clinic, clinic_id, provider, tracker, incoming):
+def _executar_engine(db, clinic, clinic_id, provider, tracker, incoming,
+                     versao_da_janela=None):
     """Monta o engine, processa a mensagem e envia o que sair."""
     try:
         conversation_id = f"{clinic_id}#{incoming.phone}"
@@ -373,6 +491,24 @@ def _executar_engine(db, clinic, clinic_id, provider, tracker, incoming):
 
         # 6. Process through conversation engine
         outgoing_messages = engine.process_message(clinic_id, incoming)
+
+        # 6b. A pessoa escreveu enquanto o agente pensava?
+        #
+        # São 6 a 12s de raciocínio, e nesse tempo ela pode ter completado a
+        # frase. Responder ao que ela disse pela metade é o mesmo defeito que a
+        # janela existe para corrigir, só que mais tarde. Quem chegou depois
+        # abriu uma janela nova e já tem execução agendada, então descartar aqui
+        # não perde ninguém.
+        #
+        # Só que agendamento criado não se desfaz: se o agente já gravou no
+        # banco, a paciente PRECISA saber, e calar aqui a deixaria com uma
+        # sessão marcada que ela não sabe que tem.
+        if versao_da_janela and _pode_descartar(clinic_id, incoming.phone):
+            logger.info(
+                f"[Agregador] {incoming.phone} escreveu durante o processamento; "
+                f"descartando esta resposta (versao={versao_da_janela})"
+            )
+            return {"status": "OK", "descartada": True}
 
         # 7. Send responses
         for msg in outgoing_messages:

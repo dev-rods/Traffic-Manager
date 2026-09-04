@@ -485,6 +485,11 @@ class ConversationAgent:
         session["respaldo_anterior"] = self._convert_decimals(
             respaldo_das_tools[-RESPALDO_GUARDADO:]
         )
+        # Quem agrupa a rajada precisa saber se esta rodada gravou algo no
+        # banco. Se gravou, a resposta vai mesmo que a pessoa tenha escrito no
+        # meio: um agendamento existe e ela precisa saber. Se nao gravou, a
+        # resposta pode ser descartada em favor da rajada completa.
+        session["efeito_na_ultima_rodada"] = bool(efeito_cometido)
         self._save_session(clinic_id, phone, session)
 
         elapsed = time.time() - start_time
