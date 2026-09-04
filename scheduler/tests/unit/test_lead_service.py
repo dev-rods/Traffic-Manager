@@ -137,6 +137,70 @@ class TestLeadServiceListLeads(unittest.TestCase):
         self.assertIn("booked = %s", args[0][0])
 
 
+class TestLeadServiceExcludeSources(unittest.TestCase):
+    """A tela de leads mede o que o site trouxe, nao quem chegou no WhatsApp.
+
+    O filtro precisa estar na query: a tela pede limit=100 e o corte acontece
+    no banco, antes de qualquer filtro no cliente. Filtrar depois esconderia
+    leads do site em silencio assim que a clinica passasse do limite.
+    """
+
+    def setUp(self):
+        self.db = MagicMock()
+        self.db.execute_query.return_value = []
+        self.service = LeadService(self.db)
+
+    def _consulta(self, **kwargs):
+        self.service.list_leads(clinic_id="clinic-1", **kwargs)
+        sql, params = self.db.execute_query.call_args[0]
+        return sql, params
+
+    def test_exclui_a_origem_pedida(self):
+        sql, params = self._consulta(exclude_sources=["whatsapp"])
+
+        self.assertIn("NOT IN", sql)
+        self.assertIn("whatsapp", params)
+
+    def test_exclui_varias_origens(self):
+        sql, params = self._consulta(exclude_sources=["whatsapp", "importacao"])
+
+        self.assertEqual(sql.count("%s"), 5)  # clinic + 2 origens + limit + offset
+        self.assertIn("whatsapp", params)
+        self.assertIn("importacao", params)
+
+    def test_sem_exclusao_a_query_nao_muda(self):
+        """Outros consumidores da API continuam vendo todos os leads."""
+        for vazio in (None, []):
+            with self.subTest(valor=vazio):
+                sql, params = self._consulta(exclude_sources=vazio)
+                self.assertNotIn("NOT IN", sql)
+
+    def test_origem_nula_nao_e_excluida(self):
+        """COALESCE: `NULL NOT IN (...)` e NULL, e o lead sumiria calado."""
+        sql, _ = self._consulta(exclude_sources=["whatsapp"])
+
+        self.assertIn("COALESCE(source, '')", sql)
+
+    def test_origem_do_site_nao_entra_na_exclusao(self):
+        """Exclusao, nao lista branca: origem nova do site continua aparecendo.
+
+        `harmonizacao` existe em producao ao lado de `landing-page`. Uma lista
+        branca de `landing-page` a teria apagado da tela sem erro nenhum.
+        """
+        _, params = self._consulta(exclude_sources=["whatsapp"])
+
+        self.assertNotIn("landing-page", params)
+        self.assertNotIn("harmonizacao", params)
+
+    def test_combina_com_os_outros_filtros(self):
+        sql, params = self._consulta(exclude_sources=["whatsapp"], booked=True)
+
+        self.assertIn("booked = %s", sql)
+        self.assertIn("NOT IN", sql)
+        self.assertIn("whatsapp", params)
+        self.assertIn(True, params)
+
+
 class TestLeadServiceUpdateLead(unittest.TestCase):
     """Tests for LeadService.update_lead."""
 

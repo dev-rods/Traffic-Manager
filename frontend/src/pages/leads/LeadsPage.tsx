@@ -16,6 +16,10 @@ export function LeadsPage() {
 
   const { data, isLoading, isError, error, refetch } = useLeads({
     booked: bookedParam,
+    // Quem chega direto no WhatsApp nao e lead captado: a tela mede o que o
+    // site trouxe. Exclusao por origem, e no servidor - o LIMIT corta no banco,
+    // entao filtrar aqui esconderia leads do site ao passar de 100.
+    excludeSource: 'whatsapp',
     limit: 100,
   })
 
@@ -44,7 +48,7 @@ export function LeadsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Leads</h1>
         <p className="text-sm text-gray-400 mt-1">
-          Contatos capturados pela landing page e pelo WhatsApp
+          Contatos capturados pelo site
         </p>
       </div>
 

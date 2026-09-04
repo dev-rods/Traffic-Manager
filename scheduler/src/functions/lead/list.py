@@ -1,7 +1,7 @@
 """
 Lambda handler to list leads for a clinic.
 
-GET /clinics/{clinicId}/leads?startDate=&endDate=&booked=true&limit=50&offset=0
+GET /clinics/{clinicId}/leads?startDate=&endDate=&booked=true&excludeSource=whatsapp&limit=50&offset=0
 """
 import logging
 from datetime import datetime, date, time
@@ -47,6 +47,12 @@ def handler(event, context):
         if booked_param is not None:
             booked = booked_param.lower() in ("true", "1", "yes")
 
+        # excludeSource=whatsapp,outra - origens a tirar do resultado.
+        exclude_param = extract_query_param(event, "excludeSource")
+        exclude_sources = [
+            s.strip() for s in (exclude_param or "").split(",") if s.strip()
+        ]
+
         db = PostgresService()
         lead_service = LeadService(db)
         leads = lead_service.list_leads(
@@ -54,6 +60,7 @@ def handler(event, context):
             start_date=start_date,
             end_date=end_date,
             booked=booked,
+            exclude_sources=exclude_sources,
             limit=limit,
             offset=offset,
         )
