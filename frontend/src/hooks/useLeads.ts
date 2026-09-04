@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
-import { leadsService } from '@/services/leads.service'
+import { leadsService, type LeadListParams } from '@/services/leads.service'
 import { useAuth } from './useAuth'
 
 export const leadKeys = {
   all: ['leads'] as const,
-  list: (clinicId: string, filters: Record<string, unknown>) => [...leadKeys.all, clinicId, filters] as const,
+  list: (clinicId: string, filters: LeadListParams) => [...leadKeys.all, clinicId, filters] as const,
 }
 
-export function useLeads(params?: { startDate?: string; endDate?: string; booked?: boolean; limit?: number; offset?: number }) {
+export function useLeads(params?: LeadListParams) {
   const { clinicId } = useAuth()
 
   return useQuery({
