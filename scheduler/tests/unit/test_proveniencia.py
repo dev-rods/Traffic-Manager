@@ -14,7 +14,7 @@ import unittest
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 os.environ.setdefault("MESSAGE_EVENTS_TABLE", "test-events")
 
-from src.services.proveniencia import fatos_sensiveis, fatos_sem_origem
+from src.services.proveniencia import fatos_de_agenda, fatos_sensiveis, fatos_sem_origem
 
 
 class TestDatas(unittest.TestCase):
@@ -128,3 +128,83 @@ class TestConferencia(unittest.TestCase):
         tools = [{"available_slots": ["18:00", "18:15"]}]
 
         self.assertIn("19:00", fatos_sem_origem("Tenho 18:00 e 19:00.", tools))
+
+
+class TestDuracao(unittest.TestCase):
+    """Duracao era o unico fato sensivel sem extrator - e por isso uma duracao
+    inventada passava pelo verificador como se fosse ok."""
+
+    RESPOSTA = "A sessão dura 35 minutos."
+
+    def test_extrai_duracao_da_resposta(self):
+        self.assertIn("duracao:35", fatos_sensiveis(self.RESPOSTA))
+
+    def test_aceita_min_abreviado(self):
+        self.assertIn("duracao:50", fatos_sensiveis("Reservei 50 min para você."))
+
+    def test_sem_tool_e_acusado(self):
+        self.assertIn("duracao:35", fatos_sem_origem(self.RESPOSTA, []))
+
+    def test_com_a_tool_certa_fica_limpo(self):
+        self.assertEqual(fatos_sem_origem(self.RESPOSTA, [{"total_duration_minutes": 35}]), set())
+
+    def test_duracao_divergente_da_tool_e_acusada(self):
+        """O modelo disse 35, a tool devolveu 50: continua sem respaldo."""
+        self.assertIn("duracao:35", fatos_sem_origem(self.RESPOSTA, [{"total_duration_minutes": 50}]))
+
+    def test_pergunta_sobre_minutos_nao_e_afirmacao(self):
+        self.assertEqual(fatos_sem_origem("Quantos minutos você tem disponível?", []), set())
+
+    def test_tempo_de_caminhada_nao_e_duracao_de_sessao(self):
+        """O endereço diz "13 minutos a pé"; não é a duração do atendimento."""
+        self.assertNotIn("duracao:13", fatos_sensiveis("Oscar Freire, cerca de 13 minutos a pé."))
+
+    def test_outros_meios_de_transporte(self):
+        for texto in ["10 minutos de carro", "5 min de metrô", "20 minutos de ônibus"]:
+            with self.subTest(texto=texto):
+                self.assertEqual(fatos_sensiveis(texto), set())
+
+
+class TestStatusComoInterjeicao(unittest.TestCase):
+    def test_confirmado_abrindo_a_frase_nao_e_status(self):
+        """"Confirmado: o horário 07:45 está disponível" é concordância."""
+        achados = fatos_sensiveis("Confirmado: o horário 07:45 está disponível.")
+
+        self.assertNotIn("status:confirmado", achados)
+        self.assertIn("07:45", achados)
+
+    def test_status_de_verdade_continua_sendo_extraido(self):
+        self.assertIn("status:confirmado", fatos_sensiveis("Sua sessão está confirmada."))
+
+
+class TestRespaldoEntreRodadas(unittest.TestCase):
+    def test_valor_consultado_na_rodada_anterior_tem_respaldo(self):
+        """A confirmação repete o preço que calculate_discount deu antes.
+
+        O respaldo era por execução, então repetir o que acabou de ser
+        consultado era acusado de invenção.
+        """
+        rodada_anterior = [{
+            "discount_pct": 10,
+            "original_price_cents": 24500,
+            "discounted_price_cents": 22050,
+        }]
+
+        self.assertEqual(fatos_sem_origem("Total: R$ 220,50", rodada_anterior), set())
+
+
+class TestFatosDeAgenda(unittest.TestCase):
+    """Quais fatos derrubam a mensagem, e quais só ficam registrados."""
+
+    def test_data_e_horario_bloqueiam(self):
+        self.assertEqual(fatos_de_agenda({"2026-09-23", "18:00"}), {"2026-09-23", "18:00"})
+
+    def test_preco_duracao_e_status_nao_bloqueiam(self):
+        self.assertEqual(fatos_de_agenda({"R$250.00", "duracao:35", "status:cancelado"}), set())
+
+    def test_mistura_devolve_so_o_que_bloqueia(self):
+        self.assertEqual(fatos_de_agenda({"18:00", "R$50.00", "duracao:35"}), {"18:00"})
+
+    def test_vazio_e_none(self):
+        self.assertEqual(fatos_de_agenda(set()), set())
+        self.assertEqual(fatos_de_agenda(None), set())
