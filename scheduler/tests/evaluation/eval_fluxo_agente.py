@@ -105,6 +105,10 @@ FIXTURES = {
         "time": "07:45", "full_name": "Fulana", "total_duration_minutes": 20,
         "status": "CONFIRMED",
     },
+    "reschedule_appointment": {"success": True, "new_date": "2026-09-30",
+                               "new_time": "09:15"},
+    "cancel_appointment": {"success": True, "appointment_id": "eval-0001",
+                           "status": "CANCELLED"},
     "sem_consulta_necessaria": {},
     "present_options": {"presented": False},
     "request_human_handoff": {"handoff_requested": True},
@@ -157,6 +161,7 @@ class AnthropicMedido:
         self.tokens_in = 0
         self.tokens_out = 0
         self.tokens_cache_read = 0
+        self.tokens_cache_write = 0
 
     def create_message(self, system, messages, tools, max_tokens, tool_choice=None):
         self.chamadas += 1
@@ -178,6 +183,7 @@ class AnthropicMedido:
         self.tokens_in += u.get("input_tokens", 0)
         self.tokens_out += u.get("output_tokens", 0)
         self.tokens_cache_read += u.get("cache_read_input_tokens", 0)
+        self.tokens_cache_write += u.get("cache_creation_input_tokens", 0)
         return r
 
 
@@ -370,12 +376,33 @@ def roda(conversas, verboso, prompt):
         "tokens_in": anthropic.tokens_in,
         "tokens_out": anthropic.tokens_out,
         "tokens_cache_read": anthropic.tokens_cache_read,
+        "tokens_cache_write": anthropic.tokens_cache_write,
         "erros_de_api": anthropic.erros,
         "primeiro_erro": anthropic.primeiro_erro,
         "segundos": round(time.time() - inicio, 1),
         "prompt_chars": len(prompt),
+        "modelo": __import__("src.services.anthropic_service", fromlist=["x"]).DEFAULT_MODEL,
         "achados": achados[:40],
     }
+
+
+# USD por milhao de tokens. Escrita de cache custa 1,25x a entrada; leitura 0,1x.
+PRECOS = {
+    "claude-sonnet-5":  {"in": 3.00, "out": 15.00, "cr": 0.30, "cw": 3.75},
+    "claude-haiku-4-5": {"in": 1.00, "out":  5.00, "cr": 0.10, "cw": 1.25},
+}
+
+
+def custo(r):
+    """Quanto custou a execucao, em USD.
+
+    Existe porque eu rodei o eval cinco vezes num dia sem contabilizar nada e
+    so descobri o gasto quando perguntaram. Numero na tela toda execucao.
+    """
+    p = PRECOS.get(r.get("modelo", ""), PRECOS["claude-sonnet-5"])
+    return (r["tokens_in"] * p["in"] + r["tokens_out"] * p["out"]
+            + r["tokens_cache_read"] * p["cr"]
+            + r.get("tokens_cache_write", 0) * p["cw"]) / 1e6
 
 
 def imprime(nome, r):
@@ -386,7 +413,8 @@ def imprime(nome, r):
     print(f"chamadas de modelo {r['chamadas_modelo']} ({r['chamadas_modelo']/t:.2f}/turno)")
     print(f"tools              {r['tools_chamadas']} ({r['tools_chamadas']/t:.2f}/turno)")
     print(f"tokens in {r['tokens_in']} | cache_read {r['tokens_cache_read']} "
-          f"| out {r['tokens_out']}")
+          f"| cache_write {r.get('tokens_cache_write', 0)} | out {r['tokens_out']}")
+    print(f"custo estimado: US$ {custo(r):.2f}  ({r.get('modelo', '?')})")
     if r["tokens_in"]:
         pct = 100 * r["tokens_cache_read"] / (r["tokens_in"] + r["tokens_cache_read"])
         print(f"  aproveitamento de cache: {pct:.0f}% do input")
