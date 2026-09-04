@@ -53,7 +53,10 @@ O corte é escrito como script com dry-run, no padrão dos outros
 (`prompt_orquestrador.py`, `prompt_faq_tool.py`), e **só se aplica depois de o
 eval aprovar**.
 
-## Parado — item 4: modelo para Haiku 4.5
+## Sugestão para depois — item 4: modelo para Haiku 4.5
+
+**Cancelado em 04/09 por decisão do André.** O Sonnet 5 fica. Fica registrado
+aqui com a medição já feita, para quem retomar não precisar remedir.
 
 `DEFAULT_MODEL` em `src/services/anthropic_service.py:12`. Fonte única — é a
 única ocorrência de model id no repositório.
@@ -65,12 +68,21 @@ eval aprovar**.
 | Contexto | 1M | 200K |
 | `output_config.effort` | aceita | **erra** (não usamos hoje) |
 
-O mínimo de cache subir para 4.096 tokens importa: o prefixo é ~17k chars de
-system mais 15 tools. Deve passar, mas **medir com `count_tokens` antes** — se
-não passar, o caching morre em silêncio (sem erro, só `cache_creation` zerado).
+**O risco de cache já foi medido e está descartado** (`count_tokens`, 04/09):
 
-Risco de fundo: Haiku é menos capaz, e todo o trabalho de 02-03/09 foi contra um
-modelo que inventa fato. É exatamente o que o eval existe para medir.
+| Modelo | Prefixo (tools + system) | Mínimo | Cacheia? |
+|---|---|---|---|
+| Sonnet 5 | 9.659 tokens | 1.024 | sim |
+| Haiku 4.5 | 7.490 tokens | 4.096 | sim, 83% de folga |
+
+O Haiku também tokeniza o mesmo texto em 22% menos tokens, então a economia vai
+além do preço por token. Uma rodada de eval nele custaria ~US$ 1,55 contra
+~US$ 4,70 no Sonnet.
+
+**O que falta é só medir o comportamento.** Haiku é menos capaz, e todo o
+trabalho de 02-03/09 foi contra um modelo que inventa fato — é exatamente o que
+o eval existe para decidir. Sequência: `eval --nome haiku` e
+`--comparar base-v2 haiku`; se I1 e I2 não piorarem, a troca se aprova sozinha.
 
 ## Sequência para retomar
 
