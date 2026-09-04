@@ -9,6 +9,15 @@ WhatsAppWebhook:
         - dynamodb:GetItem
         - dynamodb:PutItem
         - dynamodb:Query
+        # UpdateItem e DeleteItem existem para o balde que junta a rajada de
+        # mensagens (agregador_de_mensagens): o append é um UpdateItem atômico e
+        # a drenagem é um DeleteItem condicionado à versão.
+        #
+        # Faltavam, e o efeito foi mudo: o agrupamento caía no fallback e o bot
+        # respondia mensagem por mensagem, como antes. A suíte passava e o
+        # deploy saía com exit 0 - permissão não é coisa que teste unitário vê.
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
