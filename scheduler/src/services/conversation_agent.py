@@ -10,6 +10,7 @@ import boto3
 
 from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
+from src.services.calendario import bloco_de_contexto
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
 from src.services.roteador import exige_consulta, intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
@@ -224,13 +225,32 @@ class ConversationAgent:
                 except Exception as e:
                     logger.error(f"[PreCarga] {nome_tool} falhou para {phone}: {e}")
 
-        if dados_consultados:
-            nomes = ", ".join(n for n, _ in dados_consultados)
-            logger.info(f"[PreCarga] {phone}: {nomes}")
+        # ── Calendário ──────────────────────────────────────────────────
+        # O modelo não tem relógio, e nada aqui dizia a data. Em 04/09/2026 a
+        # pessoa pediu "agendar para amanhã" e o bot respondeu que não conseguia
+        # calcular amanhã - correto pelas regras dele, e inútil para ela.
+        #
+        # As datas entram no respaldo porque são fato apurado, igual a resultado
+        # de tool: sem isso, dizer "amanhã (05/09) não temos vaga" seria data
+        # sem origem e a resposta cairia no bloqueio.
+        bloco_calendario, datas_do_calendario = ("", [])
+        if not gatilho:
+            bloco_calendario, datas_do_calendario = bloco_de_contexto(user_content)
+            respaldo_das_tools.append({"calendario": datas_do_calendario})
+
+        if dados_consultados or bloco_calendario:
+            if dados_consultados:
+                nomes = ", ".join(n for n, _ in dados_consultados)
+                logger.info(f"[PreCarga] {phone}: {nomes}")
             blocos = ("\n\n").join(
                 f"[{nome}]\n{json.dumps(self._convert_decimals(res), ensure_ascii=False, default=str)[:1500]}"
                 for nome, res in dados_consultados
             )
+            cabecalho_calendario = (
+                f"═══ CALENDÁRIO ═══\n{bloco_calendario}\n"
+                "Estas datas são o calendário, não a agenda: dizem que dia é, "
+                "não que há vaga. Vaga só vem de check_availability.\n\n"
+            ) if bloco_calendario else ""
             # O bloco vai no TURNO DA PESSOA, não no system prompt.
             #
             # O conteúdo muda a cada mensagem (são os dados desta consulta). No
@@ -240,14 +260,18 @@ class ConversationAgent:
             #
             # Aqui embaixo o prefixo (tools + system) fica byte-idêntico durante
             # a conversa toda, e o dado volátil vive depois do breakpoint.
-            history[-1] = {"role": "user", "content": (
+            cabecalho_dados = (
                 "═══ DADOS CONSULTADOS AGORA ═══\n"
                 "Consultei o banco antes de te passar esta conversa. O que está "
                 "abaixo é o estado real neste momento e é a ÚNICA fonte válida "
                 "sobre agenda, preço e disponibilidade. O que não estiver aqui, "
                 "você não sabe - nem que tenha dito antes nesta conversa.\n\n"
-                + blocos
-                + f"\n\n═══ MENSAGEM DA PESSOA ═══\n{user_content}"
+                + blocos + "\n\n"
+            ) if dados_consultados else ""
+            history[-1] = {"role": "user", "content": (
+                cabecalho_calendario
+                + cabecalho_dados
+                + f"═══ MENSAGEM DA PESSOA ═══\n{user_content}"
             )}
 
         tools = get_tool_definitions(format="anthropic")
@@ -559,6 +583,27 @@ class ConversationAgent:
             "   de sessões, cuidados, contraindicações. Cada clínica tem o seu protocolo.\n"
         )
 
+        # Regra de datas: fica aqui, no prefixo cacheado, porque é estática. O
+        # que muda por mensagem é o bloco CALENDÁRIO, que entra no turno da
+        # pessoa. Sem esta regra o agente tinha a data e ainda assim não sabia o
+        # que fazer quando a data pedida não tinha vaga.
+        system_prompt += (
+            "\n═══ DATAS ═══\n"
+            "1. Toda mensagem traz um bloco CALENDÁRIO com a data de hoje e o que as\n"
+            "   referências da pessoa significam (\"amanhã\", \"sexta\", \"semana que vem\").\n"
+            "   Use-o. Nunca diga que não consegue calcular uma data.\n"
+            "2. O calendário diz que dia é, não que há vaga. Disponibilidade vem de\n"
+            "   check_availability, sempre.\n"
+            "3. Se a data que a pessoa pediu NÃO estiver entre as datas disponíveis:\n"
+            "   diga que naquele dia não há agenda, nomeando o dia como ela falou e\n"
+            "   com a data ao lado, e ofereça as datas que existem.\n"
+            "   Exemplo: 'Amanhã (05/09) não temos horário. As datas mais próximas\n"
+            "   são: quarta, 23/09 e quinta, 24/09. Alguma dessas serve?'\n"
+            "4. Não empurre a pessoa de volta para a lista sem responder o que ela\n"
+            "   perguntou. 'Escolha uma data da lista' não é resposta para 'tem\n"
+            "   amanhã?' - a resposta é sim ou não, e então as opções.\n"
+        )
+
         system_prompt += (
             "\n═══ INSTRUÇÕES PÓS-AGENDAMENTO ═══\n"
             "Após confirmar um agendamento com book_appointment, SEMPRE chame "
@@ -587,6 +632,33 @@ class ConversationAgent:
 
     # ── Outgoing message builder ──
 
+    @staticmethod
+    def _junta_texto(mensagem_das_opcoes, texto_final):
+        """As duas falas do modelo quando ele oferece opções, sem perder nenhuma.
+
+        Era `texto_final or mensagem_das_opcoes`: escrevendo os dois, o texto
+        final ganhava e a mensagem das opções sumia. Quase sempre dava no mesmo
+        porque o modelo repetia a mesma frase nos dois lugares - mas quando ele
+        responde numa e conduz na outra, o que sumia era a resposta:
+
+            opções: "Amanhã (05/09) não temos horário. As próximas datas são:"
+            final:  "Alguma dessas fica boa pra você?"
+
+        A paciente recebia só a segunda. O padrão "responde e então oferece" era
+        impossível de entregar.
+        """
+        primeira = (mensagem_das_opcoes or "").strip()
+        segunda = (texto_final or "").strip()
+        if not primeira or not segunda:
+            return primeira or segunda
+        # Repetiu a mesma frase nos dois lugares: manda a mais completa, não as
+        # duas coladas.
+        if primeira in segunda:
+            return segunda
+        if segunda in primeira:
+            return primeira
+        return f"{primeira}\n\n{segunda}"
+
     def _build_outgoing(self, text, pending_buttons):
         """Convert agent output into OutgoingMessage list."""
         messages = []
@@ -594,7 +666,7 @@ class ConversationAgent:
         if pending_buttons:
             options = pending_buttons.get("options", [])
             button_message = pending_buttons.get("message", "")
-            display_text = text or button_message
+            display_text = self._junta_texto(button_message, text)
 
             if len(options) <= 3:
                 # WhatsApp supports up to 3 inline buttons
