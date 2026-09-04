@@ -29,6 +29,9 @@ logger.setLevel(logging.INFO)
 ECO_JANELA_DE_BUSCA = 20
 
 
+TAREFA_PROCESSAR = "processar_mensagem"
+
+
 def handler(event, context):
     """
     Webhook handler for incoming WhatsApp messages via z-api.
@@ -36,7 +39,18 @@ def handler(event, context):
     POST /webhook/whatsapp
     Receives z-api ReceivedCallback payloads.
     No API key required — authentication via instanceId validation.
+
+    O trabalho pesado roda numa segunda invocação, assíncrona. O z-api reenvia o
+    webhook quando não recebe resposta em ~8s, e o agente passou a levar de 6 a
+    12s: em 02/09/2026 medimos entrega duplicada em 100% das invocações lentas e
+    em nenhuma das rápidas. A deduplicação segurava, mas o retry é sintoma - a
+    causa é o z-api esperar o agente terminar. Agora ele recebe 200 na hora.
     """
+    # Execução que a própria função agendou: já passou por validação, dedup e
+    # tracking na invocação que veio do z-api.
+    if event.get("internal_task") == TAREFA_PROCESSAR:
+        return _processar_mensagem(event["payload"])
+
     try:
         body = parse_body(event)
         if not body:
@@ -264,8 +278,73 @@ def handler(event, context):
             )
             return http_response(200, {"status": "OK"})
 
-        # 5d. Montar o engine só agora: construir o agente instancia cliente HTTP e
-        # recursos do boto3, trabalho jogado fora quando a resposta é suprimida.
+        # 5d. Devolver 200 AGORA e processar fora do request.
+        #
+        # O agente leva de 6 a 12s e o z-api reenvia o webhook em ~8s. Segurar a
+        # resposta até o fim fazia toda conversa lenta gerar entrega duplicada -
+        # a dedup barrava, mas o custo era invocação dobrada e risco permanente
+        # de o retry chegar depois do TTL de 5 min do marcador.
+        try:
+            boto3.client("lambda").invoke(
+                FunctionName=context.invoked_function_arn,
+                InvocationType="Event",
+                Payload=json.dumps({
+                    "internal_task": TAREFA_PROCESSAR,
+                    "payload": {"body": body, "phone": incoming.phone},
+                }).encode(),
+            )
+            return http_response(200, {"status": "OK", "queued": True})
+        except Exception as e:
+            # Falhar o agendamento não pode significar ignorar a pessoa: cai no
+            # processamento síncrono, que é o comportamento de antes.
+            logger.error(f"[Webhook] Falha ao agendar processamento, seguindo síncrono: {e}")
+
+        return _executar_engine(db, clinic, clinic_id, provider, tracker, incoming)
+
+    except Exception as e:
+        logger.error(f"[Webhook] Erro interno: {e}")
+        # Always return 200 to prevent z-api from retrying
+        return http_response(200, {"status": "OK", "error": "internal"})
+
+
+def _processar_mensagem(payload):
+    """Roda o agente e envia a resposta, fora do request do z-api.
+
+    Reconstrói o mínimo: validação, dedup e tracking já rodaram na invocação que
+    veio do webhook. O telefone vem pronto no payload porque pode ter sido
+    resolvido a partir do LID - re-derivar aqui arriscaria divergir.
+    """
+    try:
+        body = payload["body"]
+        db = PostgresService()
+        instance_id = body.get("instanceId")
+        clinics = db.execute_query(
+            "SELECT * FROM scheduler.clinics WHERE zapi_instance_id = %s AND active = TRUE",
+            (instance_id,),
+        )
+        if not clinics:
+            logger.warning(f"[Webhook] Clinica sumiu entre as invocações: {instance_id}")
+            return {"status": "ERROR"}
+
+        clinic = clinics[0]
+        provider = get_provider(clinic)
+        incoming = provider.parse_incoming_message(body)
+        incoming.phone = payload["phone"]
+
+        return _executar_engine(
+            db, clinic, clinic["clinic_id"], provider, MessageTracker(), incoming
+        )
+    except Exception as e:
+        logger.error(f"[Webhook] Erro no processamento assíncrono: {e}")
+        return {"status": "ERROR"}
+
+
+def _executar_engine(db, clinic, clinic_id, provider, tracker, incoming):
+    """Monta o engine, processa a mensagem e envia o que sair."""
+    try:
+        conversation_id = f"{clinic_id}#{incoming.phone}"
+        # Construir o agente instancia cliente HTTP e recursos do boto3, trabalho
+        # jogado fora quando a resposta é suprimida - por isso só acontece aqui.
         template_service = TemplateService(db)
         availability_engine = _get_availability_engine(db)
         appointment_service = _get_appointment_service(db)

@@ -35,6 +35,13 @@ _HORA = re.compile(r"\b(\d{1,2})\s*(?:h|:)\s*(\d{2})?\b")
 # "35 minutos", "35 min". Duração era o único fato sensível sem extrator, e
 # por isso uma duração inventada passava pelo verificador como se fosse ok.
 _DURACAO = re.compile(r"\b(\d{1,3})\s*(?:min\b|minutos?\b)", re.IGNORECASE)
+# "Confirmado:" / "Confirmado," abrindo a frase é concordância, não status.
+_INTERJEICAO_DE_STATUS = re.compile(r"^\s*(confirmad[ao]|cancelad[ao]|reagendad[ao])\s*[:,!]")
+# Tempo de trajeto, não de atendimento.
+_DESLOCAMENTO = re.compile(
+    r"\b(\d{1,3})\s*(?:min\b|minutos?\b)\s*(?:a\s*p[ée]|de\s*(?:caminhada|carro|onibus|ônibus|metr[oô]|uber))",
+    re.IGNORECASE,
+)
 _DINHEIRO = re.compile(r"R\$\s*(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d{2}))?", re.IGNORECASE)
 
 
@@ -93,13 +100,23 @@ def fatos_sensiveis(texto, ano=None):
 
         for minutos in _DURACAO.findall(trecho):
             achados.add(f"duracao:{int(minutos)}")
+        # "13 minutos a pé" é o trajeto do metrô até a clínica, que está no
+        # endereço do prompt - não a duração da sessão. Era acusado como fato
+        # inventado em toda mensagem de confirmação.
+        for minutos in _DESLOCAMENTO.findall(trecho):
+            achados.discard(f"duracao:{int(minutos)}")
 
         for inteiro, centavos in _DINHEIRO.findall(trecho):
             valor = float(inteiro.replace(".", "")) + int(centavos or 0) / 100
             achados.add(f"R${valor:.2f}")
 
+        # "Confirmado: o horário 07:45 está disponível" abre com a palavra como
+        # interjeição - é o bot concordando, não afirmando o estado de uma
+        # sessão. Afirmação de status vem depois do sujeito ("sua sessão está
+        # confirmada"), nunca abrindo a frase seguida de dois-pontos ou vírgula.
+        sem_interjeicao = _INTERJEICAO_DE_STATUS.sub("", plano, count=1)
         for chave, palavras in STATUS.items():
-            if any(p in plano for p in palavras):
+            if any(p in sem_interjeicao for p in palavras):
                 achados.add(f"status:{chave}")
 
     return achados

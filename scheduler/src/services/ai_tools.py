@@ -119,6 +119,30 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "sem_consulta_necessaria",
+            "description": (
+                "Declare that this message needs no data lookup — the patient is giving you "
+                "registration details (name, birth date, CPF, e-mail), agreeing, thanking or "
+                "chatting. Call this INSTEAD of answering directly when no other tool applies. "
+                "Never call it to avoid looking something up: if the patient asked about price, "
+                "schedule, duration, availability or anything about the procedure, the answer "
+                "comes from a tool, not from you."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "motivo": {
+                        "type": "string",
+                        "description": "Why no lookup is needed, in a few words.",
+                    },
+                },
+                "required": ["motivo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "calculate_duration",
             "description": "How long the session will take for the selected areas, in minutes. Call this before stating ANY duration to the patient — never add up area durations yourself and never answer from memory. Returns `total_duration_minutes`, already rounded and within the clinic limits.",
             "parameters": {
@@ -536,6 +560,20 @@ class ToolExecutor:
             "available_slots": slots,
         }
 
+    def _tool_sem_consulta_necessaria(self, args, clinic_id, phone, ctx):
+        """A saída para quando a mensagem realmente não pede dado nenhum.
+
+        Existe porque a alternativa era o código adivinhar pelo formato do texto
+        se a pessoa estava mandando um nome ou escolhendo uma área - e "Buço
+        Completo" tem exatamente a cara de um nome próprio. Quem sabe o que a
+        mensagem significa é quem tem a conversa inteira.
+
+        Devolve dicionário vazio de propósito: nada aqui pode respaldar uma
+        afirmação factual na resposta.
+        """
+        logger.info(f"[SemConsulta] {phone}: {str(args.get('motivo'))[:80]}")
+        return {}
+
     def _tool_calculate_duration(self, args, clinic_id, phone, ctx):
         """A duração da sessão para as áreas escolhidas.
 
@@ -605,7 +643,19 @@ class ToolExecutor:
             if rows:
                 return {"answers": [{"question": r["question_label"], "answer": r["answer"]} for r in rows]}
 
-        return {"answers": [], "message": "Nenhuma resposta encontrada no FAQ. Use seu conhecimento sobre depilação a laser para responder, ou ofereça transferir para um atendente."}
+        # A mensagem anterior aqui mandava "use seu conhecimento sobre depilação
+        # a laser para responder" - a própria tool autorizando a invenção que o
+        # resto do sistema existe para impedir. Cada clínica tem protocolo
+        # próprio: intervalo entre sessões, cuidados e contraindicações não são
+        # conhecimento geral, são política da casa.
+        return {
+            "answers": [],
+            "message": (
+                "Nenhuma resposta encontrada no FAQ desta clínica. Você NÃO SABE a "
+                "resposta. Não use conhecimento geral. Diga que vai confirmar com uma "
+                "especialista e chame request_human_handoff."
+            ),
+        }
 
     def _tool_get_clinic_info(self, args, clinic_id, phone, ctx):
         rows = self.db.execute_query(
@@ -710,6 +760,14 @@ class ToolExecutor:
             "time": time_str,
             "full_name": full_name,
             "total_duration_minutes": total_duration,
+            # Sem isto, dizer "agendamento confirmado" logo depois de criar o
+            # agendamento era acusado de afirmação sem respaldo - o fato tinha
+            # acabado de acontecer, mas a tool não o devolvia.
+            #
+            # Vem do RETURNING do INSERT, não de constante: cravar "CONFIRMED"
+            # aqui faria a tool respaldar um status que ela mesma inventou, que
+            # é o oposto do que a proveniência existe para garantir.
+            "status": result.get("status"),
         }
 
     def _tool_reschedule_appointment(self, args, clinic_id, phone, ctx):
