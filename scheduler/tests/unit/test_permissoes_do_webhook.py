@@ -18,12 +18,26 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parents[2]
 INTERFACE = RAIZ / "sls" / "functions" / "webhook" / "interface.yml"
 
-# Módulos que rodam dentro da WhatsAppWebhook e falam com o DynamoDB.
-MODULOS = [
-    RAIZ / "src" / "functions" / "webhook" / "handler.py",
-    RAIZ / "src" / "services" / "agregador_de_mensagens.py",
-    RAIZ / "src" / "services" / "session_store.py",
-]
+# Cada Lambda com os módulos que rodam dentro dela e falam com o DynamoDB.
+FUNCOES = {
+    "WhatsAppWebhook": (
+        RAIZ / "sls" / "functions" / "webhook" / "interface.yml",
+        [
+            RAIZ / "src" / "functions" / "webhook" / "handler.py",
+            RAIZ / "src" / "services" / "agregador_de_mensagens.py",
+            RAIZ / "src" / "services" / "session_store.py",
+        ],
+    ),
+    "ListLeads": (
+        RAIZ / "sls" / "functions" / "lead" / "interface.yml",
+        [
+            RAIZ / "src" / "functions" / "lead" / "list.py",
+            RAIZ / "src" / "services" / "status_da_conversa.py",
+        ],
+    ),
+}
+
+MODULOS = FUNCOES["WhatsAppWebhook"][1]
 
 ACAO_DO_METODO = {
     "get_item": "dynamodb:GetItem",
@@ -32,30 +46,32 @@ ACAO_DO_METODO = {
     "delete_item": "dynamodb:DeleteItem",
     "query": "dynamodb:Query",
     "scan": "dynamodb:Scan",
+    "batch_get_item": "dynamodb:BatchGetItem",
 }
 
-_CHAMADA = re.compile(r"\.(get_item|put_item|update_item|delete_item|query|scan)\s*\(")
+_CHAMADA = re.compile(
+    r"\.(get_item|put_item|update_item|delete_item|query|scan|batch_get_item)\s*\(")
 
 
-def metodos_usados():
+def metodos_usados(modulos=None):
     achados = {}
-    for caminho in MODULOS:
+    for caminho in (modulos or MODULOS):
         texto = caminho.read_text(encoding="utf-8")
         for metodo in set(_CHAMADA.findall(texto)):
             achados.setdefault(metodo, []).append(caminho.name)
     return achados
 
 
-def acoes_declaradas():
+def acoes_declaradas(arquivo=None, funcao="WhatsAppWebhook"):
     """As ações dentro do bloco WhatsAppWebhook do interface.yml.
 
     O arquivo declara várias funções; ler o arquivo inteiro faria o teste passar
     com a permissão na função errada.
     """
-    texto = INTERFACE.read_text(encoding="utf-8")
-    inicio = texto.index("WhatsAppWebhook:")
+    texto = (arquivo or INTERFACE).read_text(encoding="utf-8")
+    inicio = texto.index(f"{funcao}:")
     # A próxima função começa em coluna zero.
-    resto = texto[inicio + len("WhatsAppWebhook:"):]
+    resto = texto[inicio + len(funcao) + 1:]
     fim = re.search(r"^\S", resto, re.MULTILINE)
     bloco = resto[: fim.start()] if fim else resto
     return set(re.findall(r"-\s+(dynamodb:\w+)", bloco))
@@ -63,17 +79,17 @@ def acoes_declaradas():
 
 class TestPermissoesDoWebhook(unittest.TestCase):
     def test_toda_chamada_ao_dynamo_tem_permissao(self):
-        declaradas = acoes_declaradas()
-
-        for metodo, arquivos in sorted(metodos_usados().items()):
-            acao = ACAO_DO_METODO[metodo]
-            with self.subTest(metodo=metodo):
-                self.assertIn(
-                    acao, declaradas,
-                    f"{metodo}() é chamado em {', '.join(sorted(set(arquivos)))} "
-                    f"mas {acao} não está na role da WhatsAppWebhook. "
-                    f"Em produção isso é AccessDeniedException, não erro de teste.",
-                )
+        for funcao, (arquivo, modulos) in FUNCOES.items():
+            declaradas = acoes_declaradas(arquivo, funcao)
+            for metodo, arquivos in sorted(metodos_usados(modulos).items()):
+                acao = ACAO_DO_METODO[metodo]
+                with self.subTest(funcao=funcao, metodo=metodo):
+                    self.assertIn(
+                        acao, declaradas,
+                        f"{metodo}() é chamado em {', '.join(sorted(set(arquivos)))} "
+                        f"mas {acao} não está na role da {funcao}. "
+                        f"Em produção isso é AccessDeniedException, não erro de teste.",
+                    )
 
     def test_o_agregador_precisa_de_update_e_delete(self):
         """Prende as duas que faltaram, por nome.

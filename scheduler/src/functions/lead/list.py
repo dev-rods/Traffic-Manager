@@ -10,9 +10,27 @@ from decimal import Decimal
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 from src.services.lead_service import LeadService
+from src.services.status_da_conversa import (
+    conversas_da_clinica,
+    enriquece,
+    sessoes_por_telefone,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+_sessions_table = None
+
+
+def _get_sessions_table():
+    global _sessions_table
+    if _sessions_table is None:
+        import os
+        import boto3
+        _sessions_table = boto3.resource("dynamodb").Table(
+            os.environ["CONVERSATION_SESSIONS_TABLE"]
+        )
+    return _sessions_table
 
 
 def _serialize_row(row):
@@ -64,6 +82,21 @@ def handler(event, context):
             limit=limit,
             offset=offset,
         )
+
+        # Status da conversa vem das fontes, nao de coluna copiada no lead.
+        # Foi exatamente um campo denormalizado que mostrou "sem contato" para
+        # quem tinha conversa desenvolvida no WhatsApp.
+        try:
+            leads = enriquece(
+                leads,
+                sessoes_por_telefone(_get_sessions_table(), clinic_id,
+                                     [l.get("phone") for l in leads]),
+                conversas_da_clinica(db, clinic_id),
+            )
+        except Exception as e:
+            # A listagem nao pode cair por causa do enriquecimento: sem ele o
+            # painel mostra os leads como mostrava antes.
+            logger.error(f"Falha ao enriquecer status da conversa: {e}")
 
         return http_response(200, {
             "status": "SUCCESS",
