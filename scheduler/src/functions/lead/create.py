@@ -111,9 +111,15 @@ IDADE_MAXIMA_MINUTOS = 10
 def should_start_conversation(lead, clinic, *, agora=None) -> bool:
     """O bot deve abrir conversa com este lead?
 
-    Quatro guardas independentes, todas precisam passar. A mensagem chega no
-    WhatsApp de uma pessoa real e não tem desfazer, e há 44 leads cadastrados
-    com conversa em andamento que jamais podem ser abordados por engano.
+    Só o que é imutável decide aqui: origem, telefone e ser primeiro contato.
+    Tudo que muda com o tempo - política, horário, a pessoa ter escrito - é
+    conferido no DISPARO, porque entre o cadastro e o envio passam no mínimo 10
+    minutos e a realidade muda nesse intervalo.
+
+    A mensagem chega no WhatsApp de uma pessoa real e não tem desfazer, e há
+    leads cadastrados com conversa em andamento que jamais podem ser abordados
+    por engano - por isso a guarda de "já está conversando" vive no disparo, com
+    o dado fresco, e não aqui.
     """
     if not lead or not clinic:
         return False
@@ -137,12 +143,17 @@ def should_start_conversation(lead, clinic, *, agora=None) -> bool:
     if referencia - criado > timedelta(minutes=IDADE_MAXIMA_MINUTOS):
         return False
 
-    from src.services.bot_policy import should_bot_reply
-
-    # A sessão ainda não existe: é ela que este disparo vai criar. Passamos
-    # bot_enabled=True porque a origem landing-page já foi conferida acima, e é
-    # exatamente isso que a política LEADS_ONLY exige da conversa.
-    return should_bot_reply(clinic, {"bot_enabled": True}, lead["phone"])
+    # A POLÍTICA NÃO É CONFERIDA AQUI, de propósito.
+    #
+    # Ela era, e o efeito foi este: com o piloto ligado, `should_bot_reply`
+    # recusava no cadastro e o lead nunca entrava na fila. Desligar o piloto
+    # depois não trazia ninguém de volta - a decisão tinha sido tomada e
+    # descartada num instante que não volta.
+    #
+    # Quem confere política é o disparo, onde as condições são as do momento do
+    # envio. O que se perde por enfileirar a mais é um item que vai expirar em
+    # 72h; o que se perdia por recusar cedo era a pessoa.
+    return True
 
 
 def _enfileira_contato_ativo(log_prefix, db, lead, clinic_id):
