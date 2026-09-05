@@ -21,6 +21,18 @@ custom:
       - "**/*.pyo"
 
 provider:
+  # Nao publicar uma versao imutavel por deploy.
+  #
+  # Em 05/09/2026 o deploy quebrou em "Number of resources, 502, is greater
+  # than maximum allowed, 500": adicionar UMA Lambda estourou o limite do
+  # CloudFormation. Cada funcao carregava um AWS::Lambda::Version, e sao 65 -
+  # 65 recursos que nada referencia, porque o projeto nao usa alias nem
+  # provisioned concurrency.
+  #
+  # O que se perde: o historico de versoes publicadas. Rollback passa a ser
+  # redeploy do commit anterior, que ja era como faziamos - nunca apontamos
+  # alias para versao nenhuma.
+  versionFunctions: false
   name: aws
   runtime: python3.8
   stage: ${opt:stage, 'dev'}
