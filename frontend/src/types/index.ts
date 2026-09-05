@@ -351,6 +351,20 @@ export interface Lead {
   first_contact_at: string | null
   /** Quando o lead respondeu. Distinto de first_contact_at: é o que mede a taxa de resposta. */
   conversation_started_at: string | null
+  /**
+   * Quem está conduzindo a conversa agora. Vem das sessões e do espelho do
+   * WhatsApp na hora da listagem, não de coluna gravada no lead - foi um campo
+   * copiado que mostrou "sem contato" para quem tinha conversa desenvolvida.
+   */
+  conversation_status: 'BOT' | 'HUMANO' | 'AGUARDA_HUMANO' | 'SEM_CONVERSA' | null
+  /**
+   * Existe conversa no WhatsApp, mesmo que nunca tenha passado pelo bot. O
+   * atendimento humano nao deixa rastro no webhook: a atendente responde pelo
+   * celular e a mensagem chega com LID sem vinculo.
+   */
+  has_whatsapp_chat: boolean | null
+  /** Ultima mensagem trocada no WhatsApp, do espelho do z-api. */
+  whatsapp_last_message_at: string | null
   created_at: string
   updated_at: string
 }

@@ -531,6 +531,26 @@ SQL_STATEMENTS = [
     # 68s veio da medicao das conversas reais: junta 49% dos turnos e fica no
     # joelho da curva (90s so acrescenta 0,6pp). 0 desliga o agrupamento.
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS debounce_seconds INTEGER NOT NULL DEFAULT 68",
+
+    # Espelho da lista de conversas do WhatsApp (z-api GET /chats). Existe
+    # porque o atendimento humano nao passa pelo webhook: a atendente responde
+    # pelo celular, a mensagem chega com LID sem vinculo e e descartada. Sem
+    # isto, 17 dos 37 leads do site apareciam como sem contato tendo conversa.
+    #
+    # E espelho, nao fonte: o z-api manda. Recriar do zero e seguro.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.whatsapp_chats (
+        clinic_id VARCHAR(100) NOT NULL,
+        phone VARCHAR(20) NOT NULL,
+        lid VARCHAR(50),
+        name VARCHAR(255),
+        last_message_at TIMESTAMPTZ,
+        unread_count INTEGER DEFAULT 0,
+        synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clinic_id, phone)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_whatsapp_chats_clinic ON scheduler.whatsapp_chats(clinic_id)",
     """
     DO $$
     BEGIN

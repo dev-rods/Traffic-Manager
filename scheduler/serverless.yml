@@ -52,6 +52,7 @@ provider:
 
 functions:
   - ${file(sls/functions/webhook/interface.yml)}
+  - ${file(sls/functions/sync/interface.yml)}
   - ${file(sls/functions/send/interface.yml)}
   - ${file(sls/functions/message/interface.yml)}
   - ${file(sls/functions/clinic/interface.yml)}

@@ -33,6 +33,15 @@ ListLeads:
   timeout: 30
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListLeads-lambdaRole
   iamRoleStatements:
+    # BatchGetItem: o status da conversa (bot ou atendente) vem das sessoes, uma
+    # leitura em lote por pagina. Sem isto a listagem cai no fallback e o painel
+    # volta a mostrar lead sem status - sem erro nenhum aparente.
+    - Effect: Allow
+      Action:
+        - dynamodb:BatchGetItem
+        - dynamodb:GetItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
     - Effect: Allow
       Action:
         - ssm:GetParameter

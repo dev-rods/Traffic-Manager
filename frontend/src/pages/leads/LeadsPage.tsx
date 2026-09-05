@@ -95,6 +95,7 @@ export function LeadsPage() {
                 <th className="px-3 py-3">Telefone</th>
                 <th className="px-3 py-3">Fonte</th>
                 <th className="px-3 py-3">Conversa</th>
+                <th className="px-3 py-3">Atendimento</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Valor 1o agend.</th>
                 <th className="px-3 py-3">Data</th>
@@ -114,6 +115,9 @@ export function LeadsPage() {
                   </td>
                   <td className="px-3 py-3">
                     <ConversationBadge lead={lead} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <AtendimentoBadge lead={lead} />
                   </td>
                   <td className="px-3 py-3">
                     <Badge variant={lead.booked ? 'success' : 'warning'}>
@@ -139,17 +143,41 @@ export function LeadsPage() {
 }
 
 /**
- * Estado da conversa do lead com o bot.
+ * Estado da conversa do lead.
  *
  * A ordem das checagens importa: quem respondeu já foi contatado, então
  * "Respondeu" tem precedência sobre "Contatado".
+ *
+ * `has_whatsapp_chat` entra por último e é o que fecha o buraco que gerou esta
+ * coluna: existe conversa no WhatsApp que nunca passou pelo bot, porque a
+ * atendente respondeu pelo celular. Na Essência eram 17 de 37 leads do site
+ * marcados como "Sem contato" tendo conversa desenvolvida.
+ *
+ * Não vira "Respondeu": a lista de chats do z-api não diz quem falou, e usá-la
+ * para isso inflaria a taxa de conversão com conversas em que só a clínica
+ * falou.
  */
 function ConversationBadge({ lead }: { lead: Lead }) {
   if (lead.conversation_started_at) return <Badge variant="success">Respondeu</Badge>
   if (lead.first_contact_status === 'SENT') return <Badge variant="neutral">Contatado</Badge>
   if (lead.first_contact_status === 'QUEUED') return <Badge variant="warning">Na fila</Badge>
   if (lead.first_contact_status === 'FAILED') return <Badge variant="danger">Falhou</Badge>
+  if (lead.has_whatsapp_chat) return <Badge variant="neutral">Tem conversa</Badge>
   return <Badge variant="neutral">Sem contato</Badge>
+}
+
+/** Quem está conduzindo a conversa agora. */
+function AtendimentoBadge({ lead }: { lead: Lead }) {
+  switch (lead.conversation_status) {
+    case 'HUMANO':
+      return <Badge variant="warning">Atendente</Badge>
+    case 'AGUARDA_HUMANO':
+      return <Badge variant="danger">Aguarda atendente</Badge>
+    case 'BOT':
+      return <Badge variant="success">Bot</Badge>
+    default:
+      return <span className="text-gray-300">-</span>
+  }
 }
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {
