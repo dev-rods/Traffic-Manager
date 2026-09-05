@@ -89,18 +89,30 @@ class TestIdade(unittest.TestCase):
 
 
 class TestPolitica(unittest.TestCase):
-    def test_fora_do_piloto_nao_dispara(self):
-        self.assertFalse(should_start_conversation(_lead(phone="5511988887777"), CLINICA, agora=AGORA))
+    """A politica saiu do enfileiramento e passou a ser conferida no DISPARO.
 
-    def test_policy_off_nao_dispara(self):
-        self.assertFalse(should_start_conversation(_lead(), {"bot_autoreply_policy": "OFF"}, agora=AGORA))
+    Ela era conferida aqui, e o efeito foi caro: com o piloto ligado o lead nem
+    entrava na fila, e desligar o piloto depois nao trazia ninguem de volta - a
+    decisao tinha sido tomada e descartada num instante que nao volta.
 
-    def test_policy_leads_only_dispara_para_landing_page(self):
-        self.assertTrue(should_start_conversation(_lead(), {"bot_autoreply_policy": "LEADS_ONLY"},
-                                                  agora=AGORA))
+    A garantia continua valendo, so mudou de lugar: quem nao pode receber
+    continua nao recebendo. Os testes disso vivem em
+    `test_abordagem_com_retry.py`, contra o processor.
+    """
 
-    def test_policy_all_dispara(self):
-        self.assertTrue(should_start_conversation(_lead(), {"bot_autoreply_policy": "ALL"}, agora=AGORA))
+    def test_enfileira_mesmo_com_politica_restritiva(self):
+        for clinic in (CLINICA,
+                       {"bot_autoreply_policy": "OFF"},
+                       {"bot_autoreply_policy": "PILOT", "bot_pilot_phones": []}):
+            with self.subTest(policy=clinic.get("bot_autoreply_policy")):
+                self.assertTrue(should_start_conversation(
+                    _lead(phone="5511988887777"), clinic, agora=AGORA))
+
+    def test_o_que_e_imutavel_continua_decidindo_aqui(self):
+        """Origem, telefone e primeiro contato nao mudam entre o cadastro e o
+        envio - conferir no disparo so adiaria a mesma resposta."""
+        self.assertFalse(should_start_conversation(_lead(source="whatsapp"), CLINICA, agora=AGORA))
+        self.assertFalse(should_start_conversation(_lead(phone=""), CLINICA, agora=AGORA))
 
 
 class TestEntradasInvalidas(unittest.TestCase):

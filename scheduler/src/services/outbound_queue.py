@@ -30,6 +30,16 @@ TTL_DIAS = 30
 # atropelaria essa conversa. Passado esse tempo sem contato, o bot inicia.
 ATRASO_PRIMEIRO_CONTATO_MINUTOS = 10
 
+# Medido em 05/09/2026 nos 34 leads da landing page: dos 3 que escreveram
+# sozinhos, TODOS escreveram em menos de 1 minuto, e ninguem escreveu entre 1
+# minuto e 24 horas. Os 10 minutos cobrem 100% de quem se autoinicia com folga
+# larga, ao custo de 10 minutos de atraso para os outros 91%.
+
+# Prazo de validade da abordagem. Uma tentativa que fica adiando - clinica
+# fechada, piloto ligado, provider fora - nao pode virar um "oi" de duas semanas
+# atras chegando do nada. Passado o prazo, desiste e grava o motivo.
+VALIDADE_HORAS = 72
+
 
 class OutboundQueueService:
 
@@ -83,6 +93,8 @@ class OutboundQueueService:
             "sendAfter": send_after,
             "attempts": 0,
             "createdAt": agora.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "expiresAt": (agora + timedelta(hours=VALIDADE_HORAS)).astimezone(
+                timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ttl": int(time.time()) + TTL_DIAS * 24 * 60 * 60,
         }
         self.table.put_item(Item=item)
@@ -111,6 +123,35 @@ class OutboundQueueService:
                 ":sent_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 ":one": 1,
             },
+        )
+
+    def adia(self, message_id: str, pk: str, sk: str, motivo: str) -> None:
+        """Continua PENDING: a proxima execucao do cron tenta de novo.
+
+        Separar isto de `mark_failed` e o ponto do retry. Antes, "politica nao
+        permite" marcava FAILED terminal - e 3 leads de 02/09/2026 ficaram
+        parados para sempre porque o piloto estava ligado no momento do disparo.
+        Desligar o piloto nao os traz de volta; nada os traz.
+
+        O backoff e o proprio cron de 10 minutos. Quem para a repeticao e o
+        `expiresAt`, nao um contador de tentativas: o que importa nao e quantas
+        vezes tentamos, e ha quanto tempo a pessoa se cadastrou.
+        """
+        self.table.update_item(
+            Key={"pk": pk, "sk": sk},
+            UpdateExpression="SET ultimoMotivo = :motivo ADD attempts :one",
+            ExpressionAttributeValues={":motivo": motivo, ":one": 1},
+        )
+
+    def mark_expired(self, message_id: str, pk: str, sk: str, motivo: str) -> None:
+        """Terminal por prazo. Estado proprio para nao se confundir com falha:
+        no relatorio, "ninguem estava disponivel por 72h" e outra coisa de
+        "o envio quebrou"."""
+        self.table.update_item(
+            Key={"pk": pk, "sk": sk},
+            UpdateExpression="SET #s = :status, #e = :error",
+            ExpressionAttributeNames={"#s": "status", "#e": "error"},
+            ExpressionAttributeValues={":status": "EXPIRED", ":error": motivo},
         )
 
     def mark_failed(self, message_id: str, pk: str, sk: str, error: str) -> None:
