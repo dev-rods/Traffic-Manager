@@ -16,6 +16,8 @@ import time
 
 from src.services.elegibilidade_do_bot import (
     motivo_legivel,
+    origem_do_contato,
+    origem_legivel,
     pode_desmarcar,
     por_que_nao_pode,
 )
@@ -148,6 +150,15 @@ def enriquece(leads, sessoes, conversas, clinic=None):
             lead["bot_block_reason"] = motivo
             lead["bot_block_message"] = motivo_legivel(motivo)
             lead["can_unmark_contact"] = pode_desmarcar(lead)
+
+            # "Ja iniciada" nasce marcado quando a gente JA SABE que comecou.
+            # Pedir clique para confirmar dado apurado e trabalho manual inutil,
+            # e treina a atendente a clicar sem ler - justo no botao cuja unica
+            # razao de existir e o caso em que ela sabe o que nos nao sabemos.
+            origem = origem_do_contato(lead)
+            lead["contact_started"] = origem is not None
+            lead["contact_started_source"] = origem
+            lead["contact_started_message"] = origem_legivel(origem)
 
         enriquecidos.append(lead)
     return enriquecidos
