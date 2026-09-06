@@ -20,7 +20,13 @@ from src.services.agregador_de_mensagens import (
     enfileira,
     junta_conteudo,
 )
-from src.services.bot_policy import should_bot_reply
+from src.services.bot_policy import (
+    CAMPO_DE_PAUSA,
+    PAUSA_ATENDENTE,
+    PAUSA_CHAT_ANTERIOR,
+    PAUSA_CONTATO_MANUAL,
+    should_bot_reply,
+)
 from src.services.session_store import mark_conversation_eligible
 from src.services.autoria_mensagem import foi_enviada_pelo_bot
 from src.services.identidade_whatsapp import chat_lid, deve_vincular_lid, telefone_da_conversa
@@ -267,14 +273,19 @@ def handler(event, context):
         # 5c. Decidir se o bot responde. A mensagem já está registrada acima, então
         # sair aqui suprime a resposta sem perder a conversa.
         session = _load_session(_get_sessions_table(), clinic_id, incoming.phone)
+        # Antes de qualquer mutacao: e a primeira vez que vemos esta pessoa?
+        # O bloco de elegibilidade abaixo escreve na sessao, e conferir depois
+        # daria sempre "ja conhecida" - justo para o lead da landing page, que
+        # e o caso que importa.
+        primeira_vez = not session
 
         # Quem veio da landing page tem direito a resposta automática mesmo com a
         # política LEADS_ONLY, tenha o bot falado primeiro ou não. A marca é gravada
         # uma vez só: nas mensagens seguintes ela já está na sessão.
         if not session.get("bot_enabled"):
             leads_lp = db.execute_query(
-                "SELECT id FROM scheduler.leads WHERE clinic_id = %s AND phone = %s "
-                "AND source = 'landing-page' LIMIT 1",
+                "SELECT id, first_contact_channel FROM scheduler.leads "
+                "WHERE clinic_id = %s AND phone = %s AND source = 'landing-page' LIMIT 1",
                 (clinic_id, incoming.phone),
             )
             if leads_lp:
@@ -282,6 +293,35 @@ def handler(event, context):
                     _get_sessions_table(), clinic_id, incoming.phone, str(leads_lp[0]["id"])
                 )
                 session["bot_enabled"] = True
+
+                # "Ja iniciada" no painel significa que uma PESSOA comecou esta
+                # conversa. Sem isto o botao era decorativo: ele registrava o
+                # fato e nao governava nada, e o bot respondia por cima da
+                # atendente assim que a pessoa escrevesse.
+                if leads_lp[0].get("first_contact_channel") == "HUMANO":
+                    session[CAMPO_DE_PAUSA] = PAUSA_CONTATO_MANUAL
+
+        # Conversa que ja existia antes de a gente entrar: quem comecou foi
+        # gente. So vale na PRIMEIRA vez que vemos esta pessoa - depois disso a
+        # conversa e nossa e o proprio bot criou o chat, entao o espelho diria
+        # "existe conversa" sobre o trabalho dele mesmo.
+        if primeira_vez and not session.get(CAMPO_DE_PAUSA):
+            try:
+                ja_existia = db.execute_query(
+                    "SELECT 1 FROM scheduler.whatsapp_chats "
+                    "WHERE clinic_id = %s AND phone = %s LIMIT 1",
+                    (clinic_id, incoming.phone),
+                )
+                if ja_existia:
+                    logger.info(
+                        f"[Webhook] {incoming.phone} ja tinha conversa no WhatsApp "
+                        f"antes de nos; bot pausado ate liberarem no painel"
+                    )
+                    session[CAMPO_DE_PAUSA] = PAUSA_CHAT_ANTERIOR
+            except Exception as e:
+                # Falha aqui nao pode calar o bot nem solta-lo: sem resposta da
+                # consulta, segue o que as outras guardas disserem.
+                logger.error(f"[Webhook] Falha ao conferir conversa anterior: {e}")
         if clinic.get("bot_paused", False) or not should_bot_reply(clinic, session, incoming.phone):
             logger.info(
                 f"[Webhook] Resposta automática suprimida para {incoming.phone} "
@@ -658,6 +698,9 @@ def _activate_attendant_mode(clinic_id: str, phone: str) -> None:
     session["_previous_state_before_attendant"] = session.get("state", "")
     session["state"] = ConversationState.HUMAN_ATTENDANT_ACTIVE.value
     session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+    # A pausa nao vence sozinha: so sai pelo "Retomar bot" no painel. O prazo
+    # acima fica para a tela mostrar desde quando, nao para liberar o bot.
+    session[CAMPO_DE_PAUSA] = PAUSA_ATENDENTE
     _save_session(table, clinic_id, phone, session)
     logger.info(f"[Webhook] Modo atendente ativado/renovado para {phone} (TTL 24h)")
 

@@ -48,6 +48,19 @@ def _sessions_table():
     return boto3.resource("dynamodb").Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
 
 
+def _load_session(clinic_id, phone):
+    """A sessao como esta no banco, ou vazia. Nunca levanta: sem sessao o item
+    segue para as outras guardas, que e o comportamento de antes."""
+    try:
+        item = _sessions_table().get_item(
+            Key={"pk": f"CLINIC#{clinic_id}", "sk": f"PHONE#{phone}"}
+        ).get("Item") or {}
+        return dict(item.get("session") or {})
+    except Exception as e:
+        logger.error(f"[OutboundProcessor] Falha ao ler sessao de {phone}: {e}")
+        return {}
+
+
 def _ja_esta_conversando(tracker, clinic_id, phone, desde_iso):
     """A pessoa escreveu para a clínica depois de se cadastrar?
 
@@ -145,8 +158,14 @@ def handler(event, context):
             # ainda não existe: é este envio que vai criá-la. Passar sessão vazia
             # fazia LEADS_ONLY recusar todo item — o cenário de abordagem ativa
             # nunca enviava nada.
+            # A sessao REAL, nao uma sintetica. Passar {"bot_enabled": True}
+            # pulava a pausa: `should_bot_reply` le `bot_pausado_por` da sessao,
+            # e um dicionario inventado nunca a tem. Um item na fila disparava
+            # em conversa com atendente ativa.
+            sessao_real = _load_session(clinic_id, phone)
+            sessao_real["bot_enabled"] = True
             if clinic.get("bot_paused", False) or not should_bot_reply(
-                clinic, {"bot_enabled": True}, phone
+                clinic, sessao_real, phone
             ):
                 # ADIA, nao falha. A politica muda: o piloto de hoje sai
                 # amanha, e 3 leads de 02/09/2026 ficaram parados para sempre

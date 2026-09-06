@@ -10,6 +10,7 @@ import boto3
 
 from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
+from src.services.bot_policy import CAMPO_DE_PAUSA, PAUSA_HANDOFF, esta_pausado
 from src.services.calendario import bloco_de_contexto
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
 from src.services.roteador import exige_consulta, intencoes, tools_obrigatorias
@@ -406,6 +407,7 @@ class ConversationAgent:
             session["state"] = "HUMAN_HANDOFF"
             session["human_handoff_requested_at"] = int(time.time())
             session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+            session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
@@ -460,6 +462,8 @@ class ConversationAgent:
                 session["state"] = "HUMAN_HANDOFF"
                 session["human_handoff_requested_at"] = int(time.time())
                 session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+                # A pausa nao vence: so o "Retomar bot" no painel a remove.
+                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
             elif sem_origem:
                 logger.warning(
                     f"[Proveniencia] {phone} afirmou sem respaldo: {sorted(sem_origem)} "

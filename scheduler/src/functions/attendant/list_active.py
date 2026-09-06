@@ -6,7 +6,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 from src.utils.http import http_response, require_api_key, extract_path_param
-from src.services.bot_policy import should_bot_reply
+from src.services.bot_policy import esta_pausado, should_bot_reply
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -77,11 +77,12 @@ def handler(event, context):
             updated_at = item.get("updatedAt", "")
 
             # Atendente humano assumiu: o bot está pausado por ação de alguém.
-            atendente_ativo = False
-            if state in ("HUMAN_ATTENDANT_ACTIVE", "HUMAN_HANDOFF"):
-                if attendant_until and now < attendant_until:
-                    atendente_ativo = True
-                elif handoff_at and now < (handoff_at + 86400):
+            # `esta_pausado` cobre a pausa persistente, que nao vence por
+            # tempo. O estado da conversa sozinho nao bastava: "Ja iniciada" no
+            # painel pausa sem mudar o state.
+            atendente_ativo = esta_pausado(session)
+            if not atendente_ativo and state in ("HUMAN_ATTENDANT_ACTIVE", "HUMAN_HANDOFF"):
+                if handoff_at and now < (handoff_at + 86400):
                     atendente_ativo = True
 
             # Mesma decisão que o webhook toma ao receber mensagem: é a única
