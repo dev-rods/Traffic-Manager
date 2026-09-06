@@ -23,22 +23,33 @@ PAUSA_HANDOFF = "HANDOFF"                # o próprio bot pediu ajuda humana
 
 CAMPO_DE_PAUSA = "bot_pausado_por"
 
+# As que NAO vencem por tempo. Elas nao descrevem um atendimento em curso, e sim
+# de quem e a conversa - e isso nao muda no dia seguinte.
+PAUSAS_PERMANENTES = frozenset({PAUSA_CONTATO_MANUAL, PAUSA_CHAT_ANTERIOR})
+
 
 def esta_pausado(session: Optional[Dict]) -> bool:
-    """A conversa foi entregue a uma pessoa e o bot não fala até liberarem.
+    """A conversa foi entregue a uma pessoa e o bot não fala.
 
-    A pausa NÃO vence sozinha, e essa é a mudança. Antes ela era um prazo de 24h
-    (`attendant_active_until`): uma atendente assumia a conversa hoje e o bot
-    voltava a responder amanhã, no meio do atendimento dela, sem ninguém pedir.
+    Duas naturezas de pausa, e elas vencem diferente porque dizem coisas
+    diferentes:
 
-    Quem tira a pausa é gente, pelo botão "Retomar bot" no painel. Um bot que
-    volta sozinho é pior que um bot desligado: ninguém está esperando por ele.
+    ATENDENTE e HANDOFF descrevem um ATENDIMENTO EM CURSO. Alguém está na
+    conversa agora. Isso é verdade por um tempo e depois deixa de ser - por
+    decisão do André em 06/09/2026, 24h. Sem prazo, uma conversa atendida uma
+    vez ficaria morta para sempre e ninguém lembraria de reabrir.
 
-    `attendant_active_until` continua sendo lido para não perder as pausas que já
-    existiam quando isto subiu.
+    CONTATO_MANUAL e CHAT_ANTERIOR descrevem QUEM COMEÇOU a conversa. Isso não
+    para de ser verdade amanhã. Se vencessem, o bot entraria no dia seguinte
+    numa conversa que uma pessoa conduz - exatamente o dano que o botão "Já
+    iniciada" existe para impedir.
+
+    Em ambos os casos o "Retomar bot" no painel libera na hora.
     """
     session = session or {}
-    if session.get(CAMPO_DE_PAUSA):
+    motivo = session.get(CAMPO_DE_PAUSA)
+
+    if motivo in PAUSAS_PERMANENTES:
         return True
 
     ativo_ate = session.get("attendant_active_until")
