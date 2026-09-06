@@ -7,7 +7,12 @@ import boto3
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_query_param
 from src.services.conversation_engine import ConversationState
-from src.services.bot_policy import should_bot_reply
+from src.services.bot_policy import (
+    CAMPO_DE_PAUSA,
+    PAUSA_ATENDENTE,
+    esta_pausado,
+    should_bot_reply,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -119,6 +124,7 @@ def _handle_activate(event):
     session["_previous_state_before_attendant"] = session.get("state", "")
     session["state"] = ConversationState.HUMAN_ATTENDANT_ACTIVE.value
     session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+    session[CAMPO_DE_PAUSA] = PAUSA_ATENDENTE
     item["session"] = session
 
     _save_session(table, clinic_id, phone, item)
@@ -148,6 +154,9 @@ def _handle_deactivate(event, context):
 
     session["state"] = ConversationState.WELCOME.value
     session.pop("attendant_active_until", None)
+    # Este e o UNICO lugar que tira a pausa. Ela nao vence por tempo: quem
+    # devolve a conversa ao bot e uma pessoa clicando "Retomar bot".
+    session.pop(CAMPO_DE_PAUSA, None)
     session.pop("human_handoff_requested_at", None)
     session.pop("_previous_state_before_attendant", None)
     # Marca a conversa como elegível. Sem isso, retomar o bot não teria efeito nas
@@ -230,10 +239,12 @@ def _handle_status(event):
 
     ttl = session.get("attendant_active_until", 0)
     now = int(time.time())
-    expired = ttl > 0 and now >= ttl
 
-    if atendente_ativo and expired:
-        atendente_ativo = False
+    # A pausa nao vence mais por tempo: quem manda e `esta_pausado`. Antes o
+    # prazo vencido zerava o motivo, e o painel oferecia "Ativar bot" numa
+    # conversa que so precisava de "Retomar bot" - rotulo errado para a mesma
+    # acao, e a atendente sem entender por que o bot estava calado.
+    atendente_ativo = atendente_ativo or esta_pausado(session)
 
     # A política da clínica também decide. Sem consultá-la, o painel mostrava
     # "Pausar bot" numa conversa que o bot já não atendia — o botão prometia uma
