@@ -24,6 +24,22 @@ export const leadsService = {
       .then((r) => r.data)
   },
 
+  /** Manda o bot abrir conversa. O servidor revalida a elegibilidade. */
+  iniciarPeloBot(leadId: string) {
+    return api
+      .post<{ status: string; leadId: string }>(`/leads/${leadId}/iniciar-pelo-bot`)
+      .then((r) => r.data)
+  },
+
+  /** Alterna "Ja iniciada": marca, ou desmarca se foi uma pessoa que marcou. */
+  alternarContatoManual(leadId: string) {
+    return api
+      .post<{ status: string; first_contact_channel: string | null }>(
+        `/leads/${leadId}/marcar-contatado`
+      )
+      .then((r) => r.data)
+  },
+
   update(leadId: string, payload: Partial<Pick<Lead, 'name' | 'booked'>>) {
     return api
       .put<{ status: string; lead: Lead }>(`/leads/${leadId}`, payload)

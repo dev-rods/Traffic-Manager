@@ -14,6 +14,11 @@ da listagem custa um batch_get por página e não pode divergir.
 import logging
 import time
 
+from src.services.elegibilidade_do_bot import (
+    motivo_legivel,
+    pode_desmarcar,
+    por_que_nao_pode,
+)
 from src.utils.phone import variantes_do_numero
 
 logger = logging.getLogger(__name__)
@@ -97,7 +102,7 @@ def conversas_da_clinica(db, clinic_id):
     return por_variante
 
 
-def enriquece(leads, sessoes, conversas):
+def enriquece(leads, sessoes, conversas, clinic=None):
     """Devolve os leads com `conversation_status` e `has_whatsapp_chat`.
 
     Não sobrescreve `conversation_started_at`: "respondeu" continua sendo a
@@ -133,5 +138,16 @@ def enriquece(leads, sessoes, conversas):
         if status == SEM_CONVERSA and chat:
             status = HUMANO
         lead["conversation_status"] = status
+
+        # A elegibilidade do botao sai daqui, calculada no servidor. Deixar o
+        # frontend decidir criaria a regra em dois lugares - e a divergencia
+        # entre eles e silenciosa, que e o defeito que originou esta tela.
+        if clinic is not None:
+            motivo = por_que_nao_pode(lead, clinic)
+            lead["can_start_bot"] = motivo is None
+            lead["bot_block_reason"] = motivo
+            lead["bot_block_message"] = motivo_legivel(motivo)
+            lead["can_unmark_contact"] = pode_desmarcar(lead)
+
         enriquecidos.append(lead)
     return enriquecidos

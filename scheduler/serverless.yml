@@ -45,6 +45,7 @@ provider:
     STAGE: ${self:custom.stage}
     ACCOUNT_ID: ${self:custom.accountId}
     CONVERSATION_SESSIONS_TABLE: ${self:custom.resourcePrefix}-conversation-sessions
+    OUTBOUND_PROCESSOR_FUNCTION: ${self:service}-${self:custom.stage}-OutboundProcessor
     MESSAGE_EVENTS_TABLE: ${self:custom.resourcePrefix}-message-events
     SCHEDULED_REMINDERS_TABLE: ${self:custom.resourcePrefix}-scheduled-reminders
     OUTBOUND_QUEUE_TABLE: ${self:custom.resourcePrefix}-outbound-queue

@@ -72,6 +72,10 @@ def handler(event, context):
         ]
 
         db = PostgresService()
+        clinicas = db.execute_query(
+            "SELECT * FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
+            (clinic_id,))
+        clinic = clinicas[0] if clinicas else None
         lead_service = LeadService(db)
         leads = lead_service.list_leads(
             clinic_id=clinic_id,
@@ -92,6 +96,7 @@ def handler(event, context):
                 sessoes_por_telefone(_get_sessions_table(), clinic_id,
                                      [l.get("phone") for l in leads]),
                 conversas_da_clinica(db, clinic_id),
+                clinic=clinic,
             )
         except Exception as e:
             # A listagem nao pode cair por causa do enriquecimento: sem ele o

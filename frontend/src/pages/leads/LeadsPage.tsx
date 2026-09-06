@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useLeads } from '@/hooks/useLeads'
+import { useAcoesDoLead, useLeads } from '@/hooks/useLeads'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { formatPhone } from '@/utils/formatPhone'
 import type { Lead } from '@/types'
 
@@ -97,6 +98,7 @@ export function LeadsPage() {
                 <th className="px-3 py-3">Conversa</th>
                 <th className="px-3 py-3">Atendimento</th>
                 <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3">Conversa inicial</th>
                 <th className="px-3 py-3">Valor 1o agend.</th>
                 <th className="px-3 py-3">Data</th>
               </tr>
@@ -118,6 +120,9 @@ export function LeadsPage() {
                   </td>
                   <td className="px-3 py-3">
                     <AtendimentoBadge lead={lead} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <AcoesDeInicio lead={lead} />
                   </td>
                   <td className="px-3 py-3">
                     <Badge variant={lead.booked ? 'success' : 'warning'}>
@@ -178,6 +183,60 @@ function AtendimentoBadge({ lead }: { lead: Lead }) {
     default:
       return <span className="text-gray-300">-</span>
   }
+}
+
+/**
+ * Os dois botoes de inicio de conversa.
+ *
+ * "Iniciar pelo Bot" so acende quando o servidor disse que pode. A regra tem
+ * seis condicoes e vive em `elegibilidade_do_bot.py`; aqui so se renderiza o
+ * que veio pronto, senao a mesma regra existiria em dois lugares e divergiria
+ * em silencio.
+ *
+ * "Ja iniciada" alterna. Ele existe porque a API NAO enxerga o que ele
+ * registra: quando a atendente escreve para quem nunca respondeu, a mensagem
+ * chega ao webhook como LID sem telefone e se perde. Quem sabe e ela.
+ */
+function AcoesDeInicio({ lead }: { lead: Lead }) {
+  const { iniciarPeloBot, alternarContatoManual } = useAcoesDoLead()
+  const marcado = lead.first_contact_channel !== null
+  const iniciadoPeloBot = lead.first_contact_channel === 'BOT'
+
+  if (iniciadoPeloBot) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <Badge variant="success">Iniciada pelo bot</Badge>
+        <span className="text-[11px] text-gray-400">
+          {lead.first_contact_status === 'QUEUED' ? 'na fila' : 'enviada'}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button
+        size="sm"
+        variant="primary"
+        disabled={!lead.can_start_bot || iniciarPeloBot.isPending}
+        loading={iniciarPeloBot.isPending}
+        title={lead.can_start_bot ? 'O bot abre a conversa agora' : lead.bot_block_message ?? ''}
+        onClick={() => iniciarPeloBot.mutate(lead.id)}
+      >
+        Iniciar pelo Bot
+      </Button>
+      <Button
+        size="sm"
+        variant={marcado ? 'success' : 'secondary'}
+        disabled={alternarContatoManual.isPending || (marcado && !lead.can_unmark_contact)}
+        loading={alternarContatoManual.isPending}
+        title={marcado ? 'Clique para desmarcar' : 'Registrar que voce ja falou com esta pessoa'}
+        onClick={() => alternarContatoManual.mutate(lead.id)}
+      >
+        {marcado ? 'Ja iniciada' : 'Ja iniciada?'}
+      </Button>
+    </div>
+  )
 }
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {

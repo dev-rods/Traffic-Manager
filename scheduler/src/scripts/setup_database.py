@@ -532,6 +532,12 @@ SQL_STATEMENTS = [
     # joelho da curva (90s so acrescenta 0,6pp). 0 desliga o agrupamento.
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS debounce_seconds INTEGER NOT NULL DEFAULT 68",
 
+    # Quem iniciou a conversa: 'BOT' (a atendente clicou em Iniciar pelo Bot) ou
+    # 'HUMANO' (ela marcou Ja iniciada). NULL = ninguem iniciou. Sem esta coluna
+    # nao da para saber se o "Ja iniciada" pode ser desfeito - desmarcar um envio
+    # do bot apagaria o registro de uma mensagem que existe.
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_channel VARCHAR(10)",
+
     # Espelho da lista de conversas do WhatsApp (z-api GET /chats). Existe
     # porque o atendimento humano nao passa pelo webhook: a atendente responde
     # pelo celular, a mensagem chega com LID sem vinculo e e descartada. Sem

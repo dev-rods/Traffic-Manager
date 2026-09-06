@@ -7,6 +7,7 @@ vi.mock('./api', () => ({
 }))
 
 const mockApi = api as unknown as { get: ReturnType<typeof vi.fn> }
+const mockPost = (api as unknown as { post: ReturnType<typeof vi.fn> }).post
 
 const CLINIC_ID = 'clinic-123'
 
@@ -33,5 +34,30 @@ describe('leadsService.list', () => {
     await leadsService.list(CLINIC_ID)
 
     expect(mockApi.get).toHaveBeenCalledWith(`/clinics/${CLINIC_ID}/leads`, { params: undefined })
+  })
+})
+
+describe('acoes de inicio de conversa', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('iniciarPeloBot chama o endpoint do lead', async () => {
+    mockPost.mockResolvedValueOnce({ data: { status: 'SUCCESS', leadId: 'abc' } })
+
+    await leadsService.iniciarPeloBot('abc')
+
+    expect(mockPost).toHaveBeenCalledWith('/leads/abc/iniciar-pelo-bot')
+  })
+
+  // Um endpoint so para marcar e desmarcar: dois endpoints exigiriam o frontend
+  // saber o estado atual para escolher qual chamar, e ele erraria justamente
+  // quando outra atendente tivesse mexido no meio tempo.
+  it('alternarContatoManual usa um endpoint so para marcar e desmarcar', async () => {
+    mockPost.mockResolvedValue({ data: { status: 'SUCCESS', first_contact_channel: 'HUMANO' } })
+
+    await leadsService.alternarContatoManual('abc')
+    await leadsService.alternarContatoManual('abc')
+
+    expect(mockPost).toHaveBeenNthCalledWith(1, '/leads/abc/marcar-contatado')
+    expect(mockPost).toHaveBeenNthCalledWith(2, '/leads/abc/marcar-contatado')
   })
 })
