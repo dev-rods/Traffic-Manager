@@ -365,6 +365,22 @@ export interface Lead {
   has_whatsapp_chat: boolean | null
   /** Ultima mensagem trocada no WhatsApp, do espelho do z-api. */
   whatsapp_last_message_at: string | null
+  /** Quem iniciou a conversa. NULL = ninguem iniciou ainda. */
+  first_contact_channel: 'BOT' | 'HUMANO' | null
+  /**
+   * O bot pode abrir conversa com este lead?
+   *
+   * Calculado no SERVIDOR e so renderizado aqui. A regra tem seis condicoes e
+   * duplica-la no frontend criaria duas fontes que divergem em silencio - o
+   * defeito que originou esta tela.
+   */
+  can_start_bot: boolean | null
+  /** Chave do motivo do bloqueio, para telemetria. */
+  bot_block_reason: string | null
+  /** Texto pronto para a tela. Botao apagado sem explicacao vira suporte. */
+  bot_block_message: string | null
+  /** Da para desfazer o "Ja iniciada"? So o que uma pessoa marcou. */
+  can_unmark_contact: boolean | null
   created_at: string
   updated_at: string
 }
