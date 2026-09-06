@@ -48,7 +48,7 @@ class TestAtraso(unittest.TestCase):
         table = FakeTable()
         agora = TZ.localize(datetime(2026, 8, 17, 16, 46))
 
-        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
+        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora, atraso_minutos=10)
 
         self.assertEqual(item["status"], "PENDING")
         # 16:46 + 10min = 16:56 BRT = 19:56 UTC
@@ -58,7 +58,7 @@ class TestAtraso(unittest.TestCase):
         table = FakeTable()
         agora = TZ.localize(datetime(2026, 8, 17, 20, 55))  # +10min = 21:05, já fechou
 
-        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
+        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora, atraso_minutos=10)
 
         # terça 07:15 BRT = 10:15 UTC
         self.assertEqual(item["sendAfter"], "2026-08-18T10:15:00Z")
@@ -76,7 +76,7 @@ class TestAtraso(unittest.TestCase):
         agora_utc = datetime(2026, 8, 29, 19, 32, tzinfo=timezone.utc)  # sábado 16:32 BRT
 
         item = _service(table).enqueue(
-            "clinica-x", "5511999999999", business_hours=com_sabado, now=agora_utc
+            "clinica-x", "5511999999999", business_hours=com_sabado, now=agora_utc, atraso_minutos=10
         )
 
         # 16:32 + 10min = 16:42 BRT = 19:42 UTC, no mesmo sábado
@@ -87,7 +87,7 @@ class TestAtraso(unittest.TestCase):
         agora_utc = datetime(2026, 8, 30, 14, 0, tzinfo=timezone.utc)  # domingo 11:00 BRT
 
         item = _service(table).enqueue(
-            "clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora_utc
+            "clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora_utc, atraso_minutos=10
         )
 
         # segunda 07:15 BRT = 10:15 UTC, não 07:15 UTC
@@ -109,7 +109,7 @@ class TestEnqueue(unittest.TestCase):
         table = FakeTable()
         agora = TZ.localize(datetime(2026, 8, 15, 6, 45))
 
-        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
+        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora, atraso_minutos=10)
 
         # segunda 07:15 BRT = 10:15 UTC; o atraso não muda nada aqui
         self.assertEqual(item["sendAfter"], "2026-08-17T10:15:00Z")
@@ -119,7 +119,7 @@ class TestEnqueue(unittest.TestCase):
         table = FakeTable()
         agora = TZ.localize(datetime(2026, 8, 17, 10, 0))
 
-        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours={}, now=agora)
+        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours={}, now=agora, atraso_minutos=10)
 
         self.assertIsNone(item)
         self.assertEqual(table.items, [])
@@ -129,7 +129,7 @@ class TestEnqueue(unittest.TestCase):
         agora = TZ.localize(datetime(2026, 8, 17, 16, 46))
 
         item = _service(table).enqueue(
-            "clinica-x", "5511999999999", lead_id="lead-1", business_hours=ESSENCIA, now=agora
+            "clinica-x", "5511999999999", lead_id="lead-1", business_hours=ESSENCIA, now=agora, atraso_minutos=10
         )
 
         self.assertEqual(item["leadId"], "lead-1")
@@ -144,7 +144,7 @@ class TestEnqueue(unittest.TestCase):
         table = FakeTable()
         agora = TZ.localize(datetime(2026, 8, 17, 16, 46))
 
-        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
+        item = _service(table).enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora, atraso_minutos=10)
 
         self.assertNotIn("content", item)
 
@@ -153,8 +153,8 @@ class TestEnqueue(unittest.TestCase):
         agora = TZ.localize(datetime(2026, 8, 17, 16, 46))
         service = _service(table)
 
-        a = service.enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora)
-        b = service.enqueue("clinica-x", "5511988888888", business_hours=ESSENCIA, now=agora)
+        a = service.enqueue("clinica-x", "5511999999999", business_hours=ESSENCIA, now=agora, atraso_minutos=10)
+        b = service.enqueue("clinica-x", "5511988888888", business_hours=ESSENCIA, now=agora, atraso_minutos=10)
 
         self.assertNotEqual(a["messageId"], b["messageId"])
 
