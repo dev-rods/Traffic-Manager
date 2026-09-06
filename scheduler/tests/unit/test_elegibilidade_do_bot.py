@@ -158,5 +158,28 @@ class TestDesmarcar(unittest.TestCase):
         self.assertFalse(pode_desmarcar(None))
 
 
+class TestContatoDoFluxoAntigo(unittest.TestCase):
+    """Leads do disparo automático têm status sem canal - 5 em produção.
+
+    Sem tratar isso, o botão "Já iniciada" apareceria desmarcado neles e um
+    clique os reescreveria como HUMANO, apagando o registro de um envio que foi
+    do bot.
+    """
+
+    def test_status_sem_canal_conta_como_contatado(self):
+        for status in ("QUEUED", "SENT", "FAILED"):
+            with self.subTest(status=status):
+                self.assertEqual(
+                    por_que_nao_pode(lead(first_contact_status=status,
+                                          first_contact_channel=None), CLINICA_ABERTA),
+                    "JA_CONTATADA")
+
+    def test_status_sem_canal_nao_se_desmarca(self):
+        """Não foi uma pessoa que marcou: pode ter sido envio real do bot."""
+        self.assertFalse(pode_desmarcar(lead(first_contact_status="SENT",
+                                             first_contact_channel=None)))
+
+
 if __name__ == "__main__":
     unittest.main()
+

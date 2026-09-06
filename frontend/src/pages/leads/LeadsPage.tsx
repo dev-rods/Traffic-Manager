@@ -200,7 +200,11 @@ function AtendimentoBadge({ lead }: { lead: Lead }) {
 function AcoesDeInicio({ lead }: { lead: Lead }) {
   const { iniciarPeloBot, alternarContatoManual } = useAcoesDoLead()
   const marcado = lead.first_contact_channel !== null
-  const iniciadoPeloBot = lead.first_contact_channel === 'BOT'
+  // Registros do fluxo automatico antigo tem status sem canal. Sem esta linha o
+  // botao apareceria desmarcado neles, e um clique reescreveria como HUMANO um
+  // envio que foi do bot.
+  const contatoAntigo = lead.first_contact_channel === null && lead.first_contact_status !== null
+  const iniciadoPeloBot = lead.first_contact_channel === 'BOT' || contatoAntigo
 
   if (iniciadoPeloBot) {
     return (

@@ -55,11 +55,17 @@ def handler(event, context):
 
         # Marcar so vale enquanto ninguem contatou. Se o BOT ja enviou, marcar
         # como humano apagaria o registro de uma mensagem que existe de verdade.
+        #
+        # A condicao olha `first_contact_status` E o canal. So o canal nao basta:
+        # os leads do fluxo automatico antigo tem status QUEUED ou SENT com canal
+        # NULL - 5 deles em producao - e um clique aqui os reescreveria como
+        # HUMANO, apagando o registro de um envio que foi do bot.
         marcado = db.execute_write_returning(
             "UPDATE scheduler.leads SET first_contact_status = 'SENT', "
             "first_contact_at = NOW(), first_contact_channel = 'HUMANO', "
             "updated_at = NOW() "
-            "WHERE id = %s::uuid AND first_contact_channel IS NULL RETURNING id",
+            "WHERE id = %s::uuid AND first_contact_channel IS NULL "
+            "AND first_contact_status IS NULL RETURNING id",
             (lead_id,),
         )
         if not marcado:
