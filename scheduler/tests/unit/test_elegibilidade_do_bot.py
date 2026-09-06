@@ -15,6 +15,12 @@ import unittest
 
 from src.services.elegibilidade_do_bot import (
     MOTIVOS,
+    ORIGEM_BOT,
+    ORIGEM_HUMANO,
+    ORIGEM_RESPONDEU,
+    ORIGEM_WHATSAPP,
+    origem_do_contato,
+    origem_legivel,
     motivo_legivel,
     pode_desmarcar,
     pode_iniciar,
@@ -180,6 +186,77 @@ class TestContatoDoFluxoAntigo(unittest.TestCase):
                                              first_contact_channel=None)))
 
 
+class TestOrigemDoContato(unittest.TestCase):
+    """"Já iniciada" nasce marcado quando a gente já sabe que começou.
+
+    A tela pedia um clique para registrar o que o sistema já tinha apurado. Isso
+    é trabalho manual para confirmar dado nosso - e treina a atendente a clicar
+    sem ler, justamente no botão cuja única razão de existir é o caso em que ela
+    sabe algo que nós não sabemos.
+    """
+
+    def test_ninguem_iniciou(self):
+        """O único caso em que o clique dela vale: estamos cegos."""
+        self.assertIsNone(origem_do_contato(lead()))
+
+    def test_a_pessoa_escreveu(self):
+        self.assertEqual(origem_do_contato(lead(conversation_started_at="2026-09-01")),
+                         ORIGEM_RESPONDEU)
+
+    def test_conversa_no_espelho_do_whatsapp(self):
+        """O caso que motivou o ajuste: existe conversa e a tela pedia clique."""
+        self.assertEqual(origem_do_contato(lead(has_whatsapp_chat=True)), ORIGEM_WHATSAPP)
+
+    def test_o_bot_enviou(self):
+        self.assertEqual(
+            origem_do_contato(lead(first_contact_channel="BOT", first_contact_status="SENT")),
+            ORIGEM_BOT)
+
+    def test_o_bot_esta_na_fila(self):
+        self.assertEqual(origem_do_contato(lead(first_contact_status="QUEUED",
+                                                first_contact_channel="BOT")), ORIGEM_BOT)
+
+    def test_a_atendente_marcou(self):
+        self.assertEqual(origem_do_contato(lead(first_contact_channel="HUMANO",
+                                                first_contact_status="SENT")), ORIGEM_HUMANO)
+
+    def test_registro_do_fluxo_antigo_conta_como_bot(self):
+        """Status sem canal: 5 leads em produção, do disparo automático."""
+        self.assertEqual(origem_do_contato(lead(first_contact_status="SENT")), ORIGEM_BOT)
+
+    def test_quem_respondeu_vence_o_resto(self):
+        """A evidência mais forte manda: ela escreveu, ponto."""
+        self.assertEqual(
+            origem_do_contato(lead(conversation_started_at="2026-09-01",
+                                   has_whatsapp_chat=True,
+                                   first_contact_channel="HUMANO")),
+            ORIGEM_RESPONDEU)
+
+    def test_marca_humana_vence_o_espelho(self):
+        """Ela marcou justamente porque sabe de algo que o espelho não mostra."""
+        self.assertEqual(
+            origem_do_contato(lead(first_contact_channel="HUMANO",
+                                   first_contact_status="SENT", has_whatsapp_chat=True)),
+            ORIGEM_HUMANO)
+
+    def test_toda_origem_tem_texto(self):
+        for origem in (ORIGEM_RESPONDEU, ORIGEM_BOT, ORIGEM_HUMANO, ORIGEM_WHATSAPP):
+            with self.subTest(origem=origem):
+                self.assertTrue(origem_legivel(origem).strip())
+        self.assertEqual(origem_legivel(None), "")
+
+    def test_so_o_que_a_pessoa_marcou_se_desmarca(self):
+        """Coerência entre as duas funções: o que foi apurado não se desfaz por
+        clique, porque o clique não muda o fato."""
+        for origem_lead in (lead(conversation_started_at="2026-09-01"),
+                            lead(has_whatsapp_chat=True),
+                            lead(first_contact_channel="BOT", first_contact_status="SENT")):
+            with self.subTest(origem=origem_do_contato(origem_lead)):
+                self.assertTrue(origem_do_contato(origem_lead))
+                self.assertFalse(pode_desmarcar(origem_lead))
+
+
 if __name__ == "__main__":
     unittest.main()
+
 

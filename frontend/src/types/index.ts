@@ -381,6 +381,15 @@ export interface Lead {
   bot_block_message: string | null
   /** Da para desfazer o "Ja iniciada"? So o que uma pessoa marcou. */
   can_unmark_contact: boolean | null
+  /**
+   * A conversa ja comecou, por qualquer caminho que a gente consiga enxergar.
+   * Derivado no servidor - a tela nao recalcula, so mostra.
+   */
+  contact_started: boolean | null
+  /** De onde veio essa certeza. NULL = ninguem iniciou que a gente saiba. */
+  contact_started_source: 'RESPONDEU' | 'BOT' | 'HUMANO' | 'WHATSAPP' | null
+  /** Texto pronto explicando a origem, para o title do botao. */
+  contact_started_message: string | null
   created_at: string
   updated_at: string
 }

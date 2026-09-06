@@ -199,14 +199,10 @@ function AtendimentoBadge({ lead }: { lead: Lead }) {
  */
 function AcoesDeInicio({ lead }: { lead: Lead }) {
   const { iniciarPeloBot, alternarContatoManual } = useAcoesDoLead()
-  const marcado = lead.first_contact_channel !== null
-  // Registros do fluxo automatico antigo tem status sem canal. Sem esta linha o
-  // botao apareceria desmarcado neles, e um clique reescreveria como HUMANO um
-  // envio que foi do bot.
-  const contatoAntigo = lead.first_contact_channel === null && lead.first_contact_status !== null
-  const iniciadoPeloBot = lead.first_contact_channel === 'BOT' || contatoAntigo
+  const origem = lead.contact_started_source
 
-  if (iniciadoPeloBot) {
+  // Iniciada pelo bot tem estado proprio: mostra se saiu ou se esta na fila.
+  if (origem === 'BOT') {
     return (
       <div className="flex flex-col gap-0.5">
         <Badge variant="success">Iniciada pelo bot</Badge>
@@ -217,6 +213,36 @@ function AcoesDeInicio({ lead }: { lead: Lead }) {
     )
   }
 
+  // Ja sabemos que comecou. Nao ha o que a atendente confirmar aqui, e pedir o
+  // clique treinaria ela a clicar sem ler - justo no botao cuja unica razao de
+  // existir e o caso em que ela sabe algo que a API nao mostra.
+  if (origem === 'RESPONDEU' || origem === 'WHATSAPP') {
+    return (
+      <span title={lead.contact_started_message ?? ''}>
+        <Badge variant="neutral">Já iniciada</Badge>
+      </span>
+    )
+  }
+
+  // Marcada por uma pessoa: e a unica que se desfaz, porque o clique dela e o
+  // unico fato que um clique pode reverter.
+  if (origem === 'HUMANO') {
+    return (
+      <Button
+        size="sm"
+        variant="success"
+        disabled={alternarContatoManual.isPending || !lead.can_unmark_contact}
+        loading={alternarContatoManual.isPending}
+        title="Marcado por uma atendente. Clique para desmarcar."
+        onClick={() => alternarContatoManual.mutate(lead.id)}
+      >
+        Já iniciada ✓
+      </Button>
+    )
+  }
+
+  // Ponto cego: nenhuma evidencia de contato. Aqui, e so aqui, a atendente
+  // decide - ou manda o bot abrir, ou registra que ela mesma ja falou.
   return (
     <div className="flex items-center gap-1.5">
       <Button
@@ -231,13 +257,13 @@ function AcoesDeInicio({ lead }: { lead: Lead }) {
       </Button>
       <Button
         size="sm"
-        variant={marcado ? 'success' : 'secondary'}
-        disabled={alternarContatoManual.isPending || (marcado && !lead.can_unmark_contact)}
+        variant="secondary"
+        disabled={alternarContatoManual.isPending}
         loading={alternarContatoManual.isPending}
-        title={marcado ? 'Clique para desmarcar' : 'Registrar que voce ja falou com esta pessoa'}
+        title="Registrar que você já falou com esta pessoa fora do bot"
         onClick={() => alternarContatoManual.mutate(lead.id)}
       >
-        {marcado ? 'Ja iniciada' : 'Ja iniciada?'}
+        Já iniciada
       </Button>
     </div>
   )

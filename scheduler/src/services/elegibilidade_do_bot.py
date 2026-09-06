@@ -90,6 +90,58 @@ def motivo_legivel(chave):
     return MOTIVOS.get(chave or "", "")
 
 
+# De onde veio a certeza de que a conversa já começou. A ordem é de evidência
+# mais forte para mais fraca, e todas menos HUMANO são apuradas por nós.
+ORIGEM_RESPONDEU = "RESPONDEU"   # a pessoa escreveu para a clínica
+ORIGEM_BOT = "BOT"               # o bot enviou (ou está na fila para enviar)
+ORIGEM_HUMANO = "HUMANO"         # a atendente marcou à mão
+ORIGEM_WHATSAPP = "WHATSAPP"     # existe conversa no espelho do z-api
+
+ORIGENS_LEGIVEIS = {
+    ORIGEM_RESPONDEU: "A pessoa já escreveu para a clínica.",
+    ORIGEM_BOT: "O bot já iniciou esta conversa.",
+    ORIGEM_HUMANO: "Marcado por uma atendente.",
+    ORIGEM_WHATSAPP: "Já existe conversa com este número no WhatsApp.",
+}
+
+
+def origem_do_contato(lead):
+    """Quem já iniciou a conversa, ou None se ninguém iniciou que a gente saiba.
+
+    A tela mostrava "Já iniciada" desmarcado para lead que já tinha conversa no
+    WhatsApp, e pedia um clique para registrar o que o sistema já sabia. Isso é
+    trabalho manual para confirmar dado apurado - e pior, treina a atendente a
+    clicar sem ler, justamente no botão cuja única razão de existir é o caso em
+    que ela sabe algo que nós não sabemos.
+
+    A intervenção humana fica só onde somos cegos: contato que a atendente fez e
+    que nunca foi entregue não aparece em lugar nenhum (o WhatsApp só expõe o
+    número de quem está salvo na agenda), e é exatamente para isso que o botão
+    existe.
+    """
+    lead = lead or {}
+
+    if lead.get("conversation_started_at"):
+        return ORIGEM_RESPONDEU
+
+    canal = lead.get("first_contact_channel")
+    if canal == ORIGEM_HUMANO:
+        return ORIGEM_HUMANO
+    # Canal ausente com status preenchido é registro do disparo automático
+    # antigo, que não gravava canal. Foi envio do bot.
+    if canal == ORIGEM_BOT or lead.get("first_contact_status") or lead.get("first_contact_at"):
+        return ORIGEM_BOT
+
+    if lead.get("has_whatsapp_chat"):
+        return ORIGEM_WHATSAPP
+
+    return None
+
+
+def origem_legivel(origem):
+    return ORIGENS_LEGIVEIS.get(origem or "", "")
+
+
 def pode_desmarcar(lead):
     """Dá para desfazer o "Já iniciada"?
 
