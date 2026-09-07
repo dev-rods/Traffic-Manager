@@ -31,14 +31,24 @@ DEFAULT_DURATION_RULES = {
 
 
 def arredonda_para_passo(minutos: int, passo: int) -> int:
-    """O menor múltiplo de `passo` que não é menor que `minutos`.
+    """O múltiplo de `passo` MAIS PRÓXIMO de `minutos`.
+
+    Era para cima, e arredondava sempre contra a agenda: 17 minutos (axilas 5 +
+    virilha 12) viravam 20, e a clínica perdia 3 minutos de sala em toda sessão
+    dessa combinação. Por decisão do André em 07/09/2026, passa a ser o mais
+    próximo - 17 vira 15, 18 vira 20.
+
+    Empate vai para cima. Só acontece com passo par (com passo 5 o meio seria
+    17,5, que não existe em minutos inteiros), e nesse caso a sessão mais longa
+    é o erro menos ruim: sobra sala, em vez de a próxima paciente esperar.
 
     Passo inválido devolve o valor intacto: uma configuração ruim não pode
     zerar a duração de um agendamento.
     """
+    minutos, passo = int(minutos), int(passo)
     if passo <= 0:
-        return int(minutos)
-    return -(-int(minutos) // int(passo)) * int(passo)
+        return minutos
+    return ((minutos + passo // 2) // passo) * passo
 
 
 def duracao_da_sessao(soma_minutos, rules: Optional[Dict] = None) -> int:

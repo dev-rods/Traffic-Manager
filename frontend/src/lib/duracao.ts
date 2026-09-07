@@ -10,17 +10,26 @@ export const DURACAO_PADRAO = {
   step_minutes: 5,
 } as const
 
-/** O menor múltiplo de `passo` que não é menor que `minutos`. */
+/**
+ * O múltiplo de `passo` mais próximo de `minutos`.
+ *
+ * Era para cima, e arredondava sempre contra a agenda: 17 minutos viravam 20 e
+ * a clínica perdia 3 minutos de sala. Empate vai para cima - só acontece com
+ * passo par, e sobrar sala é melhor que a próxima paciente esperar.
+ *
+ * Espelha `arredonda_para_passo` em scheduler/src/services/duration_rules.py.
+ * As duas precisam concordar: divergindo, a tela promete um horário de fim e o
+ * banco grava outro.
+ */
 export function arredondaParaPasso(minutos: number, passo: number): number {
   if (passo <= 0) return Math.trunc(minutos)
-  return Math.ceil(minutos / passo) * passo
+  return Math.floor((Math.trunc(minutos) + Math.floor(passo / 2)) / passo) * passo
 }
 
 /**
  * A duração de uma sessão a partir da soma bruta das áreas.
  *
- * Arredonda para cima: subestimar agenda duas pessoas na mesma janela, e
- * superestimar só desperdiça um vão.
+ * Arredonda para o múltiplo mais próximo.
  *
  * Isto é PREVIEW. Quem decide é o backend, que reaplica a mesma regra em
  * duracao_da_sessao antes de gravar ou de devolver horários - se os dois
