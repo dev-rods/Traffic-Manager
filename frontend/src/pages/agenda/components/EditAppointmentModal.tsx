@@ -9,6 +9,7 @@ import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
 import { TimeField } from './TimeField'
+import { ObservacaoField } from './ObservacaoField'
 import { ehHorarioValido } from '@/lib/horario'
 import type { Appointment, UpdateAppointmentPayload } from '@/types'
 
@@ -341,17 +342,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           )
         })()}
 
-        {/* Notes */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Observações</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-            placeholder="Observações sobre o agendamento..."
-            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
-          />
-        </div>
+        <ObservacaoField value={notes} onChange={setNotes} />
 
         {/* Reschedule warning */}
         {(dateChanged || timeChanged) && (

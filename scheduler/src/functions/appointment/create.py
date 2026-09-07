@@ -97,6 +97,9 @@ def handler(event, context):
             service_ids=service_ids,
             service_area_pairs=service_area_pairs if service_area_pairs else None,
             full_name=body.get("fullName"),
+            # Observação curta que a atendente escreve ao marcar. Aparece no
+            # popover da agenda; a edição já aceitava, a criação não.
+            notes=(body.get("notes") or "").strip()[:500] or None,
             discount_pct=body.get("discountPct", 0),
             discount_reason=body.get("discountReason"),
         )

@@ -171,6 +171,8 @@ export interface CreateAppointmentPayload {
   fullName?: string
   discountPct?: number
   discountReason?: string
+  /** Observacao curta da atendente. Aparece no popover da agenda. */
+  notes?: string
 }
 
 export interface UpdateAppointmentPayload {
