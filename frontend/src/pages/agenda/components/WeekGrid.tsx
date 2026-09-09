@@ -66,7 +66,15 @@ function AppointmentBlock({
           : 'bg-brand-50 border-l-brand-500 text-brand-900',
       ].join(' ')}
     >
-      <p className="text-xs font-semibold truncate leading-tight">{displayName}</p>
+      {/* O horário ao lado do nome. Sem ele, acompanhar quem entra às 14h
+          exigia clicar em cada agendamento - a posição no grid dá a hora
+          aproximada, não a exata. `tabular-nums` mantém os dígitos alinhados
+          entre as linhas, senão a coluna de nomes serrilha. */}
+      <p className="text-xs font-semibold truncate leading-tight">
+        <span className="tabular-nums opacity-70">{a.start_time.slice(0, 5)}</span>
+        {' '}
+        {displayName}
+      </p>
       {serviceLine && (
         <p className="text-[11px] truncate leading-tight opacity-75">{serviceLine}</p>
       )}

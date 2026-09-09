@@ -3,6 +3,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
+import { CadastroFields } from './CadastroFields'
+import { cadastroSchema } from '@/lib/cadastroPaciente'
 import { useCreatePatient } from '@/hooks/usePatients'
 import { normalizePhone } from '@/utils/normalizePhone'
 import { useState } from 'react'
@@ -11,6 +13,7 @@ const schema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   phone: z.string().min(10, 'Telefone invalido').max(20, 'Telefone invalido'),
   gender: z.enum(['M', 'F']).optional(),
+  ...cadastroSchema,
 })
 
 type FormData = z.infer<typeof schema>
@@ -39,6 +42,11 @@ export function CreatePatientModal({ open, onClose, onSuccess }: CreatePatientMo
         name: data.name,
         phone: normalizePhone(data.phone),
         gender: data.gender as 'M' | 'F',
+        // So vao quando preenchidos: mandar string vazia gravaria NULL, que da
+        // no mesmo, mas o payload fica dizendo o que a atendente informou.
+        ...(data.cpf ? { cpf: data.cpf } : {}),
+        ...(data.birth_date ? { birth_date: data.birth_date } : {}),
+        ...(data.email ? { email: data.email } : {}),
       })
       onSuccess?.(result.status, result.patient.name ?? data.name)
       reset()
@@ -99,6 +107,8 @@ export function CreatePatientModal({ open, onClose, onSuccess }: CreatePatientMo
             ))}
           </div>
         </div>
+
+        <CadastroFields register={register} errors={errors} />
 
         {serverError && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">

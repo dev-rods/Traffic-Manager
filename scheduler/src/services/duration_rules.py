@@ -31,14 +31,24 @@ DEFAULT_DURATION_RULES = {
 
 
 def arredonda_para_passo(minutos: int, passo: int) -> int:
-    """O menor múltiplo de `passo` que não é menor que `minutos`.
+    """O múltiplo de `passo` MAIS PRÓXIMO de `minutos`.
+
+    Era para cima, e arredondava sempre contra a agenda: 17 minutos (axilas 5 +
+    virilha 12) viravam 20, e a clínica perdia 3 minutos de sala em toda sessão
+    dessa combinação. Por decisão do André em 07/09/2026, passa a ser o mais
+    próximo - 17 vira 15, 18 vira 20.
+
+    Empate vai para cima. Só acontece com passo par (com passo 5 o meio seria
+    17,5, que não existe em minutos inteiros), e nesse caso a sessão mais longa
+    é o erro menos ruim: sobra sala, em vez de a próxima paciente esperar.
 
     Passo inválido devolve o valor intacto: uma configuração ruim não pode
     zerar a duração de um agendamento.
     """
+    minutos, passo = int(minutos), int(passo)
     if passo <= 0:
-        return int(minutos)
-    return -(-int(minutos) // int(passo)) * int(passo)
+        return minutos
+    return ((minutos + passo // 2) // passo) * passo
 
 
 def duracao_da_sessao(soma_minutos, rules: Optional[Dict] = None) -> int:
@@ -67,6 +77,24 @@ def duracao_da_sessao(soma_minutos, rules: Optional[Dict] = None) -> int:
     return max(piso, min(teto, arredonda_para_passo(bruto, passo)))
 
 
+def normaliza_pares(service_area_pairs) -> List[Dict]:
+    """Pares de serviço+área em `service_id`/`area_id`, venham como vierem.
+
+    O corpo HTTP fala camelCase e o banco fala snake_case. Ter a conversão em um
+    lugar só é o que impede um chamador novo de repetir o erro - e o erro aqui é
+    mudo: par descartado não levanta, só soma zero.
+    """
+    normalizados = []
+    for par in service_area_pairs or []:
+        if not isinstance(par, dict):
+            continue
+        service_id = par.get("service_id") or par.get("serviceId")
+        area_id = par.get("area_id") or par.get("areaId")
+        if service_id and area_id:
+            normalizados.append({"service_id": service_id, "area_id": area_id})
+    return normalizados
+
+
 def soma_das_areas(db, service_area_pairs: List[Dict]) -> int:
     """Soma bruta das durações das áreas escolhidas, antes de qualquer limite.
 
@@ -76,8 +104,14 @@ def soma_das_areas(db, service_area_pairs: List[Dict]) -> int:
 
     Par que não casar com nenhuma linha simplesmente não soma: é área removida
     do catálogo, e derrubar o agendamento por isso seria pior.
+
+    Aceita as duas grafias de chave. A edição de agendamento passava o corpo
+    HTTP cru, em camelCase, e o filtro descartava TODOS os pares em silêncio: a
+    soma dava 0, o piso de 15 assumia, e um agendamento com quatro áreas somando
+    35 minutos era salvo com 15. A criação normalizava, a edição não - as duas
+    metades do mesmo fluxo discordando sem ninguém perceber.
     """
-    pares = [p for p in (service_area_pairs or []) if p.get("service_id") and p.get("area_id")]
+    pares = normaliza_pares(service_area_pairs)
     if not pares:
         return 0
 

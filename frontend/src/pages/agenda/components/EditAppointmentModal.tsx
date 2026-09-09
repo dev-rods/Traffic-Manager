@@ -8,6 +8,9 @@ import { calculaDuracao } from '@/lib/duracao'
 import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
+import { TimeField } from './TimeField'
+import { ObservacaoField } from './ObservacaoField'
+import { ehHorarioValido } from '@/lib/horario'
 import type { Appointment, UpdateAppointmentPayload } from '@/types'
 
 interface EditAppointmentModalProps {
@@ -125,6 +128,10 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (time && !ehHorarioValido(time)) {
+      setError('Horário inválido. Use o formato HH:MM.')
+      return
+    }
     if (!date || !time) {
       setError('Data e horário são obrigatórios.')
       return
@@ -251,38 +258,13 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           </div>
         )}
 
-        {/* Time slot picker */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Horário</label>
-          {!date || !serviceId ? (
-            <p className="text-sm text-gray-300 py-3">Selecione data e serviço para ver horários</p>
-          ) : slotsLoading ? (
-            <div className="flex items-center gap-2 py-3">
-              <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-gray-400">Carregando horários...</span>
-            </div>
-          ) : slotsWithCurrent.length === 0 ? (
-            <p className="text-sm text-gray-400 py-3">Nenhum horário disponível para esta data</p>
-          ) : (
-            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-              {slotsWithCurrent.map((slot) => (
-                <button
-                  key={slot}
-                  type="button"
-                  onClick={() => setTime(slot)}
-                  className={[
-                    'px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
-                    time === slot
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                  ].join(' ')}
-                >
-                  {slot}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <TimeField
+          value={time}
+          onChange={setTime}
+          slots={slotsWithCurrent}
+          loading={slotsLoading}
+          enabled={Boolean(date && serviceId)}
+        />
 
         {/* Discount section */}
         <div>
@@ -360,17 +342,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           )
         })()}
 
-        {/* Notes */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Observações</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-            placeholder="Observações sobre o agendamento..."
-            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
-          />
-        </div>
+        <ObservacaoField value={notes} onChange={setNotes} />
 
         {/* Reschedule warning */}
         {(dateChanged || timeChanged) && (

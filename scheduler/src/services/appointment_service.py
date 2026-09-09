@@ -44,9 +44,10 @@ class AppointmentService:
         original_price_cents: Optional[int] = None,
         final_price_cents: Optional[int] = None,
         full_name: Optional[str] = None,
+        notes: Optional[str] = None,
     ) -> Dict[str, Any]:
         # 1. Get or create patient
-        patient = self._get_or_create_patient(clinic_id, phone)
+        patient = self._get_or_create_patient(clinic_id, phone, full_name)
         patient_id = str(patient["id"])
 
         # 2. Resolve service list and duration
@@ -149,14 +150,14 @@ class AppointmentService:
                 appointment_date, start_time, end_time,
                 total_duration_minutes,
                 discount_pct, discount_reason, original_price_cents, final_price_cents,
-                full_name,
+                full_name, notes,
                 status, created_at, updated_at, version
             ) VALUES (
                 %s, %s::uuid, %s::uuid, %s::uuid,
                 %s, %s::time, %s::time,
                 %s,
                 %s, %s, %s, %s,
-                %s,
+                %s, %s,
                 'CONFIRMED', NOW(), NOW(), 1
             )
             RETURNING *
@@ -165,7 +166,7 @@ class AppointmentService:
              date, time, end_time,
              duration_minutes,
              discount_pct, discount_reason, original_price_cents, final_price_cents,
-             full_name),
+             full_name, (notes or None)),
         )
 
         if not result:
@@ -628,9 +629,22 @@ class AppointmentService:
 
         return appointments
 
-    def _get_or_create_patient(self, clinic_id: str, phone: str) -> Dict[str, Any]:
+    def _get_or_create_patient(self, clinic_id: str, phone: str,
+                               full_name: Optional[str] = None) -> Dict[str, Any]:
+        """O paciente do agendamento, criado se ainda não existir.
+
+        O nome entra junto. Antes o INSERT levava só clínica e telefone, e todo
+        paciente novo nascia anônimo: a agenda mostrava a linha sem nome, e o
+        painel de pacientes também. Isso valia para o bot e para o painel - o
+        `full_name` chegava até aqui e era descartado na porta.
+
+        Nome já cadastrado NÃO é sobrescrito. Quem está no sistema pode ter sido
+        corrigido à mão, e o que vem no agendamento é o que a pessoa digitou no
+        WhatsApp naquele dia - não é mais confiável que a clínica.
+        """
         from src.utils.phone import normalize_phone
         phone = normalize_phone(phone)
+        nome = (full_name or "").strip() or None
 
         # Lookup includes soft-deleted records so we can restore in place
         # and avoid violating the UNIQUE(clinic_id, phone) constraint.
@@ -642,6 +656,15 @@ class AppointmentService:
         if patients:
             existing = patients[0]
             if existing.get("deleted_at") is None:
+                # Cadastro sem nome é o rastro do defeito antigo. Preencher na
+                # primeira oportunidade evita que ele fique anônimo para sempre.
+                if nome and not (existing.get("name") or "").strip():
+                    atualizado = self.db.execute_write_returning(
+                        "UPDATE scheduler.patients SET name = %s, updated_at = NOW() "
+                        "WHERE id = %s::uuid RETURNING *",
+                        (nome, str(existing["id"])),
+                    )
+                    return atualizado or existing
                 return existing
 
             # Soft-deleted patient came back — restore in place
@@ -661,11 +684,11 @@ class AppointmentService:
 
         result = self.db.execute_write_returning(
             """
-            INSERT INTO scheduler.patients (clinic_id, phone, created_at, updated_at)
-            VALUES (%s, %s, NOW(), NOW())
+            INSERT INTO scheduler.patients (clinic_id, phone, name, created_at, updated_at)
+            VALUES (%s, %s, %s, NOW(), NOW())
             RETURNING *
             """,
-            (clinic_id, phone),
+            (clinic_id, phone, nome),
         )
 
         return result

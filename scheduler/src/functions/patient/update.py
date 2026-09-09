@@ -4,6 +4,7 @@ from datetime import datetime, date, time
 
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
 from src.utils.phone import normalize_phone
+from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
 from src.services.db.postgres import PostgresService
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,10 @@ def handler(event, context):
             })
 
         # Build dynamic SET clause
-        allowed_fields = {"name", "phone", "gender"}
+        # `birth_date` e `cpf` entram aqui porque a clinica precisa deles para
+        # nota e cadastro, e ate agora so o bot conseguia grava-los - quem
+        # chegou por outro caminho ficava sem, sem forma de corrigir pela tela.
+        allowed_fields = {"name", "phone", "gender", "birth_date", "cpf", "email"}
         sets = []
         params = []
         for field in allowed_fields:
@@ -74,6 +78,19 @@ def handler(event, context):
                     })
                 if field == "phone" and val:
                     val = normalize_phone(val)
+                if field == "cpf":
+                    val = normaliza_cpf(val)
+                    if val is False:
+                        return http_response(400, {
+                            "status": "ERROR", "message": "CPF deve ter 11 digitos"})
+                if field == "birth_date":
+                    val = normaliza_data_nascimento(val)
+                    if val is False:
+                        return http_response(400, {
+                            "status": "ERROR",
+                            "message": "Data de nascimento invalida"})
+                if field == "email":
+                    val = (str(val).strip() or None) if val else None
                 sets.append(f"{field} = %s")
                 params.append(val)
 

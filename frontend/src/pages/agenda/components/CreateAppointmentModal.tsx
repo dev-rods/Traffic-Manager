@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { DateSelect } from '@/components/ui/DateSelect'
 import { Input } from '@/components/ui/Input'
+import { TimeField } from './TimeField'
+import { ObservacaoField } from './ObservacaoField'
+import { ehHorarioValido } from '@/lib/horario'
 import { Button } from '@/components/ui/Button'
 import { useCreateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
@@ -29,6 +32,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
 
   const [date, setDate] = useState(initialDate ?? '')
   const [time, setTime] = useState(initialTime ?? '')
+  const [notes, setNotes] = useState('')
   const [serviceId, setServiceId] = useState(() =>
     services?.length === 1 ? services[0].id : ''
   )
@@ -175,6 +179,13 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
       setError('Preencha todos os campos obrigatorios.')
       return
     }
+    // O horário agora pode ser digitado. `<input type="time">` cobre o teclado,
+    // mas não o que chega colado ou vindo de fora - e uma hora malformada só
+    // apareceria como 500 no backend.
+    if (!ehHorarioValido(time)) {
+      setError('Horário inválido. Use o formato HH:MM.')
+      return
+    }
 
     setError(null)
     try {
@@ -189,6 +200,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         date,
         time,
         serviceAreaPairs,
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
         ...(discountMode === 'partnership'
           ? { discountPct: 100, discountReason: 'partnership' }
           : discountMode === 'custom' && customDiscountPct
@@ -400,38 +412,15 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           </div>
         )}
 
-        {/* Time slot picker */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Horario</label>
-          {!date || !serviceId ? (
-            <p className="text-sm text-gray-300 py-3">Selecione data e servico para ver horarios</p>
-          ) : slotsLoading ? (
-            <div className="flex items-center gap-2 py-3">
-              <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-gray-400">Carregando horarios...</span>
-            </div>
-          ) : slots.length === 0 ? (
-            <p className="text-sm text-gray-400 py-3">Nenhum horario disponivel para esta data</p>
-          ) : (
-            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-              {slots.map((slot) => (
-                <button
-                  key={slot}
-                  type="button"
-                  onClick={() => setTime(slot)}
-                  className={[
-                    'px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
-                    time === slot
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                  ].join(' ')}
-                >
-                  {slot}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <ObservacaoField value={notes} onChange={setNotes} />
+
+        <TimeField
+          value={time}
+          onChange={setTime}
+          slots={slots}
+          loading={slotsLoading}
+          enabled={Boolean(date && serviceId)}
+        />
 
         {/* Discount section */}
         <div>

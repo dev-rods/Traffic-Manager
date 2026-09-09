@@ -44,6 +44,11 @@ export interface Patient {
   phone: string
   name: string
   gender: 'M' | 'F'
+  /** Só dígitos, como o backend guarda. Vazio = ainda não informado. */
+  cpf: string | null
+  /** ISO `YYYY-MM-DD`. */
+  birth_date: string | null
+  email: string | null
   deleted_at?: string | null
   created_at: string
   updated_at: string
@@ -53,6 +58,10 @@ export interface CreatePatientPayload {
   name: string
   phone: string
   gender?: 'M' | 'F'
+  /** Opcionais: o cadastro completo raramente existe no primeiro contato. */
+  cpf?: string
+  birth_date?: string
+  email?: string
 }
 
 export interface CreatePatientResponse {
@@ -171,6 +180,8 @@ export interface CreateAppointmentPayload {
   fullName?: string
   discountPct?: number
   discountReason?: string
+  /** Observacao curta da atendente. Aparece no popover da agenda. */
+  notes?: string
 }
 
 export interface UpdateAppointmentPayload {

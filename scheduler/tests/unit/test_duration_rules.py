@@ -35,10 +35,30 @@ class DbFalso:
 
 
 class TestArredondamento(unittest.TestCase):
-    def test_arredonda_para_cima(self):
-        """Para cima de propósito: subestimar sobrepõe agendamentos."""
-        self.assertEqual(arredonda_para_passo(21, 5), 25)
+    def test_arredonda_para_o_mais_proximo(self):
+        """Era para cima, e arredondava sempre contra a agenda.
+
+        A Bruna tinha 17 minutos (axilas 5 + virilha 12) virando 20: a clínica
+        perdia 3 minutos de sala em toda sessão dessa combinação. Decisão do
+        André em 07/09/2026.
+        """
+        self.assertEqual(arredonda_para_passo(17, 5), 15)  # o caso da Bruna
+        self.assertEqual(arredonda_para_passo(18, 5), 20)
+        self.assertEqual(arredonda_para_passo(21, 5), 20)
         self.assertEqual(arredonda_para_passo(24, 5), 25)
+
+    def test_empate_vai_para_cima(self):
+        """Só acontece com passo par - com passo 5 o meio seria 17,5, que não
+        existe em minutos inteiros. Sobrar sala é melhor que a próxima esperar.
+        """
+        self.assertEqual(arredonda_para_passo(2, 4), 4)
+        self.assertEqual(arredonda_para_passo(5, 10), 10)
+
+    def test_arredondar_para_baixo_nunca_zera_a_sessao(self):
+        """`arredonda_para_passo(2, 5)` é 0, e sozinho isso seria uma sessão de
+        duração nenhuma. Quem impede é o piso, aplicado depois."""
+        self.assertEqual(arredonda_para_passo(2, 5), 0)
+        self.assertEqual(duracao_da_sessao(2), 15)
 
     def test_multiplo_exato_nao_muda(self):
         self.assertEqual(arredonda_para_passo(25, 5), 25)
@@ -58,9 +78,10 @@ class TestPisoTetoPasso(unittest.TestCase):
         self.assertEqual(duracao_da_sessao(60), 50)
         self.assertEqual(duracao_da_sessao(600), 50)
 
-    def test_no_meio_arredonda_para_multiplo_de_cinco(self):
+    def test_no_meio_arredonda_para_o_multiplo_mais_proximo(self):
+        self.assertEqual(duracao_da_sessao(17), 15)
         self.assertEqual(duracao_da_sessao(24), 25)
-        self.assertEqual(duracao_da_sessao(31), 35)
+        self.assertEqual(duracao_da_sessao(31), 30)
         self.assertEqual(duracao_da_sessao(35), 35)
 
     def test_resultado_e_sempre_multiplo_do_passo(self):
@@ -95,7 +116,8 @@ class TestRegrasDaClinica(unittest.TestCase):
         regras = {"floor_minutes": 30, "ceiling_minutes": 90, "step_minutes": 10, "is_active": True}
 
         self.assertEqual(duracao_da_sessao(12, regras), 30)
-        self.assertEqual(duracao_da_sessao(62, regras), 70)
+        self.assertEqual(duracao_da_sessao(62, regras), 60)
+        self.assertEqual(duracao_da_sessao(67, regras), 70)
         self.assertEqual(duracao_da_sessao(200, regras), 90)
 
     def test_regra_inativa_cai_no_padrao(self):
@@ -159,3 +181,34 @@ class TestPadrao(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestContratoComOFrontend(unittest.TestCase):
+    """A MESMA tabela existe em frontend/src/lib/duracao.test.ts.
+
+    A regra de duração vive em duas linguagens porque a tela precisa mostrar o
+    horário de fim antes de salvar. Divergindo, a tela promete uma coisa e o
+    banco grava outra - e o paciente é quem descobre. Esta tabela é o contrato:
+    mudou de um lado, muda do outro, e os dois testes quebram juntos.
+    """
+
+    CASOS = (
+        (0, 15),
+        (2, 15),
+        (12, 15),
+        (17, 15),
+        (18, 20),
+        (21, 20),
+        (24, 25),
+        (31, 30),
+        (35, 35),
+        (37, 35),
+        (38, 40),
+        (52, 50),
+        (200, 50),
+    )
+
+    def test_tabela_de_referencia(self):
+        for bruto, esperado in self.CASOS:
+            with self.subTest(bruto=bruto):
+                self.assertEqual(duracao_da_sessao(bruto), esperado)
