@@ -50,6 +50,7 @@ function AppointmentBlock({
   const displayName = a.patient_name || a.full_name || 'Sem nome'
   const serviceLine = [a.service_name, a.areas].filter(Boolean).join(' · ')
   const isPartnership = a.discount_reason === 'partnership'
+  const isPrimeira = a.is_first_visit
 
   return (
     <button
@@ -61,9 +62,14 @@ function AppointmentBlock({
       style={appointmentStyle(a)}
       className={[
         'w-full text-left rounded-md px-2 py-1 border-l-3 overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
+        // Parceria vence a estreia: quem vem por parceria quase sempre esta
+        // vindo pela primeira vez, e as duas cores no mesmo card nao cabem.
+        // A que muda o atendimento e a parceria.
         isPartnership
           ? 'bg-amber-50 border-l-amber-400 text-amber-800'
-          : 'bg-brand-50 border-l-brand-500 text-brand-900',
+          : isPrimeira
+            ? 'bg-violet-50 border-l-violet-400 text-violet-900'
+            : 'bg-brand-50 border-l-brand-500 text-brand-900',
       ].join(' ')}
     >
       {/* O horário ao lado do nome. Sem ele, acompanhar quem entra às 14h
@@ -73,6 +79,16 @@ function AppointmentBlock({
       <p className="text-xs font-semibold truncate leading-tight">
         <span className="tabular-nums opacity-70">{a.start_time.slice(0, 5)}</span>
         {' '}
+        {/* Cor sozinha nao basta: quem tem daltonismo, ou olha a agenda no
+            celular sob sol, precisa distinguir tambem. */}
+        {isPrimeira && !isPartnership && (
+          <span
+            title="Primeira vez na clínica"
+            className="inline-block px-1 rounded bg-violet-200/70 text-[10px] font-bold align-middle mr-0.5"
+          >
+            1ª
+          </span>
+        )}
         {displayName}
       </p>
       {serviceLine && (

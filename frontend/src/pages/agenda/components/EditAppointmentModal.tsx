@@ -27,6 +27,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const [date, setDate] = useState(appointment?.appointment_date ?? '')
   const [time, setTime] = useState(appointment?.start_time.slice(0, 5) ?? '')
   const [notes, setNotes] = useState(appointment?.notes ?? '')
+  const [primeiraVisita, setPrimeiraVisita] = useState(appointment?.is_first_visit ?? false)
   const [serviceId, setServiceId] = useState(appointment?.service_id ?? '')
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>(initialAreaIds)
   const [prevServiceId, setPrevServiceId] = useState(serviceId)
@@ -102,6 +103,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const dateChanged = date !== a.appointment_date
   const timeChanged = time !== a.start_time.slice(0, 5)
   const notesChanged = notes !== (a.notes ?? '')
+  const primeiraChanged = primeiraVisita !== (a.is_first_visit ?? false)
   const serviceChanged = serviceId !== a.service_id
   const areasChanged = (() => {
     const sorted = [...selectedAreaIds].sort()
@@ -115,7 +117,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     return false
   })()
 
-  const hasChanges = dateChanged || timeChanged || notesChanged || serviceChanged || areasChanged || discountChanged
+  const hasChanges = dateChanged || timeChanged || primeiraChanged || notesChanged || serviceChanged || areasChanged || discountChanged
 
   const toggleArea = (areaId: string) => {
     setSelectedAreaIds((prev) =>
@@ -159,6 +161,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
       if (dateChanged) payload.date = date
       if (timeChanged) payload.time = time
       if (notesChanged) payload.notes = notes
+      if (primeiraChanged) payload.isFirstVisit = primeiraVisita
 
       if (serviceChanged || areasChanged) {
         payload.serviceId = serviceId
@@ -341,6 +344,18 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
             </div>
           )
         })()}
+
+        {/* A marca e automatica na criacao, mas quem manda e a atendente: a
+            pessoa pode ter vindo antes por fora do sistema, e so ela sabe. */}
+        <label className="flex items-center gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={primeiraVisita}
+            onChange={(e) => setPrimeiraVisita(e.target.checked)}
+            className="accent-violet-500 w-4 h-4"
+          />
+          <span className="text-sm text-gray-700">Primeira vez na clínica</span>
+        </label>
 
         <ObservacaoField value={notes} onChange={setNotes} />
 

@@ -3,6 +3,7 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
+from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
 
@@ -173,6 +174,19 @@ class AppointmentService:
             raise Exception("Erro ao criar agendamento")
 
         appointment_id = str(result["id"])
+
+        # Estreia: marcada aqui, no unico caminho por onde todo agendamento
+        # passa - bot, painel e importacao. Marcar so no bot deixaria a agenda
+        # mentindo pela metade, porque uma primeira vez marcada pela recepcao e
+        # igualmente uma primeira vez.
+        #
+        # Depois do INSERT e por isso `ignorar_id`: neste ponto o proprio
+        # agendamento ja esta no banco e contaria a si mesmo.
+        if e_primeira_visita(self.db, clinic_id, phone, ignorar_id=appointment_id):
+            self.db.execute_write(
+                "UPDATE scheduler.appointments SET is_first_visit = TRUE "
+                "WHERE id = %s::uuid", (appointment_id,))
+            result["is_first_visit"] = True
 
         # 7. Insert into junction tables
         if service_area_pairs:
@@ -348,6 +362,9 @@ class AppointmentService:
             raise OptimisticLockError("Agendamento foi modificado por outro processo")
 
         # 6. Cancel old reminder and schedule new
+        # A estreia passa para a proxima sessao confirmada, se houver.
+        passa_a_marca_adiante(self.db, appointment_id)
+
         if self.reminder_service:
             try:
                 self.reminder_service.cancel_reminder(appointment_id)
@@ -552,6 +569,9 @@ class AppointmentService:
 
         if not result:
             raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou já cancelado")
+
+        # A estreia passa para a proxima sessao confirmada, se houver.
+        passa_a_marca_adiante(self.db, appointment_id)
 
         if self.reminder_service:
             try:

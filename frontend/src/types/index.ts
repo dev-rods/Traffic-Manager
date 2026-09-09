@@ -145,6 +145,8 @@ export interface Appointment {
   end_time: string           // HH:MM:SS
   status: AppointmentStatus
   notes: string | null
+  /** Marca visual na agenda: a pessoa esta pisando na clinica pela primeira vez. */
+  is_first_visit: boolean
   patient_name: string | null
   patient_phone: string | null
   service_name: string | null
@@ -185,6 +187,8 @@ export interface CreateAppointmentPayload {
 }
 
 export interface UpdateAppointmentPayload {
+  /** Desmarcar quando a pessoa ja veio antes por fora do sistema. */
+  isFirstVisit?: boolean
   status?: AppointmentStatus
   notes?: string
   date?: string
