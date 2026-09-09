@@ -12,6 +12,7 @@ from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
 from src.services.bot_policy import CAMPO_DE_PAUSA, PAUSA_HANDOFF, esta_pausado
 from src.services.calendario import bloco_de_contexto
+from src.services.preco_minimo import preco_minimo_por_area
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
 from src.services.roteador import exige_consulta, intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
@@ -564,6 +565,9 @@ class ConversationAgent:
             "clinic_phone": clinic.get("phone") or "",
             "collected_data_summary": "",
             "single_service_hint": single_service_hint,
+            # O valor vem do banco, nao do texto do prompt. Ver preco_minimo.py:
+            # numero escrito no template envelhece calado quando a tabela muda.
+            "preco_minimo": preco_minimo_por_area(self.db, clinic_id),
         }
 
         system_prompt = self.template_service.get_and_render(clinic_id, "AI_SYSTEM_PROMPT", variables)

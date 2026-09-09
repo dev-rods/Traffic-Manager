@@ -208,3 +208,52 @@ class TestFatosDeAgenda(unittest.TestCase):
     def test_vazio_e_none(self):
         self.assertEqual(fatos_de_agenda(set()), set())
         self.assertEqual(fatos_de_agenda(None), set())
+
+
+class TestDinheiroDeTool(unittest.TestCase):
+    """Preço devolvido por tool não pode ser acusado de fato sem origem.
+
+    Descoberto em 06/09/2026 simulando a saudação: o bot dizia "a partir de
+    R$ 65" com `list_areas` tendo devolvido `price_display: "R$ 65,00"`, e o
+    verificador acusava mesmo assim.
+
+    A causa eram DUAS normalizações que discordavam. A resposta do modelo
+    passava por `_DINHEIRO`; o valor da tool caía no ramo de string, que só
+    procurava data. Agora é a mesma função dos dois lados.
+    """
+
+    def test_o_caso_da_saudacao(self):
+        resposta = "Sessão avulsa a partir de R$ 65 por área."
+        tools = [{"areas": [{"name": "Buço", "price_display": "R$ 65,00"}]}]
+
+        self.assertEqual(fatos_sem_origem(resposta, tools), set())
+
+    def test_valor_com_centavos_dos_dois_lados(self):
+        resposta = "Total: R$ 220,50"
+        tools = [{"discounted_price_display": "R$ 220,50"}]
+
+        self.assertEqual(fatos_sem_origem(resposta, tools), set())
+
+    def test_milhar_casa(self):
+        self.assertEqual(
+            fatos_sem_origem("Fica R$ 1.234,56", [{"price_display": "R$ 1.234,56"}]),
+            set())
+
+    def test_preco_que_nenhuma_tool_devolveu_continua_acusado(self):
+        """O guardrail não pode virar permissivo: valor inventado segue pegando."""
+        resposta = "Sessão avulsa a partir de R$ 39 por área."
+        tools = [{"areas": [{"name": "Buço", "price_display": "R$ 65,00"}]}]
+
+        self.assertIn("R$39.00", fatos_sem_origem(resposta, tools))
+
+    def test_campo_com_data_e_valor_junto(self):
+        """`discount_message` traz os dois. O `elif` antigo pegaria só um."""
+        tools = [{"discount_message": "De R$ 245,00 por R$ 220,50 até 23/09"}]
+
+        self.assertEqual(fatos_sem_origem("Fica R$ 220,50", tools), set())
+
+    def test_centavos_numericos_continuam_funcionando(self):
+        """O caminho antigo, por chave `*_cents`, não pode ter quebrado."""
+        self.assertEqual(
+            fatos_sem_origem("Total: R$ 245,00", [{"original_price_cents": 24500}]),
+            set())

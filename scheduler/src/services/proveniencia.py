@@ -106,9 +106,7 @@ def fatos_sensiveis(texto, ano=None):
         for minutos in _DESLOCAMENTO.findall(trecho):
             achados.discard(f"duracao:{int(minutos)}")
 
-        for inteiro, centavos in _DINHEIRO.findall(trecho):
-            valor = float(inteiro.replace(".", "")) + int(centavos or 0) / 100
-            achados.add(f"R${valor:.2f}")
+        achados |= dinheiro_no_texto(trecho)
 
         # "Confirmado: o horário 07:45 está disponível" abre com a palavra como
         # interjeição - é o bot concordando, não afirmando o estado de uma
@@ -122,13 +120,38 @@ def fatos_sensiveis(texto, ano=None):
     return achados
 
 
+def dinheiro_no_texto(texto):
+    """Valores em reais de um texto, normalizados.
+
+    UMA funcao para os dois lados da comparacao. Antes a resposta do modelo era
+    normalizada aqui e o valor da tool em `_valor_simples`, e as duas rotinas
+    divergiam: o bot dizia "R$ 65" (virava `R$65.00`) e a tool devolvia
+    `price_display: "R$ 65,00"`, que caia no ramo de string e so era vasculhado
+    por datas. Resultado: TODO preco vindo de tool era acusado como fato sem
+    origem, em toda mensagem que citasse valor.
+
+    Nao bloqueava - dinheiro so gera aviso -, mas poluia o log exatamente na
+    classe de fato que mais se quer vigiar quando o bot atende mais gente.
+    """
+    achados = set()
+    for inteiro, centavos in _DINHEIRO.findall(texto or ""):
+        valor = float(inteiro.replace(".", "")) + int(centavos or 0) / 100
+        achados.add(f"R${valor:.2f}")
+    return achados
+
+
 def _frases_afirmativas(texto):
-    """Separa o texto em frases, descartando as interrogativas.
+    r"""Separa o texto em frases, descartando as interrogativas.
 
     "Qual horário prefere?" não afirma horário nenhum - cobrar origem dela
     faria o guardrail disparar em conversa normal.
+
+    O `(?!\d)` impede que o separador de milhar vire fim de frase. Sem ele,
+    "R$ 1.234,56" era partido em "R$ 1" e "234,56", e o valor extraído virava
+    R$ 1,00 - que nenhuma tool respaldaria. Decimal solto ("3.5 cm") tinha o
+    mesmo problema.
     """
-    for frase in re.split(r"(?<=[.!?\n])\s*", texto or ""):
+    for frase in re.split(r"(?<=[.!?\n])(?!\d)\s*", texto or ""):
         if frase.strip() and not frase.rstrip().endswith("?"):
             yield frase
 
@@ -188,6 +211,12 @@ def _valor_simples(chave, valor, encontrados):
             achado = _data(d, m, a, date.today().year)
             if achado:
                 encontrados.add(achado)
+
+    # Dinheiro pode vir em QUALQUER campo de texto, e vem: `price_display`,
+    # `original_price_display`, `discount_message`. Fora do elif porque as
+    # chaves acima nao se excluem - um campo pode ter data e valor.
+    if isinstance(valor, str):
+        encontrados |= dinheiro_no_texto(texto)
 
 
 _FATO_DE_AGENDA = re.compile(r"^(?:\d{4}-\d{2}-\d{2}|\d{2}:\d{2})$")
