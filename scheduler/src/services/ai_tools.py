@@ -4,6 +4,7 @@ import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
+from src.services.primeira_visita import e_primeira_visita
 from src.services.duration_rules import calcula_duracao
 
 logger = logging.getLogger(__name__)
@@ -864,14 +865,10 @@ class ToolExecutor:
                 "price_display": f"R$ {total_price_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
             }
 
-        # Check if first session
-        count_rows = self.db.execute_query(
-            """SELECT COUNT(*) as cnt FROM scheduler.appointments a
-               JOIN scheduler.patients p ON a.patient_id = p.id
-               WHERE a.clinic_id = %s AND p.phone = %s AND a.status = 'CONFIRMED'""",
-            (clinic_id, phone),
-        )
-        is_first = int(count_rows[0]["cnt"]) == 0 if count_rows else True
+        # A MESMA funcao que marca a estreia na agenda. Eram duas contas
+        # separadas para a mesma pergunta, e campo gravado que nasce de contas
+        # diferentes diverge em silencio.
+        is_first = e_primeira_visita(self.db, clinic_id, phone)
 
         # Evaluate every applicable rule and pick the best (highest pct) for the patient.
         # Discounts are mutually exclusive — only the winner is applied.

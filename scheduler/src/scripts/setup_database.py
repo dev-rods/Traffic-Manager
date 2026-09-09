@@ -538,6 +538,11 @@ SQL_STATEMENTS = [
     # do bot apagaria o registro de uma mensagem que existe.
     "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_channel VARCHAR(10)",
 
+    # Marca visual na agenda: quem esta pisando na clinica pela primeira vez.
+    # Gravada e nao derivada porque a atendente precisa poder desmarcar - a
+    # pessoa pode ter vindo antes por fora do sistema.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS is_first_visit BOOLEAN NOT NULL DEFAULT FALSE",
+
     # Espelho da lista de conversas do WhatsApp (z-api GET /chats). Existe
     # porque o atendimento humano nao passa pelo webhook: a atendente responde
     # pelo celular, a mensagem chega com LID sem vinculo e e descartada. Sem
