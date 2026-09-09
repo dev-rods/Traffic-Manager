@@ -50,6 +50,18 @@ def handler(event, context):
         name = body.get("name", "").strip()
         phone = body.get("phone", "").strip()
         gender = body.get("gender")
+        # Opcionais: o cadastro completo raramente existe no primeiro contato.
+        # Vazio grava NULL - o campo fica visivelmente pendente na tela, em vez
+        # de parecer preenchido com string vazia.
+        cpf = normaliza_cpf(body.get("cpf"))
+        birth_date = normaliza_data_nascimento(body.get("birth_date"))
+        if cpf is False:
+            return http_response(400, {"status": "ERROR",
+                                       "message": "CPF deve ter 11 digitos"})
+        if birth_date is False:
+            return http_response(400, {"status": "ERROR",
+                                       "message": "Data de nascimento invalida"})
+        email = (body.get("email") or "").strip() or None
 
         if not name:
             return http_response(400, {
@@ -90,10 +102,16 @@ def handler(event, context):
             # Soft-deleted patient with same phone — restore and update fields
             restored = db.execute_write_returning("""
                 UPDATE scheduler.patients
-                SET name = %s, gender = %s, deleted_at = NULL, updated_at = NOW()
+                SET name = %s, gender = %s,
+                    -- COALESCE: restaurar nao pode apagar CPF e nascimento que
+                    -- ja estavam la so porque o formulario veio sem eles.
+                    cpf = COALESCE(%s, cpf),
+                    birth_date = COALESCE(%s::date, birth_date),
+                    email = COALESCE(%s, email),
+                    deleted_at = NULL, updated_at = NOW()
                 WHERE id = %s::uuid
                 RETURNING *
-            """, (name, gender, str(row["id"])))
+            """, (name, gender, cpf, birth_date, email, str(row["id"])))
 
             if not restored:
                 return http_response(500, {
@@ -109,10 +127,10 @@ def handler(event, context):
             })
 
         result = db.execute_write_returning("""
-            INSERT INTO scheduler.patients (clinic_id, name, phone, gender, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, NOW(), NOW())
+            INSERT INTO scheduler.patients (clinic_id, name, phone, gender, cpf, birth_date, email, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s::date, %s, NOW(), NOW())
             RETURNING *
-        """, (clinic_id, name, phone, gender))
+        """, (clinic_id, name, phone, gender, cpf, birth_date, email))
 
         if not result:
             return http_response(500, {
