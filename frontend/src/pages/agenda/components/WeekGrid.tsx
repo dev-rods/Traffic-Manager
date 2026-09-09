@@ -65,10 +65,19 @@ function AppointmentBlock({
         // Parceria vence a estreia: quem vem por parceria quase sempre esta
         // vindo pela primeira vez, e as duas cores no mesmo card nao cabem.
         // A que muda o atendimento e a parceria.
+        //
+        // Fucsia na estreia. Violeta ficava perto demais do azul padrao para
+        // distinguir de relance - que e como a agenda e lida.
+        //
+        // Vermelho foi descartado apesar de o grid nunca mostrar cancelado
+        // (ele filtra `status !== 'CANCELLED'`): vermelho ja significa
+        // cancelado no popover e na acao de cancelar, e a mesma cor com dois
+        // sentidos na mesma tela cobra do usuario lembrar em qual metade ele
+        // esta. Fucsia nao disputa com azul, ambar, vermelho nem verde.
         isPartnership
           ? 'bg-amber-50 border-l-amber-400 text-amber-800'
           : isPrimeira
-            ? 'bg-violet-50 border-l-violet-400 text-violet-900'
+            ? 'bg-fuchsia-50 border-l-fuchsia-500 text-fuchsia-900'
             : 'bg-brand-50 border-l-brand-500 text-brand-900',
       ].join(' ')}
     >
@@ -84,7 +93,7 @@ function AppointmentBlock({
         {isPrimeira && !isPartnership && (
           <span
             title="Primeira vez na clínica"
-            className="inline-block px-1 rounded bg-violet-200/70 text-[10px] font-bold align-middle mr-0.5"
+            className="inline-block px-1 rounded bg-fuchsia-200/70 text-[10px] font-bold align-middle mr-0.5"
           >
             1ª
           </span>
