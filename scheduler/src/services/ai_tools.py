@@ -692,7 +692,7 @@ class ToolExecutor:
             from src.utils.phone import normalize_phone
 
             cpf_digitos = re.sub(r"\D", "", cpf) if cpf else None
-            self.db.execute_write(
+            linhas = self.db.execute_write(
                 """
                 UPDATE scheduler.patients
                 SET birth_date = COALESCE(%s::date, birth_date),
@@ -704,6 +704,13 @@ class ToolExecutor:
                 (birth_date or None, cpf_digitos or None, email or None,
                  clinic_id, normalize_phone(phone)),
             )
+            if not linhas:
+                # Zero linhas significa que o paciente nao existe. Era o defeito
+                # antigo, e sem este aviso ele voltaria a ser invisivel.
+                logger.warning(
+                    f"[ToolExecutor] Cadastro nao gravado: paciente {phone} nao "
+                    f"encontrado na clinica {clinic_id}"
+                )
         except Exception as e:
             logger.warning(f"[ToolExecutor] Falha ao gravar cadastro do paciente: {e}")
 
@@ -729,16 +736,6 @@ class ToolExecutor:
         original_price_cents = args.get("original_price_cents")
         final_price_cents = args.get("final_price_cents")
 
-        # Dados de cadastro: gravados no paciente, não no agendamento. São opcionais
-        # na tool para o agendamento não falhar se a pessoa se recusar a informar,
-        # mas o prompt instrui a pedir todos antes de chamar.
-        self._salva_cadastro_do_paciente(
-            clinic_id, phone,
-            birth_date=args.get("birth_date"),
-            cpf=args.get("cpf"),
-            email=args.get("email"),
-        )
-
         result = self.appointment_service.create_appointment(
             clinic_id=clinic_id,
             phone=phone,
@@ -753,6 +750,25 @@ class ToolExecutor:
             original_price_cents=original_price_cents,
             final_price_cents=final_price_cents,
         )
+
+        # Dados de cadastro: gravados no paciente, não no agendamento. São
+        # opcionais na tool para o agendamento não falhar se a pessoa se recusar
+        # a informar, mas o prompt instrui a pedir todos antes de chamar.
+        #
+        # DEPOIS de criar o agendamento, e essa ordem é o conserto. Antes vinha
+        # primeiro, e `_salva_cadastro_do_paciente` faz UPDATE: para quem agenda
+        # pela primeira vez o paciente ainda não existia, o UPDATE acertava zero
+        # linhas e CPF, nascimento e e-mail sumiam sem erro nenhum.
+        #
+        # Medido em 08/09/2026: dos 272 pacientes da Essência, 3 tinham CPF - e
+        # os 3 já eram pacientes antes de agendar. Nenhum cadastro novo passou.
+        self._salva_cadastro_do_paciente(
+            clinic_id, phone,
+            birth_date=args.get("birth_date"),
+            cpf=args.get("cpf"),
+            email=args.get("email"),
+        )
+
         return {
             "success": True,
             "appointment_id": str(result.get("id", "")),
