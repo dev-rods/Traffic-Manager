@@ -352,7 +352,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
             type="checkbox"
             checked={primeiraVisita}
             onChange={(e) => setPrimeiraVisita(e.target.checked)}
-            className="accent-violet-500 w-4 h-4"
+            className="accent-fuchsia-500 w-4 h-4"
           />
           <span className="text-sm text-gray-700">Primeira vez na clínica</span>
         </label>
