@@ -1,15 +1,26 @@
 import json
+import os
 import uuid
 import logging
 from datetime import datetime, date
+
+import boto3
 
 from src.utils.http import parse_body, http_response, require_api_key
 from src.services.db.postgres import PostgresService
 from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import get_provider
+from src.services.campanha import DURACAO_PADRAO_DIAS, MAX_DATAS, abre
+from src.services.session_store import abre_campanha
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+def _tabela_de_sessoes():
+    return boto3.resource("dynamodb").Table(
+        os.environ.get("CONVERSATION_SESSIONS_TABLE", "")
+    )
 
 
 def handler(event, context):
@@ -81,6 +92,21 @@ def handler(event, context):
                 "message": "Campo 'sections' e obrigatorio para type=list"
             })
 
+        # Campanha de reagendamento: campo OPCIONAL. Ausente - que e o caso de
+        # toda mensagem manual da atendente - nada muda neste handler.
+        campanha_pedida = body.get("campanha")
+        if campanha_pedida is not None:
+            if not isinstance(campanha_pedida, dict) or not campanha_pedida.get("datas"):
+                return http_response(400, {
+                    "status": "ERROR",
+                    "message": "campanha requer 'datas' com pelo menos uma data",
+                })
+            if len(campanha_pedida["datas"]) > MAX_DATAS:
+                return http_response(400, {
+                    "status": "ERROR",
+                    "message": f"campanha aceita no maximo {MAX_DATAS} datas",
+                })
+
         # 4. Buscar clinica no RDS
         db = PostgresService()
         clinics = db.execute_query(
@@ -95,6 +121,17 @@ def handler(event, context):
             })
 
         clinic = clinics[0]
+
+        # A campanha so existe no ConversationAgent: o bloco de modo e montado
+        # la. Numa clinica que ainda roda a ConversationEngine antiga o disparo
+        # sairia, a campanha seria gravada, e a paciente receberia o fluxo de
+        # lead - boas-vindas e pedido de CPF de quem ja e cadastrada. Barrado
+        # aqui, na origem, em vez de virar log que ninguem le.
+        if campanha_pedida is not None and not clinic.get("use_agent"):
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "campanha exige a clinica com use_agent ativo",
+            })
 
         # 5. Instanciar provider
         provider = get_provider(clinic)
@@ -154,15 +191,37 @@ def handler(event, context):
             except Exception as e:
                 logger.warning(f"Falha ao atualizar last_message_at para {phone}: {e}")
 
+            # Campanha so DEPOIS do envio confirmado. Invertida a ordem, uma
+            # falha de entrega deixaria o bot esperando resposta de uma
+            # mensagem que ninguem recebeu.
+            campanha_aberta = None
+            if campanha_pedida is not None:
+                campanha_aberta = abre_campanha(
+                    _tabela_de_sessoes(), clinic_id, phone,
+                    abre(campanha_pedida["datas"],
+                         dias=int(campanha_pedida.get("dias") or DURACAO_PADRAO_DIAS)),
+                )
+                if not campanha_aberta:
+                    # Nao derruba o envio - a mensagem ja saiu. Mas volta na
+                    # resposta: a paciente recebeu as datas e o bot NAO vai
+                    # responder, entao alguem precisa saber disso.
+                    logger.error(
+                        f"[Send] Mensagem enviada para {phone} mas a campanha nao abriu; "
+                        f"o bot nao respondera esta conversa"
+                    )
+
             logger.info(f"Mensagem {message_id} enviada com sucesso. Provider ID: {response.provider_message_id}")
 
-            return http_response(200, {
+            corpo = {
                 "status": "SUCCESS",
                 "message": "Mensagem enviada com sucesso",
                 "messageId": message_id,
                 "providerMessageId": response.provider_message_id,
                 "messageStatus": "SENT",
-            })
+            }
+            if campanha_aberta is not None:
+                corpo["campanhaAberta"] = campanha_aberta
+            return http_response(200, corpo)
         else:
             tracker.track_outbound(
                 clinic_id=clinic_id,
