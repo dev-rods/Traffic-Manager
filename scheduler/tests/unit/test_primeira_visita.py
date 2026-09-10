@@ -185,6 +185,67 @@ class TestIntegracaoComOAgendamento(unittest.TestCase):
 
         self.assertFalse(any("is_first_visit = TRUE" in s for s in db.escritas))
 
+    def test_painel_desmarcado_nao_marca_nem_pergunta(self):
+        """Decisao do Andre em 09/09/2026: pelo painel o padrao e desmarcado.
+
+        Nao basta nao gravar - a contagem nem deve ser feita, senao um dia
+        alguem a religa "porque ja estava calculada" e o padrao volta sozinho.
+        """
+        from src.services.appointment_service import AppointmentService
+
+        db = DbRoteado()
+        with mock.patch("src.services.appointment_service.e_primeira_visita",
+                        return_value=True) as pergunta:
+            AppointmentService(db).create_appointment(
+                clinic_id=CLINIC, phone=PHONE, service_id="s1",
+                date="2026-09-23", time="14:00",
+                service_area_pairs=[{"service_id": "s1", "area_id": "a1"}],
+                is_first_visit=False)
+
+        pergunta.assert_not_called()
+        self.assertFalse(any("is_first_visit = TRUE" in s for s in db.escritas),
+                         "o painel marcou estreia com a caixinha desmarcada")
+
+    def test_painel_marcado_vence_o_historico_do_banco(self):
+        """Quem esta na recepcao sabe o que o banco nao sabe.
+
+        A clinica atende desde antes do sistema existir: a contagem automatica
+        diria "ja veio" para quem esta estreando no sistema, e vice-versa.
+        """
+        from src.services.appointment_service import AppointmentService
+
+        db = DbRoteado()
+        with mock.patch("src.services.appointment_service.e_primeira_visita",
+                        return_value=False) as pergunta:
+            AppointmentService(db).create_appointment(
+                clinic_id=CLINIC, phone=PHONE, service_id="s1",
+                date="2026-09-23", time="14:00",
+                service_area_pairs=[{"service_id": "s1", "area_id": "a1"}],
+                is_first_visit=True)
+
+        pergunta.assert_not_called()
+        self.assertTrue(any("is_first_visit = TRUE" in s for s in db.escritas))
+
+    def test_o_bot_continua_decidindo_sozinho(self):
+        """O outro lado da mesma regra: sem opiniao, conta.
+
+        Sem isto, trocar o default do painel para False silenciosamente
+        desligaria a marcacao do bot tambem, e ninguem notaria - a agenda so
+        pararia de ter estreias.
+        """
+        from src.services.appointment_service import AppointmentService
+
+        db = DbRoteado()
+        with mock.patch("src.services.appointment_service.e_primeira_visita",
+                        return_value=True) as pergunta:
+            AppointmentService(db).create_appointment(
+                clinic_id=CLINIC, phone=PHONE, service_id="s1",
+                date="2026-09-23", time="14:00",
+                service_area_pairs=[{"service_id": "s1", "area_id": "a1"}])
+
+        pergunta.assert_called_once()
+        self.assertTrue(any("is_first_visit = TRUE" in s for s in db.escritas))
+
     def test_cancelar_passa_a_marca_adiante(self):
         from src.services.appointment_service import AppointmentService
 

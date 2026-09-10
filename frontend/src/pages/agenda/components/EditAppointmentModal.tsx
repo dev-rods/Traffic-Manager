@@ -10,6 +10,7 @@ import { useServiceAreas } from '@/hooks/useAreas'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
 import { TimeField } from './TimeField'
 import { ObservacaoField } from './ObservacaoField'
+import { PrimeiraVisitaField } from './PrimeiraVisitaField'
 import { ehHorarioValido } from '@/lib/horario'
 import type { Appointment, UpdateAppointmentPayload } from '@/types'
 
@@ -345,17 +346,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           )
         })()}
 
-        {/* A marca e automatica na criacao, mas quem manda e a atendente: a
-            pessoa pode ter vindo antes por fora do sistema, e so ela sabe. */}
-        <label className="flex items-center gap-2.5 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={primeiraVisita}
-            onChange={(e) => setPrimeiraVisita(e.target.checked)}
-            className="accent-fuchsia-500 w-4 h-4"
-          />
-          <span className="text-sm text-gray-700">Primeira vez na clínica</span>
-        </label>
+        <PrimeiraVisitaField checked={primeiraVisita} onChange={setPrimeiraVisita} />
 
         <ObservacaoField value={notes} onChange={setNotes} />
 

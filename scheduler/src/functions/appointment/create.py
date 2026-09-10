@@ -102,6 +102,11 @@ def handler(event, context):
             notes=(body.get("notes") or "").strip()[:500] or None,
             discount_pct=body.get("discountPct", 0),
             discount_reason=body.get("discountReason"),
+            # Sempre um booleano, nunca None: pelo painel a estreia e decisao de
+            # quem esta na recepcao, e o padrao e desmarcado. A contagem
+            # automatica so enxerga este banco, e a clinica atende desde antes
+            # dele existir.
+            is_first_visit=bool(body.get("isFirstVisit")),
         )
 
         appointment = _serialize_row(result)

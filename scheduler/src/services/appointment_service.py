@@ -46,7 +46,15 @@ class AppointmentService:
         final_price_cents: Optional[int] = None,
         full_name: Optional[str] = None,
         notes: Optional[str] = None,
+        is_first_visit: Optional[bool] = None,
     ) -> Dict[str, Any]:
+        """`is_first_visit=None` deixa o sistema decidir; um booleano manda.
+
+        O bot passa None: ele conversa com quem chega da landing page e nao tem
+        ninguem para conferir. O painel manda o valor da caixinha, porque quem
+        esta na recepcao sabe de historico que o banco nao tem - pessoa que ja
+        veio antes do sistema existir, ou que remarcou por fora.
+        """
         # 1. Get or create patient
         patient = self._get_or_create_patient(clinic_id, phone, full_name)
         patient_id = str(patient["id"])
@@ -175,14 +183,23 @@ class AppointmentService:
 
         appointment_id = str(result["id"])
 
-        # Estreia: marcada aqui, no unico caminho por onde todo agendamento
-        # passa - bot, painel e importacao. Marcar so no bot deixaria a agenda
-        # mentindo pela metade, porque uma primeira vez marcada pela recepcao e
-        # igualmente uma primeira vez.
+        # Estreia. Quando o chamador nao opina (`None`), o sistema conta os
+        # agendamentos confirmados: e o caso do bot, que atende quem chega da
+        # landing page sem ninguem por perto para conferir.
+        #
+        # O painel opina sempre, e por decisao do Andre em 09/09/2026 opina
+        # False por padrao. A contagem automatica so enxerga o que esta neste
+        # banco, e a clinica atende desde antes dele existir - marcar "primeira
+        # vez" em cliente antiga na frente dela e o erro que custa caro.
         #
         # Depois do INSERT e por isso `ignorar_id`: neste ponto o proprio
         # agendamento ja esta no banco e contaria a si mesmo.
-        if e_primeira_visita(self.db, clinic_id, phone, ignorar_id=appointment_id):
+        estreia = (
+            e_primeira_visita(self.db, clinic_id, phone, ignorar_id=appointment_id)
+            if is_first_visit is None
+            else is_first_visit
+        )
+        if estreia:
             self.db.execute_write(
                 "UPDATE scheduler.appointments SET is_first_visit = TRUE "
                 "WHERE id = %s::uuid", (appointment_id,))
