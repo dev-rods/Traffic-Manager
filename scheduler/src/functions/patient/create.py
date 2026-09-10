@@ -5,6 +5,7 @@ from datetime import datetime, date, time
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
 from src.utils.phone import normalize_phone
 from src.services.db.postgres import PostgresService
+from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

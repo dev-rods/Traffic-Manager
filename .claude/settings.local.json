@@ -49,5 +49,8 @@
       "Bash(grep:*)",
       "Bash(source .env:*)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "google-ads-mcp"
+  ]
 }

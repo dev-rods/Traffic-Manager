@@ -14,22 +14,35 @@ Testar cada handler daria mais, mas custa dublê de AWS e banco para cada um.
 Isto aqui é barato e pega o modo de falha específico: usar sem importar.
 """
 import ast
+import builtins
 import unittest
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2] / "src"
 
-# Só nomes que a análise estática reconhece com segurança: CONSTANTES e funções
-# do projeto. Variável local com nome comum daria falso positivo e o teste
-# viraria ruído - que é como um teste morre.
-def _interessa(nome):
-    return nome.isupper() or nome.startswith(("esta_", "pode_", "por_que_", "deve_"))
+def _nomes_do_alvo(alvo):
+    """Todo nome que uma atribuição liga, inclusive desempacotando tuplas.
+
+    `api_key, error_response = require_api_key(event)` liga DOIS nomes. Enquanto
+    isto olhava só `ast.Name`, os 107 desempacotamentos da base apareciam como
+    indefinidos - e foi por isso que a versão anterior precisou de um filtro de
+    nomes "interessantes" para calar o ruído. O filtro calou junto o erro real:
+    `normaliza_cpf` usado sem import em patient/create, que derrubou o cadastro
+    de pacientes em produção em 09/09/2026.
+    """
+    if isinstance(alvo, ast.Name):
+        yield alvo.id
+    elif isinstance(alvo, (ast.Tuple, ast.List)):
+        for e in alvo.elts:
+            yield from _nomes_do_alvo(e)
+    elif isinstance(alvo, ast.Starred):
+        yield from _nomes_do_alvo(alvo.value)
 
 
 def nomes_nao_resolvidos(caminho):
     arvore = ast.parse(caminho.read_text(encoding="utf-8"))
 
-    definidos = set(dir(__builtins__)) | {"__name__", "__file__", "__doc__"}
+    definidos = set(dir(builtins)) | {"__name__", "__file__", "__doc__"}
     for no in ast.walk(arvore):
         if isinstance(no, (ast.Import, ast.ImportFrom)):
             for alias in no.names:
@@ -38,8 +51,9 @@ def nomes_nao_resolvidos(caminho):
             definidos.add(no.name)
         elif isinstance(no, ast.Assign):
             for alvo in no.targets:
-                if isinstance(alvo, ast.Name):
-                    definidos.add(alvo.id)
+                definidos.update(_nomes_do_alvo(alvo))
+        elif isinstance(no, ast.NamedExpr):
+            definidos.update(_nomes_do_alvo(no.target))
         elif isinstance(no, (ast.AnnAssign, ast.AugAssign)):
             if isinstance(no.target, ast.Name):
                 definidos.add(no.target.id)
@@ -50,17 +64,13 @@ def nomes_nao_resolvidos(caminho):
         elif isinstance(no, ast.ExceptHandler) and no.name:
             definidos.add(no.name)
         elif isinstance(no, (ast.For, ast.comprehension)):
-            alvo = no.target
-            if isinstance(alvo, ast.Name):
-                definidos.add(alvo.id)
-            elif isinstance(alvo, (ast.Tuple, ast.List)):
-                definidos.update(e.id for e in alvo.elts if isinstance(e, ast.Name))
-        elif isinstance(no, ast.withitem) and isinstance(no.optional_vars, ast.Name):
-            definidos.add(no.optional_vars.id)
+            definidos.update(_nomes_do_alvo(no.target))
+        elif isinstance(no, ast.withitem) and no.optional_vars is not None:
+            definidos.update(_nomes_do_alvo(no.optional_vars))
 
     usados = {
         no.id for no in ast.walk(arvore)
-        if isinstance(no, ast.Name) and isinstance(no.ctx, ast.Load) and _interessa(no.id)
+        if isinstance(no, ast.Name) and isinstance(no.ctx, ast.Load)
     }
     return usados - definidos
 
