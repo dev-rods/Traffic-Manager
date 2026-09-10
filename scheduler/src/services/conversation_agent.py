@@ -11,6 +11,7 @@ import boto3
 from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
 from src.services.bot_policy import CAMPO_DE_PAUSA, PAUSA_HANDOFF, esta_pausado
+from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
 from src.services.calendario import bloco_de_contexto
 from src.services.preco_minimo import preco_minimo_por_area
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
@@ -169,7 +170,7 @@ class ConversationAgent:
             return []
 
         # 3. Build system prompt
-        system_prompt = self._build_system_prompt(clinic_id, phone)
+        system_prompt = self._build_system_prompt(clinic_id, phone, session)
 
         # 4. Load conversation history and append user message
         # Sanitize loaded history: sessions saved by older code versions may
@@ -504,8 +505,14 @@ class ConversationAgent:
 
     # ── System prompt ──
 
-    def _build_system_prompt(self, clinic_id, phone):
-        """Build the system prompt with clinic context."""
+    def _build_system_prompt(self, clinic_id, phone, session=None):
+        """Build the system prompt with clinic context.
+
+        `session` entra por causa da campanha de reagendamento: o MODO da
+        conversa e lido do banco, nunca inferido pelo modelo. Modelo inferindo
+        em que fluxo esta pode trocar de fluxo no meio, e o erro chega a
+        paciente como "o bot me pediu o CPF de novo".
+        """
         # Get clinic info
         clinic_rows = self.db.execute_query(
             "SELECT * FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
@@ -624,7 +631,62 @@ class ConversationAgent:
             "Se houver instruções, envie-as ao cliente."
         )
 
+        system_prompt += self._bloco_da_campanha(clinic_id, phone, session)
+
         return system_prompt
+
+    def _bloco_da_campanha(self, clinic_id, phone, session):
+        """O que muda quando a conversa e de campanha - e nada quando nao e.
+
+        Fica no FIM do prompt de proposito: tudo acima e identico nos dois
+        fluxos, entao o prefixo continua compartilhado e o cache do Anthropic
+        segue valendo. Dentro de uma conversa o bloco nao muda (mesma paciente,
+        mesmas datas), entao ele tambem nao invalida cache entre turnos.
+        """
+        if not campanha_viva(session):
+            return ""
+
+        datas = datas_da_campanha(session)
+        nome = ""
+        try:
+            linhas = self.db.execute_query(
+                "SELECT name FROM scheduler.patients "
+                "WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL LIMIT 1",
+                (clinic_id, phone),
+            )
+            if linhas:
+                nome = (linhas[0].get("name") or "").strip()
+        except Exception as e:
+            # Sem o nome o bot so evita chama-la pelo nome. Derrubar a conversa
+            # por causa disso seria trocar o essencial pelo enfeite.
+            logger.error(f"[Campanha] Nao consegui ler o cadastro de {phone}: {e}")
+
+        linha_nome = f"Nome dela (do cadastro): {nome}\n" if nome else ""
+
+        return (
+            "\n═══ CONVERSA DE CAMPANHA ═══\n"
+            "Esta pessoa JÁ É PACIENTE CADASTRADA e acabou de receber de nós a\n"
+            "mensagem com as datas abertas. A conversa começou por nossa iniciativa,\n"
+            "não pela dela.\n"
+            f"{linha_nome}"
+            f"Datas que anunciamos a ela: {', '.join(datas)}\n"
+            "\n"
+            "O que muda nesta conversa:\n"
+            "1. NÃO dê boas-vindas e não se apresente. A conversa já está em andamento.\n"
+            "2. NUNCA peça nome, CPF, data de nascimento ou e-mail. Já temos o cadastro\n"
+            "   dela. Pedir de novo é o erro mais visível que você pode cometer aqui.\n"
+            "3. NÃO anuncie preço, total nem desconto. Só fale de valor se ELA perguntar.\n"
+            "4. Comece confirmando as áreas: chame ultimas_areas_do_paciente e proponha\n"
+            "   as mesmas da última sessão ('as mesmas da última vez?'). Se a tool\n"
+            "   devolver encontrou=false, aí sim pergunte quais áreas ela quer.\n"
+            "5. Ofereça APENAS as datas anunciadas acima. Confirme os horários com\n"
+            "   check_availability e get_time_slots, como sempre.\n"
+            "6. Ao fechar, siga com get_pre_session_instructions normalmente.\n"
+            "\n"
+            "Continua valendo tudo o mais: calculate_discount antes de book_appointment\n"
+            "(o preço gravado tem de estar certo, mesmo sem ser anunciado), get_faq_answer\n"
+            "para dúvidas, e nunca afirmar data ou horário que não veio de uma tool.\n"
+        )
 
     # ── WhatsApp formatting fix ──
 

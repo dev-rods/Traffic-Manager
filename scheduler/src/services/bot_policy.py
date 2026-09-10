@@ -7,6 +7,7 @@ ser testável sem subir webhook.
 import time
 from typing import Dict, Optional
 
+from src.services.campanha import esta_viva as campanha_viva
 from src.utils.phone import normalize_phone
 
 POLICY_ALL = "ALL"
@@ -81,7 +82,15 @@ def should_bot_reply(clinic: Optional[Dict], session: Optional[Dict], phone: str
         return normalize_phone(phone) in piloto
 
     if policy == POLICY_LEADS_ONLY:
-        return bool(session.get("bot_enabled"))
+        # Dois caminhos independentes para a mesma politica, e nenhum sabe do
+        # outro:
+        #   `bot_enabled` - lead da landing page que escreveu para nos.
+        #   campanha viva - paciente cadastrada para quem NOS escrevemos.
+        #
+        # O segundo VENCE, e e por isso que ele nao virou outro `bot_enabled`:
+        # a tabela de sessoes esta sem TTL, entao marca permanente aqui deixaria
+        # um rastro mensal de gente que o bot atende para sempre. Ver campanha.py.
+        return bool(session.get("bot_enabled")) or campanha_viva(session)
 
     # OFF e qualquer valor inesperado falham fechado: só chegariam aqui por
     # escrita manual fora do CHECK da coluna.

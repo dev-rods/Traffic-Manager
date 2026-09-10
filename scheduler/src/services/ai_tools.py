@@ -181,6 +181,24 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "ultimas_areas_do_paciente",
+            "description": (
+                "As areas tratadas na ULTIMA sessao ja realizada desta paciente. "
+                "Use no inicio de uma conversa de campanha para propor as mesmas "
+                "areas da vez anterior em vez de perguntar do zero. Se "
+                "encontrou=false, a paciente nao tem historico e voce deve "
+                "perguntar quais areas ela quer."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_faq_answer",
             "description": "Search the clinic FAQ for an answer to the patient's question. ALWAYS call this FIRST when the patient asks a question (phrases with 'posso', 'pode', 'como funciona', 'quanto custa', 'é possível', etc.) BEFORE calling any booking tools.",
             "parameters": {
@@ -604,6 +622,65 @@ class ToolExecutor:
                 "full_name": appt.get("full_name", ""),
             })
         return {"appointments": result}
+
+    def _tool_ultimas_areas_do_paciente(self, args, clinic_id, phone, ctx):
+        """As areas da ultima sessao JA REALIZADA.
+
+        Sessao futura nao serve: a paciente pode ter agendado outra coisa, e a
+        pergunta aqui e "o que voce fez da ultima vez". Cancelada tambem nao -
+        sessao que nao aconteceu nao tratou area nenhuma.
+
+        Falha fechada em `encontrou: false`: sem historico ou sem resposta do
+        banco, o bot pergunta as areas, que e o que ele faria de qualquer forma.
+        Inventar area errada faria a paciente confirmar tratamento que nao pediu.
+        """
+        try:
+            ultima = self.db.execute_query(
+                """
+                SELECT a.id, a.appointment_date
+                FROM scheduler.appointments a
+                JOIN scheduler.patients p ON p.id = a.patient_id
+                WHERE a.clinic_id = %s AND p.phone = %s
+                  AND a.status = 'CONFIRMED'
+                  AND a.appointment_date < CURRENT_DATE
+                ORDER BY a.appointment_date DESC, a.start_time DESC
+                LIMIT 1
+                """,
+                (clinic_id, phone),
+            )
+            if not ultima:
+                return {"encontrou": False, "areas": []}
+
+            areas = self.db.execute_query(
+                """
+                SELECT area_id, area_name, service_id, service_name
+                FROM scheduler.appointment_service_areas
+                WHERE appointment_id = %s::uuid
+                ORDER BY area_name
+                """,
+                (str(ultima[0]["id"]),),
+            )
+            if not areas:
+                # Agendamento antigo sem area registrada (a importacao do
+                # historico gravou area default). Melhor perguntar.
+                return {"encontrou": False, "areas": []}
+
+            return {
+                "encontrou": True,
+                "data": str(ultima[0]["appointment_date"]),
+                "areas": [
+                    {
+                        "area_id": str(a["area_id"]),
+                        "nome": a["area_name"],
+                        "service_id": str(a["service_id"]),
+                        "servico": a["service_name"],
+                    }
+                    for a in areas
+                ],
+            }
+        except Exception as e:
+            logger.error(f"[ToolExecutor] ultimas_areas_do_paciente falhou para {phone}: {e}")
+            return {"encontrou": False, "areas": []}
 
     def _tool_get_faq_answer(self, args, clinic_id, phone, ctx):
         question = args.get("question", "")

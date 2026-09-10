@@ -50,6 +50,42 @@ def mark_conversation_eligible(table, clinic_id: str, phone: str,
         return False
 
 
+def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
+    """Grava a campanha de reagendamento na sessão da paciente.
+
+    Chamada pelo disparo em massa, DEPOIS de a mensagem sair. Campanha aberta
+    sem mensagem entregue deixa o bot esperando resposta de algo que ninguém
+    recebeu.
+
+    Dentro de `session`, nunca na raiz - a raiz é invisível para quem lê a
+    sessão, e o bot ficaria mudo em silêncio (ver o docstring do módulo).
+
+    Devolve True se gravou. Nunca levanta: falhar aqui não pode derrubar o envio
+    que já aconteceu. Quem chama reporta o resultado para a tela.
+    """
+    pk, sk = f"CLINIC#{clinic_id}", f"PHONE#{phone}"
+    try:
+        item = table.get_item(Key={"pk": pk, "sk": sk}).get("Item") or {}
+        session = item.get("session") or {}
+        session["campanha"] = campanha
+
+        table.put_item(
+            Item={
+                "pk": pk,
+                "sk": sk,
+                "session": session,
+                "clinicId": clinic_id,
+                "phone": phone,
+                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(time.time()))),
+            }
+        )
+        logger.info(f"[SessionStore] Campanha aberta para {phone}")
+        return True
+    except Exception as e:
+        logger.error(f"[SessionStore] Falha ao abrir campanha para {phone}: {e}")
+        return False
+
+
 def vincula_lid(table, clinic_id: str, chat_lid: str, phone: str) -> None:
     """Guarda a quem pertence um LID do WhatsApp.
 

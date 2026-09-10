@@ -28,6 +28,15 @@ FUNCOES = {
             RAIZ / "src" / "services" / "session_store.py",
         ],
     ),
+    # O /send passou a abrir a campanha de reagendamento na sessao. Antes ele
+    # so gravava evento de mensagem, e a role refletia isso.
+    "SendMessage": (
+        RAIZ / "sls" / "functions" / "send" / "interface.yml",
+        [
+            RAIZ / "src" / "functions" / "send" / "handler.py",
+            RAIZ / "src" / "services" / "session_store.py",
+        ],
+    ),
     "ListLeads": (
         RAIZ / "sls" / "functions" / "lead" / "interface.yml",
         [
@@ -62,18 +71,22 @@ def metodos_usados(modulos=None):
     return achados
 
 
+def _bloco_da_funcao(arquivo, funcao):
+    """O trecho do interface.yml que pertence a uma função só."""
+    texto = arquivo.read_text(encoding="utf-8")
+    inicio = texto.index(f"{funcao}:")
+    resto = texto[inicio + len(funcao) + 1:]
+    fim = re.search(r"^\S", resto, re.MULTILINE)
+    return resto[: fim.start()] if fim else resto
+
+
 def acoes_declaradas(arquivo=None, funcao="WhatsAppWebhook"):
     """As ações dentro do bloco WhatsAppWebhook do interface.yml.
 
     O arquivo declara várias funções; ler o arquivo inteiro faria o teste passar
     com a permissão na função errada.
     """
-    texto = (arquivo or INTERFACE).read_text(encoding="utf-8")
-    inicio = texto.index(f"{funcao}:")
-    # A próxima função começa em coluna zero.
-    resto = texto[inicio + len(funcao) + 1:]
-    fim = re.search(r"^\S", resto, re.MULTILINE)
-    bloco = resto[: fim.start()] if fim else resto
+    bloco = _bloco_da_funcao(arquivo or INTERFACE, funcao)
     return set(re.findall(r"-\s+(dynamodb:\w+)", bloco))
 
 
@@ -90,6 +103,20 @@ class TestPermissoesDoWebhook(unittest.TestCase):
                         f"mas {acao} não está na role da {funcao}. "
                         f"Em produção isso é AccessDeniedException, não erro de teste.",
                     )
+
+    def test_o_send_alcanca_a_tabela_de_sessoes(self):
+        """Ação certa na TABELA errada continua sendo AccessDenied.
+
+        `SendMessage` já tinha `PutItem` - na tabela de message-events. O teste
+        de ações acima passaria satisfeito enquanto a abertura da campanha
+        morria em produção, porque ele não olha o Resource. Aqui o alvo é o ARN.
+        """
+        bloco = _bloco_da_funcao(
+            RAIZ / "sls" / "functions" / "send" / "interface.yml", "SendMessage")
+
+        self.assertIn("conversation-sessions", bloco,
+                      "o /send abre a campanha na sessão mas a role não alcança "
+                      "a tabela conversation-sessions")
 
     def test_o_agregador_precisa_de_update_e_delete(self):
         """Prende as duas que faltaram, por nome.
