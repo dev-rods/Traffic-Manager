@@ -4,6 +4,7 @@ import { DateSelect } from '@/components/ui/DateSelect'
 import { Input } from '@/components/ui/Input'
 import { TimeField } from './TimeField'
 import { ObservacaoField } from './ObservacaoField'
+import { PrimeiraVisitaField } from './PrimeiraVisitaField'
 import { ehHorarioValido } from '@/lib/horario'
 import { Button } from '@/components/ui/Button'
 import { useCreateAppointment } from '@/hooks/useAppointments'
@@ -33,6 +34,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   const [date, setDate] = useState(initialDate ?? '')
   const [time, setTime] = useState(initialTime ?? '')
   const [notes, setNotes] = useState('')
+  // Desmarcada por padrao: pelo painel a estreia e decisao da recepcao.
+  const [primeiraVisita, setPrimeiraVisita] = useState(false)
   const [serviceId, setServiceId] = useState(() =>
     services?.length === 1 ? services[0].id : ''
   )
@@ -201,6 +204,9 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         time,
         serviceAreaPairs,
         ...(notes.trim() ? { notes: notes.trim() } : {}),
+        // Sempre enviado, inclusive `false`: omitir devolveria a decisao ao
+        // backend, que e exatamente o que se reverteu.
+        isFirstVisit: primeiraVisita,
         ...(discountMode === 'partnership'
           ? { discountPct: 100, discountReason: 'partnership' }
           : discountMode === 'custom' && customDiscountPct
@@ -411,6 +417,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
             </div>
           </div>
         )}
+
+        <PrimeiraVisitaField checked={primeiraVisita} onChange={setPrimeiraVisita} />
 
         <ObservacaoField value={notes} onChange={setNotes} />
 

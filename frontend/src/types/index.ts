@@ -184,6 +184,12 @@ export interface CreateAppointmentPayload {
   discountReason?: string
   /** Observacao curta da atendente. Aparece no popover da agenda. */
   notes?: string
+  /**
+   * Estreia na clinica. Obrigatorio, e nao opcional: omitir faz o backend
+   * decidir pela contagem do banco, que e o comportamento revertido em
+   * 09/09/2026. Pelo painel quem decide e a recepcao.
+   */
+  isFirstVisit: boolean
 }
 
 export interface UpdateAppointmentPayload {
