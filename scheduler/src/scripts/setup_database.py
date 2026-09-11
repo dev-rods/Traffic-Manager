@@ -38,6 +38,7 @@ SQL_STATEMENTS = [
         bot_paused BOOLEAN DEFAULT FALSE,
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
+        logo_url VARCHAR(500),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -66,6 +67,7 @@ SQL_STATEMENTS = [
         name VARCHAR(255) NOT NULL,
         role VARCHAR(100),
         active BOOLEAN DEFAULT TRUE,
+        photo_url VARCHAR(500),
         created_at TIMESTAMP DEFAULT NOW()
     )
     """,
@@ -540,6 +542,11 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS offline_conversion_action_id VARCHAR(30)",
     # Note: scheduler.lead_conversions is defined (CREATE IF NOT EXISTS) in the tables
     # section above, which also covers existing DBs on re-run.
+
+    # --- Site público de agendamento (booking-site) ---
+    # Logo do salão (header/hero do site público) e foto do profissional (avatar no wizard)
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
+    "ALTER TABLE scheduler.professionals ADD COLUMN IF NOT EXISTS photo_url VARCHAR(500)",
 ]
 
 

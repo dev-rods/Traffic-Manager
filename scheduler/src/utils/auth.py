@@ -40,6 +40,27 @@ class SchedulerAuth:
             logger.error(f"Erro ao validar intake API key: {str(e)}")
             return False
 
+    def validate_booking_intake_api_key(self, api_key):
+        """Valida a chave para os endpoints públicos do site de agendamento (public_booking).
+
+        Aceita a chave de intake dedicada (BOOKING_INTAKE_API_KEY), restrita a esses
+        endpoints e embutida no client do booking-site, OU a chave mestra
+        (SCHEDULER_API_KEY) para chamadas internas/administrativas.
+        """
+        try:
+            if not api_key:
+                return False
+            intake_key = os.environ.get("BOOKING_INTAKE_API_KEY")
+            master_key = os.environ.get("SCHEDULER_API_KEY")
+            if intake_key and api_key == intake_key:
+                return True
+            if master_key and api_key == master_key:
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Erro ao validar booking intake API key: {str(e)}")
+            return False
+
     @staticmethod
     def generate_clinic_id(clinic_name):
         base = "".join(e for e in clinic_name if e.isalnum()).lower()
