@@ -90,9 +90,16 @@ class TestBlocoDaCampanha(unittest.TestCase):
         self.assertIn("CPF", prompt)
         self.assertIn("NUNCA peça", prompt)
 
-    def test_manda_usar_a_tool_das_areas(self):
+    def test_manda_perguntar_as_areas_desta_vez(self):
+        """Decisao do Andre em 11/09/2026: nunca deduzir do atendimento anterior.
+
+        Ele chegou a pedir o contrario dois dias antes - propor as da ultima
+        sessao e confirmar. O piloto mostrou que propor e um convite a induzir,
+        entao a pergunta passou a ser sempre aberta.
+        """
         prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
-        self.assertIn("ultimas_areas_do_paciente", prompt)
+        self.assertIn("DESTA VEZ", prompt)
+        self.assertNotIn("ultimas_areas_do_paciente", prompt)
 
     def test_mantem_o_desconto_obrigatorio_antes_de_agendar(self):
         """Não anunciar preço não é o mesmo que não calcular: o valor gravado
@@ -182,11 +189,11 @@ class TestRegraDeAreasNoPrompt(unittest.TestCase):
         prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
         self.assertIn("NUNCA escolha por ela", prompt)
 
-    def test_diz_que_achar_no_historico_nao_dispensa_perguntar(self):
-        """Pedido explicito do Andre em 11/09/2026."""
+    def test_diz_que_nao_ha_consulta_ao_historico_de_areas(self):
+        """A tool foi REMOVIDA, nao so desencorajada: enquanto a capacidade
+        existir, o modelo a usa."""
         prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
-        self.assertIn("achar", prompt)
-        self.assertIn("dispensa perguntar", prompt)
+        self.assertIn("NÃO consulta o histórico", prompt)
 
     def test_explica_que_horario_depende_de_area(self):
         """A parte menos obvia: os horarios saem errados junto, porque a

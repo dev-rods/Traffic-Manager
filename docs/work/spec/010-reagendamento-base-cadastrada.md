@@ -102,21 +102,24 @@ sem campanha - o comportamento de hoje.
 
 ---
 
-## 4. Tool nova: `ultimas_areas_do_paciente`
+## 4. ~~Tool `ultimas_areas_do_paciente`~~ - REVERTIDO em 11/09/2026
 
-`src/services/ai_tools.py` - entrada em `TOOL_DEFINITIONS` + método
-`_tool_ultimas_areas_do_paciente` (a convenção do `execute`: `_tool_<nome>`).
+A tool foi implementada, foi a produção e **foi removida**.
 
-- Sem parâmetros; usa o `phone` do contexto, como `lookup_appointments`
-- Última sessão **CONFIRMED e passada** da paciente, com as áreas daquela sessão
-- Devolve `{"encontrou": bool, "data": iso, "areas": [{"area_id","nome","service_id"}]}`
-- `encontrou: false` para quem não tem histórico ⇒ o bot pergunta as áreas
-- Falha fechada: erro devolve `encontrou: false`, e o bot pergunta
+A ideia era boa no papel: ler as áreas da última sessão realizada, propor as
+mesmas e pedir confirmação - exatamente o que a atendente faz hoje à mão.
 
-Consulta em `appointment_service_areas` ligada ao último `appointments` da
-paciente, ordenado por `appointment_date DESC, start_time DESC`.
+O piloto mostrou o problema. Propor é um convite a induzir, e o bot já tinha
+demonstrado que induz: numa conversa em que ninguém citou área, ele escolheu
+três sozinho e chegou a um "sim" de agendar R$ 400,50. O que a paciente fez da
+última vez não responde o que ela quer agora.
 
----
+**Decisão do André em 11/09/2026: as áreas são SEMPRE perguntadas.** A tool foi
+removida, não desencorajada - enquanto a capacidade existir, alguém a usa. O
+prompt agora diz que não há consulta ao histórico de áreas.
+
+A trava de `confirmacao_de_areas` continua valendo e é o que garante: nenhuma
+área entra em horário, preço ou agendamento sem ter sido dita na conversa.
 
 ## 5. Bloco de modo no prompt
 
@@ -140,8 +143,8 @@ Datas anunciadas: {datas}
 - NÃO dê boas-vindas nem se apresente. A conversa já está em andamento.
 - NUNCA peça nome, CPF, data de nascimento ou e-mail. Já temos o cadastro.
 - NÃO anuncie preço, total nem desconto, a menos que perguntem.
-- Comece por confirmar as áreas: chame ultimas_areas_do_paciente e proponha
-  as mesmas da última sessão. Se não houver histórico, pergunte as áreas.
+- Comece pelas áreas: pergunte quais ela quer tratar DESTA VEZ. Sempre
+  pergunte - nunca deduza do atendimento anterior.
 - Ofereça apenas as datas anunciadas acima; confirme horários com
   check_availability e get_time_slots.
 - Ao fechar, encerre com get_pre_session_instructions, como sempre.
@@ -160,7 +163,7 @@ repassa à tool sem nunca perguntar.
 1. `campanha.py` + testes (puro, sem I/O)
 2. `bot_policy.py` - a linha da elegibilidade + testes de mutação
 3. `/send` - abertura da campanha + testes de handler
-4. Tool `ultimas_areas_do_paciente` + testes
+4. ~~Tool `ultimas_areas_do_paciente`~~ - revertido, ver seção 4
 5. Bloco de modo no prompt
 6. Frontend - datas no modal de disparo
 7. Piloto no número do André antes da base

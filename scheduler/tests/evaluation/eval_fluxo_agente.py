@@ -94,9 +94,6 @@ FIXTURES = {
         "original_price_display": "R$ 185.00", "price_display": "R$ 166.50",
     },
     "lookup_appointments": {"appointments": []},
-    # Sem historico: e o caso do eval, que simula lead novo, e faz o agente
-    # perguntar as areas em vez de propor as da ultima vez.
-    "ultimas_areas_do_paciente": {"encontrou": False, "areas": []},
     "get_faq_answer": {"answers": [
         {"question": "Dói?", "answer": "O Soprano Ice tem ponteira de safira com "
          "resfriamento; a maioria descreve como morno e confortável."},
