@@ -5,7 +5,10 @@ import type { DurationRule } from '@/types'
  * Espelham DEFAULT_DURATION_RULES em scheduler/src/services/duration_rules.py.
  */
 export const DURACAO_PADRAO = {
-  floor_minutes: 15,
+  // 10 desde 11/09/2026 (era 15). Espelha DEFAULT_DURATION_RULES do
+  // backend - se divergir, a tela promete um horario de fim que o
+  // servidor nao aceita, e quem descobre e o paciente.
+  floor_minutes: 10,
   ceiling_minutes: 50,
   step_minutes: 5,
 } as const

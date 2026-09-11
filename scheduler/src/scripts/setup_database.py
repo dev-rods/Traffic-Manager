@@ -317,7 +317,7 @@ SQL_STATEMENTS = [
     CREATE TABLE IF NOT EXISTS scheduler.duration_rules (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
-        floor_minutes INTEGER NOT NULL DEFAULT 15,
+        floor_minutes INTEGER NOT NULL DEFAULT 10,
         ceiling_minutes INTEGER NOT NULL DEFAULT 50,
         step_minutes INTEGER NOT NULL DEFAULT 5,
         is_active BOOLEAN NOT NULL DEFAULT true,
@@ -652,7 +652,7 @@ SQL_STATEMENTS = [
     # A duracao deixou de ser faixa por quantidade de areas e passou a ser a
     # soma das duracoes das areas, limitada por piso e teto e arredondada ao
     # passo. As colunas de faixa nao decidem mais nada. Ver duration_rules.py.
-    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS floor_minutes INTEGER NOT NULL DEFAULT 15",
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS floor_minutes INTEGER NOT NULL DEFAULT 10",
     "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS ceiling_minutes INTEGER NOT NULL DEFAULT 50",
     "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS step_minutes INTEGER NOT NULL DEFAULT 5",
     "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS base_duration_minutes",
