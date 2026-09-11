@@ -266,6 +266,18 @@ class ConversationAgent:
             bloco_calendario, datas_do_calendario = bloco_de_contexto(user_content)
             respaldo_das_tools.append({"calendario": datas_do_calendario})
 
+        # As datas da campanha tambem sao respaldo. Elas vem da sessao, gravadas
+        # no ato do disparo, e o bloco de campanha as poe no prompt - sao fato
+        # tao legitimo quanto resultado de tool.
+        #
+        # Sem isto, em 11/09/2026 o bot compos a resposta CERTA ("as datas sao
+        # 23, 24 e 29; dia 25 nao temos") e a proveniencia a bloqueou por
+        # "agenda sem respaldo", caindo no fallback de transferir para uma
+        # especialista. A guarda barrou justamente quem estava certo.
+        datas_da_campanha_aberta = datas_da_campanha(session)
+        if datas_da_campanha_aberta:
+            respaldo_das_tools.append({"campanha": datas_da_campanha_aberta})
+
         if dados_consultados or bloco_calendario:
             if dados_consultados:
                 nomes = ", ".join(n for n, _ in dados_consultados)
