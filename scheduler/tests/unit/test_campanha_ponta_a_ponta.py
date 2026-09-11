@@ -86,15 +86,52 @@ class TestPercursoDaCampanha(unittest.TestCase):
         for d in DATAS:
             self.assertIn(d, prompt)
 
+    def test_a_campanha_zera_a_conversa_anterior(self):
+        """Campanha COMEÇA uma conversa - não continua a do mês passado.
+
+        Achado no piloto de 09/09/2026: o número de teste tinha 36 turnos de
+        05 dias antes parados na sessão. O bloco de campanha diz "acabamos de
+        te escrever" e o histórico dizia outra coisa - e na prática quem manda
+        é o histórico, porque é ele que vai nas mensagens do modelo.
+
+        Sem TTL na tabela, isso não se resolve sozinho: o mês que vem teria a
+        conversa deste mês por baixo.
+        """
+        from src.services.session_store import abre_campanha
+
+        sessao = self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]
+        sessao["agent_history"] = [{"role": "user", "content": "mes passado"}]
+        sessao["state"] = "WELCOME"
+
+        abre_campanha(self.tabela, "clinica-x", FONE, abre(DATAS))
+
+        nova = self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]
+        self.assertEqual(nova["agent_history"], [])
+        self.assertNotIn("state", nova)
+
+    def test_mas_preserva_o_que_nao_e_conversa(self):
+        """Zerar o histórico não pode levar junto quem é a pessoa."""
+        from src.services.session_store import abre_campanha
+
+        sessao = self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]
+        sessao["lead_id"] = "lead-123"
+        sessao["bot_enabled"] = True
+
+        abre_campanha(self.tabela, "clinica-x", FONE, abre(DATAS))
+
+        nova = self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]
+        self.assertEqual(nova["lead_id"], "lead-123")
+        self.assertTrue(nova["bot_enabled"])
+
     def test_a_campanha_nao_apaga_o_resto_da_sessao(self):
         """Ler-mesclar-gravar: só PutItem apagaria o histórico já acumulado."""
         from src.services.session_store import abre_campanha
 
-        self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]["historico"] = ["oi"]
+        self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]["lead_id"] = "L1"
         abre_campanha(self.tabela, "clinica-x", FONE, abre(DATAS))
 
         sessao = self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]
-        self.assertEqual(sessao["historico"], ["oi"])
+        self.assertEqual(sessao["lead_id"], "L1")
         self.assertTrue(esta_viva(sessao))
 
 

@@ -69,6 +69,19 @@ def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
         session = item.get("session") or {}
         session["campanha"] = campanha
 
+        # A campanha COMECA uma conversa. Quem ja falou com o bot antes tem
+        # historico guardado, e sem limpar aqui o agente leria a conversa velha
+        # e a continuaria - o bloco de campanha diz "acabamos de te escrever" e
+        # o historico diz outra coisa, e quem decide na pratica e o historico.
+        #
+        # Encontrado no piloto de 09/09/2026: o numero de teste tinha 36 turnos
+        # de 04/09 parados na sessao. Sem TTL na tabela, esse historico fica
+        # para sempre - o mes que vem teria a conversa deste mes por baixo.
+        session["agent_history"] = []
+        session.pop("state", None)
+        session.pop("respaldo_anterior", None)
+        session.pop("efeito_na_ultima_rodada", None)
+
         table.put_item(
             Item={
                 "pk": pk,
