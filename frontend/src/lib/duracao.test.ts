@@ -28,8 +28,17 @@ describe('arredondaParaPasso', () => {
 
 describe('calculaDuracao', () => {
   it('sobe para o piso quando a soma é curta', () => {
-    expect(calculaDuracao(4)).toBe(15)
-    expect(calculaDuracao(10)).toBe(15)
+    expect(calculaDuracao(4)).toBe(10)
+    expect(calculaDuracao(8)).toBe(10)
+  })
+
+  it('o piso é 10, não 15', () => {
+    // Mudança de 11/09/2026. A Essência tem 16 áreas entre 5 e 10 minutos, e
+    // o piso antigo inflava todas elas para 15.
+    expect(calculaDuracao(5)).toBe(10)
+    expect(calculaDuracao(10)).toBe(10)
+    // 13 continua virando 15 - pelo arredondamento, não pelo piso.
+    expect(calculaDuracao(13)).toBe(15)
   })
 
   it('desce para o teto quando a soma é longa', () => {
@@ -54,8 +63,8 @@ describe('calculaDuracao', () => {
   })
 
   it('trata zero, negativo e ausência de regra', () => {
-    expect(calculaDuracao(0)).toBe(15)
-    expect(calculaDuracao(-30)).toBe(15)
+    expect(calculaDuracao(0)).toBe(10)
+    expect(calculaDuracao(-30)).toBe(10)
     expect(calculaDuracao(24, null)).toBe(25)
   })
 
@@ -89,9 +98,12 @@ describe('calculaDuracao', () => {
  */
 describe('contrato com o backend', () => {
   const CASOS: Array<[number, number]> = [
-    [0, 15],
-    [2, 15],
-    [12, 15],
+    [0, 10],
+    [2, 10],
+    [5, 10],
+    [8, 10],
+    [12, 10],
+    [13, 15],
     [17, 15],
     [18, 20],
     [21, 20],

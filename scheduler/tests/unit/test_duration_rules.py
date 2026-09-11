@@ -58,7 +58,7 @@ class TestArredondamento(unittest.TestCase):
         """`arredonda_para_passo(2, 5)` é 0, e sozinho isso seria uma sessão de
         duração nenhuma. Quem impede é o piso, aplicado depois."""
         self.assertEqual(arredonda_para_passo(2, 5), 0)
-        self.assertEqual(duracao_da_sessao(2), 15)
+        self.assertEqual(duracao_da_sessao(2), 10)
 
     def test_multiplo_exato_nao_muda(self):
         self.assertEqual(arredonda_para_passo(25, 5), 25)
@@ -71,8 +71,23 @@ class TestArredondamento(unittest.TestCase):
 
 class TestPisoTetoPasso(unittest.TestCase):
     def test_abaixo_do_piso_sobe_para_o_piso(self):
-        self.assertEqual(duracao_da_sessao(4), 15)
-        self.assertEqual(duracao_da_sessao(10), 15)
+        self.assertEqual(duracao_da_sessao(4), 10)
+        self.assertEqual(duracao_da_sessao(8), 10)
+
+    def test_o_piso_e_10_e_nao_15(self):
+        """Mudanca de 11/09/2026. Antes, area de 5 minutos ocupava 15.
+
+        A Essencia tem 16 areas entre 5 e 10 minutos - Nuca, Ombros, Glandulas,
+        1/2 Coxa, Barba contorno... - e todas eram infladas para 15. Em 14 horas
+        de agenda isso e muita vaga desperdicada.
+        """
+        self.assertEqual(duracao_da_sessao(5), 10)
+        self.assertEqual(duracao_da_sessao(10), 10)
+
+    def test_o_que_ja_passava_do_piso_nao_muda(self):
+        """13 minutos continuam virando 15 pelo arredondamento, nao pelo piso."""
+        self.assertEqual(duracao_da_sessao(13), 15)
+        self.assertEqual(duracao_da_sessao(20), 20)
 
     def test_acima_do_teto_desce_para_o_teto(self):
         self.assertEqual(duracao_da_sessao(60), 50)
@@ -90,15 +105,15 @@ class TestPisoTetoPasso(unittest.TestCase):
 
     def test_resultado_esta_sempre_entre_piso_e_teto(self):
         for bruto in range(0, 121):
-            self.assertGreaterEqual(duracao_da_sessao(bruto), 15)
+            self.assertGreaterEqual(duracao_da_sessao(bruto), 10)
             self.assertLessEqual(duracao_da_sessao(bruto), 50)
 
     def test_zero_e_none_caem_no_piso(self):
-        self.assertEqual(duracao_da_sessao(0), 15)
-        self.assertEqual(duracao_da_sessao(None), 15)
+        self.assertEqual(duracao_da_sessao(0), 10)
+        self.assertEqual(duracao_da_sessao(None), 10)
 
     def test_negativo_cai_no_piso(self):
-        self.assertEqual(duracao_da_sessao(-30), 15)
+        self.assertEqual(duracao_da_sessao(-30), 10)
 
     def test_idempotente(self):
         """Reaplicar sobre um valor já calculado não muda nada.
@@ -164,17 +179,17 @@ class TestCalculaDuracao(unittest.TestCase):
     def test_area_unica_curta_sobe_para_o_piso(self):
         db = DbFalso(total=8)
 
-        self.assertEqual(calcula_duracao(db, "clinica", [{"service_id": "s", "area_id": "a"}]), 15)
+        self.assertEqual(calcula_duracao(db, "clinica", [{"service_id": "s", "area_id": "a"}]), 10)
 
     def test_sem_areas_devolve_o_piso(self):
         db = DbFalso(total=0)
 
-        self.assertEqual(calcula_duracao(db, "clinica", []), 15)
+        self.assertEqual(calcula_duracao(db, "clinica", []), 10)
 
 
 class TestPadrao(unittest.TestCase):
     def test_padrao_e_o_combinado(self):
-        self.assertEqual(DEFAULT_DURATION_RULES["floor_minutes"], 15)
+        self.assertEqual(DEFAULT_DURATION_RULES["floor_minutes"], 10)
         self.assertEqual(DEFAULT_DURATION_RULES["ceiling_minutes"], 50)
         self.assertEqual(DEFAULT_DURATION_RULES["step_minutes"], 5)
 
@@ -193,9 +208,12 @@ class TestContratoComOFrontend(unittest.TestCase):
     """
 
     CASOS = (
-        (0, 15),
-        (2, 15),
-        (12, 15),
+        (0, 10),
+        (2, 10),
+        (5, 10),
+        (8, 10),
+        (12, 10),
+        (13, 15),
         (17, 15),
         (18, 20),
         (21, 20),

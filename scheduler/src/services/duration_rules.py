@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 # Padrão da Essência, usado quando a clínica não tem regra própria cadastrada.
 DEFAULT_DURATION_RULES = {
-    "floor_minutes": 15,     # nenhuma sessão é mais curta que isto
+    # 10 desde 11/09/2026 (era 15). A Essência tem 16 áreas de 5 a 10
+    # minutos, e o piso de 15 inflava todas elas - sessão de uma área
+    # pequena ocupava 15 minutos de agenda para gastar 5.
+    "floor_minutes": 10,     # nenhuma sessão é mais curta que isto
     "ceiling_minutes": 50,   # nenhuma sessão é mais longa que isto
     "step_minutes": 5,       # toda duração é múltiplo disto
     "is_active": True,
