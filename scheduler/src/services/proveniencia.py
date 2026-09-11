@@ -65,6 +65,77 @@ def _data(dia, mes, ano, ano_padrao):
         return None
 
 
+
+# Negacao de disponibilidade. Para dizer que NAO tem 9h, o bot precisa escrever
+# "9h" - e nenhuma tool devolveu 9h, justamente porque nao existe. Sem isto a
+# guarda barra a resposta honesta: em 11/09/2026 uma paciente pediu 9h, o bot
+# respondeu com os horarios reais mais "nao temos 9h nesse dia" e a mensagem
+# inteira foi descartada.
+#
+# A mascara cobre SO o valor que a negacao governa - o primeiro logo depois do
+# marcador, ou o ultimo logo antes. Dispensar a frase inteira abriria a brecha
+# de verdade: "nao temos 9h, mas tenho 10:30" passaria com o 10:30 inventado.
+_NEGACAO = re.compile(
+    r"n[ãa]o\s+(?:temos|tenho|h[áa]|tem|possu[íi]mos|est[áa]\s+dispon[íi]ve(?:l|is))",
+    re.I,
+)
+# O que conta como valor mascaravel: hora, "dia N" ou data numerica.
+_VALOR = re.compile(
+    r"\b\d{1,2}\s*[:h](?:\d{2})?"  # minutos COLADOS: "9h 14:00" nao pode virar um valor so
+    r"|\bdia\s+\d{1,2}(?:/\d{1,2})?"
+    r"|\b\d{1,2}/\d{1,2}(?:/\d{2,4})?",
+    re.I,
+)
+# Janela curta de proposito. No caso real, "o mais proximo e *09:45*" comeca 30
+# caracteres depois do marcador: uma janela larga mascararia o 09:45 tambem, e
+# ele PRECISA continuar sendo conferido.
+_ALCANCE = 25
+# Encadeadores de negacao. Deliberadamente sem virgula e sem "e".
+_ELO = re.compile(r"\s*(?:nem|ou)\s+", re.I)
+
+
+def _mascara_negacoes(texto):
+    """Apaga do texto os valores negados, preservando o resto.
+
+    Mascarar em vez de subtrair depois resolve de graca o caso "aparece negado
+    aqui e afirmado ali": a ocorrencia afirmada sobrevive no texto e continua
+    sendo cobrada.
+    """
+    if not texto:
+        return texto
+    fora = []
+    for neg in _NEGACAO.finditer(texto):
+        depois = _VALOR.search(texto, neg.end(), neg.end() + _ALCANCE)
+        if depois:
+            fora.append(depois.span())
+            # "nao temos 8h nem 9h": a negacao governa os dois. So "nem" e "ou"
+            # encadeiam - virgula nao, porque "nao temos 8h, 17:45 esta livre"
+            # e afirmacao do 17:45 e precisa continuar sendo conferida.
+            fim = depois.end()
+            while True:
+                elo = _ELO.match(texto, fim)
+                if not elo:
+                    break
+                seguinte = _VALOR.match(texto, elo.end())
+                if not seguinte:
+                    break
+                fora.append(seguinte.span())
+                fim = seguinte.end()
+        janela = texto[max(0, neg.start() - _ALCANCE):neg.start()]
+        antes = list(_VALOR.finditer(janela))
+        if antes:
+            base = max(0, neg.start() - _ALCANCE)
+            fora.append((base + antes[-1].start(), base + antes[-1].end()))
+
+    if not fora:
+        return texto
+    chars = list(texto)
+    for ini, fim in fora:
+        for i in range(ini, fim):
+            chars[i] = " "
+    return "".join(chars)
+
+
 def fatos_sensiveis(texto, ano=None):
     """Os fatos de banco afirmados neste texto, normalizados.
 
@@ -79,6 +150,8 @@ def fatos_sensiveis(texto, ano=None):
     achados = set()
 
     for trecho in _frases_afirmativas(texto):
+        # Negar disponibilidade nao e afirma-la: o valor negado sai daqui.
+        trecho = _mascara_negacoes(trecho)
         plano = _sem_acento(trecho)
 
         for dia, mes, ano_txt in _DATA_NUMERICA.findall(trecho):
