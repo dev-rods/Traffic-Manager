@@ -165,5 +165,35 @@ class TestASessaoChegaAoPrompt(unittest.TestCase):
         self.assertNotIn("campanha", recebida)
 
 
+class TestRegraDeAreasNoPrompt(unittest.TestCase):
+    """A regra vale nos DOIS fluxos - o defeito nao era da campanha.
+
+    Em 11/09/2026 o bot escolheu tres areas sozinho numa conversa de campanha,
+    mas nada no codigo impedia o mesmo num lead. A trava das tools garante; o
+    prompt e quem diz ao modelo o que fazer quando ela recusa.
+    """
+
+    def test_a_regra_esta_no_prompt_do_lead(self):
+        prompt = agente()._build_system_prompt(CLINIC, FONE, {"bot_enabled": True})
+        self.assertIn("AREAS", prompt.replace("Á", "A"))
+        self.assertIn("NUNCA escolha por ela", prompt)
+
+    def test_a_regra_esta_no_prompt_da_campanha(self):
+        prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
+        self.assertIn("NUNCA escolha por ela", prompt)
+
+    def test_diz_que_achar_no_historico_nao_dispensa_perguntar(self):
+        """Pedido explicito do Andre em 11/09/2026."""
+        prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
+        self.assertIn("achar", prompt)
+        self.assertIn("dispensa perguntar", prompt)
+
+    def test_explica_que_horario_depende_de_area(self):
+        """A parte menos obvia: os horarios saem errados junto, porque a
+        duracao do slot vem das areas."""
+        prompt = agente()._build_system_prompt(CLINIC, FONE, {"bot_enabled": True})
+        self.assertIn("depende de", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

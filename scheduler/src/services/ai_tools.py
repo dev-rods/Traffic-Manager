@@ -4,6 +4,11 @@ import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
+from src.services.confirmacao_de_areas import (
+    areas_conversadas,
+    recado_de_recusa,
+    separa,
+)
 from src.services.primeira_visita import e_primeira_visita
 from src.services.duration_rules import calcula_duracao
 
@@ -489,6 +494,48 @@ class ToolExecutor:
             logger.error(f"[ToolExecutor] Error executing {tool_name}: {e}")
             return {"error": str(e)}
 
+    def _barra_areas_nao_conversadas(self, args, clinic_id, ctx):
+        """Devolve o recado de recusa se houver area que ninguem conversou.
+
+        None significa "pode seguir". A trava fica AQUI, na tool, e nao no
+        prompt: em 11/09/2026 o prompt ja mandava confirmar as areas e o modelo
+        escolheu tres por conta propria mesmo assim. Instrucao e pedido; tool
+        que recusa e garantia.
+        """
+        pares = args.get("service_area_pairs") or []
+        if not pares:
+            return None
+
+        turnos = ctx.get("turnos") or []
+        if not turnos:
+            # FALHA FECHADA. Sem transcricao nao da para verificar nada, e
+            # deixar passar desligaria a trava em silencio - o bot voltaria a
+            # inventar area e ninguem saberia, que e o defeito original.
+            #
+            # Barrar aqui e seguro porque so o agente usa este executor, e ele
+            # sempre manda os turnos. A consulta obrigatoria chama as tools com
+            # argumentos vazios, entao nem chega nesta linha.
+            logger.error(
+                "[Areas] chamada com pares mas SEM transcricao no contexto - "
+                "barrando. Se isso aparece em producao, a fiacao quebrou."
+            )
+            return recado_de_recusa([])
+
+        areas = self.db.execute_query(
+            "SELECT id, name FROM scheduler.areas WHERE clinic_id = %s AND active = true",
+            (clinic_id,),
+        ) or []
+        _, barrados = separa(pares, areas_conversadas(turnos, areas))
+        if not barrados:
+            return None
+
+        por_id = {str(a["id"]): a["name"] for a in areas}
+        nomes = [por_id.get(i, i) for i in barrados]
+        logger.warning(
+            f"[Areas] barradas por nao terem sido conversadas: {nomes}"
+        )
+        return recado_de_recusa(nomes)
+
     # ── Read-only tools ──
 
     def _tool_list_services(self, args, clinic_id, phone, ctx):
@@ -566,6 +613,9 @@ class ToolExecutor:
         }
 
     def _tool_get_time_slots(self, args, clinic_id, phone, ctx):
+        recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
+        if recusa:
+            return recusa
         target_date = args.get("date")
         if not target_date:
             return {"error": "date is required"}
@@ -793,6 +843,9 @@ class ToolExecutor:
             logger.warning(f"[ToolExecutor] Falha ao gravar cadastro do paciente: {e}")
 
     def _tool_book_appointment(self, args, clinic_id, phone, ctx):
+        recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
+        if recusa:
+            return recusa
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
 
@@ -898,6 +951,9 @@ class ToolExecutor:
     # ── New tools ──
 
     def _tool_calculate_discount(self, args, clinic_id, phone, ctx):
+        recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
+        if recusa:
+            return recusa
         service_area_pairs = args.get("service_area_pairs", [])
         if not service_area_pairs:
             return {"error": "service_area_pairs is required"}

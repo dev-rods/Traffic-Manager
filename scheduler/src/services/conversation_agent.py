@@ -121,6 +121,30 @@ class OutgoingMessage:
     button_text: Optional[str] = None
 
 
+def _turnos_para_trava(history):
+    """A conversa achatada em {role, content} de texto.
+
+    O `history` do agente mistura texto, tool_use e tool_result num mesmo turno.
+    A trava de areas so quer o que foi DITO - resultado de tool nao conta:
+    achar a area no historico da paciente nao e o mesmo que perguntar a ela.
+    """
+    turnos = []
+    for turno in history or []:
+        conteudo = turno.get("content")
+        if isinstance(conteudo, str):
+            texto = conteudo
+        elif isinstance(conteudo, list):
+            texto = " ".join(
+                b.get("text", "") for b in conteudo
+                if isinstance(b, dict) and b.get("type") == "text"
+            )
+        else:
+            texto = ""
+        if texto.strip():
+            turnos.append({"role": turno.get("role"), "content": texto})
+    return turnos
+
+
 class ConversationAgent:
     """
     LLM-based conversation agent that replaces the state machine.
@@ -221,7 +245,8 @@ class ConversationAgent:
             for nome_tool in tools_obrigatorias(intencoes_detectadas):
                 try:
                     resultado = self.tool_executor.execute(
-                        nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone}
+                        nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone,
+                                 "turnos": _turnos_para_trava(history)},
                     )
                     dados_consultados.append((nome_tool, resultado))
                     respaldo_das_tools.append(resultado)
@@ -364,7 +389,8 @@ class ConversationAgent:
                     result = self.tool_executor.execute(
                         tool_use["name"],
                         tool_use["input"],
-                        context={"clinic_id": clinic_id, "phone": phone},
+                        context={"clinic_id": clinic_id, "phone": phone,
+                                 "turnos": _turnos_para_trava(history)},
                     )
                     respaldo_das_tools.append(result)
 
@@ -625,6 +651,20 @@ class ConversationAgent:
         )
 
         system_prompt += (
+            "\n═══ ÁREAS ═══\n"
+            "1. As áreas são escolha da paciente. NUNCA escolha por ela, nem para\n"
+            "   'adiantar', nem porque pareciam prováveis, nem porque você as viu no\n"
+            "   histórico dela.\n"
+            "2. Antes de get_time_slots, calculate_discount ou book_appointment, as\n"
+            "   áreas precisam ter sido ditas nesta conversa: ou ela pediu, ou você\n"
+            "   perguntou e ela respondeu. As tools RECUSAM área que não passou por\n"
+            "   isso, e devolvem o que fazer.\n"
+            "3. Isso vale inclusive quando você acha as áreas no histórico: achar não\n"
+            "   é perguntar. Diga os nomes e pergunte se confirma que são essas.\n"
+            "4. Horário depende de área: a duração da sessão vem das áreas. Passar\n"
+            "   horários antes de saber as áreas é passar horário errado.\n"
+        )
+        system_prompt += (
             "\n═══ INSTRUÇÕES PÓS-AGENDAMENTO ═══\n"
             "Após confirmar um agendamento com book_appointment, SEMPRE chame "
             "get_pre_session_instructions para obter as instruções de cuidados pré-sessão. "
@@ -676,9 +716,11 @@ class ConversationAgent:
             "2. NUNCA peça nome, CPF, data de nascimento ou e-mail. Já temos o cadastro\n"
             "   dela. Pedir de novo é o erro mais visível que você pode cometer aqui.\n"
             "3. NÃO anuncie preço, total nem desconto. Só fale de valor se ELA perguntar.\n"
-            "4. Comece confirmando as áreas: chame ultimas_areas_do_paciente e proponha\n"
-            "   as mesmas da última sessão ('as mesmas da última vez?'). Se a tool\n"
-            "   devolver encontrou=false, aí sim pergunte quais áreas ela quer.\n"
+            "4. Comece pelas ÁREAS, antes de qualquer horário: chame\n"
+            "   ultimas_areas_do_paciente. Se achou, diga os nomes e pergunte se ela\n"
+            "   confirma que são essas - achar no histórico NÃO dispensa perguntar.\n"
+            "   Se devolver encontrou=false, pergunte quais áreas ela quer.\n"
+            "   Só depois da resposta dela vá para os horários.\n"
             "5. Ofereça APENAS as datas anunciadas acima. Confirme os horários com\n"
             "   check_availability e get_time_slots, como sempre.\n"
             "6. Ao fechar, siga com get_pre_session_instructions normalmente.\n"

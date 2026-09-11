@@ -21,9 +21,20 @@ CLINIC = "clinica-teste-0001"
 PHONE = "5511999990000"
 
 
+# A trava de areas consulta as areas da clinica e a transcricao da conversa.
+# Aqui a paciente pede "axilas" em voz alta, que e o caminho normal - sem isso
+# `book_appointment` recusa, e com razao.
+AREAS = [{"id": "a1", "name": "Axilas"}]
+CONVERSA = {"turnos": [{"role": "user", "content": "quero fazer axilas"}]}
+
+
 def executor(rowcount=1):
     db = mock.MagicMock()
     db.execute_write.return_value = rowcount
+    # So a consulta de areas e roteada; o resto segue MagicMock como antes,
+    # senao `duration_rules` recebe a lista de areas no lugar da duracao.
+    db.execute_query.side_effect = lambda sql, params=None: (
+        AREAS if "FROM scheduler.areas" in sql else mock.MagicMock())
     ex = object.__new__(ToolExecutor)
     ex.db = db
     ex.appointment_service = mock.MagicMock()
@@ -49,7 +60,7 @@ class TestOrdemDaGravacao(unittest.TestCase):
             "service_area_pairs": [{"service_id": "s1", "area_id": "a1"}],
             "full_name": "Maria Silva", "cpf": "079.039.845-19",
             "birth_date": "1999-12-29", "email": "m@x.com",
-        }, CLINIC, PHONE, {})
+        }, CLINIC, PHONE, dict(CONVERSA))
 
         self.assertEqual(ordem, ["cria_agendamento", "salva_cadastro"],
                          "o UPDATE do cadastro rodou antes de o paciente existir")
