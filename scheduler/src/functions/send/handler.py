@@ -140,9 +140,12 @@ def handler(event, context):
                 provider_response=response.raw_response,
             )
 
-            # Update last_message_at on patient record (skip soft-deleted)
+            # Update last_message_at on patient record (skip soft-deleted).
+            # execute_write, not execute_query — the latter calls fetchall() and never
+            # commits, so every UPDATE raised "no results to fetch" into the except below
+            # and last_message_at stayed NULL for every patient.
             try:
-                db.execute_query(
+                db.execute_write(
                     """UPDATE scheduler.patients
                        SET last_message_at = NOW(), updated_at = NOW()
                        WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL""",

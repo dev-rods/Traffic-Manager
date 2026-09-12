@@ -4,6 +4,7 @@ import { useClinic } from '@/hooks/useClinic'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import { useActiveConversations, usePauseBot, useResumeBot } from '@/hooks/useBot'
 import { useDebounce } from '@/hooks/useDebounce'
+import { useSelection } from '@/hooks/useSelection'
 import { todayStr } from '@/utils/dateHelpers'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -37,7 +38,6 @@ export function PacientesPage() {
   const [batchPatients, setBatchPatients] = useState<PatientWithStats[]>([])
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [batchDeleteTargets, setBatchDeleteTargets] = useState<PatientWithStats[]>([])
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'info'; message: string } | null>(null)
   const debouncedSearch = useDebounce(search)
 
@@ -90,36 +90,23 @@ export function PacientesPage() {
     per_page: perPage,
   })
 
-  // Reset page when filters change
-  const handleSearch = useCallback((v: string) => { setSearch(v); setPage(1) }, [])
-  const handleNextVisitFilter = useCallback((v: NextVisitFilter) => { setNextVisitFilter(v); setPage(1) }, [])
-  const handleLastMessageFilter = useCallback((v: LastMessageFilter) => { setLastMessageFilter(v); setPage(1) }, [])
-  const handleLastVisitBefore = useCallback((v: string) => { setLastVisitBefore(v); setPage(1) }, [])
-
   const patients = useMemo(() => data?.items ?? [], [data])
 
-  const handleToggleSelect = useCallback((id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+  const {
+    selectedIds,
+    selectedItems: selectedPatients,
+    pageFullySelected,
+    toggle: handleToggleSelect,
+    togglePage: handleToggleAll,
+    clear: clearSelection,
+  } = useSelection(patients)
 
-  const handleToggleAll = useCallback(() => {
-    setSelectedIds((prev) => {
-      if (patients.length > 0 && patients.every((p) => prev.has(p.id))) {
-        return new Set()
-      }
-      return new Set(patients.map((p) => p.id))
-    })
-  }, [patients])
-
-  const selectedPatients = useMemo(
-    () => patients.filter((p) => selectedIds.has(p.id)),
-    [patients, selectedIds],
-  )
+  // Reset page when filters change, and drop the selection — it spans pages, so keeping it
+  // would carry patients that no longer match the filter into the next batch action
+  const handleSearch = useCallback((v: string) => { setSearch(v); setPage(1); clearSelection() }, [clearSelection])
+  const handleNextVisitFilter = useCallback((v: NextVisitFilter) => { setNextVisitFilter(v); setPage(1); clearSelection() }, [clearSelection])
+  const handleLastMessageFilter = useCallback((v: LastMessageFilter) => { setLastMessageFilter(v); setPage(1); clearSelection() }, [clearSelection])
+  const handleLastVisitBefore = useCallback((v: string) => { setLastVisitBefore(v); setPage(1); clearSelection() }, [clearSelection])
 
   return (
     <div className="p-8 space-y-6">
@@ -212,6 +199,7 @@ export function PacientesPage() {
             pausedPhones={pausedPhones}
             pauseLoading={pauseBot.isPending || resumeBot.isPending}
             selectedIds={selectedIds}
+            allSelected={pageFullySelected}
             onToggleSelect={handleToggleSelect}
             onToggleAll={handleToggleAll}
           />
@@ -232,7 +220,7 @@ export function PacientesPage() {
             {selectedIds.size} paciente{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}
           </p>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
               Limpar seleção
             </Button>
             <Button variant="success" size="sm" onClick={() => { setBatchPatients(selectedPatients); setBatchOpen(true) }}>
@@ -278,14 +266,14 @@ export function PacientesPage() {
         availableDates={availableDates}
         clinicTemplate={clinic?.batch_message_template}
         onClose={() => setBatchOpen(false)}
-        onDone={() => { setSelectedIds(new Set()); setBatchPatients([]) }}
+        onDone={() => { clearSelection(); setBatchPatients([]) }}
       />
       <BatchDeletePatientsModal
         open={batchDeleteOpen}
         patients={batchDeleteTargets}
         onClose={() => setBatchDeleteOpen(false)}
         onDone={(deletedCount) => {
-          setSelectedIds(new Set())
+          clearSelection()
           setBatchDeleteTargets([])
           if (deletedCount > 0) {
             setFeedback({

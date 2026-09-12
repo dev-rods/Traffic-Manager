@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useConversationMessages } from '@/hooks/useBot'
 import { formatPhone } from '@/utils/formatPhone'
 import { Button } from '@/components/ui/Button'
+import type { MessageStatus } from '@/types'
 
 interface ConversationThreadProps {
   phone: string
@@ -12,6 +13,50 @@ interface ConversationThreadProps {
   onClose: () => void
   pauseLoading?: boolean
   resumeLoading?: boolean
+}
+
+const READ_STATUSES: MessageStatus[] = ['READ', 'READ_BY_ME', 'PLAYED']
+const DELIVERED_STATUSES: MessageStatus[] = ['RECEIVED']
+
+/**
+ * WhatsApp-style delivery indicator for outbound messages.
+ * Mapping follows the user's mental model (not literal WhatsApp semantics):
+ *   FAILED / SENT (no RECEIVED webhook yet) → "não entregue" (error glyph)
+ *   RECEIVED                                → "entregue"    (single tick)
+ *   READ / READ_BY_ME / PLAYED              → "lida"        (double ticks, bright)
+ */
+function DeliveryTicks({ status }: { status: MessageStatus }) {
+  const isRead = READ_STATUSES.includes(status)
+  const isDelivered = DELIVERED_STATUSES.includes(status)
+
+  if (!isDelivered && !isRead) {
+    return (
+      <svg aria-label="Não entregue" className="w-3.5 h-3.5 text-red-300" viewBox="0 0 20 20" fill="currentColor">
+        <title>Não entregue</title>
+        <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm-.75 4h1.5v6h-1.5V6zm.75 9a1 1 0 110-2 1 1 0 010 2z" />
+      </svg>
+    )
+  }
+
+  const label = isRead ? 'Lida' : 'Entregue'
+  const color = isRead ? 'text-white' : 'text-brand-200'
+
+  return (
+    <svg
+      aria-label={label}
+      className={['w-4 h-4', color].join(' ')}
+      viewBox="0 0 20 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <title>{label}</title>
+      {isRead && <path d="M2 7l3.5 3.5L12 4" />}
+      <path d="M8 7l3.5 3.5L18 4" />
+    </svg>
+  )
 }
 
 export function ConversationThread({ phone, senderName, botPaused, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
@@ -71,12 +116,18 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
               ].join(' ')}
             >
               <p>{msg.content}</p>
-              <p className={[
-                'text-[10px] mt-1',
-                msg.direction === 'INBOUND' ? 'text-gray-400' : 'text-brand-200',
+              <div className={[
+                'flex items-center gap-1 mt-1',
+                msg.direction === 'OUTBOUND' ? 'justify-end' : '',
               ].join(' ')}>
-                {msg.created_at ? new Date(msg.created_at).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}
-              </p>
+                <p className={[
+                  'text-[10px]',
+                  msg.direction === 'INBOUND' ? 'text-gray-400' : 'text-brand-200',
+                ].join(' ')}>
+                  {msg.created_at ? new Date(msg.created_at).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : ''}
+                </p>
+                {msg.direction === 'OUTBOUND' && <DeliveryTicks status={msg.status} />}
+              </div>
             </div>
           ))
         )}

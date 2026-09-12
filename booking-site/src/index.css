@@ -1,0 +1,54 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Neutros com leve tint quente (não cinza puro) */
+  --color-ink-50: #faf9f6;
+  --color-ink-100: #f2efe9;
+  --color-ink-200: #e4ded2;
+  --color-ink-300: #cec3ac;
+  --color-ink-400: #a89678;
+  --color-ink-500: #8a7757;
+  --color-ink-600: #6b5b40;
+  --color-ink-700: #52452f;
+  --color-ink-800: #3a3121;
+  --color-ink-900: #241e14;
+
+  /* Accent: terracota queimado */
+  --color-accent-50: #fdf3ec;
+  --color-accent-100: #fbe3d0;
+  --color-accent-200: #f5c49f;
+  --color-accent-300: #eb9f68;
+  --color-accent-400: #dd7c3f;
+  --color-accent-500: #c25f28;
+  --color-accent-600: #9c4a1f;
+  --color-accent-700: #77391a;
+
+  --color-success-500: #03a561;
+  --color-success-600: #028f54;
+  --color-success-100: #e5efe2;
+  --color-danger-500: #b3462f;
+  --color-danger-100: #f6e6e0;
+
+  /* Fiel ao site de referência: botão de reservar (creme) e botão neutro (cinza) */
+  --color-cream-100: #fcf6d7;
+  --color-cream-200: #f5e9b0;
+  --color-muted-100: #f3f3f4;
+  --color-muted-200: #e9e9ea;
+  --color-muted-700: #515164;
+
+  /* Site de referência não usa serif em nenhum lugar — só sans, como aqui */
+  --font-display:
+    'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-sans:
+    'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-ink-50);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+}

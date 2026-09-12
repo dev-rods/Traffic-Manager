@@ -14,13 +14,12 @@ interface PatientsTableProps {
   pausedPhones: Set<string>
   pauseLoading?: boolean
   selectedIds: Set<string>
-  onToggleSelect: (id: string) => void
+  allSelected: boolean
+  onToggleSelect: (patient: PatientWithStats) => void
   onToggleAll: () => void
 }
 
-export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDelete, pausedPhones, pauseLoading, selectedIds, onToggleSelect, onToggleAll }: PatientsTableProps) {
-  const allSelected = patients.length > 0 && patients.every((p) => selectedIds.has(p.id))
-
+export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDelete, pausedPhones, pauseLoading, selectedIds, allSelected, onToggleSelect, onToggleAll }: PatientsTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
       <table className="w-full text-sm">
@@ -51,7 +50,7 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDe
                 <input
                   type="checkbox"
                   checked={selectedIds.has(p.id)}
-                  onChange={() => onToggleSelect(p.id)}
+                  onChange={() => onToggleSelect(p)}
                   className="accent-brand-500"
                 />
               </td>

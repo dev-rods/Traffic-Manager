@@ -1,4 +1,5 @@
 import os
+import random
 import time
 import logging
 
@@ -61,10 +62,23 @@ class AnthropicService:
                     return response.json()
 
                 if response.status_code == 429 or response.status_code >= 500:
-                    wait_time = min(3 * 2 ** attempt, 15)
+                    # Honor Retry-After when the API provides it (429 / 503).
+                    # Otherwise use decorrelated jitter: random in [base, prev*3]
+                    # capped at 60s. With many parallel Lambdas hitting the same
+                    # rate limit, jitter desynchronizes retries instead of
+                    # creating retry waves that all hit 429 again.
+                    retry_after = response.headers.get("retry-after")
+                    if retry_after:
+                        try:
+                            wait_time = min(float(retry_after), 60.0)
+                        except ValueError:
+                            wait_time = min(2.0 * (3 ** attempt), 60.0)
+                    else:
+                        base = 2.0
+                        wait_time = min(random.uniform(base, base * (3 ** (attempt + 1))), 60.0)
                     logger.warning(
                         f"[AnthropicService] API error (status {response.status_code}), "
-                        f"retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})"
+                        f"retrying in {wait_time:.1f}s (attempt {attempt + 1}/{max_retries})"
                     )
                     time.sleep(wait_time)
                     continue
@@ -77,9 +91,9 @@ class AnthropicService:
                 )
 
             except requests.exceptions.Timeout:
-                wait_time = 2 ** (attempt + 1)
+                wait_time = min(random.uniform(2.0, 2.0 * (3 ** (attempt + 1))), 60.0)
                 logger.warning(
-                    f"[AnthropicService] Request timeout, retrying in {wait_time}s "
+                    f"[AnthropicService] Request timeout, retrying in {wait_time:.1f}s "
                     f"(attempt {attempt + 1}/{max_retries})"
                 )
                 time.sleep(wait_time)

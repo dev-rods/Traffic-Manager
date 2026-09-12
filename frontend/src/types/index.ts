@@ -19,6 +19,8 @@ export interface Clinic {
   bot_paused: boolean
   batch_message_template: string | null
   active: boolean
+  logo_url: string | null
+  favicon_url: string | null
 }
 
 export interface UpdateClinicPayload {
@@ -37,6 +39,17 @@ export interface UpdateClinicPayload {
   use_agent?: boolean
   bot_paused?: boolean
   batch_message_template?: string
+  logo_url?: string
+  favicon_url?: string
+}
+
+// ── Booking site assets (upload) ────────────────────────────────
+export type ClinicAssetKind = 'logo' | 'favicon'
+
+export interface AssetUploadUrlResponse {
+  uploadUrl: string
+  publicUrl: string
+  expiresIn: number
 }
 
 // ── Patient ───────────────────────────────────────────────────
@@ -280,12 +293,22 @@ export interface ConversationPreview {
   sender_name: string
 }
 
+export type MessageStatus =
+  | 'QUEUED'
+  | 'SENT'
+  | 'RECEIVED'
+  | 'READ'
+  | 'READ_BY_ME'
+  | 'PLAYED'
+  | 'FAILED'
+  | ''
+
 export interface ConversationMessage {
   id: string
   direction: 'INBOUND' | 'OUTBOUND'
   content: string
   message_type: string
-  status: string
+  status: MessageStatus
   created_at: string
   sender_name: string
 }

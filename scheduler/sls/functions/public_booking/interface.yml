@@ -1,0 +1,52 @@
+PublicBooking:
+  handler: src.functions.public_booking.router.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBooking-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-booking-otp-codes"
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: public/clinics/{clinicId}/bootstrap
+        method: get
+        cors: true
+    - http:
+        path: public/clinics/{clinicId}/available-slots
+        method: get
+        cors: true
+    - http:
+        path: public/clinics/{clinicId}/verify/send
+        method: post
+        cors: true
+    - http:
+        path: public/clinics/{clinicId}/verify/confirm
+        method: post
+        cors: true
+    - http:
+        path: public/clinics/{clinicId}/appointments
+        method: post
+        cors: true
+    - http:
+        path: public/clinics/{clinicId}/my-appointments
+        method: get
+        cors: true
+    - http:
+        path: public/clinics/{clinicId}/appointments/{appointmentId}/cancel
+        method: post
+        cors: true

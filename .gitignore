@@ -3,5 +3,8 @@ scheduler/sa.json
 frontend/.env
 frontend/.env.local
 frontend/.env*.local
+booking-site/.env
+booking-site/.env.local
+booking-site/.env*.local
 .vercel
 .env*

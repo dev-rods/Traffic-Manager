@@ -114,3 +114,27 @@ def require_api_key(event: Dict[str, Any], body: Optional[Dict[str, Any]] = None
         return None, http_response(401, {"status": "ERROR", "message": error_message})
 
     return api_key, None
+
+
+def require_intake_api_key(event: Dict[str, Any], body: Optional[Dict[str, Any]] = None) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Auth para o endpoint público de intake de leads (POST /leads).
+
+    Aceita a chave de intake dedicada (exposta no client da landing page) ou a
+    chave mestra. Nunca autoriza os demais endpoints do scheduler.
+    """
+    api_key = extract_api_key(event, body)
+    if not SchedulerAuth().validate_intake_api_key(api_key):
+        return None, http_response(401, {"status": "ERROR", "message": "Não autorizado"})
+    return api_key, None
+
+
+def require_booking_intake_api_key(event: Dict[str, Any], body: Optional[Dict[str, Any]] = None) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Auth para os endpoints públicos do site de agendamento (public_booking/*).
+
+    Aceita a chave de intake dedicada (exposta no client do booking-site) ou a
+    chave mestra. Nunca autoriza os demais endpoints do scheduler.
+    """
+    api_key = extract_api_key(event, body)
+    if not SchedulerAuth().validate_booking_intake_api_key(api_key):
+        return None, http_response(401, {"status": "ERROR", "message": "Não autorizado"})
+    return api_key, None

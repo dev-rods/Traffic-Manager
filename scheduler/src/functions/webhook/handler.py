@@ -7,6 +7,7 @@ import logging
 import boto3
 
 from src.utils.http import parse_body, http_response
+from src.utils.phone import normalize_phone
 from src.services.db.postgres import PostgresService
 from src.services.template_service import TemplateService
 from src.services.conversation_engine import ConversationEngine, ConversationState
@@ -42,6 +43,19 @@ def handler(event, context):
         instance_id = body.get("instanceId", "")
         if not instance_id:
             logger.warning("[Webhook] Payload sem instanceId")
+            return http_response(200, {"status": "OK"})
+
+        # 1a. Self-chat / LID guard — drop any message addressed to a non-PSTN
+        # WhatsApp identity (LID, group, broadcast) or to the bot's own connected
+        # number. These can't be normal patient conversations and ignoring them
+        # prevents echo loops where the bot replies to itself.
+        raw_phone = body.get("phone", "") or ""
+        connected_phone = body.get("connectedPhone", "") or ""
+        if "@" in raw_phone or raw_phone.endswith("-group") or raw_phone.endswith("-broadcast"):
+            logger.info(f"[Webhook] Ignorando mensagem de identidade não-PSTN: phone={raw_phone}")
+            return http_response(200, {"status": "OK"})
+        if connected_phone and normalize_phone(raw_phone) == normalize_phone(connected_phone):
+            logger.info(f"[Webhook] Ignorando self-chat: phone={raw_phone} == connectedPhone")
             return http_response(200, {"status": "OK"})
 
         # 1b. Handle fromMe (attendant messages or bot echo)
@@ -152,6 +166,17 @@ def handler(event, context):
             f"[Webhook] Mensagem de {incoming.phone} | type={incoming.message_type} | "
             f"content='{incoming.content[:50]}' | clinic={clinic_id}"
         )
+
+        # 4a. Drop messages with no processable content (empty text, unsupported
+        # types like reactions/stickers without caption). The agent would call
+        # Anthropic with an empty user message and get 400, then reply with a
+        # generic error — which is worse than silently ignoring.
+        if not incoming.content and not incoming.button_id:
+            logger.info(
+                f"[Webhook] Ignorando mensagem sem conteúdo processável: "
+                f"phone={incoming.phone} type={incoming.message_type}"
+            )
+            return http_response(200, {"status": "OK"})
 
         # 4b. Extract GCLID and upsert lead
         gclid = extract_gclid(incoming.content) if incoming.content else None
