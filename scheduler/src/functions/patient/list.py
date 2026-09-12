@@ -114,6 +114,14 @@ def handler(event, context):
                 p.phone,
                 p.name,
                 p.gender,
+                -- cpf, birth_date e email NAO vinham aqui, e a tela de edicao
+                -- le exatamente esses campos: ela abria com os tres em branco e,
+                -- ao salvar, gravava o branco por cima do que havia. Toda edicao
+                -- de paciente apagava o cadastro dele.
+                p.cpf,
+                p.birth_date,
+                p.email,
+                p.custom_discount_pct,
                 p.created_at,
                 p.updated_at,
                 p.last_message_at,

@@ -2,8 +2,12 @@ import { Input } from '@/components/ui/Input'
 
 interface CadastroFieldsProps {
   /** `register` do react-hook-form do formulário que embute estes campos. */
-  register: (nome: 'cpf' | 'birth_date' | 'email') => Record<string, unknown>
-  errors: Partial<Record<'cpf' | 'birth_date' | 'email', { message?: string }>>
+  register: (
+    nome: 'cpf' | 'birth_date' | 'email' | 'custom_discount_pct',
+  ) => Record<string, unknown>
+  errors: Partial<
+    Record<'cpf' | 'birth_date' | 'email' | 'custom_discount_pct', { message?: string }>
+  >
 }
 
 /**
@@ -38,6 +42,20 @@ export function CadastroFields({ register, errors }: CadastroFieldsProps) {
         error={errors.email?.message}
         {...register('email')}
       />
+      <div>
+        <Input
+          label="Desconto personalizado (%)"
+          inputMode="numeric"
+          placeholder="deixe vazio para usar a politica da clinica"
+          error={errors.custom_discount_pct?.message}
+          {...register('custom_discount_pct')}
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Preenchido, vale em todo agendamento desta paciente, no lugar dos
+          descontos de primeira sessao e de faixa de areas. Vazio usa a politica
+          normal; <strong>0</strong> significa nunca dar desconto.
+        </p>
+      </div>
     </>
   )
 }

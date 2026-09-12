@@ -136,6 +136,17 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     setPatientSearch(patient.name ?? formatPhone(patient.phone))
     setShowResults(false)
     setShowNewPatient(false)
+
+    // Desconto combinado com a paciente entra JA SELECIONADO. O backend tambem
+    // o aplica quando ninguem escolhe nada, mas deixa-lo invisivel aqui faria a
+    // atendente ver um total e a paciente pagar outro.
+    //
+    // `!= null` e nao `?` de proposito: 0 e um combinado legitimo - "esta
+    // paciente nunca recebe desconto" - e cairia fora com teste de verdade.
+    if (patient.custom_discount_pct != null) {
+      setDiscountMode('custom')
+      setCustomDiscountPct(String(patient.custom_discount_pct))
+    }
   }
 
   const handleCreatePatient = async () => {
