@@ -5,7 +5,16 @@ import { Button } from './Button'
 
 const ACCEPTED_CONTENT_TYPES: Record<ClinicAssetKind, string[]> = {
   logo: ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'],
-  favicon: ['image/png', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/svg+xml'],
+  // Navegadores aceitam qualquer formato de imagem comum como favicon, não só
+  // PNG/ICO — restringir a esses dois rejeitava JPEG/WebP sem necessidade.
+  favicon: [
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/svg+xml',
+    'image/x-icon',
+    'image/vnd.microsoft.icon',
+  ],
 }
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 // 2MB
