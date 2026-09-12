@@ -112,7 +112,7 @@ SQL_STATEMENTS = [
         birth_date DATE,
         cpf VARCHAR(14),
         email VARCHAR(255),
-        custom_discount_pct INTEGER CHECK (custom_discount_pct IS NULL
+        custom_discount_pct NUMERIC(5,2) CHECK (custom_discount_pct IS NULL
             OR (custom_discount_pct >= 0 AND custom_discount_pct <= 100)),
         last_message_at TIMESTAMPTZ,
         deleted_at TIMESTAMPTZ,
@@ -350,7 +350,7 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS welcome_intro_message TEXT",
 
     # Discount fields on appointments
-    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_pct INTEGER DEFAULT 0",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_pct NUMERIC(5,2) DEFAULT 0",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_reason VARCHAR(50)",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS original_price_cents INTEGER",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS final_price_cents INTEGER",
@@ -592,7 +592,39 @@ SQL_STATEMENTS = [
     # "esta paciente nunca recebe desconto" - e so o nulo consegue dizer "nao ha
     # personalizado aqui". Com zero como padrao, as duas situacoes ficariam
     # indistinguiveis e ninguem descobriria o engano olhando a tabela.
-    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS custom_discount_pct INTEGER",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS custom_discount_pct NUMERIC(5,2)",
+    # Duas casas decimais (11/09/2026). 12,5% e 33,33% sao combinados reais e o
+    # inteiro os arredondava calado.
+    #
+    # `appointments.discount_pct` vai junto por obrigacao: o percentual e
+    # GRAVADO no agendamento, e deixa-la inteira faria o 12,5 do cadastro virar
+    # 12 na hora de marcar - o cadastro diria uma coisa e a sessao outra.
+    #
+    # USING converte o que ja existe; inteiro cabe em NUMERIC(5,2) sem perda.
+    """
+    DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'scheduler' AND table_name = 'patients'
+                     AND column_name = 'custom_discount_pct'
+                     AND data_type = 'integer') THEN
+            ALTER TABLE scheduler.patients
+                ALTER COLUMN custom_discount_pct TYPE NUMERIC(5,2)
+                USING custom_discount_pct::NUMERIC(5,2);
+        END IF;
+    END $$;
+    """,
+    """
+    DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'scheduler' AND table_name = 'appointments'
+                     AND column_name = 'discount_pct'
+                     AND data_type = 'integer') THEN
+            ALTER TABLE scheduler.appointments
+                ALTER COLUMN discount_pct TYPE NUMERIC(5,2)
+                USING discount_pct::NUMERIC(5,2);
+        END IF;
+    END $$;
+    """,
     """
     DO $$ BEGIN
         IF NOT EXISTS (

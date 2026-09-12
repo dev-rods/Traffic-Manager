@@ -3,6 +3,7 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
+from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
@@ -132,7 +133,7 @@ class AppointmentService:
                 original_price_cents = sum(s.get("price_cents") or 0 for s in services) or None
 
             if original_price_cents is not None:
-                final_price_cents = original_price_cents * (100 - discount_pct) // 100
+                final_price_cents = aplica_desconto(original_price_cents, discount_pct)
 
         # 3. Calculate end_time
         start_parts = time.split(":")
@@ -491,7 +492,8 @@ class AppointmentService:
                 svc.get("duration_minutes"), get_duration_rules(self.db, appointment["clinic_id"]))
             original_price_cents = svc.get("price_cents")
 
-        final_price_cents = original_price_cents * (100 - discount_pct) // 100 if original_price_cents else original_price_cents
+        final_price_cents = (aplica_desconto(original_price_cents, discount_pct)
+                             if original_price_cents else original_price_cents)
 
         # 4. Calculate new end_time
         start_parts = start_time.split(":")

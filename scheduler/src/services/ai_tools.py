@@ -9,6 +9,7 @@ from src.services.confirmacao_de_areas import (
     recado_de_recusa,
     separa,
 )
+from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita
@@ -883,7 +884,7 @@ class ToolExecutor:
         campos divergirem - o bot le `discounted_price_display` para anunciar o
         valor, e um caminho sem esse campo daria preco vazio na conversa.
         """
-        descontado = total_cents * (100 - pct) // 100
+        descontado = aplica_desconto(total_cents, pct)
 
         def reais(centavos):
             return f"R$ {centavos / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")

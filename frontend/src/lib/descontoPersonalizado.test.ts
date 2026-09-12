@@ -31,8 +31,15 @@ describe('desconto personalizado no formulario', () => {
     }
   })
 
-  it('recusa fora da faixa e nao inteiro', () => {
-    for (const v of ['-1', '101', '30,5', '30%', 'abc']) {
+  it('aceita duas casas decimais, com ponto ou virgula', () => {
+    for (const v of ['12.5', '12,5', '33.33', '0.01']) {
+      expect(schema.safeParse({ custom_discount_pct: v }).success).toBe(true)
+    }
+    expect(descontoParaApi('12,5')).toBe(12.5)
+  })
+
+  it('recusa fora da faixa, mais de duas casas e lixo', () => {
+    for (const v of ['-1', '101', '12.555', '30%', 'abc']) {
       expect(schema.safeParse({ custom_discount_pct: v }).success).toBe(false)
     }
   })

@@ -2,6 +2,7 @@ import os
 import time
 import uuid
 import unicodedata
+from src.services.desconto_personalizado import aplica as aplica_desconto
 import logging
 from datetime import date, datetime, time as dt_time, timedelta
 from decimal import Decimal
@@ -1367,7 +1368,7 @@ class ConversationEngine:
                 discount_pct = 0
                 discount_reason = None
 
-        discounted_price = total_price * (100 - discount_pct) // 100
+        discounted_price = aplica_desconto(total_price, discount_pct)
 
         session["discount_pct"] = discount_pct
         session["discount_reason"] = discount_reason

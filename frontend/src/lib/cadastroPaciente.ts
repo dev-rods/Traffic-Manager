@@ -28,9 +28,12 @@ export const cadastroSchema = {
     .optional()
     .refine((v) => {
       if (!v || !v.trim()) return true
-      const n = Number(v)
-      return Number.isInteger(n) && n >= 0 && n <= 100
-    }, 'Informe um numero inteiro de 0 a 100'),
+      // Virgula tambem: e como se digita percentual em portugues.
+      const n = Number(v.replace(',', '.'))
+      if (!Number.isFinite(n) || n < 0 || n > 100) return false
+      // Mais de duas casas seria truncado pela coluna NUMERIC(5,2) sem aviso.
+      return Math.round(n * 100) === n * 100
+    }, 'Informe um valor de 0 a 100, com ate duas casas decimais'),
   email: z
     .string()
     .optional()
@@ -45,7 +48,20 @@ export const cadastroSchema = {
  */
 export function descontoParaApi(valor: string | undefined): number | null {
   if (!valor || !valor.trim()) return null
-  return Number(valor)
+  return Number(valor.replace(',', '.'))
+}
+
+/**
+ * O preço em centavos depois do desconto - a MESMA conta do backend.
+ *
+ * `Math.trunc` e não arredondamento: `aplica()` em
+ * `scheduler/src/services/desconto_personalizado.py` trunca, e a tela precisa
+ * mostrar o total que vai ser gravado. Divergindo, a atendente combina um
+ * valor com a paciente e o sistema cobra outro.
+ */
+export function precoComDesconto(totalCents: number, pct: number): number {
+  if (!totalCents) return totalCents || 0
+  return Math.trunc((totalCents * (100 - pct)) / 100)
 }
 
 /** `07903984519` → `079.039.845-19`. Só formata quando está completo. */

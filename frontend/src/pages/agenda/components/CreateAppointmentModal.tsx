@@ -18,6 +18,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useAuth } from '@/hooks/useAuth'
 import { formatPhone } from '@/utils/formatPhone'
 import type { PatientWithStats } from '@/types'
+import { precoComDesconto } from '@/lib/cadastroPaciente'
 
 interface CreateAppointmentModalProps {
   open: boolean
@@ -493,8 +494,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           const discountPct = discountMode === 'partnership' ? 100
             : discountMode === 'custom' && customDiscountPct ? Number(customDiscountPct)
             : 0
-          const discountAmount = subtotal * discountPct / 100
-          const total = subtotal - discountAmount
+          const total = precoComDesconto(subtotal, discountPct)
+          const discountAmount = subtotal - total
           const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
           return (
