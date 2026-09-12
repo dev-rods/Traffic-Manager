@@ -6,3 +6,5 @@ frontend/.env*.local
 booking-site/.env
 booking-site/.env.local
 booking-site/.env*.local
+.vercel
+.env*
