@@ -12,6 +12,8 @@ from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
 from src.services.bot_policy import CAMPO_DE_PAUSA, PAUSA_HANDOFF, esta_pausado
 from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
+from src.services.prompt_da_campanha import adapta as adapta_para_campanha
+from src.services.prompt_da_campanha import pede_cadastro
 from src.services.calendario import bloco_de_contexto
 from src.services.preco_minimo import preco_minimo_por_area
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
@@ -328,6 +330,8 @@ class ConversationAgent:
         # bot inventou dez horários. Agora a lista curta é a de conversa fiada.
         forcar_proxima = exige_consulta(user_content) and not gatilho
         ja_refez = False
+        ja_refez_cadastro = False
+        em_campanha = campanha_viva(session)
         efeito_cometido = None
 
         try:
@@ -374,6 +378,29 @@ class ConversationAgent:
 
                     # Efeito já cometido não se refaz: mandar consultar de novo
                     # convida o modelo a chamar book_appointment outra vez.
+                    # Pedir cadastro a quem ja e cadastrada e o erro mais
+                    # visivel deste fluxo. Retirar o roteiro do prompt reduz a
+                    # chance; esta trava e o que garante.
+                    cadastro = (
+                        pede_cadastro(texto_provisorio) if em_campanha else []
+                    )
+                    if cadastro and not ja_refez_cadastro and not efeito_cometido:
+                        ja_refez_cadastro = True
+                        logger.warning(
+                            f"[Campanha] {phone} pediu cadastro ({cadastro}) a paciente "
+                            f"ja cadastrada; refazendo"
+                        )
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            "PARE. Esta pessoa JA E PACIENTE CADASTRADA e voce acabou de "
+                            "pedir dado de cadastro a ela. Nao peca nome, CPF, data de "
+                            "nascimento nem e-mail: a clinica ja tem tudo isso, e o nome "
+                            "dela esta no seu contexto. Reescreva a mensagem sem esse "
+                            "pedido, seguindo de onde a conversa estava."
+                        )})
+                        text_parts = []
+                        continue
+
                     if inventado and not ja_refez and not efeito_cometido:
                         ja_refez = True
                         logger.warning(
@@ -464,6 +491,28 @@ class ConversationAgent:
         # Só data e horário derrubam a mensagem. Preço, duração e status
         # continuam apenas registrados: erram para o lado do constrangimento,
         # não o da paciente que vem num dia que não existe.
+        # Ultima rede do pedido de cadastro. So chega aqui quem ja levou um PARE
+        # explicito e insistiu. Rarissimo por construcao - o roteiro nem esta
+        # mais no prompt - mas pedir CPF a uma paciente cadastrada e o erro que
+        # nao pode sair daqui de jeito nenhum.
+        if em_campanha:
+            insistiu = pede_cadastro(final_text)
+            if insistiu:
+                logger.error(
+                    f"[Campanha] BLOQUEADO {phone}: insistiu em pedir cadastro "
+                    f"{insistiu} depois do PARE | resposta={final_text[:200]!r}"
+                )
+                final_text = (
+                    "Perfeito! Vou confirmar os detalhes com uma especialista e "
+                    "ja te retorno 😊"
+                )
+                pending_buttons = None
+                handoff_requested = True
+                session["state"] = "HUMAN_HANDOFF"
+                session["human_handoff_requested_at"] = int(time.time())
+                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+
         try:
             sem_origem = fatos_sem_origem(final_text, respaldo_das_tools)
             inventado = fatos_de_agenda(sem_origem)
@@ -683,7 +732,14 @@ class ConversationAgent:
             "Se houver instruções, envie-as ao cliente."
         )
 
-        system_prompt += self._bloco_da_campanha(clinic_id, phone, session)
+        bloco_da_campanha = self._bloco_da_campanha(clinic_id, phone, session)
+        if bloco_da_campanha:
+            # Tira o roteiro de lead ANTES de acrescentar o da campanha. Antes
+            # isto era so acrescimo, e o roteiro antigo continuava la: em
+            # 11/09/2026 o bot reproduziu palavra por palavra o passo 6 dele,
+            # pedindo CPF a uma paciente cadastrada.
+            system_prompt = adapta_para_campanha(system_prompt)
+        system_prompt += bloco_da_campanha
 
         return system_prompt
 
