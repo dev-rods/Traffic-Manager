@@ -119,6 +119,25 @@ class TestNormalizaEntrada(unittest.TestCase):
                 self.assertFalse(normaliza_entrada(ruim)[0])
 
 
+class TestMensagemDeErro(unittest.TestCase):
+    """A mensagem e o que a recepcao le quando erra o formato.
+
+    Ela dizia "deve ser um inteiro" depois de o campo passar a aceitar
+    decimais: mandava a atendente fazer exatamente a coisa errada. Mensagem
+    que envelhece e pior que mensagem generica, porque parece confiavel.
+    """
+
+    def test_a_mensagem_nao_pede_inteiro(self):
+        from pathlib import Path
+
+        raiz = Path(__file__).resolve().parents[2] / "src" / "functions" / "patient"
+        for arquivo in ("create.py", "update.py"):
+            texto = (raiz / arquivo).read_text(encoding="utf-8")
+            with self.subTest(arquivo=arquivo):
+                self.assertNotIn("inteiro de 0 a 100", texto)
+                self.assertIn("duas casas decimais", texto)
+
+
 class TestRazao(unittest.TestCase):
     def test_a_razao_gravada_identifica_a_origem(self):
         """Sem razao propria, o relatorio nao distingue combinado de faixa."""

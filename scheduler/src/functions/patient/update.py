@@ -98,7 +98,7 @@ def handler(event, context):
                     if not ok:
                         return http_response(400, {
                             "status": "ERROR",
-                            "message": "custom_discount_pct deve ser um inteiro de 0 a 100"})
+                            "message": "custom_discount_pct deve ser de 0 a 100, com ate duas casas decimais"})
                 if field == "email":
                     val = (str(val).strip() or None) if val else None
                 sets.append(f"{field} = %s")

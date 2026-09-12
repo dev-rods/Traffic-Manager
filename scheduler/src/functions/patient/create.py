@@ -59,7 +59,7 @@ def handler(event, context):
         if not ok:
             return http_response(400, {
                 "status": "ERROR",
-                "message": "custom_discount_pct deve ser um inteiro de 0 a 100"})
+                "message": "custom_discount_pct deve ser de 0 a 100, com ate duas casas decimais"})
         cpf = normaliza_cpf(body.get("cpf"))
         birth_date = normaliza_data_nascimento(body.get("birth_date"))
         if cpf is False:
