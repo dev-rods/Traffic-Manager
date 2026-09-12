@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, date, time
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
+from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, NotFoundError, OptimisticLockError, ConflictError
 
@@ -138,7 +139,7 @@ def handler(event, context):
             if existing and existing[0].get("original_price_cents") is not None:
                 orig = existing[0]["original_price_cents"]
                 updates.append("final_price_cents = %s")
-                params.append(orig * (100 - discount_pct) // 100)
+                params.append(aplica_desconto(orig, discount_pct))
             messages.append("desconto")
 
         if updates:

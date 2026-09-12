@@ -13,6 +13,7 @@ import { ObservacaoField } from './ObservacaoField'
 import { PrimeiraVisitaField } from './PrimeiraVisitaField'
 import { ehHorarioValido } from '@/lib/horario'
 import type { Appointment, UpdateAppointmentPayload } from '@/types'
+import { precoComDesconto } from '@/lib/cadastroPaciente'
 
 interface EditAppointmentModalProps {
   appointment: Appointment | null
@@ -322,8 +323,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           const discountPct = discountMode === 'partnership' ? 100
             : discountMode === 'custom' && customDiscountPct ? Number(customDiscountPct)
             : 0
-          const discountAmount = subtotal * discountPct / 100
-          const total = subtotal - discountAmount
+          const total = precoComDesconto(subtotal, discountPct)
+          const discountAmount = subtotal - total
           const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
           return (

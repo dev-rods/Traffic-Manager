@@ -12,6 +12,8 @@ engano olhando a tabela.
 import unittest
 from unittest import mock
 
+from decimal import Decimal
+
 from src.services.desconto_personalizado import (
     RAZAO,
     do_paciente,
@@ -33,11 +35,15 @@ def db_com(valor, erro=False):
 
 class TestLeitura(unittest.TestCase):
     def test_paciente_com_combinado(self):
-        self.assertEqual(do_paciente(db_com(30), CLINIC, FONE), 30)
+        self.assertEqual(do_paciente(db_com(30), CLINIC, FONE), Decimal(30))
+
+    def test_combinado_com_casas_decimais(self):
+        self.assertEqual(do_paciente(db_com(Decimal("12.50")), CLINIC, FONE),
+                         Decimal("12.50"))
 
     def test_zero_e_um_combinado_legitimo(self):
         """"Esta paciente nunca recebe desconto" e uma decisao, nao ausencia."""
-        self.assertEqual(do_paciente(db_com(0), CLINIC, FONE), 0)
+        self.assertEqual(do_paciente(db_com(0), CLINIC, FONE), Decimal(0))
 
     def test_nulo_significa_sem_combinado(self):
         self.assertIsNone(do_paciente(db_com(None), CLINIC, FONE))
@@ -84,14 +90,31 @@ class TestNormalizaEntrada(unittest.TestCase):
                 self.assertEqual(normaliza_entrada(vazio), (True, None))
 
     def test_aceita_numero_e_texto_numerico(self):
-        self.assertEqual(normaliza_entrada(30), (True, 30))
-        self.assertEqual(normaliza_entrada(" 30 "), (True, 30))
+        self.assertEqual(normaliza_entrada(30), (True, Decimal("30.00")))
+        self.assertEqual(normaliza_entrada(" 30 "), (True, Decimal("30.00")))
 
     def test_zero_passa(self):
-        self.assertEqual(normaliza_entrada(0), (True, 0))
+        self.assertEqual(normaliza_entrada(0), (True, Decimal("0.00")))
+
+    def test_duas_casas_decimais(self):
+        """O pedido do Andre em 11/09/2026: 12,5% e 33,33% sao combinados reais."""
+        self.assertEqual(normaliza_entrada("12.5"), (True, Decimal("12.50")))
+        self.assertEqual(normaliza_entrada("33.33"), (True, Decimal("33.33")))
+
+    def test_virgula_como_separador(self):
+        """E como se digita percentual em portugues. Recusar obrigaria a
+        recepcao a adivinhar o formato."""
+        self.assertEqual(normaliza_entrada("12,5"), (True, Decimal("12.50")))
+
+    def test_mais_de_duas_casas_e_recusado(self):
+        """A coluna e NUMERIC(5,2): a terceira casa seria truncada em silencio,
+        e o combinado gravado ficaria diferente do que a clinica digitou."""
+        for demais in ("12.555", "0.001", "99.999"):
+            with self.subTest(demais=demais):
+                self.assertFalse(normaliza_entrada(demais)[0])
 
     def test_recusa_fora_da_faixa_e_lixo(self):
-        for ruim in (-1, 101, "abc", "30%"):
+        for ruim in (-1, 101, "abc", "30%", "100.01"):
             with self.subTest(ruim=ruim):
                 self.assertFalse(normaliza_entrada(ruim)[0])
 

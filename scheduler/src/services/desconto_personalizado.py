@@ -18,14 +18,50 @@ Fica num modulo proprio porque a pergunta e feita em dois lugares - a tool do
 bot e a criacao pelo painel - e resposta duplicada diverge em silencio.
 """
 import logging
-from typing import Optional
+from decimal import Decimal, InvalidOperation
+from typing import Optional, Union
 
 logger = logging.getLogger(__name__)
 
 RAZAO = "personalizado"
 
+# Duas casas decimais: 12,5% e 33,33% sao combinados reais, e o inteiro os
+# arredondava em silencio. O percentual e gravado no agendamento tambem, entao
+# a coluna de la e NUMERIC(5,2) pelo mesmo motivo.
+CASAS = 2
+PASSO = Decimal("0.01")
 
-def do_paciente(db, clinic_id: str, phone: str) -> Optional[int]:
+
+def aplica(total_cents: int, pct: Union[int, float, Decimal, None]) -> int:
+    """O preco em centavos depois do desconto.
+
+    Existe porque o calculo estava repetido em cinco lugares do backend, cada um
+    com sua divisao inteira. Com percentual fracionario isso viraria cinco
+    arredondamentos possivelmente diferentes para o mesmo agendamento - e a
+    divergencia apareceria como um centavo a mais num relatorio e a menos em
+    outro, sem ninguem saber qual esta certo.
+
+    TRUNCA, nao arredonda, para manter o que ja acontecia com percentual
+    inteiro: `total * (100 - pct) // 100`. Trocar para arredondamento mudaria
+    precos de agendamentos antigos ao recalcula-los.
+
+    Decimal e nao float porque 0.1 nao existe exato em binario, e preco errado
+    por um centavo e o tipo de defeito que ninguem consegue explicar depois.
+    """
+    if not total_cents:
+        return total_cents or 0
+    if pct is None:
+        return int(total_cents)
+    try:
+        p = Decimal(str(pct))
+    except (InvalidOperation, ValueError):
+        logger.error(f"[Desconto] percentual ilegivel: {pct!r}; aplicando zero")
+        return int(total_cents)
+    restante = (Decimal(100) - p) / Decimal(100)
+    return int(Decimal(total_cents) * restante)
+
+
+def do_paciente(db, clinic_id: str, phone: str) -> Optional[Decimal]:
     """O percentual combinado com esta paciente, ou None se nao ha.
 
     Falha fechada em None: sem resposta do banco, vale a politica normal. O
@@ -50,12 +86,12 @@ def do_paciente(db, clinic_id: str, phone: str) -> Optional[int]:
         return None
 
     try:
-        pct = int(valor)
-    except (TypeError, ValueError):
+        pct = Decimal(str(valor))
+    except (InvalidOperation, TypeError, ValueError):
         logger.error(f"[DescontoPersonalizado] valor ilegivel para {phone}: {valor!r}")
         return None
 
-    if not 0 <= pct <= 100:
+    if not Decimal(0) <= pct <= Decimal(100):
         # O CHECK do banco impede, mas dado antigo ou escrita manual nao passam
         # por ele. Percentual fora da faixa viraria preco negativo.
         logger.error(f"[DescontoPersonalizado] {phone} fora da faixa: {pct}")
@@ -73,9 +109,14 @@ def normaliza_entrada(valor):
     if valor is None or (isinstance(valor, str) and not valor.strip()):
         return True, None
     try:
-        pct = int(str(valor).strip())
-    except (TypeError, ValueError):
+        # Virgula tambem: e como se digita percentual em portugues, e recusar
+        # "12,5" obrigaria a recepcao a adivinhar o formato.
+        pct = Decimal(str(valor).strip().replace(",", "."))
+    except (InvalidOperation, TypeError, ValueError):
         return False, None
-    if not 0 <= pct <= 100:
+    if not Decimal(0) <= pct <= Decimal(100):
         return False, None
-    return True, pct
+    if pct != pct.quantize(PASSO):
+        # Mais de duas casas nao cabe na coluna e seria truncado em silencio.
+        return False, None
+    return True, pct.quantize(PASSO)
