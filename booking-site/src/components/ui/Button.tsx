@@ -16,7 +16,7 @@ const SIZES = {
 
 const VARIANTS = {
   primary: 'bg-ink-900 text-ink-50 hover:bg-ink-800',
-  secondary: 'bg-accent-100 text-accent-700 hover:bg-accent-200',
+  secondary: 'bg-accent-100 text-accent-700 border border-accent-200 hover:bg-accent-200',
   ghost: 'bg-transparent text-ink-700 hover:bg-ink-100',
   danger: 'bg-transparent text-danger-500 hover:bg-danger-100',
 }
@@ -30,7 +30,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       disabled={disabled || loading}
       className={cx(
-        'inline-flex items-center justify-center gap-2 rounded-full font-medium transition-colors duration-150',
+        'inline-flex items-center justify-center gap-2 rounded-lg font-display font-semibold transition-colors duration-150',
         'disabled:cursor-not-allowed disabled:opacity-50',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500',
         SIZES[size],

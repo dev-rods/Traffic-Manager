@@ -56,7 +56,7 @@ export function Home() {
         </div>
       </div>
 
-      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-500">Serviços</h2>
+      <h2 className="mb-3 font-display text-lg font-semibold text-ink-900">Serviços</h2>
 
       {services.length === 0 ? (
         <EmptyState
