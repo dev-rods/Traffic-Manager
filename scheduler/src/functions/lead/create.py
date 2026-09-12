@@ -19,7 +19,7 @@ PII (telefone/email) é sempre mascarada nos logs.
 import logging
 import os
 import time
-from datetime import datetime, date, time as dtime
+from datetime import datetime, date, time as dtime, timedelta, timezone
 from decimal import Decimal
 
 import psycopg2
@@ -98,6 +98,11 @@ def _log_pg_error(prefix, exc):
         f"hint={getattr(diag, 'message_hint', None)} table={getattr(diag, 'table_name', None)} "
         f"constraint={getattr(diag, 'constraint_name', None)} raw={str(exc).strip()}"
     )
+
+
+
+# Janela máxima entre a criação do lead e o disparo. É a guarda que impede que
+# qualquer reprocessamento ou backfill dispare mensagem para lead antigo: mesmo
 
 
 def handler(event, context):
@@ -233,6 +238,19 @@ def handler(event, context):
                         f"{log_prefix} Read-back pós-commit FALHOU: id={lead.get('id')} não encontrado "
                         f"após o commit — escrita revertida ou banco/schema diferente do lido. {_db_target()}"
                     )
+
+        # O DISPARO AUTOMATICO FOI REMOVIDO em 05/09/2026.
+        #
+        # Nao ha como saber por API que a atendente ja falou com um lead que
+        # nunca respondeu: a mensagem dela chega ao webhook como LID sem
+        # telefone e o z-api tambem nao resolve (4 de 27 LIDs testados, e os 4
+        # ja estavam na agenda do aparelho). Abordar automaticamente corria o
+        # risco permanente de escrever para quem ja estava sendo atendido.
+        #
+        # Quem inicia agora e a atendente, pelo botao na tela de leads. A fila
+        # e o dispatcher continuam existindo: eles e que respeitam horario
+        # comercial e o limite que protege a linha contra bloqueio no z-api.
+        # Ver src/functions/lead/iniciar_bot.py.
 
         logger.info(f"{log_prefix} 201 Lead registrado ({elapsed_ms()}ms total)")
         return http_response(201, {

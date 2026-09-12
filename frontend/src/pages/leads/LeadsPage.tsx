@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { useLeads } from '@/hooks/useLeads'
+import { useAcoesDoLead, useLeads } from '@/hooks/useLeads'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { formatPhone } from '@/utils/formatPhone'
 import type { Lead } from '@/types'
 
@@ -16,6 +17,10 @@ export function LeadsPage() {
 
   const { data, isLoading, isError, error, refetch } = useLeads({
     booked: bookedParam,
+    // Quem chega direto no WhatsApp nao e lead captado: a tela mede o que o
+    // site trouxe. Exclusao por origem, e no servidor - o LIMIT corta no banco,
+    // entao filtrar aqui esconderia leads do site ao passar de 100.
+    excludeSource: 'whatsapp',
     limit: 100,
   })
 
@@ -23,7 +28,9 @@ export function LeadsPage() {
   const totalLeads = data?.total ?? 0
   const bookedCount = leads.filter((l) => l.booked).length
   const notBookedCount = leads.filter((l) => !l.booked).length
-  const conversionRate = totalLeads > 0 ? Math.round((bookedCount / totalLeads) * 100) : 0
+  // Divide pelo mesmo conjunto que gerou bookedCount. Usar data.total aqui daria
+  // percentual errado em silêncio assim que houvesse mais leads que o limit.
+  const conversionRate = leads.length > 0 ? Math.round((bookedCount / leads.length) * 100) : 0
 
   if (isLoading) return <div className="p-6"><SkeletonTable rows={8} /></div>
   if (isError) {
@@ -41,7 +48,9 @@ export function LeadsPage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-gray-900">Leads</h1>
-        <p className="text-sm text-gray-400 mt-1">Contatos que iniciaram conversa com o bot</p>
+        <p className="text-sm text-gray-400 mt-1">
+          Contatos capturados pelo site
+        </p>
       </div>
 
       {/* KPI Cards */}
@@ -76,7 +85,7 @@ export function LeadsPage() {
       {leads.length === 0 ? (
         <EmptyState
           title="Nenhum lead encontrado"
-          description={status !== 'all' ? 'Tente mudar o filtro.' : 'Leads aparecem quando pacientes entram em contato via WhatsApp.'}
+          description={status !== 'all' ? 'Tente mudar o filtro.' : 'Leads aparecem quando alguém preenche o formulário da landing page ou chama no WhatsApp.'}
         />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -86,7 +95,10 @@ export function LeadsPage() {
                 <th className="px-5 py-3">Contato</th>
                 <th className="px-3 py-3">Telefone</th>
                 <th className="px-3 py-3">Fonte</th>
+                <th className="px-3 py-3">Conversa</th>
+                <th className="px-3 py-3">Atendimento</th>
                 <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3">Conversa inicial</th>
                 <th className="px-3 py-3">Valor 1o agend.</th>
                 <th className="px-3 py-3">Data</th>
               </tr>
@@ -102,6 +114,15 @@ export function LeadsPage() {
                   </td>
                   <td className="px-3 py-3">
                     <Badge variant="neutral">{lead.source}</Badge>
+                  </td>
+                  <td className="px-3 py-3">
+                    <ConversationBadge lead={lead} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <AtendimentoBadge lead={lead} />
+                  </td>
+                  <td className="px-3 py-3">
+                    <AcoesDeInicio lead={lead} />
                   </td>
                   <td className="px-3 py-3">
                     <Badge variant={lead.booked ? 'success' : 'warning'}>
@@ -122,6 +143,128 @@ export function LeadsPage() {
           </table>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Estado da conversa do lead.
+ *
+ * A ordem das checagens importa: quem respondeu já foi contatado, então
+ * "Respondeu" tem precedência sobre "Contatado".
+ *
+ * `has_whatsapp_chat` entra por último e é o que fecha o buraco que gerou esta
+ * coluna: existe conversa no WhatsApp que nunca passou pelo bot, porque a
+ * atendente respondeu pelo celular. Na Essência eram 17 de 37 leads do site
+ * marcados como "Sem contato" tendo conversa desenvolvida.
+ *
+ * Não vira "Respondeu": a lista de chats do z-api não diz quem falou, e usá-la
+ * para isso inflaria a taxa de conversão com conversas em que só a clínica
+ * falou.
+ */
+function ConversationBadge({ lead }: { lead: Lead }) {
+  if (lead.conversation_started_at) return <Badge variant="success">Respondeu</Badge>
+  if (lead.first_contact_status === 'SENT') return <Badge variant="neutral">Contatado</Badge>
+  if (lead.first_contact_status === 'QUEUED') return <Badge variant="warning">Na fila</Badge>
+  if (lead.first_contact_status === 'FAILED') return <Badge variant="danger">Falhou</Badge>
+  if (lead.has_whatsapp_chat) return <Badge variant="neutral">Tem conversa</Badge>
+  return <Badge variant="neutral">Sem contato</Badge>
+}
+
+/** Quem está conduzindo a conversa agora. */
+function AtendimentoBadge({ lead }: { lead: Lead }) {
+  switch (lead.conversation_status) {
+    case 'HUMANO':
+      return <Badge variant="warning">Atendente</Badge>
+    case 'AGUARDA_HUMANO':
+      return <Badge variant="danger">Aguarda atendente</Badge>
+    case 'BOT':
+      return <Badge variant="success">Bot</Badge>
+    default:
+      return <span className="text-gray-300">-</span>
+  }
+}
+
+/**
+ * Os dois botoes de inicio de conversa.
+ *
+ * "Iniciar pelo Bot" so acende quando o servidor disse que pode. A regra tem
+ * seis condicoes e vive em `elegibilidade_do_bot.py`; aqui so se renderiza o
+ * que veio pronto, senao a mesma regra existiria em dois lugares e divergiria
+ * em silencio.
+ *
+ * "Ja iniciada" alterna. Ele existe porque a API NAO enxerga o que ele
+ * registra: quando a atendente escreve para quem nunca respondeu, a mensagem
+ * chega ao webhook como LID sem telefone e se perde. Quem sabe e ela.
+ */
+function AcoesDeInicio({ lead }: { lead: Lead }) {
+  const { iniciarPeloBot, alternarContatoManual } = useAcoesDoLead()
+  const origem = lead.contact_started_source
+
+  // Iniciada pelo bot tem estado proprio: mostra se saiu ou se esta na fila.
+  if (origem === 'BOT') {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <Badge variant="success">Iniciada pelo bot</Badge>
+        <span className="text-[11px] text-gray-400">
+          {lead.first_contact_status === 'QUEUED' ? 'na fila' : 'enviada'}
+        </span>
+      </div>
+    )
+  }
+
+  // Ja sabemos que comecou. Nao ha o que a atendente confirmar aqui, e pedir o
+  // clique treinaria ela a clicar sem ler - justo no botao cuja unica razao de
+  // existir e o caso em que ela sabe algo que a API nao mostra.
+  if (origem === 'RESPONDEU' || origem === 'WHATSAPP') {
+    return (
+      <span title={lead.contact_started_message ?? ''}>
+        <Badge variant="neutral">Já iniciada</Badge>
+      </span>
+    )
+  }
+
+  // Marcada por uma pessoa: e a unica que se desfaz, porque o clique dela e o
+  // unico fato que um clique pode reverter.
+  if (origem === 'HUMANO') {
+    return (
+      <Button
+        size="sm"
+        variant="success"
+        disabled={alternarContatoManual.isPending || !lead.can_unmark_contact}
+        loading={alternarContatoManual.isPending}
+        title="Marcado por uma atendente. Clique para desmarcar."
+        onClick={() => alternarContatoManual.mutate(lead.id)}
+      >
+        Já iniciada ✓
+      </Button>
+    )
+  }
+
+  // Ponto cego: nenhuma evidencia de contato. Aqui, e so aqui, a atendente
+  // decide - ou manda o bot abrir, ou registra que ela mesma ja falou.
+  return (
+    <div className="flex items-center gap-1.5">
+      <Button
+        size="sm"
+        variant="primary"
+        disabled={!lead.can_start_bot || iniciarPeloBot.isPending}
+        loading={iniciarPeloBot.isPending}
+        title={lead.can_start_bot ? 'O bot abre a conversa agora' : lead.bot_block_message ?? ''}
+        onClick={() => iniciarPeloBot.mutate(lead.id)}
+      >
+        Iniciar pelo Bot
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={alternarContatoManual.isPending}
+        loading={alternarContatoManual.isPending}
+        title="Registrar que você já falou com esta pessoa fora do bot"
+        onClick={() => alternarContatoManual.mutate(lead.id)}
+      >
+        Já iniciada
+      </Button>
     </div>
   )
 }

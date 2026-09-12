@@ -1,0 +1,7 @@
+# Resultados de execucao do eval sao locais e regeneraveis.
+#
+# Nao versionar: uma nota so vale contra a versao do eval que a produziu, e
+# resultado antigo com metrica nova parece comparavel quando nao e. Em 04/09
+# tres baselines seguidos foram invalidados por defeito de medicao - se
+# estivessem no repositorio, alguem compararia contra eles meses depois.
+*.json

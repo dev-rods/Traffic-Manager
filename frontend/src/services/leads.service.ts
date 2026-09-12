@@ -7,10 +7,36 @@ interface LeadsResponse {
   total: number
 }
 
+export interface LeadListParams {
+  startDate?: string
+  endDate?: string
+  booked?: boolean
+  /** Origens a excluir, separadas por virgula. Ex: 'whatsapp'. */
+  excludeSource?: string
+  limit?: number
+  offset?: number
+}
+
 export const leadsService = {
-  list(clinicId: string, params?: { startDate?: string; endDate?: string; booked?: boolean; limit?: number; offset?: number }) {
+  list(clinicId: string, params?: LeadListParams) {
     return api
       .get<LeadsResponse>(`/clinics/${clinicId}/leads`, { params })
+      .then((r) => r.data)
+  },
+
+  /** Manda o bot abrir conversa. O servidor revalida a elegibilidade. */
+  iniciarPeloBot(leadId: string) {
+    return api
+      .post<{ status: string; leadId: string }>(`/leads/${leadId}/iniciar-pelo-bot`)
+      .then((r) => r.data)
+  },
+
+  /** Alterna "Ja iniciada": marca, ou desmarca se foi uma pessoa que marcou. */
+  alternarContatoManual(leadId: string) {
+    return api
+      .post<{ status: string; first_contact_channel: string | null }>(
+        `/leads/${leadId}/marcar-contatado`
+      )
       .then((r) => r.data)
   },
 

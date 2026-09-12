@@ -9,13 +9,17 @@ import { CancelAppointmentModal } from './components/CancelAppointmentModal'
 import { CreateAppointmentModal } from './components/CreateAppointmentModal'
 import { EditAppointmentModal } from './components/EditAppointmentModal'
 import { todayStr } from '@/utils/dateHelpers'
+import { paginaDaProximaData } from '@/utils/agendaPaging'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import type { Appointment } from '@/types'
 
 const PAGE_SIZE = 7
 
 export function AgendaPage() {
-  const [pageIndex, setPageIndex] = useState(0)
+  // null = ainda não navegou, então vale a página padrão (as próximas datas).
+  // Guardar "não escolheu" em vez de um número evita que a página do usuário
+  // seja sobrescrita quando a lista de datas recarrega.
+  const [pageIndex, setPageIndex] = useState<number | null>(null)
 
   // Popover state
   const [popoverAppointment, setPopoverAppointment] = useState<Appointment | null>(null)
@@ -42,7 +46,12 @@ export function AgendaPage() {
 
   // Paginate
   const totalPages = Math.max(1, Math.ceil(allDates.length / PAGE_SIZE))
-  const safePageIndex = Math.min(pageIndex, totalPages - 1)
+  // A agenda abre no trabalho que está por vir, não no começo do histórico.
+  const paginaPadrao = useMemo(
+    () => paginaDaProximaData(allDates, todayStr(), PAGE_SIZE),
+    [allDates],
+  )
+  const safePageIndex = Math.min(pageIndex ?? paginaPadrao, totalPages - 1)
   const visibleDates = allDates.slice(safePageIndex * PAGE_SIZE, (safePageIndex + 1) * PAGE_SIZE)
 
   // Fetch appointments for the visible date range
@@ -54,17 +63,11 @@ export function AgendaPage() {
   const appointments = data?.appointments ?? []
 
   // Navigation
-  const handlePrev = () => setPageIndex((i) => Math.max(0, i - 1))
-  const handleNext = () => setPageIndex((i) => Math.min(totalPages - 1, i + 1))
+  const handlePrev = () => setPageIndex(Math.max(0, safePageIndex - 1))
+  const handleNext = () => setPageIndex(Math.min(totalPages - 1, safePageIndex + 1))
 
-  const handleToday = () => {
-    const today = todayStr()
-    // Find page that contains today or the nearest future date
-    const idx = allDates.findIndex((d) => d >= today)
-    if (idx >= 0) {
-      setPageIndex(Math.floor(idx / PAGE_SIZE))
-    }
-  }
+  // Volta ao padrão: o botão "Próximas" faz o mesmo que abrir a tela.
+  const handleToday = () => setPageIndex(null)
 
   // Slot click → open create modal
   const handleSlotClick = useCallback((date: string, time: string) => {

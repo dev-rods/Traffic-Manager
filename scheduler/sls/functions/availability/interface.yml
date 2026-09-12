@@ -42,6 +42,50 @@ ListAvailabilityRules:
         method: get
         cors: true
 
+DeleteAvailabilityRule:
+  handler: src.functions.availability.rules.delete_handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DelAvailRule-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/availability-rules/{ruleId}
+        method: delete
+        cors: true
+
+UpdateAvailabilityRule:
+  handler: src.functions.availability.rules.update_handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-UpdAvailRule-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/availability-rules/{ruleId}
+        method: patch
+        cors: true
+
 CreateAvailabilityException:
   handler: src.functions.availability.exceptions.create_handler
   memorySize: 512
@@ -84,6 +128,28 @@ ListAvailabilityExceptions:
     - http:
         path: clinics/{clinicId}/availability-exceptions
         method: get
+        cors: true
+
+DeleteAvailabilityException:
+  handler: src.functions.availability.exceptions.delete_handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DelAvailExcept-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/availability-exceptions/{exceptionId}
+        method: delete
         cors: true
 
 GetAvailableSlots:

@@ -9,6 +9,12 @@ CreateLead:
         - ssm:GetParameter
       Resource:
         - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    # Enfileira a abertura de conversa quando o lead é novo e elegível.
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-outbound-queue"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
@@ -27,6 +33,15 @@ ListLeads:
   timeout: 30
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListLeads-lambdaRole
   iamRoleStatements:
+    # BatchGetItem: o status da conversa (bot ou atendente) vem das sessoes, uma
+    # leitura em lote por pagina. Sem isto a listagem cai no fallback e o painel
+    # volta a mostrar lead sem status - sem erro nenhum aparente.
+    - Effect: Allow
+      Action:
+        - dynamodb:BatchGetItem
+        - dynamodb:GetItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
     - Effect: Allow
       Action:
         - ssm:GetParameter
@@ -65,4 +80,62 @@ UpdateLead:
     - http:
         path: leads/{leadId}
         method: put
+        cors: true
+
+IniciarConversaPeloBot:
+  handler: src.functions.lead.iniciar_bot.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-IniciarConversaPeloBot-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-outbound-queue"
+    # Acorda o dispatcher em vez de esperar o cron de 10 minutos: a atendente
+    # clica e olha a tela, e "na fila" parado por dez minutos parece defeito.
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+      Resource:
+        - "arn:aws:lambda:${self:provider.region}:${self:custom.accountId}:function:${self:service}-${self:custom.stage}-OutboundProcessor"
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: leads/{leadId}/iniciar-pelo-bot
+        method: post
+        cors: true
+
+MarcarContatoIniciado:
+  handler: src.functions.lead.marcar_contatado.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-MarcarContatoIniciado-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: leads/{leadId}/marcar-contatado
+        method: post
         cors: true

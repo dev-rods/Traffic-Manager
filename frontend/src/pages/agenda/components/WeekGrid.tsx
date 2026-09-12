@@ -50,6 +50,7 @@ function AppointmentBlock({
   const displayName = a.patient_name || a.full_name || 'Sem nome'
   const serviceLine = [a.service_name, a.areas].filter(Boolean).join(' · ')
   const isPartnership = a.discount_reason === 'partnership'
+  const isPrimeira = a.is_first_visit
 
   return (
     <button
@@ -61,12 +62,44 @@ function AppointmentBlock({
       style={appointmentStyle(a)}
       className={[
         'w-full text-left rounded-md px-2 py-1 border-l-3 overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
+        // Parceria vence a estreia: quem vem por parceria quase sempre esta
+        // vindo pela primeira vez, e as duas cores no mesmo card nao cabem.
+        // A que muda o atendimento e a parceria.
+        //
+        // Fucsia na estreia. Violeta ficava perto demais do azul padrao para
+        // distinguir de relance - que e como a agenda e lida.
+        //
+        // Vermelho foi descartado apesar de o grid nunca mostrar cancelado
+        // (ele filtra `status !== 'CANCELLED'`): vermelho ja significa
+        // cancelado no popover e na acao de cancelar, e a mesma cor com dois
+        // sentidos na mesma tela cobra do usuario lembrar em qual metade ele
+        // esta. Fucsia nao disputa com azul, ambar, vermelho nem verde.
         isPartnership
           ? 'bg-amber-50 border-l-amber-400 text-amber-800'
-          : 'bg-brand-50 border-l-brand-500 text-brand-900',
+          : isPrimeira
+            ? 'bg-fuchsia-50 border-l-fuchsia-500 text-fuchsia-900'
+            : 'bg-brand-50 border-l-brand-500 text-brand-900',
       ].join(' ')}
     >
-      <p className="text-xs font-semibold truncate leading-tight">{displayName}</p>
+      {/* O horário ao lado do nome. Sem ele, acompanhar quem entra às 14h
+          exigia clicar em cada agendamento - a posição no grid dá a hora
+          aproximada, não a exata. `tabular-nums` mantém os dígitos alinhados
+          entre as linhas, senão a coluna de nomes serrilha. */}
+      <p className="text-xs font-semibold truncate leading-tight">
+        <span className="tabular-nums opacity-70">{a.start_time.slice(0, 5)}</span>
+        {' '}
+        {/* Cor sozinha nao basta: quem tem daltonismo, ou olha a agenda no
+            celular sob sol, precisa distinguir tambem. */}
+        {isPrimeira && !isPartnership && (
+          <span
+            title="Primeira vez na clínica"
+            className="inline-block px-1 rounded bg-fuchsia-200/70 text-[10px] font-bold align-middle mr-0.5"
+          >
+            1ª
+          </span>
+        )}
+        {displayName}
+      </p>
       {serviceLine && (
         <p className="text-[11px] truncate leading-tight opacity-75">{serviceLine}</p>
       )}

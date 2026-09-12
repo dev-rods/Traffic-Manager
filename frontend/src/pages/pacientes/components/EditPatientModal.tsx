@@ -4,6 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
+import { CadastroFields } from './CadastroFields'
+import { cadastroSchema, descontoParaApi } from '@/lib/cadastroPaciente'
 import { useUpdatePatient } from '@/hooks/usePatients'
 import { normalizePhone } from '@/utils/normalizePhone'
 import type { PatientWithStats } from '@/types'
@@ -12,6 +14,7 @@ const schema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   phone: z.string().min(10, 'Telefone invalido').max(20, 'Telefone invalido'),
   gender: z.enum(['M', 'F']).optional(),
+  ...cadastroSchema,
 })
 
 type FormData = z.infer<typeof schema>
@@ -38,6 +41,19 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
         name: patient.name ?? '',
         phone: patient.phone,
         gender: (patient.gender as 'M' | 'F') ?? undefined,
+        // `?? ''` e nao `?? undefined`: o input controlado precisa de string,
+        // e undefined faria o React reclamar de campo trocando de nao
+        // controlado para controlado quando o paciente carrega.
+        cpf: patient.cpf ?? '',
+        birth_date: patient.birth_date ?? '',
+        email: patient.email ?? '',
+        // String vazia quando nao ha combinado. `?? 0` aqui inventaria um
+        // desconto de zero por cento, que significa outra coisa.
+        custom_discount_pct:
+          patient.custom_discount_pct === null ||
+          patient.custom_discount_pct === undefined
+            ? ''
+            : String(patient.custom_discount_pct),
       })
     }
   }, [patient, reset])
@@ -52,6 +68,12 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
           name: data.name,
           phone: normalizePhone(data.phone),
           gender: data.gender as 'M' | 'F',
+          // Campo apagado na tela vira string vazia, que o backend grava como
+          // NULL. E o jeito de a atendente limpar um dado errado.
+          cpf: data.cpf ?? '',
+          birth_date: data.birth_date ?? '',
+          email: data.email ?? '',
+          custom_discount_pct: descontoParaApi(data.custom_discount_pct),
         },
       })
       onClose()
@@ -111,6 +133,8 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
             ))}
           </div>
         </div>
+
+        <CadastroFields register={register} errors={errors} />
 
         {serverError && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">

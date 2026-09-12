@@ -46,6 +46,11 @@ def handler(event, context):
             SELECT
                 a.id, a.clinic_id, a.service_id, a.appointment_date, a.start_time, a.end_time,
                 a.status, a.notes, a.version, a.created_at, a.updated_at,
+                -- A agenda colore por este campo e o modal de edicao marca a
+                -- caixinha com ele. Sem estar no SELECT, o PUT gravava e a tela
+                -- nunca mostrava: a atendente marcava, salvava, reabria e via
+                -- desmarcado - parecendo que nao salvou.
+                a.is_first_visit,
                 a.discount_pct, a.discount_reason, a.original_price_cents, a.final_price_cents,
                 a.full_name, a.total_duration_minutes as duration_minutes,
                 p.name as patient_name, p.phone as patient_phone,

@@ -6,30 +6,81 @@ from src.services.db.postgres import PostgresService
 
 logger = logging.getLogger(__name__)
 
+# Horizonte de busca por dias disponíveis, em dias corridos a partir de hoje.
+MAX_SEARCH_DAYS = 90
+
 
 class AvailabilityEngine:
 
     def __init__(self, db: PostgresService):
         self.db = db
+        # Duração do serviço e buffer da clínica não mudam entre as datas de uma
+        # mesma busca, mas eram relidos a cada dia verificado. Memorizar por
+        # instância corta 2 das 5 queries por data. A instância vive o tempo de
+        # uma requisição, então não há risco de servir valor obsoleto.
+        self._duracao_servico = {}
+        self._buffer_clinica = {}
+
+    def _get_service_duration(self, service_id: str) -> Optional[int]:
+        if service_id not in self._duracao_servico:
+            rows = self.db.execute_query(
+                "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid AND active = TRUE",
+                (service_id,),
+            )
+            self._duracao_servico[service_id] = rows[0]["duration_minutes"] if rows else None
+        return self._duracao_servico[service_id]
+
+    def _get_buffer_minutes(self, clinic_id: str) -> int:
+        if clinic_id not in self._buffer_clinica:
+            rows = self.db.execute_query(
+                "SELECT buffer_minutes FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
+                (clinic_id,),
+            )
+            self._buffer_clinica[clinic_id] = rows[0]["buffer_minutes"] if rows else 10
+        return self._buffer_clinica[clinic_id]
+
+    def _candidate_dates(self, clinic_id: str, start: date, horizon_days: int) -> List[str]:
+        """Datas do horizonte que têm alguma regra de disponibilidade.
+
+        Resolve numa única query quais dias sequer podem ter horário, em vez de
+        perguntar dia a dia. Cada verificação de dia custa 5 queries, então varrer
+        90 dias custava ~450 idas ao banco — mais de 80s numa clínica que atende
+        em poucas datas fixas por mês. Filtrando antes, só os dias com regra são
+        calculados.
+        """
+        end = start + timedelta(days=horizon_days)
+        rows = self.db.execute_query(
+            """
+            SELECT day_of_week, rule_date FROM scheduler.availability_rules
+            WHERE clinic_id = %s AND active = TRUE
+              AND (rule_date IS NULL OR rule_date BETWEEN %s AND %s)
+            """,
+            (clinic_id, start, end),
+        )
+        if not rows:
+            return []
+
+        datas_fixas = {r["rule_date"] for r in rows if r.get("rule_date")}
+        dias_semana = {r["day_of_week"] for r in rows if r.get("day_of_week") is not None}
+
+        candidatas = []
+        for i in range(1, horizon_days + 1):
+            alvo = start + timedelta(days=i)
+            # day_of_week no banco: 0=domingo ... 6=sábado
+            if alvo in datas_fixas or (alvo.isoweekday() % 7) in dias_semana:
+                candidatas.append(alvo.strftime("%Y-%m-%d"))
+        return candidatas
 
     def get_available_slots(self, clinic_id: str, target_date: str, service_id: str) -> List[str]:
         try:
             # 1. Fetch service duration
-            services = self.db.execute_query(
-                "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid AND active = TRUE",
-                (service_id,),
-            )
-            if not services:
+            duration_minutes = self._get_service_duration(service_id)
+            if duration_minutes is None:
                 logger.warning(f"[AvailabilityEngine] Servico {service_id} nao encontrado")
                 return []
-            duration_minutes = services[0]["duration_minutes"]
 
             # 2. Fetch clinic buffer
-            clinics = self.db.execute_query(
-                "SELECT buffer_minutes FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
-                (clinic_id,),
-            )
-            buffer_minutes = clinics[0]["buffer_minutes"] if clinics else 10
+            buffer_minutes = self._get_buffer_minutes(clinic_id)
 
             # 3. Parse date and get day_of_week (DB stores 0=Sunday, 1=Monday, ..., 6=Saturday)
             dt = datetime.strptime(target_date, "%Y-%m-%d").date()
@@ -93,15 +144,11 @@ class AvailabilityEngine:
 
             today = date.today()
             available_days = []
-            max_search = 90
 
-            for i in range(1, max_search + 1):
+            for target_str in self._candidate_dates(clinic_id, today, MAX_SEARCH_DAYS):
                 if len(available_days) >= max_dates:
                     break
-                target = today + timedelta(days=i)
-                target_str = target.strftime("%Y-%m-%d")
-                slots = self.get_available_slots(clinic_id, target_str, service_id)
-                if slots:
+                if self.get_available_slots(clinic_id, target_str, service_id):
                     available_days.append(target_str)
 
             return available_days
@@ -114,11 +161,7 @@ class AvailabilityEngine:
         """Calculate available slots using a direct duration value (sum of selected services)."""
         try:
             # 1. Fetch clinic buffer
-            clinics = self.db.execute_query(
-                "SELECT buffer_minutes FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
-                (clinic_id,),
-            )
-            buffer_minutes = clinics[0]["buffer_minutes"] if clinics else 10
+            buffer_minutes = self._get_buffer_minutes(clinic_id)
 
             # 2. Parse date and get day_of_week
             dt = datetime.strptime(target_date, "%Y-%m-%d").date()
@@ -183,15 +226,11 @@ class AvailabilityEngine:
 
             today = date.today()
             available_days = []
-            max_search = 90
 
-            for i in range(1, max_search + 1):
+            for target_str in self._candidate_dates(clinic_id, today, MAX_SEARCH_DAYS):
                 if len(available_days) >= max_dates:
                     break
-                target = today + timedelta(days=i)
-                target_str = target.strftime("%Y-%m-%d")
-                slots = self.get_available_slots_multi(clinic_id, target_str, total_duration)
-                if slots:
+                if self.get_available_slots_multi(clinic_id, target_str, total_duration):
                     available_days.append(target_str)
 
             return available_days

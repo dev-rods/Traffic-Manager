@@ -2,11 +2,12 @@ import { api } from './api'
 import type {
   AvailabilityRule,
   CreateAvailabilityRulePayload,
+  UpdateAvailabilityRulePayload,
   AvailabilityException,
   CreateAvailabilityExceptionPayload,
 } from '@/types'
 
-interface ListAvailabilityRulesResponse {
+export interface ListAvailabilityRulesResponse {
   status: string
   data: AvailabilityRule[]
 }
@@ -48,8 +49,14 @@ export const availabilityService = {
       .then((r) => r.data.data)
   },
 
-  deleteRule(ruleId: string) {
-    return api.delete(`/availability-rules/${ruleId}`).then((r) => r.data)
+  updateRule(clinicId: string, ruleId: string, payload: UpdateAvailabilityRulePayload) {
+    return api
+      .patch<RuleResponse>(`/clinics/${clinicId}/availability-rules/${ruleId}`, payload)
+      .then((r) => r.data.data)
+  },
+
+  deleteRule(clinicId: string, ruleId: string) {
+    return api.delete(`/clinics/${clinicId}/availability-rules/${ruleId}`).then((r) => r.data)
   },
 
   listExceptions(clinicId: string, params?: { from_date?: string; to_date?: string }) {
@@ -62,6 +69,12 @@ export const availabilityService = {
     return api
       .post<ExceptionResponse>(`/clinics/${clinicId}/availability-exceptions`, payload)
       .then((r) => r.data.data)
+  },
+
+  deleteException(clinicId: string, exceptionId: string) {
+    return api
+      .delete(`/clinics/${clinicId}/availability-exceptions/${exceptionId}`)
+      .then((r) => r.data)
   },
 
   getSlots(clinicId: string, date: string, serviceId: string, totalDuration?: number) {

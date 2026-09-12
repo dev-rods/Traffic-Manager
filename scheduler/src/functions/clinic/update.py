@@ -26,10 +26,11 @@ ALLOWED_FIELDS = {
     "max_future_dates",
     "active",
     "display_name",
-    "max_session_minutes",
     "welcome_intro_message",
     "bot_paused",
     "batch_message_template",
+    "bot_autoreply_policy",
+    "bot_pilot_phones",
     "logo_url",
     "favicon_url",
 }

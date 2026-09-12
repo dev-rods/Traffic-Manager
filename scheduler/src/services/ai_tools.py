@@ -1,7 +1,19 @@
 import json
 import logging
+import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
+
+from src.services.confirmacao_de_areas import (
+    areas_conversadas,
+    recado_de_recusa,
+    separa,
+)
+from src.services.desconto_personalizado import aplica as aplica_desconto
+from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
+from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
+from src.services.primeira_visita import e_primeira_visita
+from src.services.duration_rules import calcula_duracao
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +75,24 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "check_availability",
-            "description": "Check which days have available slots for the given total duration. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts. Returns objects with `date` (YYYY-MM-DD, used internally) and `label` (PT-BR formatted, ALWAYS use this for display — never compute the weekday yourself).",
+            "description": "Check which days have available slots for the selected areas. Only call AFTER the patient has selected areas and confirmed. Do NOT call for questions/doubts. Returns objects with `date` (YYYY-MM-DD, used internally) and `label` (PT-BR formatted, ALWAYS use this for display — never compute the weekday yourself).",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "total_duration_minutes": {
-                        "type": "integer",
-                        "description": "Total duration of all selected areas combined (in minutes)",
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected. The session duration is derived from these — never state or estimate a duration yourself.",
                     },
                 },
-                "required": ["total_duration_minutes"],
+                "required": ["service_area_pairs"],
             },
         },
     },
@@ -80,7 +100,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_time_slots",
-            "description": "Get available time slots for a specific date and total duration. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
+            "description": "Get available time slots for a specific date and the selected areas. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -88,12 +108,69 @@ TOOL_DEFINITIONS = [
                         "type": "string",
                         "description": "Date in YYYY-MM-DD format",
                     },
-                    "total_duration_minutes": {
-                        "type": "integer",
-                        "description": "Total duration of all selected areas combined (in minutes)",
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected. The session duration is derived from these — never state or estimate a duration yourself.",
                     },
                 },
-                "required": ["date", "total_duration_minutes"],
+                "required": ["date", "service_area_pairs"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sem_consulta_necessaria",
+            "description": (
+                "Declare that this message needs no data lookup — the patient is giving you "
+                "registration details (name, birth date, CPF, e-mail), agreeing, thanking or "
+                "chatting. Call this INSTEAD of answering directly when no other tool applies. "
+                "Never call it to avoid looking something up: if the patient asked about price, "
+                "schedule, duration, availability or anything about the procedure, the answer "
+                "comes from a tool, not from you."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "motivo": {
+                        "type": "string",
+                        "description": "Why no lookup is needed, in a few words.",
+                    },
+                },
+                "required": ["motivo"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_duration",
+            "description": "How long the session will take for the selected areas, in minutes. Call this before stating ANY duration to the patient — never add up area durations yourself and never answer from memory. Returns `total_duration_minutes`, already rounded and within the clinic limits.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": "Areas the patient selected.",
+                    },
+                },
+                "required": ["service_area_pairs"],
             },
         },
     },
@@ -142,7 +219,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "book_appointment",
-            "description": "Book an appointment. Requires all data to be collected: service areas, date, time, and patient full name. Always call check_availability and get_time_slots before booking. Always call calculate_discount before booking to get the correct pricing.",
+            "description": "Book an appointment. Requires all data to be collected: service areas, date, time, and the patient registration data (full name, birth date, CPF, email). Always call check_availability and get_time_slots before booking. Always call calculate_discount before booking to get the correct pricing.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -169,6 +246,18 @@ TOOL_DEFINITIONS = [
                     "full_name": {
                         "type": "string",
                         "description": "Patient's full name",
+                    },
+                    "birth_date": {
+                        "type": "string",
+                        "description": "Patient's birth date in YYYY-MM-DD format",
+                    },
+                    "cpf": {
+                        "type": "string",
+                        "description": "Patient's CPF, digits only or formatted",
+                    },
+                    "email": {
+                        "type": "string",
+                        "description": "Patient's email address",
                     },
                     "discount_pct": {
                         "type": "integer",
@@ -390,6 +479,48 @@ class ToolExecutor:
             logger.error(f"[ToolExecutor] Error executing {tool_name}: {e}")
             return {"error": str(e)}
 
+    def _barra_areas_nao_conversadas(self, args, clinic_id, ctx):
+        """Devolve o recado de recusa se houver area que ninguem conversou.
+
+        None significa "pode seguir". A trava fica AQUI, na tool, e nao no
+        prompt: em 11/09/2026 o prompt ja mandava confirmar as areas e o modelo
+        escolheu tres por conta propria mesmo assim. Instrucao e pedido; tool
+        que recusa e garantia.
+        """
+        pares = args.get("service_area_pairs") or []
+        if not pares:
+            return None
+
+        turnos = ctx.get("turnos") or []
+        if not turnos:
+            # FALHA FECHADA. Sem transcricao nao da para verificar nada, e
+            # deixar passar desligaria a trava em silencio - o bot voltaria a
+            # inventar area e ninguem saberia, que e o defeito original.
+            #
+            # Barrar aqui e seguro porque so o agente usa este executor, e ele
+            # sempre manda os turnos. A consulta obrigatoria chama as tools com
+            # argumentos vazios, entao nem chega nesta linha.
+            logger.error(
+                "[Areas] chamada com pares mas SEM transcricao no contexto - "
+                "barrando. Se isso aparece em producao, a fiacao quebrou."
+            )
+            return recado_de_recusa([])
+
+        areas = self.db.execute_query(
+            "SELECT id, name FROM scheduler.areas WHERE clinic_id = %s AND active = true",
+            (clinic_id,),
+        ) or []
+        _, barrados = separa(pares, areas_conversadas(turnos, areas))
+        if not barrados:
+            return None
+
+        por_id = {str(a["id"]): a["name"] for a in areas}
+        nomes = [por_id.get(i, i) for i in barrados]
+        logger.warning(
+            f"[Areas] barradas por nao terem sido conversadas: {nomes}"
+        )
+        return recado_de_recusa(nomes)
+
     # ── Read-only tools ──
 
     def _tool_list_services(self, args, clinic_id, phone, ctx):
@@ -443,16 +574,22 @@ class ToolExecutor:
                 "area_id": str(r["area_id"]),
                 "service_name": r["service_name"],
                 "area_name": r["area_name"],
-                "duration_minutes": r["duration_minutes"],
+                # A duração por área não é exposta ao modelo de propósito. Ela é
+                # insumo do cálculo, não resposta: vendo 10 min por área, ele
+                # soma seis e diz 60, ou repete o 10 de uma área como se fosse a
+                # sessão inteira - que na verdade é 15, o piso. A duração da
+                # sessão vem de calculate_duration, e só de lá.
                 "price_display": f"R$ {price_cents / 100:.2f}" if price_cents else None,
                 "price_cents": price_cents,
             })
         return {"areas": areas}
 
     def _tool_check_availability(self, args, clinic_id, phone, ctx):
-        total_duration = args.get("total_duration_minutes", 60)
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
+        # A duração é derivada das áreas, nunca do que o modelo informa. Ver
+        # duration_rules.py: ele já pediu horário para uma sessão de 4 minutos.
+        total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
         days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
         return {
             "available_dates": [
@@ -461,17 +598,48 @@ class ToolExecutor:
         }
 
     def _tool_get_time_slots(self, args, clinic_id, phone, ctx):
+        recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
+        if recusa:
+            return recusa
         target_date = args.get("date")
-        total_duration = args.get("total_duration_minutes", 60)
         if not target_date:
             return {"error": "date is required"}
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
+        total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
         slots = self.availability_engine.get_available_slots_multi(clinic_id, target_date, total_duration)
         return {
             "date": target_date,
             "date_label": _format_pt_br_date_label(target_date),
             "available_slots": slots,
+        }
+
+    def _tool_sem_consulta_necessaria(self, args, clinic_id, phone, ctx):
+        """A saída para quando a mensagem realmente não pede dado nenhum.
+
+        Existe porque a alternativa era o código adivinhar pelo formato do texto
+        se a pessoa estava mandando um nome ou escolhendo uma área - e "Buço
+        Completo" tem exatamente a cara de um nome próprio. Quem sabe o que a
+        mensagem significa é quem tem a conversa inteira.
+
+        Devolve dicionário vazio de propósito: nada aqui pode respaldar uma
+        afirmação factual na resposta.
+        """
+        logger.info(f"[SemConsulta] {phone}: {str(args.get('motivo'))[:80]}")
+        return {}
+
+    def _tool_calculate_duration(self, args, clinic_id, phone, ctx):
+        """A duração da sessão para as áreas escolhidas.
+
+        Existe para o agente poder AFIRMAR uma duração com respaldo. Sem ela,
+        em 02/09/2026 ele respondeu "quanto tempo dura?" de memória, sem
+        chamar tool nenhuma - não havia o que chamar.
+        """
+        pares = args.get("service_area_pairs") or []
+        minutos = calcula_duracao(self.db, clinic_id, pares)
+        return {
+            "total_duration_minutes": minutos,
+            "area_count": len(pares),
         }
 
     def _tool_lookup_appointments(self, args, clinic_id, phone, ctx):
@@ -529,7 +697,19 @@ class ToolExecutor:
             if rows:
                 return {"answers": [{"question": r["question_label"], "answer": r["answer"]} for r in rows]}
 
-        return {"answers": [], "message": "Nenhuma resposta encontrada no FAQ. Use seu conhecimento sobre depilação a laser para responder, ou ofereça transferir para um atendente."}
+        # A mensagem anterior aqui mandava "use seu conhecimento sobre depilação
+        # a laser para responder" - a própria tool autorizando a invenção que o
+        # resto do sistema existe para impedir. Cada clínica tem protocolo
+        # próprio: intervalo entre sessões, cuidados e contraindicações não são
+        # conhecimento geral, são política da casa.
+        return {
+            "answers": [],
+            "message": (
+                "Nenhuma resposta encontrada no FAQ desta clínica. Você NÃO SABE a "
+                "resposta. Não use conhecimento geral. Diga que vai confirmar com uma "
+                "especialista e chame request_human_handoff."
+            ),
+        }
 
     def _tool_get_clinic_info(self, args, clinic_id, phone, ctx):
         rows = self.db.execute_query(
@@ -553,7 +733,45 @@ class ToolExecutor:
 
     # ── Write tools ──
 
+    def _salva_cadastro_do_paciente(self, clinic_id, phone, *, birth_date=None, cpf=None, email=None):
+        """Grava os dados de cadastro no paciente, se vieram.
+
+        COALESCE preserva o que já existe: se a pessoa informar só parte dos dados
+        numa conversa e o resto em outra, nada é apagado. Nunca propaga erro —
+        perder o agendamento por causa de um CPF mal formatado seria pior.
+        """
+        if not any([birth_date, cpf, email]):
+            return
+        try:
+            from src.utils.phone import normalize_phone
+
+            cpf_digitos = re.sub(r"\D", "", cpf) if cpf else None
+            linhas = self.db.execute_write(
+                """
+                UPDATE scheduler.patients
+                SET birth_date = COALESCE(%s::date, birth_date),
+                    cpf = COALESCE(%s, cpf),
+                    email = COALESCE(%s, email),
+                    updated_at = NOW()
+                WHERE clinic_id = %s AND phone = %s
+                """,
+                (birth_date or None, cpf_digitos or None, email or None,
+                 clinic_id, normalize_phone(phone)),
+            )
+            if not linhas:
+                # Zero linhas significa que o paciente nao existe. Era o defeito
+                # antigo, e sem este aviso ele voltaria a ser invisivel.
+                logger.warning(
+                    f"[ToolExecutor] Cadastro nao gravado: paciente {phone} nao "
+                    f"encontrado na clinica {clinic_id}"
+                )
+        except Exception as e:
+            logger.warning(f"[ToolExecutor] Falha ao gravar cadastro do paciente: {e}")
+
     def _tool_book_appointment(self, args, clinic_id, phone, ctx):
+        recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
+        if recusa:
+            return recusa
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
 
@@ -565,21 +783,7 @@ class ToolExecutor:
         if not all([service_area_pairs, date, time_str, full_name]):
             return {"error": "Missing required fields: service_area_pairs, date, time, full_name"}
 
-        # Calculate total duration from service_area_pairs
-        total_duration = 0
-        for pair in service_area_pairs:
-            rows = self.db.execute_query(
-                """
-                SELECT COALESCE(sa.duration_minutes, s.duration_minutes) as duration_minutes,
-                       COALESCE(sa.price_cents, s.price_cents) as price_cents
-                FROM scheduler.service_areas sa
-                JOIN scheduler.services s ON s.id = sa.service_id
-                WHERE sa.service_id = %s AND sa.area_id = %s
-                """,
-                (pair["service_id"], pair["area_id"]),
-            )
-            if rows:
-                total_duration += rows[0]["duration_minutes"] or 0
+        total_duration = calcula_duracao(self.db, clinic_id, service_area_pairs)
 
         primary_service_id = service_area_pairs[0]["service_id"]
 
@@ -603,6 +807,25 @@ class ToolExecutor:
             original_price_cents=original_price_cents,
             final_price_cents=final_price_cents,
         )
+
+        # Dados de cadastro: gravados no paciente, não no agendamento. São
+        # opcionais na tool para o agendamento não falhar se a pessoa se recusar
+        # a informar, mas o prompt instrui a pedir todos antes de chamar.
+        #
+        # DEPOIS de criar o agendamento, e essa ordem é o conserto. Antes vinha
+        # primeiro, e `_salva_cadastro_do_paciente` faz UPDATE: para quem agenda
+        # pela primeira vez o paciente ainda não existia, o UPDATE acertava zero
+        # linhas e CPF, nascimento e e-mail sumiam sem erro nenhum.
+        #
+        # Medido em 08/09/2026: dos 272 pacientes da Essência, 3 tinham CPF - e
+        # os 3 já eram pacientes antes de agendar. Nenhum cadastro novo passou.
+        self._salva_cadastro_do_paciente(
+            clinic_id, phone,
+            birth_date=args.get("birth_date"),
+            cpf=args.get("cpf"),
+            email=args.get("email"),
+        )
+
         return {
             "success": True,
             "appointment_id": str(result.get("id", "")),
@@ -610,6 +833,14 @@ class ToolExecutor:
             "time": time_str,
             "full_name": full_name,
             "total_duration_minutes": total_duration,
+            # Sem isto, dizer "agendamento confirmado" logo depois de criar o
+            # agendamento era acusado de afirmação sem respaldo - o fato tinha
+            # acabado de acontecer, mas a tool não o devolvia.
+            #
+            # Vem do RETURNING do INSERT, não de constante: cravar "CONFIRMED"
+            # aqui faria a tool respaldar um status que ela mesma inventou, que
+            # é o oposto do que a proveniência existe para garantir.
+            "status": result.get("status"),
         }
 
     def _tool_reschedule_appointment(self, args, clinic_id, phone, ctx):
@@ -645,7 +876,44 @@ class ToolExecutor:
 
     # ── New tools ──
 
+    def _resultado_de_desconto(self, total_cents, pct, razao, is_first=False):
+        """O formato de resposta da calculate_discount, num lugar so.
+
+        Extraido quando o desconto personalizado entrou: passaram a existir dois
+        caminhos ate a resposta, e montar o dicionario duas vezes faria os
+        campos divergirem - o bot le `discounted_price_display` para anunciar o
+        valor, e um caminho sem esse campo daria preco vazio na conversa.
+        """
+        descontado = aplica_desconto(total_cents, pct)
+
+        def reais(centavos):
+            return f"R$ {centavos / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        original_display, descontado_display = reais(total_cents), reais(descontado)
+        result = {
+            "discount_pct": pct,
+            "discount_reason": razao,
+            "original_price_cents": total_cents,
+            "discounted_price_cents": descontado,
+            "original_price_display": original_display,
+            "discounted_price_display": descontado_display,
+            "is_first_session": is_first,
+        }
+        if pct > 0:
+            result["discount_message"] = (
+                f"Desconto de {pct}% aplicado! "
+                f"De {original_display} por {descontado_display}"
+            )
+        logger.info(
+            f"[ToolExecutor] calculate_discount: pct={pct} reason={razao} "
+            f"original={total_cents} discounted={descontado}"
+        )
+        return result
+
     def _tool_calculate_discount(self, args, clinic_id, phone, ctx):
+        recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
+        if recusa:
+            return recusa
         service_area_pairs = args.get("service_area_pairs", [])
         if not service_area_pairs:
             return {"error": "service_area_pairs is required"}
@@ -674,6 +942,14 @@ class ToolExecutor:
                 "price_display": "Valor a consultar",
             }
 
+        # Combinado com a paciente vence a politica. E o ponto do campo: um
+        # percentual acertado com ela vale em todo agendamento, no lugar de
+        # primeira sessao e faixas de areas.
+        personalizado = desconto_do_paciente(self.db, clinic_id, phone)
+        if personalizado is not None:
+            return self._resultado_de_desconto(
+                total_price_cents, personalizado, RAZAO_PERSONALIZADA)
+
         # Fetch discount rules
         rules_rows = self.db.execute_query(
             "SELECT * FROM scheduler.discount_rules WHERE clinic_id = %s AND is_active = TRUE",
@@ -690,14 +966,10 @@ class ToolExecutor:
                 "price_display": f"R$ {total_price_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
             }
 
-        # Check if first session
-        count_rows = self.db.execute_query(
-            """SELECT COUNT(*) as cnt FROM scheduler.appointments a
-               JOIN scheduler.patients p ON a.patient_id = p.id
-               WHERE a.clinic_id = %s AND p.phone = %s AND a.status = 'CONFIRMED'""",
-            (clinic_id, phone),
-        )
-        is_first = int(count_rows[0]["cnt"]) == 0 if count_rows else True
+        # A MESMA funcao que marca a estreia na agenda. Eram duas contas
+        # separadas para a mesma pergunta, e campo gravado que nasce de contas
+        # diferentes diverge em silencio.
+        is_first = e_primeira_visita(self.db, clinic_id, phone)
 
         # Evaluate every applicable rule and pick the best (highest pct) for the patient.
         # Discounts are mutually exclusive — only the winner is applied.
@@ -724,33 +996,8 @@ class ToolExecutor:
             discount_pct = 0
             discount_reason = None
 
-        discounted_price = total_price_cents * (100 - discount_pct) // 100
-
-        original_display = f"R$ {total_price_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        discounted_display = f"R$ {discounted_price / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-        result = {
-            "discount_pct": discount_pct,
-            "discount_reason": discount_reason,
-            "original_price_cents": total_price_cents,
-            "discounted_price_cents": discounted_price,
-            "original_price_display": original_display,
-            "discounted_price_display": discounted_display,
-            "is_first_session": is_first,
-        }
-
-        if discount_pct > 0:
-            result["discount_message"] = (
-                f"Desconto de {discount_pct}% aplicado! "
-                f"De {original_display} por {discounted_display}"
-            )
-
-        logger.info(
-            f"[ToolExecutor] calculate_discount: pct={discount_pct} reason={discount_reason} "
-            f"original={total_price_cents} discounted={discounted_price}"
-        )
-
-        return result
+        return self._resultado_de_desconto(
+            total_price_cents, discount_pct, discount_reason, is_first)
 
     def _tool_get_pre_session_instructions(self, args, clinic_id, phone, ctx):
         service_area_pairs = args.get("service_area_pairs", [])

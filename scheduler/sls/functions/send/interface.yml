@@ -9,6 +9,16 @@ SendMessage:
         - dynamodb:PutItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+    # Abertura da campanha de reagendamento (session_store.abre_campanha).
+    # Le-mescla-grava, entao precisa de GetItem junto: so PutItem apagaria o
+    # resto da sessao. Sem estas duas, o disparo sai, o bot nao responde, e
+    # nada acusa - foi assim que a agregacao de rajada morreu em 04/09.
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
     - Effect: Allow
       Action:
         - ssm:GetParameter

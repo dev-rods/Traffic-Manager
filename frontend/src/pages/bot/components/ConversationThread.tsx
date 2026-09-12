@@ -2,17 +2,32 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useConversationMessages } from '@/hooks/useBot'
 import { formatPhone } from '@/utils/formatPhone'
 import { Button } from '@/components/ui/Button'
-import type { MessageStatus } from '@/types'
+import type { MessageStatus, PauseReason } from '@/types'
 
 interface ConversationThreadProps {
   phone: string
   senderName?: string
   botPaused?: boolean
+  /** Por que o bot não responde: muda o texto do botão e explica o motivo. */
+  pauseReason?: PauseReason
+  /** O bot foi ativado sobre uma pergunta sem resposta e está escrevendo. */
+  answering?: boolean
   onPause: () => void
   onResume: () => void
   onClose: () => void
   pauseLoading?: boolean
   resumeLoading?: boolean
+}
+
+/**
+ * "Pausado" e "não elegível" parecem iguais na tela mas têm causas diferentes:
+ * o primeiro alguém fez, o segundo é o padrão da clínica para quem não veio da
+ * landing page. Sem distinguir, o botão prometia uma ação que não teria efeito.
+ */
+const MOTIVO_DA_PAUSA: Record<NonNullable<PauseReason>, string> = {
+  attendant: 'Atendimento humano em andamento',
+  clinic_paused: 'Bot desligado para toda a clínica',
+  not_eligible: 'Fora da regra de resposta automática',
 }
 
 const READ_STATUSES: MessageStatus[] = ['READ', 'READ_BY_ME', 'PLAYED']
@@ -59,7 +74,7 @@ function DeliveryTicks({ status }: { status: MessageStatus }) {
   )
 }
 
-export function ConversationThread({ phone, senderName, botPaused, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
+export function ConversationThread({ phone, senderName, botPaused, pauseReason, answering, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
   const { data, isLoading } = useConversationMessages(phone)
   const messages = useMemo(() => data?.messages ?? [], [data])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -69,7 +84,7 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [messages, answering])
 
   return (
     <div className="flex flex-col h-full">
@@ -86,9 +101,14 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
             <p className="text-xs text-gray-400">{formatPhone(phone)}</p>
           </div>
         </div>
-        <div>
+        <div className="flex items-center gap-3">
+          {botPaused && pauseReason && (
+            <span className="text-xs text-gray-400">{MOTIVO_DA_PAUSA[pauseReason]}</span>
+          )}
           {botPaused ? (
-            <Button size="sm" onClick={onResume} loading={resumeLoading}>Retomar bot</Button>
+            <Button size="sm" onClick={onResume} loading={resumeLoading}>
+              {pauseReason === 'not_eligible' ? 'Ativar bot' : 'Retomar bot'}
+            </Button>
           ) : (
             <Button size="sm" variant="secondary" onClick={onPause} loading={pauseLoading}>Pausar bot</Button>
           )}
@@ -130,6 +150,19 @@ export function ConversationThread({ phone, senderName, botPaused, onPause, onRe
               </div>
             </div>
           ))
+        )}
+
+        {/* A resposta leva alguns segundos: sem sinal, a tela parece inerte e
+            quem clicou clica de novo. */}
+        {answering && (
+          <div className="ml-auto flex max-w-[75%] items-center gap-2 rounded-2xl rounded-br-sm bg-brand-50 px-3.5 py-2.5 text-sm text-brand-700">
+            <span className="flex gap-1" aria-hidden="true">
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-400 motion-safe:animate-pulse" />
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-400 motion-safe:animate-pulse [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-brand-400 motion-safe:animate-pulse [animation-delay:300ms]" />
+            </span>
+            Respondendo o que ficou em aberto
+          </div>
         )}
       </div>
     </div>

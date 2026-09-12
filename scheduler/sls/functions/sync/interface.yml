@@ -1,0 +1,28 @@
+SyncWhatsAppChats:
+  handler: src.functions.sync.conversas.handler
+  memorySize: 512
+  timeout: 300
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-SyncWhatsAppChats-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - ssm:GetParameter
+      Resource:
+        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    # Diario as 06:00 BRT (09:00 UTC): antes de a clinica abrir, entao o painel
+    # comeca o dia com a informacao do dia anterior inteira.
+    #
+    # A frequencia troca recencia por chamadas. Medido: 4 requisicoes e 6,9s por
+    # clinica, entao passar para de hora em hora custaria ~96 requisicoes/dia e
+    # centavos de Lambda. O que o diario custa e ate 24h de atraso justamente no
+    # sinal que a clinica usa para decidir quem abordar.
+    - schedule:
+        rate: cron(0 9 * * ? *)
+        enabled: true

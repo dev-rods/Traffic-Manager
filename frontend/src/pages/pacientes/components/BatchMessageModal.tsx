@@ -3,6 +3,8 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useSendBatchMessages, type BatchMessageResult } from '@/hooks/useMessages'
 import { formatPhone } from '@/utils/formatPhone'
+import { buildDefaultMessage } from '@/utils/buildDefaultMessage'
+import { CampanhaDoBot } from './CampanhaDoBot'
 import type { PatientWithStats } from '@/types'
 import type { SendMessagePayload } from '@/services/messages.service'
 
@@ -26,22 +28,16 @@ interface BatchMessageModalProps {
   onDone: () => void
 }
 
-export function buildDefaultMessage(availableDates: string[]): string {
-  const datesText = availableDates.length > 0
-    ? availableDates.map((d) => {
-        const [, m, day] = d.split('-')
-        return `${day}/${m}`
-      }).join(', ')
-    : 'em breve'
-
-  return `Oi {nome}! Tudo bem?\n\nEstamos com novas datas disponíveis para agendamento: *${datesText}*.\n\nGostaria de agendar sua sessão? Responda aqui que te ajudamos!`
-}
-
 export function BatchMessageModal({ open, patients, availableDates, clinicTemplate, onClose, onDone }: BatchMessageModalProps) {
   const [messageTemplate, setMessageTemplate] = useState(() =>
     clinicTemplate?.trim() ? clinicTemplate : buildDefaultMessage(availableDates),
   )
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
+  // Tres datas por padrao (decisao do Andre em 09/09/2026), parametrizavel na
+  // propria tela. O bot assume por padrao: o disparo e o comeco de um
+  // atendimento, nao uma mensagem solta.
+  const [datasDaCampanha, setDatasDaCampanha] = useState(() => availableDates.slice(0, 3))
+  const [botAssume, setBotAssume] = useState(true)
   const { send, results, isSending, isCheckingDelivery, progress, reset } = useSendBatchMessages()
 
   const activePatients = useMemo(
@@ -55,6 +51,8 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
     setRemovedIds((prev) => new Set([...prev, id]))
   }
 
+  const campanhaAtiva = botAssume && datasDaCampanha.length > 0
+
   const handleSend = async () => {
     const payloads: SendMessagePayload[] = activePatients.map((p) => {
       const firstName = p.name?.split(' ')[0] || 'Ola'
@@ -64,6 +62,9 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
         phone: p.phone,
         template: 'livre' as const,
         body,
+        // Sem datas o bot nao teria o que oferecer, entao o disparo sai como
+        // mensagem simples - e a conversa continua sendo das pessoas.
+        ...(campanhaAtiva ? { campanha: { datas: datasDaCampanha } } : {}),
       }
     })
     await send(payloads)
@@ -88,6 +89,14 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
   return (
     <Modal open={open} onClose={handleClose} title="Enviar WhatsApp em lote" width="lg">
       <div className="space-y-5">
+        <CampanhaDoBot
+          datasDisponiveis={availableDates}
+          selecionadas={datasDaCampanha}
+          onSelecionar={setDatasDaCampanha}
+          ativa={botAssume}
+          onAtivar={setBotAssume}
+        />
+
         {/* Patient list */}
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1.5">

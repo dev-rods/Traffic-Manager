@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Service, Area, DiscountRule } from '@/types'
+import type { Service, Area, DiscountRule, DurationRule } from '@/types'
 
 export const catalogService = {
   listServices(clinicId: string) {
@@ -29,6 +29,18 @@ export const catalogService = {
   upsertDiscountRules(clinicId: string, payload: Omit<DiscountRule, 'clinic_id'>) {
     return api
       .post<{ status: string; discount_rules: DiscountRule }>(`/clinics/${clinicId}/discount-rules`, payload)
+      .then((r) => r.data)
+  },
+
+  getDurationRules(clinicId: string) {
+    return api
+      .get<{ status: string; duration_rules: DurationRule }>(`/clinics/${clinicId}/duration-rules`)
+      .then((r) => r.data)
+  },
+
+  updateDurationRules(clinicId: string, payload: Partial<Omit<DurationRule, 'clinic_id'>>) {
+    return api
+      .put<{ status: string; duration_rules: DurationRule }>(`/clinics/${clinicId}/duration-rules`, payload)
       .then((r) => r.data)
   },
 }

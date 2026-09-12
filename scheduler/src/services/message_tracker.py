@@ -167,12 +167,17 @@ class MessageTracker:
         self, clinic_id: str, phone: str, limit: int = 50
     ) -> List[Dict[str, Any]]:
         try:
+            # Descendente e depois invertido: com Limit, ascendente devolveria o
+            # COMEÇO da conversa. 39% das conversas passam de 20 eventos, então o
+            # agente relia disparos de campanha antigos em vez do que a pessoa
+            # acabou de perguntar. O retorno segue cronológico, do mais antigo
+            # para o mais recente, que é como quem lê espera.
             response = self.table.query(
                 KeyConditionExpression=Key("pk").eq(f"CLINIC#{clinic_id}#PHONE#{phone}"),
-                ScanIndexForward=True,
+                ScanIndexForward=False,
                 Limit=limit,
             )
-            return response.get("Items", [])
+            return list(reversed(response.get("Items", [])))
         except Exception as e:
             logger.error(f"[MessageTracker] Erro ao buscar mensagens: {e}")
             return []

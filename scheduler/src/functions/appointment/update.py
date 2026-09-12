@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, date, time
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
+from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, NotFoundError, OptimisticLockError, ConflictError
 
@@ -58,6 +59,7 @@ def handler(event, context):
         new_service_area_pairs = body.get("serviceAreaPairs")
         new_discount_pct = body.get("discountPct")
         new_discount_reason = body.get("discountReason")
+        nova_primeira_visita = body.get("isFirstVisit")
 
         service = AppointmentService(db)
 
@@ -109,6 +111,13 @@ def handler(event, context):
             params.append(new_status)
             messages.append("status")
 
+        if nova_primeira_visita is not None:
+            # A marca e automatica, mas a atendente manda: a pessoa pode ter
+            # vindo antes por fora do sistema, e so ela sabe disso.
+            updates.append("is_first_visit = %s")
+            params.append(bool(nova_primeira_visita))
+            messages.append("primeira visita")
+
         if notes is not None:
             updates.append("notes = %s")
             params.append(notes)
@@ -130,7 +139,7 @@ def handler(event, context):
             if existing and existing[0].get("original_price_cents") is not None:
                 orig = existing[0]["original_price_cents"]
                 updates.append("final_price_cents = %s")
-                params.append(orig * (100 - discount_pct) // 100)
+                params.append(aplica_desconto(orig, discount_pct))
             messages.append("desconto")
 
         if updates:

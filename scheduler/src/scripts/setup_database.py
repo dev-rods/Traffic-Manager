@@ -31,11 +31,13 @@ SQL_STATEMENTS = [
         google_spreadsheet_id VARCHAR(255),  -- DEPRECATED: will be dropped by migration
         google_sheet_name VARCHAR(100) DEFAULT 'Agenda',  -- DEPRECATED: will be dropped by migration
         owner_email VARCHAR(255),
-        max_session_minutes INTEGER DEFAULT 60,
         welcome_intro_message TEXT,
         display_name VARCHAR(255),
         use_agent BOOLEAN DEFAULT FALSE,
         bot_paused BOOLEAN DEFAULT FALSE,
+        bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL',
+        debounce_seconds INTEGER NOT NULL DEFAULT 68,
+        bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}',
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         logo_url VARCHAR(500),
@@ -79,7 +81,8 @@ SQL_STATEMENTS = [
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
         professional_id UUID REFERENCES scheduler.professionals(id),
-        day_of_week INTEGER NOT NULL,
+        day_of_week INTEGER,
+        rule_date DATE,
         start_time TIME NOT NULL,
         end_time TIME NOT NULL,
         active BOOLEAN DEFAULT TRUE,
@@ -109,6 +112,11 @@ SQL_STATEMENTS = [
         phone VARCHAR(20) NOT NULL,
         name VARCHAR(255),
         gender VARCHAR(1) CHECK (gender IN ('M', 'F')),
+        birth_date DATE,
+        cpf VARCHAR(14),
+        email VARCHAR(255),
+        custom_discount_pct NUMERIC(5,2) CHECK (custom_discount_pct IS NULL
+            OR (custom_discount_pct >= 0 AND custom_discount_pct <= 100)),
         last_message_at TIMESTAMPTZ,
         deleted_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -258,6 +266,15 @@ SQL_STATEMENTS = [
     END $$
     """,
 
+    # Impede data fixa duplicada (mesma data + mesmo horario de inicio).
+    # Indice parcial: nao afeta regras recorrentes, onde rule_date e NULL.
+    # Inclui start_time para permitir faixas distintas na mesma data (manha e tarde).
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_availability_rules_clinic_date
+    ON scheduler.availability_rules (clinic_id, rule_date, start_time)
+    WHERE rule_date IS NOT NULL
+    """,
+
     # Índices
     "CREATE INDEX IF NOT EXISTS idx_appointments_clinic_date ON scheduler.appointments(clinic_id, appointment_date)",
     "CREATE INDEX IF NOT EXISTS idx_appointments_patient ON scheduler.appointments(patient_id)",
@@ -302,6 +319,20 @@ SQL_STATEMENTS = [
 
     # Discount rules per clinic (configurable progressive discounts)
     """
+    CREATE TABLE IF NOT EXISTS scheduler.duration_rules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        floor_minutes INTEGER NOT NULL DEFAULT 10,
+        ceiling_minutes INTEGER NOT NULL DEFAULT 50,
+        step_minutes INTEGER NOT NULL DEFAULT 5,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(clinic_id)
+    )
+    """,
+
+    """
     CREATE TABLE IF NOT EXISTS scheduler.discount_rules (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
@@ -319,11 +350,10 @@ SQL_STATEMENTS = [
     """,
 
     # Max session minutes and welcome intro message for clinics
-    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS max_session_minutes INTEGER DEFAULT 60",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS welcome_intro_message TEXT",
 
     # Discount fields on appointments
-    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_pct INTEGER DEFAULT 0",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_pct NUMERIC(5,2) DEFAULT 0",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_reason VARCHAR(50)",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS original_price_cents INTEGER",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS final_price_cents INTEGER",
@@ -451,6 +481,9 @@ SQL_STATEMENTS = [
         first_appointment_id UUID REFERENCES scheduler.appointments(id),
         first_appointment_value DECIMAL(10,2),
         raw_message TEXT,
+        first_contact_status VARCHAR(20),
+        first_contact_at TIMESTAMPTZ,
+        conversation_started_at TIMESTAMPTZ,
         metadata JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -494,6 +527,127 @@ SQL_STATEMENTS = [
 
     # Bot pause flag per clinic
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_paused BOOLEAN DEFAULT FALSE",
+
+    # Política de resposta automática do bot, por clínica.
+    # ALL preserva o comportamento atual de quem já usa o bot; as demais restringem.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL'",
+
+    # Segundos que o bot espera juntando a rajada antes de comecar a pensar.
+    # 68s veio da medicao das conversas reais: junta 49% dos turnos e fica no
+    # joelho da curva (90s so acrescenta 0,6pp). 0 desliga o agrupamento.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS debounce_seconds INTEGER NOT NULL DEFAULT 68",
+
+    # Quem iniciou a conversa: 'BOT' (a atendente clicou em Iniciar pelo Bot) ou
+    # 'HUMANO' (ela marcou Ja iniciada). NULL = ninguem iniciou. Sem esta coluna
+    # nao da para saber se o "Ja iniciada" pode ser desfeito - desmarcar um envio
+    # do bot apagaria o registro de uma mensagem que existe.
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_channel VARCHAR(10)",
+
+    # Marca visual na agenda: quem esta pisando na clinica pela primeira vez.
+    # Gravada e nao derivada porque a atendente precisa poder desmarcar - a
+    # pessoa pode ter vindo antes por fora do sistema.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS is_first_visit BOOLEAN NOT NULL DEFAULT FALSE",
+
+    # Espelho da lista de conversas do WhatsApp (z-api GET /chats). Existe
+    # porque o atendimento humano nao passa pelo webhook: a atendente responde
+    # pelo celular, a mensagem chega com LID sem vinculo e e descartada. Sem
+    # isto, 17 dos 37 leads do site apareciam como sem contato tendo conversa.
+    #
+    # E espelho, nao fonte: o z-api manda. Recriar do zero e seguro.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.whatsapp_chats (
+        clinic_id VARCHAR(100) NOT NULL,
+        phone VARCHAR(20) NOT NULL,
+        lid VARCHAR(50),
+        name VARCHAR(255),
+        last_message_at TIMESTAMPTZ,
+        unread_count INTEGER DEFAULT 0,
+        synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clinic_id, phone)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_whatsapp_chats_clinic ON scheduler.whatsapp_chats(clinic_id)",
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_bot_autoreply_policy') THEN
+            ALTER TABLE scheduler.clinics ADD CONSTRAINT chk_bot_autoreply_policy
+            CHECK (bot_autoreply_policy IN ('ALL', 'PILOT', 'LEADS_ONLY', 'OFF'));
+        END IF;
+    END $$
+    """,
+    # Telefones do piloto, normalizados (55DDDNNNNNNNNN). Só usado com policy=PILOT.
+    # Separado de ALLOWED_PHONES do SSM de propósito: aquela governa também lembretes
+    # de consulta e disparos do painel, e restringi-la deixaria pacientes sem lembrete.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}'",
+
+    # Dados de cadastro coletados na confirmação do agendamento.
+    # Sem estas colunas o bot pediria CPF e data de nascimento e descartaria a
+    # resposta, que além de inútil é ruim para dado pessoal.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS birth_date DATE",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS cpf VARCHAR(14)",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+
+    # Desconto fixo da paciente, em porcento. NULO e o normal: sem personalizado,
+    # vale a politica da clinica (primeira sessao, faixas de areas).
+    #
+    # NULO e nao zero, e a diferenca nao e detalhe: zero e um valor legitimo -
+    # "esta paciente nunca recebe desconto" - e so o nulo consegue dizer "nao ha
+    # personalizado aqui". Com zero como padrao, as duas situacoes ficariam
+    # indistinguiveis e ninguem descobriria o engano olhando a tabela.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS custom_discount_pct NUMERIC(5,2)",
+    # Duas casas decimais (11/09/2026). 12,5% e 33,33% sao combinados reais e o
+    # inteiro os arredondava calado.
+    #
+    # `appointments.discount_pct` vai junto por obrigacao: o percentual e
+    # GRAVADO no agendamento, e deixa-la inteira faria o 12,5 do cadastro virar
+    # 12 na hora de marcar - o cadastro diria uma coisa e a sessao outra.
+    #
+    # USING converte o que ja existe; inteiro cabe em NUMERIC(5,2) sem perda.
+    """
+    DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'scheduler' AND table_name = 'patients'
+                     AND column_name = 'custom_discount_pct'
+                     AND data_type = 'integer') THEN
+            ALTER TABLE scheduler.patients
+                ALTER COLUMN custom_discount_pct TYPE NUMERIC(5,2)
+                USING custom_discount_pct::NUMERIC(5,2);
+        END IF;
+    END $$;
+    """,
+    """
+    DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'scheduler' AND table_name = 'appointments'
+                     AND column_name = 'discount_pct'
+                     AND data_type = 'integer') THEN
+            ALTER TABLE scheduler.appointments
+                ALTER COLUMN discount_pct TYPE NUMERIC(5,2)
+                USING discount_pct::NUMERIC(5,2);
+        END IF;
+    END $$;
+    """,
+    """
+    DO $$ BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'patients_custom_discount_pct_range'
+        ) THEN
+            ALTER TABLE scheduler.patients
+                ADD CONSTRAINT patients_custom_discount_pct_range
+                CHECK (custom_discount_pct IS NULL
+                       OR (custom_discount_pct >= 0 AND custom_discount_pct <= 100));
+        END IF;
+    END $$;
+    """,
+
+    # Rastreio do primeiro contato ativo com o lead.
+    # first_contact_at é "falamos com ele"; conversation_started_at é "ele respondeu".
+    # Sem separar não dá para medir a taxa de resposta da abordagem.
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_status VARCHAR(20)",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_at TIMESTAMPTZ",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS conversation_started_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS idx_leads_first_contact ON scheduler.leads(clinic_id, first_contact_status)",
 
     # Configurable default message template for batch WhatsApp sends
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS batch_message_template TEXT",
@@ -543,6 +697,35 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS offline_conversion_action_id VARCHAR(30)",
     # Note: scheduler.lead_conversions is defined (CREATE IF NOT EXISTS) in the tables
     # section above, which also covers existing DBs on re-run.
+
+    # Regras de duração da sessão por quantidade de áreas.
+    # Semeia uma linha por clínica com o padrão da Essência: quem já opera não
+    # fica sem regra, e quem quiser ajusta pelo painel.
+    """
+    INSERT INTO scheduler.duration_rules (clinic_id)
+    SELECT clinic_id FROM scheduler.clinics
+    ON CONFLICT (clinic_id) DO NOTHING
+    """,
+
+    # A duracao deixou de ser faixa por quantidade de areas e passou a ser a
+    # soma das duracoes das areas, limitada por piso e teto e arredondada ao
+    # passo. As colunas de faixa nao decidem mais nada. Ver duration_rules.py.
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS floor_minutes INTEGER NOT NULL DEFAULT 10",
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS ceiling_minutes INTEGER NOT NULL DEFAULT 50",
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS step_minutes INTEGER NOT NULL DEFAULT 5",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS base_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_max_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_max_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_4_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_4_duration_minutes",
+
+    # clinics.max_session_minutes era um segundo teto, aplicado so no engine
+    # antigo e em desacordo com ceiling_minutes. O teto agora e um so.
+    "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS max_session_minutes",
 
     # --- Site público de agendamento (booking-site) ---
     # Logo do salão (header/hero do site público) e foto do profissional (avatar no wizard)

@@ -8,7 +8,6 @@ export interface Clinic {
   timezone: string | null
   buffer_minutes: number | null
   max_future_dates: number | null
-  max_session_minutes: number | null
   display_name: string | null
   welcome_message: string | null
   welcome_intro_message: string | null
@@ -30,7 +29,6 @@ export interface UpdateClinicPayload {
   address?: string
   buffer_minutes?: number
   max_future_dates?: number
-  max_session_minutes?: number
   welcome_message?: string
   welcome_intro_message?: string
   pre_session_instructions?: string
@@ -59,6 +57,19 @@ export interface Patient {
   phone: string
   name: string
   gender: 'M' | 'F'
+  /** Só dígitos, como o backend guarda. Vazio = ainda não informado. */
+  cpf: string | null
+  /** ISO `YYYY-MM-DD`. */
+  birth_date: string | null
+  email: string | null
+  /**
+   * Desconto fixo combinado com a paciente, em porcento.
+   *
+   * `null` e `0` sao coisas DIFERENTES: null significa "sem combinado, vale a
+   * politica da clinica"; 0 significa "combinado, e o combinado e nenhum
+   * desconto". Nunca troque um pelo outro com `?? 0`.
+   */
+  custom_discount_pct: number | null
   deleted_at?: string | null
   created_at: string
   updated_at: string
@@ -68,6 +79,12 @@ export interface CreatePatientPayload {
   name: string
   phone: string
   gender?: 'M' | 'F'
+  /** Opcionais: o cadastro completo raramente existe no primeiro contato. */
+  cpf?: string
+  birth_date?: string
+  email?: string
+  /** null = sem combinado; inteiro = o percentual fixo da paciente. */
+  custom_discount_pct?: number | null
 }
 
 export interface CreatePatientResponse {
@@ -112,6 +129,24 @@ export interface DiscountRule {
   is_active: boolean
 }
 
+/**
+ * Duração da sessão por quantidade de áreas.
+ *
+ * A duração é a soma das durações por área, arredondada para cima ao passo e
+ * limitada por piso e teto. O backend é a autoridade: o que o painel calcula
+ * é preview, e é reaplicado no servidor antes de virar agenda.
+ */
+export interface DurationRule {
+  clinic_id: string
+  /** Nenhuma sessão é mais curta que isto. */
+  floor_minutes: number
+  /** Nenhuma sessão é mais longa que isto. */
+  ceiling_minutes: number
+  /** Toda duração é múltiplo disto. */
+  step_minutes: number
+  is_active: boolean
+}
+
 export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'partnership' | 'custom' | null
 
 export interface DiscountBreakdown {
@@ -133,6 +168,8 @@ export interface Appointment {
   end_time: string           // HH:MM:SS
   status: AppointmentStatus
   notes: string | null
+  /** Marca visual na agenda: a pessoa esta pisando na clinica pela primeira vez. */
+  is_first_visit: boolean
   patient_name: string | null
   patient_phone: string | null
   service_name: string | null
@@ -168,9 +205,19 @@ export interface CreateAppointmentPayload {
   fullName?: string
   discountPct?: number
   discountReason?: string
+  /** Observacao curta da atendente. Aparece no popover da agenda. */
+  notes?: string
+  /**
+   * Estreia na clinica. Obrigatorio, e nao opcional: omitir faz o backend
+   * decidir pela contagem do banco, que e o comportamento revertido em
+   * 09/09/2026. Pelo painel quem decide e a recepcao.
+   */
+  isFirstVisit: boolean
 }
 
 export interface UpdateAppointmentPayload {
+  /** Desmarcar quando a pessoa ja veio antes por fora do sistema. */
+  isFirstVisit?: boolean
   status?: AppointmentStatus
   notes?: string
   date?: string
@@ -200,6 +247,11 @@ export interface CreateAvailabilityRulePayload {
   end_time: string
 }
 
+export interface UpdateAvailabilityRulePayload {
+  start_time?: string
+  end_time?: string
+}
+
 export interface AvailabilityException {
   id: string
   clinic_id: string
@@ -208,7 +260,6 @@ export interface AvailabilityException {
   start_time: string | null
   end_time: string | null
   reason: string | null
-  active: boolean
 }
 
 export interface CreateAvailabilityExceptionPayload {
@@ -277,10 +328,14 @@ export interface ApiError {
 }
 
 // ── Bot / Conversations ──────────────────────────────────────
+/** Por que o bot não responde uma conversa. null quando ele está respondendo. */
+export type PauseReason = 'attendant' | 'clinic_paused' | 'not_eligible' | null
+
 export interface ActiveConversation {
   phone: string
   state: string
   bot_paused: boolean
+  pause_reason: PauseReason
   attendant_active_until: number | null
   updated_at: string
 }
@@ -334,6 +389,51 @@ export interface Lead {
   first_appointment_id: string | null
   first_appointment_value: number | null
   raw_message: string | null
+  /** Estado da abordagem ativa do bot: QUEUED enfileirada, SENT enviada, FAILED falhou. */
+  first_contact_status: 'QUEUED' | 'SENT' | 'FAILED' | null
+  /** Quando o bot falou com o lead. */
+  first_contact_at: string | null
+  /** Quando o lead respondeu. Distinto de first_contact_at: é o que mede a taxa de resposta. */
+  conversation_started_at: string | null
+  /**
+   * Quem está conduzindo a conversa agora. Vem das sessões e do espelho do
+   * WhatsApp na hora da listagem, não de coluna gravada no lead - foi um campo
+   * copiado que mostrou "sem contato" para quem tinha conversa desenvolvida.
+   */
+  conversation_status: 'BOT' | 'HUMANO' | 'AGUARDA_HUMANO' | 'SEM_CONVERSA' | null
+  /**
+   * Existe conversa no WhatsApp, mesmo que nunca tenha passado pelo bot. O
+   * atendimento humano nao deixa rastro no webhook: a atendente responde pelo
+   * celular e a mensagem chega com LID sem vinculo.
+   */
+  has_whatsapp_chat: boolean | null
+  /** Ultima mensagem trocada no WhatsApp, do espelho do z-api. */
+  whatsapp_last_message_at: string | null
+  /** Quem iniciou a conversa. NULL = ninguem iniciou ainda. */
+  first_contact_channel: 'BOT' | 'HUMANO' | null
+  /**
+   * O bot pode abrir conversa com este lead?
+   *
+   * Calculado no SERVIDOR e so renderizado aqui. A regra tem seis condicoes e
+   * duplica-la no frontend criaria duas fontes que divergem em silencio - o
+   * defeito que originou esta tela.
+   */
+  can_start_bot: boolean | null
+  /** Chave do motivo do bloqueio, para telemetria. */
+  bot_block_reason: string | null
+  /** Texto pronto para a tela. Botao apagado sem explicacao vira suporte. */
+  bot_block_message: string | null
+  /** Da para desfazer o "Ja iniciada"? So o que uma pessoa marcou. */
+  can_unmark_contact: boolean | null
+  /**
+   * A conversa ja comecou, por qualquer caminho que a gente consiga enxergar.
+   * Derivado no servidor - a tela nao recalcula, so mostra.
+   */
+  contact_started: boolean | null
+  /** De onde veio essa certeza. NULL = ninguem iniciou que a gente saiba. */
+  contact_started_source: 'RESPONDEU' | 'BOT' | 'HUMANO' | 'WHATSAPP' | null
+  /** Texto pronto explicando a origem, para o title do botao. */
+  contact_started_message: string | null
   created_at: string
   updated_at: string
 }

@@ -1,12 +1,19 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
-import { Input } from '@/components/ui/Input'
+import { DateSelect } from '@/components/ui/DateSelect'
 import { Button } from '@/components/ui/Button'
 import { useUpdateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
+import { calculaDuracao } from '@/lib/duracao'
+import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
+import { TimeField } from './TimeField'
+import { ObservacaoField } from './ObservacaoField'
+import { PrimeiraVisitaField } from './PrimeiraVisitaField'
+import { ehHorarioValido } from '@/lib/horario'
 import type { Appointment, UpdateAppointmentPayload } from '@/types'
+import { precoComDesconto } from '@/lib/cadastroPaciente'
 
 interface EditAppointmentModalProps {
   appointment: Appointment | null
@@ -22,6 +29,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const [date, setDate] = useState(appointment?.appointment_date ?? '')
   const [time, setTime] = useState(appointment?.start_time.slice(0, 5) ?? '')
   const [notes, setNotes] = useState(appointment?.notes ?? '')
+  const [primeiraVisita, setPrimeiraVisita] = useState(appointment?.is_first_visit ?? false)
   const [serviceId, setServiceId] = useState(appointment?.service_id ?? '')
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>(initialAreaIds)
   const [prevServiceId, setPrevServiceId] = useState(serviceId)
@@ -43,13 +51,17 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   )
 
   const { data: serviceAreas } = useServiceAreas(serviceId || undefined)
+  const { data: durationRulesData } = useDurationRules()
+  const durationRules = durationRulesData?.duration_rules
 
-  // Compute total duration from selected areas for accurate slot calculation
-  const totalDuration = selectedAreaIds.length > 0 && serviceAreas
+  const somaDasAreas = selectedAreaIds.length > 0 && serviceAreas
     ? serviceAreas
         .filter((a) => selectedAreaIds.includes(a.area_id))
         .reduce((sum, a) => sum + a.effective_duration_minutes, 0)
     : undefined
+  // Preview: o backend reaplica a mesma regra antes de devolver horários.
+  const totalDuration =
+    somaDasAreas === undefined ? undefined : calculaDuracao(somaDasAreas, durationRules)
 
   // Fetch available slots
   const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(
@@ -93,6 +105,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const dateChanged = date !== a.appointment_date
   const timeChanged = time !== a.start_time.slice(0, 5)
   const notesChanged = notes !== (a.notes ?? '')
+  const primeiraChanged = primeiraVisita !== (a.is_first_visit ?? false)
   const serviceChanged = serviceId !== a.service_id
   const areasChanged = (() => {
     const sorted = [...selectedAreaIds].sort()
@@ -106,7 +119,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     return false
   })()
 
-  const hasChanges = dateChanged || timeChanged || notesChanged || serviceChanged || areasChanged || discountChanged
+  const hasChanges = dateChanged || timeChanged || primeiraChanged || notesChanged || serviceChanged || areasChanged || discountChanged
 
   const toggleArea = (areaId: string) => {
     setSelectedAreaIds((prev) =>
@@ -119,6 +132,10 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (time && !ehHorarioValido(time)) {
+      setError('Horário inválido. Use o formato HH:MM.')
+      return
+    }
     if (!date || !time) {
       setError('Data e horário são obrigatórios.')
       return
@@ -146,6 +163,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
       if (dateChanged) payload.date = date
       if (timeChanged) payload.time = time
       if (notesChanged) payload.notes = notes
+      if (primeiraChanged) payload.isFirstVisit = primeiraVisita
 
       if (serviceChanged || areasChanged) {
         payload.serviceId = serviceId
@@ -195,12 +213,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
         </div>
 
         {/* Date */}
-        <Input
-          label="Data"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <DateSelect value={date} onChange={setDate}
+          includePast />
 
         {/* Service */}
         <div>
@@ -249,38 +263,13 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           </div>
         )}
 
-        {/* Time slot picker */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Horário</label>
-          {!date || !serviceId ? (
-            <p className="text-sm text-gray-300 py-3">Selecione data e serviço para ver horários</p>
-          ) : slotsLoading ? (
-            <div className="flex items-center gap-2 py-3">
-              <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-gray-400">Carregando horários...</span>
-            </div>
-          ) : slotsWithCurrent.length === 0 ? (
-            <p className="text-sm text-gray-400 py-3">Nenhum horário disponível para esta data</p>
-          ) : (
-            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-              {slotsWithCurrent.map((slot) => (
-                <button
-                  key={slot}
-                  type="button"
-                  onClick={() => setTime(slot)}
-                  className={[
-                    'px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
-                    time === slot
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                  ].join(' ')}
-                >
-                  {slot}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <TimeField
+          value={time}
+          onChange={setTime}
+          slots={slotsWithCurrent}
+          loading={slotsLoading}
+          enabled={Boolean(date && serviceId)}
+        />
 
         {/* Discount section */}
         <div>
@@ -334,8 +323,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           const discountPct = discountMode === 'partnership' ? 100
             : discountMode === 'custom' && customDiscountPct ? Number(customDiscountPct)
             : 0
-          const discountAmount = subtotal * discountPct / 100
-          const total = subtotal - discountAmount
+          const total = precoComDesconto(subtotal, discountPct)
+          const discountAmount = subtotal - total
           const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
           return (
@@ -358,17 +347,9 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           )
         })()}
 
-        {/* Notes */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Observações</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-            placeholder="Observações sobre o agendamento..."
-            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
-          />
-        </div>
+        <PrimeiraVisitaField checked={primeiraVisita} onChange={setPrimeiraVisita} />
+
+        <ObservacaoField value={notes} onChange={setNotes} />
 
         {/* Reschedule warning */}
         {(dateChanged || timeChanged) && (

@@ -67,15 +67,33 @@ export function usePauseBot() {
   })
 }
 
+/**
+ * Quando o bot responde algo em aberto, o texto sai numa execução assíncrona que
+ * leva de 3 a 15 segundos. Sem recarregar depois, a resposta só apareceria no
+ * refetch seguinte e a tela pareceria não ter feito nada. Duas tentativas cobrem
+ * o caso típico e o mais lento observado.
+ */
+const RECARGAS_APOS_RETOMAR_MS = [8000, 16000]
+
+/** Quanto tempo a tela sinaliza que o bot está escrevendo. */
+export const ESPERA_RESPOSTA_RETOMADA_MS = RECARGAS_APOS_RETOMAR_MS[RECARGAS_APOS_RETOMAR_MS.length - 1]
+
 export function useResumeBot() {
   const { clinicId } = useAuth()
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (phone: string) => botService.resumeForPhone(clinicId!, phone),
-    onSuccess: () => {
+    onSuccess: (data, phone) => {
       queryClient.invalidateQueries({ queryKey: botKeys.active(clinicId!) })
       queryClient.invalidateQueries({ queryKey: botKeys.recent(clinicId!) })
+
+      if (!data.answering_open_question) return
+      for (const espera of RECARGAS_APOS_RETOMAR_MS) {
+        window.setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: botKeys.messages(clinicId!, phone) })
+        }, espera)
+      }
     },
   })
 }

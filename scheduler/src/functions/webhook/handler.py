@@ -13,10 +13,41 @@ from src.services.template_service import TemplateService
 from src.services.conversation_engine import ConversationEngine, ConversationState
 from src.services.message_tracker import MessageTracker
 from src.services.lead_service import LeadService, extract_gclid
+from src.services.agregador_de_mensagens import (
+    JANELA_PADRAO_SEGUNDOS,
+    chegou_mensagem_nova,
+    drena,
+    enfileira,
+    junta_conteudo,
+)
+from src.services.bot_policy import (
+    CAMPO_DE_PAUSA,
+    PAUSA_ATENDENTE,
+    PAUSA_CHAT_ANTERIOR,
+    PAUSA_CONTATO_MANUAL,
+    should_bot_reply,
+)
+from src.services.session_store import mark_conversation_eligible
+from src.services.autoria_mensagem import foi_enviada_pelo_bot
+from src.services.identidade_whatsapp import chat_lid, deve_vincular_lid, telefone_da_conversa
+from src.services.session_store import telefone_do_lid, vincula_lid
 from src.providers.whatsapp_provider import get_provider
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# Quantas mensagens da conversa consultar para reconhecer o eco do bot. O eco
+# chega segundos depois do envio, então a janela só precisa cobrir a rajada de
+# respostas de uma mesma execução.
+ECO_JANELA_DE_BUSCA = 20
+
+
+TAREFA_PROCESSAR = "processar_mensagem"
+
+# Teto da espera. A Lambda tem 120s de timeout e o agente leva de 6 a 12s: o
+# teto existe para uma configuracao errada na clinica nao derrubar a invocacao
+# por timeout, que apareceria como silencio do bot.
+JANELA_MAXIMA_SEGUNDOS = 90
 
 
 def handler(event, context):
@@ -26,7 +57,18 @@ def handler(event, context):
     POST /webhook/whatsapp
     Receives z-api ReceivedCallback payloads.
     No API key required — authentication via instanceId validation.
+
+    O trabalho pesado roda numa segunda invocação, assíncrona. O z-api reenvia o
+    webhook quando não recebe resposta em ~8s, e o agente passou a levar de 6 a
+    12s: em 02/09/2026 medimos entrega duplicada em 100% das invocações lentas e
+    em nenhuma das rápidas. A deduplicação segurava, mas o retry é sintoma - a
+    causa é o z-api esperar o agente terminar. Agora ele recebe 200 na hora.
     """
+    # Execução que a própria função agendou: já passou por validação, dedup e
+    # tracking na invocação que veio do z-api.
+    if event.get("internal_task") == TAREFA_PROCESSAR:
+        return _processar_mensagem(event["payload"])
+
     try:
         body = parse_body(event)
         if not body:
@@ -45,18 +87,36 @@ def handler(event, context):
             logger.warning("[Webhook] Payload sem instanceId")
             return http_response(200, {"status": "OK"})
 
-        # 1a. Self-chat / LID guard — drop any message addressed to a non-PSTN
-        # WhatsApp identity (LID, group, broadcast) or to the bot's own connected
-        # number. These can't be normal patient conversations and ignoring them
-        # prevents echo loops where the bot replies to itself.
+        # 1a. De quem é esta conversa. Grupo, broadcast e self-chat saem aqui.
+        #
+        # A mensagem que a atendente digita no celular chega com o LID no lugar
+        # do número, e antes era descartada junto com os grupos - por isso o bot
+        # não sabia que havia gente atendendo e respondia por cima. O LID é
+        # resolvido pelo vínculo que as mensagens normais da conversa deixam.
         raw_phone = body.get("phone", "") or ""
-        connected_phone = body.get("connectedPhone", "") or ""
-        if "@" in raw_phone or raw_phone.endswith("-group") or raw_phone.endswith("-broadcast"):
-            logger.info(f"[Webhook] Ignorando mensagem de identidade não-PSTN: phone={raw_phone}")
+        lid = chat_lid(body)
+        clinica_do_webhook = _resolve_clinic_id(PostgresService(), instance_id)
+
+        telefone_conhecido = None
+        if lid and "@" in raw_phone and clinica_do_webhook:
+            telefone_conhecido = telefone_do_lid(
+                _get_sessions_table(), clinica_do_webhook, lid
+            )
+
+        phone_resolvido = telefone_da_conversa(body, telefone_do_lid=telefone_conhecido)
+        if not phone_resolvido:
+            logger.info(
+                f"[Webhook] Ignorando mensagem sem conversa individual: phone={raw_phone}"
+            )
             return http_response(200, {"status": "OK"})
-        if connected_phone and normalize_phone(raw_phone) == normalize_phone(connected_phone):
-            logger.info(f"[Webhook] Ignorando self-chat: phone={raw_phone} == connectedPhone")
-            return http_response(200, {"status": "OK"})
+
+        if phone_resolvido != raw_phone:
+            logger.info(f"[Webhook] LID {lid} resolvido para {phone_resolvido}")
+            body["phone"] = phone_resolvido
+        elif clinica_do_webhook and deve_vincular_lid(body):
+            # Mensagem que traz número e chatLid: é ela que ensina o vínculo
+            # usado quando a atendente responder pelo celular.
+            vincula_lid(_get_sessions_table(), clinica_do_webhook, lid, phone_resolvido)
 
         # 1b. Handle fromMe (attendant messages or bot echo)
         if body.get("fromMe", False):
@@ -65,27 +125,32 @@ def handler(event, context):
                 f"phone={body.get('phone')} | messageId={body.get('messageId')} | "
                 f"payload_keys={list(body.keys())}"
             )
-            # Messages sent via API/bot arrive with status=SENT; ignore them
-            if body.get("status") == "SENT":
-                logger.info("[Webhook] Ignorando fromMe com status=SENT (mensagem enviada via API/bot)")
-                return http_response(200, {"status": "OK"})
-
-            # status != SENT → manual attendant message
+            # O status não separa bot de gente: os dois chegam como SENT. Quem
+            # separa é o id que o provider devolveu no envio, e que o bot grava
+            # no MessageEvents. Antes daqui havia um `return` para todo
+            # status=SENT, o que tornava inalcançável o código abaixo — o bot
+            # respondeu por cima de um atendimento humano em 01/09/2026.
             phone = body.get("phone", "")
             if phone and instance_id:
                 content = _extract_text_content(body)
                 db = PostgresService()
                 clinic_id = _resolve_clinic_id(db, instance_id)
                 if clinic_id:
-                    DEACTIVATION_COMMANDS = {
-                        "#encerrar", "#fim",
-                        "encerrar atendimento", "finalizar atendimento",
-                        "atendimento encerrado", "atendimento finalizado",
-                    }
-                    if content and content.strip().lower() in DEACTIVATION_COMMANDS:
-                        _deactivate_attendant_mode(clinic_id, phone)
-                    else:
-                        _activate_attendant_mode(clinic_id, phone)
+                    provider_id = body.get("messageId", "")
+                    eventos = MessageTracker().get_conversation_messages(
+                        clinic_id, phone, limit=ECO_JANELA_DE_BUSCA
+                    )
+                    if foi_enviada_pelo_bot(eventos, provider_id):
+                        logger.info(
+                            f"[Webhook] Eco do próprio bot ({provider_id}), ignorando"
+                        )
+                        return http_response(200, {"status": "OK"})
+
+                    logger.info(
+                        f"[Webhook] Atendente humano respondeu {phone} pelo celular; "
+                        f"pausando o bot por 24h"
+                    )
+                    _activate_attendant_mode(clinic_id, phone)
 
                     # Track attendant message so it appears in the conversation view
                     if content:
@@ -121,44 +186,15 @@ def handler(event, context):
         clinic = clinics[0]
         clinic_id = clinic["clinic_id"]
 
-        # Global bot pause — clinic owner disabled the bot
-        if clinic.get("bot_paused", False):
-            logger.info(f"[Webhook] Bot paused globally for clinic {clinic_id}, ignoring message")
-            return http_response(200, {"status": "OK"})
+        # A decisão de responder foi movida para depois do track_inbound (passo 5c).
+        # Antes ela ficava aqui e saía da função sem registrar nada: por isso a
+        # Essência acumulou 7.200 eventos com zero INBOUND. Suprimir a resposta
+        # não pode significar perder a mensagem — ela precisa aparecer no painel
+        # do atendente de qualquer forma.
 
         # 3. Setup services
         provider = get_provider(clinic)
         tracker = MessageTracker()
-        template_service = TemplateService(db)
-
-        # availability_engine and appointment_service are optional (Phase 8)
-        availability_engine = _get_availability_engine(db)
-        appointment_service = _get_appointment_service(db)
-
-        # Feature flag: use LLM agent or legacy state machine
-        use_agent = clinic.get("use_agent", False) or os.environ.get("USE_AGENT_MODE") == "true"
-
-        if use_agent:
-            from src.services.conversation_agent import ConversationAgent
-            engine = ConversationAgent(
-                db=db,
-                template_service=template_service,
-                availability_engine=availability_engine,
-                appointment_service=appointment_service,
-                provider=provider,
-                message_tracker=tracker,
-            )
-        else:
-            intent_classifier = _get_intent_classifier()
-            engine = ConversationEngine(
-                db=db,
-                template_service=template_service,
-                availability_engine=availability_engine,
-                appointment_service=appointment_service,
-                provider=provider,
-                message_tracker=tracker,
-                intent_classifier=intent_classifier,
-            )
 
         # 4. Parse incoming message
         incoming = provider.parse_incoming_message(body)
@@ -218,8 +254,301 @@ def handler(event, context):
             incoming_message=incoming,
         )
 
+        # 5b-bis. Marcar que o lead respondeu. COALESCE com o filtro IS NULL garante
+        # que só a primeira resposta conta e que reprocessar o webhook não sobrescreve
+        # a data original. first_contact_at é "falamos com ele";
+        # conversation_started_at é "ele respondeu" — sem separar não dá para medir
+        # a taxa de resposta da abordagem.
+        try:
+            db.execute_write(
+                "UPDATE scheduler.leads "
+                "SET conversation_started_at = COALESCE(conversation_started_at, NOW()), "
+                "    updated_at = NOW() "
+                "WHERE clinic_id = %s AND phone = %s AND conversation_started_at IS NULL",
+                (clinic_id, incoming.phone),
+            )
+        except Exception as e:
+            logger.warning(f"[Webhook] Falha ao marcar conversation_started_at: {e}")
+
+        # 5c. Decidir se o bot responde. A mensagem já está registrada acima, então
+        # sair aqui suprime a resposta sem perder a conversa.
+        session = _load_session(_get_sessions_table(), clinic_id, incoming.phone)
+        # Antes de qualquer mutacao: e a primeira vez que vemos esta pessoa?
+        # O bloco de elegibilidade abaixo escreve na sessao, e conferir depois
+        # daria sempre "ja conhecida" - justo para o lead da landing page, que
+        # e o caso que importa.
+        primeira_vez = not session
+
+        # Quem veio da landing page tem direito a resposta automática mesmo com a
+        # política LEADS_ONLY, tenha o bot falado primeiro ou não. A marca é gravada
+        # uma vez só: nas mensagens seguintes ela já está na sessão.
+        if not session.get("bot_enabled"):
+            leads_lp = db.execute_query(
+                "SELECT id, first_contact_channel FROM scheduler.leads "
+                "WHERE clinic_id = %s AND phone = %s AND source = 'landing-page' LIMIT 1",
+                (clinic_id, incoming.phone),
+            )
+            if leads_lp:
+                mark_conversation_eligible(
+                    _get_sessions_table(), clinic_id, incoming.phone, str(leads_lp[0]["id"])
+                )
+                session["bot_enabled"] = True
+
+                # "Ja iniciada" no painel significa que uma PESSOA comecou esta
+                # conversa. Sem isto o botao era decorativo: ele registrava o
+                # fato e nao governava nada, e o bot respondia por cima da
+                # atendente assim que a pessoa escrevesse.
+                if leads_lp[0].get("first_contact_channel") == "HUMANO":
+                    session[CAMPO_DE_PAUSA] = PAUSA_CONTATO_MANUAL
+
+        # Conversa que ja existia antes de a gente entrar: quem comecou foi
+        # gente. So vale na PRIMEIRA vez que vemos esta pessoa - depois disso a
+        # conversa e nossa e o proprio bot criou o chat, entao o espelho diria
+        # "existe conversa" sobre o trabalho dele mesmo.
+        if primeira_vez and not session.get(CAMPO_DE_PAUSA):
+            try:
+                ja_existia = db.execute_query(
+                    "SELECT 1 FROM scheduler.whatsapp_chats "
+                    "WHERE clinic_id = %s AND phone = %s LIMIT 1",
+                    (clinic_id, incoming.phone),
+                )
+                if ja_existia:
+                    logger.info(
+                        f"[Webhook] {incoming.phone} ja tinha conversa no WhatsApp "
+                        f"antes de nos; bot pausado ate liberarem no painel"
+                    )
+                    session[CAMPO_DE_PAUSA] = PAUSA_CHAT_ANTERIOR
+            except Exception as e:
+                # Falha aqui nao pode calar o bot nem solta-lo: sem resposta da
+                # consulta, segue o que as outras guardas disserem.
+                logger.error(f"[Webhook] Falha ao conferir conversa anterior: {e}")
+        if clinic.get("bot_paused", False) or not should_bot_reply(clinic, session, incoming.phone):
+            logger.info(
+                f"[Webhook] Resposta automática suprimida para {incoming.phone} "
+                f"(paused={clinic.get('bot_paused', False)}, "
+                f"policy={clinic.get('bot_autoreply_policy') or 'ALL'})"
+            )
+            return http_response(200, {"status": "OK"})
+
+        # 5d. Guardar a mensagem e devolver 200 AGORA.
+        #
+        # Duas coisas acontecem aqui. A resposta imediata resolve o retry do
+        # z-api (ele reenvia em ~8s e o agente leva de 6 a 12s). O balde resolve
+        # a rajada: quem escreve no WhatsApp manda "oi", "queria agendar", "pra
+        # semana que vem" em três balões, e o bot respondia cada um. Pior que
+        # feio - o roteador classificava cada pedaço sozinho, e "queria agendar"
+        # ia consultar agenda sem saber que a data vinha depois.
+        janela = _janela_da_clinica(clinic)
+        try:
+            versao, processar_em, abriu_a_janela = enfileira(
+                _get_sessions_table(), clinic_id, incoming.phone,
+                {
+                    "content": incoming.content or "",
+                    "message_id": incoming.message_id,
+                    "button_id": incoming.button_id or "",
+                    "recebida_em": int(time.time()),
+                },
+                janela,
+            )
+        except Exception as e:
+            # Sem balde, o comportamento é o de antes: responde a esta mensagem.
+            logger.error(f"[Webhook] Falha ao agrupar, seguindo sem janela: {e}")
+            versao, processar_em, abriu_a_janela = 0, int(time.time()), True
+
+        if not abriu_a_janela:
+            # Já existe execução agendada para esta conversa; ela leva esta
+            # mensagem junto. Agendar outra aqui traria de volta uma resposta
+            # por mensagem, que é exatamente o defeito.
+            logger.info(
+                f"[Webhook] {incoming.phone} entrou na janela aberta "
+                f"(versao={versao}, processa em {max(0, processar_em - int(time.time()))}s)"
+            )
+            return http_response(200, {"status": "OK", "agrupada": True})
+
+        try:
+            boto3.client("lambda").invoke(
+                FunctionName=context.invoked_function_arn,
+                InvocationType="Event",
+                Payload=json.dumps({
+                    "internal_task": TAREFA_PROCESSAR,
+                    "payload": {
+                        "body": body,
+                        "phone": incoming.phone,
+                        "processar_em": processar_em,
+                    },
+                }).encode(),
+            )
+            return http_response(200, {"status": "OK", "queued": True})
+        except Exception as e:
+            # Falhar o agendamento não pode significar ignorar a pessoa: cai no
+            # processamento síncrono, que é o comportamento de antes.
+            logger.error(f"[Webhook] Falha ao agendar processamento, seguindo síncrono: {e}")
+
+        # Esvazia o balde antes de seguir. Sem isso a mensagem ficaria guardada
+        # sem ninguém agendado para buscá-la, e as próximas veriam a janela já
+        # aberta - a conversa travaria até o TTL de 15 min.
+        try:
+            drena(_get_sessions_table(), clinic_id, incoming.phone)
+        except Exception as e:
+            logger.error(f"[Webhook] Falha ao esvaziar o balde de {incoming.phone}: {e}")
+
+        return _executar_engine(db, clinic, clinic_id, provider, tracker, incoming)
+
+    except Exception as e:
+        logger.error(f"[Webhook] Erro interno: {e}")
+        # Always return 200 to prevent z-api from retrying
+        return http_response(200, {"status": "OK", "error": "internal"})
+
+
+def _janela_da_clinica(clinic):
+    """Segundos de espera antes de o bot pensar. 0 desliga o agrupamento.
+
+    Vem da clínica para poder ser ajustado sem deploy: o valor certo é empírico
+    e muda com o perfil de quem escreve.
+    """
+    valor = clinic.get("debounce_seconds")
+    if valor is None:
+        return JANELA_PADRAO_SEGUNDOS
+    try:
+        return max(0, min(int(valor), JANELA_MAXIMA_SEGUNDOS))
+    except (TypeError, ValueError):
+        return JANELA_PADRAO_SEGUNDOS
+
+
+def _pode_descartar(clinic_id, phone):
+    """Chegou mensagem nova E nada foi gravado no banco nesta rodada.
+
+    Falha fechada: qualquer erro na conferência devolve False, e a resposta é
+    enviada. Perder uma resposta é pior que mandar uma desatualizada.
+    """
+    try:
+        if not chegou_mensagem_nova(_get_sessions_table(), clinic_id, phone):
+            return False
+        sessao = _load_session(_get_sessions_table(), clinic_id, phone)
+        if sessao.get("efeito_na_ultima_rodada"):
+            logger.info(
+                f"[Agregador] {phone} tem efeito gravado nesta rodada; "
+                f"resposta segue mesmo com mensagem nova"
+            )
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"[Agregador] Falha ao decidir descarte de {phone}: {e}")
+        return False
+
+
+def _processar_mensagem(payload):
+    """Roda o agente e envia a resposta, fora do request do z-api.
+
+    Reconstrói o mínimo: validação, dedup e tracking já rodaram na invocação que
+    veio do webhook. O telefone vem pronto no payload porque pode ter sido
+    resolvido a partir do LID - re-derivar aqui arriscaria divergir.
+    """
+    try:
+        # Espera a janela fechar. O sono acontece aqui, e não no request do
+        # z-api, que já recebeu 200. A Lambda tem 120s de timeout e a janela é
+        # limitada por construção (não reinicia), então isso não pode estourar.
+        espera = int(payload.get("processar_em") or 0) - int(time.time())
+        if espera > 0:
+            logger.info(f"[Webhook] Aguardando {espera}s a janela de {payload.get('phone')}")
+            time.sleep(min(espera, JANELA_MAXIMA_SEGUNDOS))
+
+        body = payload["body"]
+        db = PostgresService()
+        instance_id = body.get("instanceId")
+        clinics = db.execute_query(
+            "SELECT * FROM scheduler.clinics WHERE zapi_instance_id = %s AND active = TRUE",
+            (instance_id,),
+        )
+        if not clinics:
+            logger.warning(f"[Webhook] Clinica sumiu entre as invocações: {instance_id}")
+            return {"status": "ERROR"}
+
+        clinic = clinics[0]
+        clinic_id = clinic["clinic_id"]
+        provider = get_provider(clinic)
+        incoming = provider.parse_incoming_message(body)
+        incoming.phone = payload["phone"]
+
+        # Tira do balde tudo que chegou na janela e responde a rajada inteira de
+        # uma vez. Sem isso o agente leria só a mensagem que abriu a janela.
+        agrupadas, versao = drena(_get_sessions_table(), clinic_id, incoming.phone)
+        if agrupadas:
+            juntado = junta_conteudo(agrupadas)
+            if juntado:
+                incoming.content = juntado
+            # O botão vale como escolha explícita mesmo vindo no meio da rajada.
+            for m in agrupadas:
+                if m.get("button_id"):
+                    incoming.button_id = m["button_id"]
+            if len(agrupadas) > 1:
+                logger.info(
+                    f"[Agregador] {incoming.phone}: {len(agrupadas)} mensagens "
+                    f"num turno só (versao={versao})"
+                )
+
+        return _executar_engine(
+            db, clinic, clinic_id, provider, MessageTracker(), incoming,
+            versao_da_janela=versao,
+        )
+    except Exception as e:
+        logger.error(f"[Webhook] Erro no processamento assíncrono: {e}")
+        return {"status": "ERROR"}
+
+
+def _executar_engine(db, clinic, clinic_id, provider, tracker, incoming,
+                     versao_da_janela=None):
+    """Monta o engine, processa a mensagem e envia o que sair."""
+    try:
+        conversation_id = f"{clinic_id}#{incoming.phone}"
+        # Construir o agente instancia cliente HTTP e recursos do boto3, trabalho
+        # jogado fora quando a resposta é suprimida - por isso só acontece aqui.
+        template_service = TemplateService(db)
+        availability_engine = _get_availability_engine(db)
+        appointment_service = _get_appointment_service(db)
+        use_agent = clinic.get("use_agent", False) or os.environ.get("USE_AGENT_MODE") == "true"
+
+        if use_agent:
+            from src.services.conversation_agent import ConversationAgent
+            engine = ConversationAgent(
+                db=db,
+                template_service=template_service,
+                availability_engine=availability_engine,
+                appointment_service=appointment_service,
+                provider=provider,
+                message_tracker=tracker,
+            )
+        else:
+            engine = ConversationEngine(
+                db=db,
+                template_service=template_service,
+                availability_engine=availability_engine,
+                appointment_service=appointment_service,
+                provider=provider,
+                message_tracker=tracker,
+                intent_classifier=_get_intent_classifier(),
+            )
+
         # 6. Process through conversation engine
         outgoing_messages = engine.process_message(clinic_id, incoming)
+
+        # 6b. A pessoa escreveu enquanto o agente pensava?
+        #
+        # São 6 a 12s de raciocínio, e nesse tempo ela pode ter completado a
+        # frase. Responder ao que ela disse pela metade é o mesmo defeito que a
+        # janela existe para corrigir, só que mais tarde. Quem chegou depois
+        # abriu uma janela nova e já tem execução agendada, então descartar aqui
+        # não perde ninguém.
+        #
+        # Só que agendamento criado não se desfaz: se o agente já gravou no
+        # banco, a paciente PRECISA saber, e calar aqui a deixaria com uma
+        # sessão marcada que ela não sabe que tem.
+        if versao_da_janela and _pode_descartar(clinic_id, incoming.phone):
+            logger.info(
+                f"[Agregador] {incoming.phone} escreveu durante o processamento; "
+                f"descartando esta resposta (versao={versao_da_janela})"
+            )
+            return {"status": "OK", "descartada": True}
 
         # 7. Send responses
         for msg in outgoing_messages:
@@ -369,17 +698,13 @@ def _activate_attendant_mode(clinic_id: str, phone: str) -> None:
     session["_previous_state_before_attendant"] = session.get("state", "")
     session["state"] = ConversationState.HUMAN_ATTENDANT_ACTIVE.value
     session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+    # A pausa nao vence sozinha: so sai pelo "Retomar bot" no painel. O prazo
+    # acima fica para a tela mostrar desde quando, nao para liberar o bot.
+    session[CAMPO_DE_PAUSA] = PAUSA_ATENDENTE
     _save_session(table, clinic_id, phone, session)
     logger.info(f"[Webhook] Modo atendente ativado/renovado para {phone} (TTL 24h)")
 
 
-def _deactivate_attendant_mode(clinic_id: str, phone: str) -> None:
-    table = _get_sessions_table()
-    session = _load_session(table, clinic_id, phone)
-
-    session["state"] = ConversationState.WELCOME.value
-    session.pop("attendant_active_until", None)
-    session.pop("human_handoff_requested_at", None)
-    session.pop("_previous_state_before_attendant", None)
-    _save_session(table, clinic_id, phone, session)
-    logger.info(f"[Webhook] Modo atendente encerrado para {phone}")
+# A desativação por comando no WhatsApp ("#encerrar", "#fim") foi removida em
+# 02/09/2026: a reativação antecipada passa a ser só pelo painel. Sem o painel,
+# o bot volta sozinho quando o TTL de 24h expira.

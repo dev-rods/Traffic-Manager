@@ -10,6 +10,14 @@ import boto3
 
 from src.services.anthropic_service import AnthropicService, AnthropicError
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
+from src.services.bot_policy import CAMPO_DE_PAUSA, PAUSA_HANDOFF, esta_pausado
+from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
+from src.services.prompt_da_campanha import adapta as adapta_para_campanha
+from src.services.prompt_da_campanha import pede_cadastro
+from src.services.calendario import bloco_de_contexto
+from src.services.preco_minimo import preco_minimo_por_area
+from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
+from src.services.roteador import exige_consulta, intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
 
 logger = logging.getLogger(__name__)
@@ -17,6 +25,85 @@ logger = logging.getLogger(__name__)
 MAX_AGENT_ITERATIONS = 5
 MAX_HISTORY_PAIRS = 20
 ATTENDANT_TTL_SECONDS = 24 * 60 * 60
+
+# Quantos resultados de tool a sessão carrega adiante para respaldar repetição
+# de fato já consultado. Alto o bastante para uma negociação de data (a pessoa
+# volta ao mesmo horário por vários turnos), baixo o bastante para não estourar
+# o item do DynamoDB.
+RESPALDO_GUARDADO = 16
+
+
+# Mensagens sintéticas que fazem o agente falar sem ninguém ter escrito. Ficam
+# aqui, e não no módulo de cada fluxo, porque quem precisa reconhecê-las é o
+# agente - importar de volta criaria ciclo.
+GATILHOS_SINTETICOS = ("__INICIAR_CONVERSA__", "__RETOMAR_CONVERSA__")
+
+# Tools que mudam o mundo. Depois de uma delas, o agendamento existe no banco e
+# a pessoa PRECISA saber - trocar a mensagem por "vou confirmar com uma
+# especialista" a deixaria com uma sessão marcada que ela não sabe que tem.
+TOOLS_COM_EFEITO = frozenset({
+    "book_appointment",
+    "reschedule_appointment",
+    "cancel_appointment",
+})
+
+
+def eh_gatilho_sintetico(conteudo):
+    """A mensagem é um gatilho da clínica, e não fala de alguém?"""
+    return (conteudo or "").strip() in GATILHOS_SINTETICOS
+
+
+def limpar_gatilhos(history):
+    """Tira os gatilhos do histórico antes de salvar.
+
+    Gatilho não é fala de ninguém: persistido, reaparece como turno da pessoa na
+    conversa seguinte. Removê-lo deixaria dois turnos de assistant colados, que a
+    API da Anthropic recusa, então os vizinhos são unidos.
+    """
+    limpo = []
+    for turno in history or []:
+        conteudo = turno.get("content")
+        if turno.get("role") == "user" and isinstance(conteudo, str) and eh_gatilho_sintetico(conteudo):
+            continue
+        if limpo and limpo[-1]["role"] == turno.get("role"):
+            anterior, atual = limpo[-1].get("content"), conteudo
+            if isinstance(anterior, str) and isinstance(atual, str):
+                limpo[-1] = {"role": turno["role"], "content": anterior + chr(10) + atual}
+            else:
+                # Conteúdo em blocos (tool_use, thinking): concatena as listas.
+                a = anterior if isinstance(anterior, list) else [{"type": "text", "text": str(anterior)}]
+                b = atual if isinstance(atual, list) else [{"type": "text", "text": str(atual)}]
+                limpo[-1] = {"role": turno["role"], "content": a + b}
+            continue
+        limpo.append(turno)
+    return limpo
+
+
+def events_to_history(events):
+    """Converte eventos de mensagem em turnos de conversa para o agente.
+
+    Usado quando a sessão está sem `agent_history` mas o MessageEvents ainda tem a
+    conversa (retenção de 90 dias). Só texto: blocos de tool_use não são
+    reconstruídos, porque o resultado das ferramentas já está refletido no que foi
+    dito. Turnos consecutivos do mesmo papel são unidos, porque a API da Anthropic
+    exige alternância entre user e assistant.
+    """
+    history = []
+    for event in events or []:
+        content = (event.get("content") or "").strip()
+        if not content:
+            continue
+        papel = "assistant" if event.get("direction") == "OUTBOUND" else "user"
+        if history and history[-1]["role"] == papel:
+            history[-1]["content"] = f"{history[-1]['content']}\n{content}"
+        else:
+            history.append({"role": papel, "content": content})
+
+    # A API rejeita histórico que começa com assistant.
+    while history and history[0]["role"] == "assistant":
+        history.pop(0)
+
+    return history
 
 
 class DecimalEncoder(json.JSONEncoder):
@@ -34,6 +121,30 @@ class OutgoingMessage:
     buttons: Optional[List[Dict[str, str]]] = None
     sections: Optional[List[Dict]] = None
     button_text: Optional[str] = None
+
+
+def _turnos_para_trava(history):
+    """A conversa achatada em {role, content} de texto.
+
+    O `history` do agente mistura texto, tool_use e tool_result num mesmo turno.
+    A trava de areas so quer o que foi DITO - resultado de tool nao conta:
+    achar a area no historico da paciente nao e o mesmo que perguntar a ela.
+    """
+    turnos = []
+    for turno in history or []:
+        conteudo = turno.get("content")
+        if isinstance(conteudo, str):
+            texto = conteudo
+        elif isinstance(conteudo, list):
+            texto = " ".join(
+                b.get("text", "") for b in conteudo
+                if isinstance(b, dict) and b.get("type") == "text"
+            )
+        else:
+            texto = ""
+        if texto.strip():
+            turnos.append({"role": turno.get("role"), "content": texto})
+    return turnos
 
 
 class ConversationAgent:
@@ -55,6 +166,18 @@ class ConversationAgent:
         dynamodb = boto3.resource("dynamodb")
         self.sessions_table = dynamodb.Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
 
+    def _agenda_sem_respaldo(self, texto, respaldo_das_tools):
+        """Data ou horário afirmados que nenhuma tool desta execução devolveu.
+
+        Nunca levanta: uma falha na conferência não pode derrubar a resposta,
+        senão o guardrail vira o motivo de o bot calar.
+        """
+        try:
+            return fatos_de_agenda(fatos_sem_origem(texto, respaldo_das_tools))
+        except Exception as e:
+            logger.error(f"[Proveniencia] Falha ao conferir resposta: {e}")
+            return set()
+
     def process_message(self, clinic_id, incoming):
         """
         Process an incoming WhatsApp message and return outgoing messages.
@@ -73,33 +196,161 @@ class ConversationAgent:
             return []
 
         # 3. Build system prompt
-        system_prompt = self._build_system_prompt(clinic_id, phone)
+        system_prompt = self._build_system_prompt(clinic_id, phone, session)
 
         # 4. Load conversation history and append user message
         # Sanitize loaded history: sessions saved by older code versions may
         # start with an orphan tool_result block (no preceding tool_use), which
         # the Anthropic API rejects with 400.
+        gatilho = eh_gatilho_sintetico(incoming.content)
+        # Tudo que as tools devolveram ao longo da conversa, não só nesta
+        # rodada. Uma janela de uma rodada era curta demais para conversa real:
+        # a pessoa negocia data por vários turnos ("pode dia 27?", "e sábado?",
+        # "então fica 23 mesmo") e o bot repete as MESMAS datas consultadas. Da
+        # segunda repetição em diante o fato consultado virava "sem respaldo" e
+        # a resposta era bloqueada.
+        #
+        # Isso não reabre o bug de origem: aquele era o modelo repetindo a
+        # própria FALA. Resultado de tool é fato consultado, e a pré-carga mais
+        # o tool_choice obrigatório já forçam reconsulta quando a intenção é
+        # factual - o respaldo aqui é rede, não fonte.
+        respaldo_das_tools = list(session.get("respaldo_anterior") or [])
         history = self._truncate_history(session.get("agent_history", []))
+        if gatilho or not history:
+            # Sessão sem histórico não significa conversa nova: a pessoa pode já ter
+            # escrito antes de o bot assumir, ou a sessão pode ter expirado. O
+            # MessageEvents guarda 90 dias, então dá para retomar de onde parou em
+            # vez de recomeçar por cima de uma conversa em andamento.
+            #
+            # Num gatilho a reconstrução é obrigatória, mesmo com histórico na
+            # sessão: com o bot pausado o webhook grava no MessageEvents mas não
+            # chama o agente, então o agent_history está velho justamente nas
+            # mensagens que motivaram a retomada. Uma cliente perguntou duas vezes
+            # com o bot pausado e recebeu "tudo certo por aqui" ao retomar.
+            do_events = self._truncate_history(self.rebuild_history_from_events(clinic_id, phone))
+            history = do_events or history
         user_content = incoming.content or ""
         if incoming.button_id:
             user_content = incoming.button_text or incoming.button_id
         history.append({"role": "user", "content": user_content})
 
         # 5. Agent loop
+        # ── Pré-carga determinística ────────────────────────────────────
+        # O agente decide sozinho quando consultar, e em 02/09/2026 decidiu que
+        # não precisava: respondeu sobre um agendamento pelo que ele mesmo
+        # dissera dias antes, já cancelado. Aqui a decisão sai do modelo: se a
+        # pergunta é sobre agenda, preço ou disponibilidade, a consulta acontece
+        # antes de ele escrever, e o resultado entra como fonte única.
+        dados_consultados = []
+        intencoes_detectadas = set() if gatilho else intencoes(user_content)
+        if not gatilho:
+            for nome_tool in tools_obrigatorias(intencoes_detectadas):
+                try:
+                    resultado = self.tool_executor.execute(
+                        nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone,
+                                 "turnos": _turnos_para_trava(history)},
+                    )
+                    dados_consultados.append((nome_tool, resultado))
+                    respaldo_das_tools.append(resultado)
+                except Exception as e:
+                    logger.error(f"[PreCarga] {nome_tool} falhou para {phone}: {e}")
+
+        # ── Calendário ──────────────────────────────────────────────────
+        # O modelo não tem relógio, e nada aqui dizia a data. Em 04/09/2026 a
+        # pessoa pediu "agendar para amanhã" e o bot respondeu que não conseguia
+        # calcular amanhã - correto pelas regras dele, e inútil para ela.
+        #
+        # As datas entram no respaldo porque são fato apurado, igual a resultado
+        # de tool: sem isso, dizer "amanhã (05/09) não temos vaga" seria data
+        # sem origem e a resposta cairia no bloqueio.
+        bloco_calendario, datas_do_calendario = ("", [])
+        if not gatilho:
+            bloco_calendario, datas_do_calendario = bloco_de_contexto(user_content)
+            respaldo_das_tools.append({"calendario": datas_do_calendario})
+
+        # As datas da campanha tambem sao respaldo. Elas vem da sessao, gravadas
+        # no ato do disparo, e o bloco de campanha as poe no prompt - sao fato
+        # tao legitimo quanto resultado de tool.
+        #
+        # Sem isto, em 11/09/2026 o bot compos a resposta CERTA ("as datas sao
+        # 23, 24 e 29; dia 25 nao temos") e a proveniencia a bloqueou por
+        # "agenda sem respaldo", caindo no fallback de transferir para uma
+        # especialista. A guarda barrou justamente quem estava certo.
+        datas_da_campanha_aberta = datas_da_campanha(session)
+        if datas_da_campanha_aberta:
+            respaldo_das_tools.append({"campanha": datas_da_campanha_aberta})
+
+        if dados_consultados or bloco_calendario:
+            if dados_consultados:
+                nomes = ", ".join(n for n, _ in dados_consultados)
+                logger.info(f"[PreCarga] {phone}: {nomes}")
+            blocos = ("\n\n").join(
+                f"[{nome}]\n{json.dumps(self._convert_decimals(res), ensure_ascii=False, default=str)[:1500]}"
+                for nome, res in dados_consultados
+            )
+            cabecalho_calendario = (
+                f"═══ CALENDÁRIO ═══\n{bloco_calendario}\n"
+                "Estas datas são o calendário, não a agenda: dizem que dia é, "
+                "não que há vaga. Vaga só vem de check_availability.\n\n"
+            ) if bloco_calendario else ""
+            # O bloco vai no TURNO DA PESSOA, não no system prompt.
+            #
+            # O conteúdo muda a cada mensagem (são os dados desta consulta). No
+            # system ele ficava dentro do prefixo cacheado, e mudar um byte do
+            # prefixo invalida tudo depois dele - o cache morria a cada mensagem
+            # e pagávamos os ~17k chars de prompt inteiros de novo.
+            #
+            # Aqui embaixo o prefixo (tools + system) fica byte-idêntico durante
+            # a conversa toda, e o dado volátil vive depois do breakpoint.
+            cabecalho_dados = (
+                "═══ DADOS CONSULTADOS AGORA ═══\n"
+                "Consultei o banco antes de te passar esta conversa. O que está "
+                "abaixo é o estado real neste momento e é a ÚNICA fonte válida "
+                "sobre agenda, preço e disponibilidade. O que não estiver aqui, "
+                "você não sabe - nem que tenha dito antes nesta conversa.\n\n"
+                + blocos + "\n\n"
+            ) if dados_consultados else ""
+            history[-1] = {"role": "user", "content": (
+                cabecalho_calendario
+                + cabecalho_dados
+                + f"═══ MENSAGEM DA PESSOA ═══\n{user_content}"
+            )}
+
         tools = get_tool_definitions(format="anthropic")
         pending_buttons = None
         handoff_requested = False
         text_parts = []
+        # Perguntou sobre agenda? Então a primeira jogada é consultar, não
+        # escrever. Deixar a escolha com o modelo fez o bot listar nove horários
+        # da manhã com tools=0, mesmo com o prompt mandando consultar - duas
+        # vezes no mesmo dia. Ele escolhe QUAL tool; não escolhe se consulta.
+        # Consultar é o padrão; não consultar é a exceção. O desenho anterior
+        # forçava só quando o regex reconhecia o assunto, e a lista de assuntos
+        # factuais não tem fim: "E horários à tarde?" não casava com nada e o
+        # bot inventou dez horários. Agora a lista curta é a de conversa fiada.
+        forcar_proxima = exige_consulta(user_content) and not gatilho
+        ja_refez = False
+        ja_refez_cadastro = False
+        em_campanha = campanha_viva(session)
+        efeito_cometido = None
 
         try:
             for iteration in range(MAX_AGENT_ITERATIONS):
                 logger.info(f"[ConversationAgent] Iteration {iteration + 1} for {phone}")
+
+                # Consumido a cada volta: forçar sempre deixaria o modelo sem
+                # como encerrar, já que toda resposta exigiria mais uma tool.
+                forcar_tool = {"type": "any"} if forcar_proxima else None
+                forcar_proxima = False
+                if forcar_tool:
+                    logger.info(f"[ConversationAgent] Consulta obrigatória para {phone}")
 
                 response = self.anthropic.create_message(
                     system=system_prompt,
                     messages=history,
                     tools=tools,
                     max_tokens=1024,
+                    tool_choice=forcar_tool,
                 )
 
                 # Parse response content blocks
@@ -119,7 +370,55 @@ class ConversationAgent:
                 stop_reason = response.get("stop_reason", "end_turn")
 
                 if not tool_uses:
-                    # No tool calls — final response
+                    # Resposta final: confere antes de aceitar. Data e horário
+                    # afirmados sem respaldo não viram mensagem - mas a primeira
+                    # reação é mandar consultar, não desistir da conversa.
+                    texto_provisorio = "\n".join(current_text_parts).strip()
+                    inventado = self._agenda_sem_respaldo(texto_provisorio, respaldo_das_tools)
+
+                    # Efeito já cometido não se refaz: mandar consultar de novo
+                    # convida o modelo a chamar book_appointment outra vez.
+                    # Pedir cadastro a quem ja e cadastrada e o erro mais
+                    # visivel deste fluxo. Retirar o roteiro do prompt reduz a
+                    # chance; esta trava e o que garante.
+                    cadastro = (
+                        pede_cadastro(texto_provisorio) if em_campanha else []
+                    )
+                    if cadastro and not ja_refez_cadastro and not efeito_cometido:
+                        ja_refez_cadastro = True
+                        logger.warning(
+                            f"[Campanha] {phone} pediu cadastro ({cadastro}) a paciente "
+                            f"ja cadastrada; refazendo"
+                        )
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            "PARE. Esta pessoa JA E PACIENTE CADASTRADA e voce acabou de "
+                            "pedir dado de cadastro a ela. Nao peca nome, CPF, data de "
+                            "nascimento nem e-mail: a clinica ja tem tudo isso, e o nome "
+                            "dela esta no seu contexto. Reescreva a mensagem sem esse "
+                            "pedido, seguindo de onde a conversa estava."
+                        )})
+                        text_parts = []
+                        continue
+
+                    if inventado and not ja_refez and not efeito_cometido:
+                        ja_refez = True
+                        logger.warning(
+                            f"[Proveniencia] {phone} afirmou {sorted(inventado)} sem consultar; "
+                            f"refazendo com consulta obrigatória"
+                        )
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            "PARE. Você acabou de afirmar data ou horário que não veio de "
+                            "nenhuma tool nesta conversa. Não repita, não deduza a partir de "
+                            "horários que você mesma deu antes e não complete a lista. "
+                            "Chame agora a tool que traz esse dado e responda apenas com o "
+                            "que ela devolver."
+                        )})
+                        forcar_proxima = True
+                        text_parts = []
+                        continue
+
                     history.append({"role": "assistant", "content": content_blocks})
                     break
 
@@ -129,8 +428,10 @@ class ConversationAgent:
                     result = self.tool_executor.execute(
                         tool_use["name"],
                         tool_use["input"],
-                        context={"clinic_id": clinic_id, "phone": phone},
+                        context={"clinic_id": clinic_id, "phone": phone,
+                                 "turnos": _turnos_para_trava(history)},
                     )
+                    respaldo_das_tools.append(result)
 
                     # Intercept special tools
                     if tool_use["name"] == "present_options" and result.get("presented"):
@@ -138,6 +439,9 @@ class ConversationAgent:
 
                     if tool_use["name"] == "request_human_handoff" and result.get("handoff_requested"):
                         handoff_requested = True
+
+                    if tool_use["name"] in TOOLS_COM_EFEITO and not result.get("error"):
+                        efeito_cometido = tool_use["name"]
 
                     tool_results.append({
                         "type": "tool_result",
@@ -155,7 +459,7 @@ class ConversationAgent:
             # message) so the next attempt has the full context. Without this,
             # the user's message is silently dropped and they have to repeat it.
             try:
-                session["agent_history"] = self._truncate_history(history)
+                session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
                 session["mode"] = "agent"
                 self._save_session(clinic_id, phone, session)
             except Exception as save_err:
@@ -170,14 +474,115 @@ class ConversationAgent:
             session["state"] = "HUMAN_HANDOFF"
             session["human_handoff_requested_at"] = int(time.time())
             session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+            session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
+        # Modelo no meio, determinismo em volta. O prompt já proíbe afirmar
+        # data, preço ou status sem consultar - e em 02/09/2026 o bot disse que
+        # um agendamento cancelado estava confirmado mesmo assim, relendo a
+        # própria mensagem de três dias antes. Instrução não segura isso.
+        #
+        # Data e horário sem respaldo BLOQUEIAM a resposta. Em 02/09/2026, à
+        # pergunta "E horários à tarde?", o agente listou dez horários sem
+        # chamar tool nenhuma - extrapolou da lista da noite que ele mesmo
+        # dera minutos antes. O modo observação só registrou.
+        #
+        # Só data e horário derrubam a mensagem. Preço, duração e status
+        # continuam apenas registrados: erram para o lado do constrangimento,
+        # não o da paciente que vem num dia que não existe.
+        # Ultima rede do pedido de cadastro. So chega aqui quem ja levou um PARE
+        # explicito e insistiu. Rarissimo por construcao - o roteiro nem esta
+        # mais no prompt - mas pedir CPF a uma paciente cadastrada e o erro que
+        # nao pode sair daqui de jeito nenhum.
+        if em_campanha:
+            insistiu = pede_cadastro(final_text)
+            if insistiu:
+                logger.error(
+                    f"[Campanha] BLOQUEADO {phone}: insistiu em pedir cadastro "
+                    f"{insistiu} depois do PARE | resposta={final_text[:200]!r}"
+                )
+                final_text = (
+                    "Perfeito! Vou confirmar os detalhes com uma especialista e "
+                    "ja te retorno 😊"
+                )
+                pending_buttons = None
+                handoff_requested = True
+                session["state"] = "HUMAN_HANDOFF"
+                session["human_handoff_requested_at"] = int(time.time())
+                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+
+        try:
+            sem_origem = fatos_sem_origem(final_text, respaldo_das_tools)
+            inventado = fatos_de_agenda(sem_origem)
+
+            if inventado:
+                logger.error(
+                    f"[Proveniencia] BLOQUEADO {phone}: agenda sem respaldo "
+                    f"{sorted(inventado)} | tools={len(respaldo_das_tools)} "
+                    f"| refez={ja_refez} | resposta={final_text[:200]!r}"
+                )
+                # Só chega aqui quem já foi mandado consultar e mesmo assim
+                # inventou de novo. Aí a especialista é o caminho certo: a
+                # alternativa é ficar tentando enquanto a pessoa espera.
+                #
+                # Mas se uma tool já mudou o mundo nesta execução, a mensagem
+                # não pode fingir que nada aconteceu: o agendamento existe no
+                # banco, e sumir com ele deixaria a pessoa sem saber que tem
+                # uma sessão marcada. "Efeito só no fim" - quando o efeito
+                # escapa para o meio, a mensagem tem que contá-lo.
+                if efeito_cometido:
+                    logger.error(
+                        f"[Proveniencia] {phone}: bloqueio APÓS {efeito_cometido} já "
+                        f"executado. A ação está no banco e a mensagem foi trocada."
+                    )
+                    final_text = (
+                        "Registrei aqui e uma especialista vai te confirmar os "
+                        "detalhes em instantes, para não te passar nada errado 😊"
+                    )
+                else:
+                    final_text = (
+                        "Deixa eu confirmar os horários certinho com uma especialista "
+                        "para não te passar nada errado. Já te falo 😊"
+                    )
+                pending_buttons = None
+                handoff_requested = True
+                session["state"] = "HUMAN_HANDOFF"
+                session["human_handoff_requested_at"] = int(time.time())
+                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+                # A pausa nao vence: so o "Retomar bot" no painel a remove.
+                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+            elif sem_origem:
+                logger.warning(
+                    f"[Proveniencia] {phone} afirmou sem respaldo: {sorted(sem_origem)} "
+                    f"| tools={len(respaldo_das_tools)} | resposta={final_text[:120]!r}"
+                )
+            else:
+                logger.info(f"[Proveniencia] {phone} ok | tools={len(respaldo_das_tools)}")
+        except Exception as e:
+            # A conferência nunca pode derrubar o atendimento: falhando ela, a
+            # resposta segue como estava, que é o comportamento de antes dela.
+            logger.error(f"[Proveniencia] Falha ao conferir resposta de {phone}: {e}")
+
         outgoing = self._build_outgoing(final_text, pending_buttons)
 
         # 8. Save history (truncated)
-        session["agent_history"] = self._truncate_history(history)
+        session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
         session["mode"] = "agent"
+        # Guarda o que a conversa INTEIRA consultou, não só esta rodada: a
+        # pessoa negocia data por vários turnos e o bot repete o mesmo fato
+        # consultado. Cortado nos últimos RESPALDO_GUARDADO porque a sessão vive
+        # no DynamoDB (limite de 400KB por item) e resultado de tool cresce
+        # rápido - list_areas de uma clínica grande já são alguns KB.
+        session["respaldo_anterior"] = self._convert_decimals(
+            respaldo_das_tools[-RESPALDO_GUARDADO:]
+        )
+        # Quem agrupa a rajada precisa saber se esta rodada gravou algo no
+        # banco. Se gravou, a resposta vai mesmo que a pessoa tenha escrito no
+        # meio: um agendamento existe e ela precisa saber. Se nao gravou, a
+        # resposta pode ser descartada em favor da rajada completa.
+        session["efeito_na_ultima_rodada"] = bool(efeito_cometido)
         self._save_session(clinic_id, phone, session)
 
         elapsed = time.time() - start_time
@@ -187,8 +592,14 @@ class ConversationAgent:
 
     # ── System prompt ──
 
-    def _build_system_prompt(self, clinic_id, phone):
-        """Build the system prompt with clinic context."""
+    def _build_system_prompt(self, clinic_id, phone, session=None):
+        """Build the system prompt with clinic context.
+
+        `session` entra por causa da campanha de reagendamento: o MODO da
+        conversa e lido do banco, nunca inferido pelo modelo. Modelo inferindo
+        em que fluxo esta pode trocar de fluxo no meio, e o erro chega a
+        paciente como "o bot me pediu o CPF de novo".
+        """
         # Get clinic info
         clinic_rows = self.db.execute_query(
             "SELECT * FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
@@ -248,35 +659,72 @@ class ConversationAgent:
             "clinic_phone": clinic.get("phone") or "",
             "collected_data_summary": "",
             "single_service_hint": single_service_hint,
+            # O valor vem do banco, nao do texto do prompt. Ver preco_minimo.py:
+            # numero escrito no template envelhece calado quando a tabela muda.
+            "preco_minimo": preco_minimo_por_area(self.db, clinic_id),
         }
 
         system_prompt = self.template_service.get_and_render(clinic_id, "AI_SYSTEM_PROMPT", variables)
         system_prompt += discount_context
 
-        # Load ALL FAQ items into the system prompt as knowledge base
-        faq_rows = self.db.execute_query(
-            "SELECT question_label, answer FROM scheduler.faq_items WHERE clinic_id = %s AND active = true ORDER BY display_order",
-            (clinic_id,),
-        )
-        if faq_rows:
-            faq_context = "\n═══ BASE DE CONHECIMENTO (FAQ) ═══\n"
-            faq_context += "Use estas informações para responder dúvidas dos clientes. "
-            faq_context += "Você pode reformular e adaptar as respostas ao contexto da conversa.\n\n"
-            for faq in faq_rows:
-                faq_context += f"P: {faq['question_label']}\nR: {faq['answer']}\n\n"
-            system_prompt += faq_context
-
+        # O FAQ SAIU DAQUI de propósito.
+        #
+        # Despejar a base inteira no prompt fazia com que responder de memória
+        # fosse o caminho normal: para toda dúvida, `tools=0` era o esperado, e
+        # com isso não havia como distinguir "repetiu o FAQ" de "completou o FAQ
+        # com o que parecia plausível". O verificador ficava cego justamente na
+        # maior classe de respostas.
+        #
+        # Agora get_faq_answer é o único caminho até a resposta. Custa uma
+        # rodada de latência por dúvida e devolve o sinal: sem tool, sem fato.
         system_prompt += (
             "\n═══ COMO RESPONDER DÚVIDAS ═══\n"
-            "1. Primeiro, tente responder usando a BASE DE CONHECIMENTO acima.\n"
-            "2. Se a pergunta não está coberta exatamente mas a base de conhecimento tem "
-            "informações relacionadas, use-as para formular uma resposta útil.\n"
-            "3. Use get_faq_answer APENAS se precisar buscar algo específico não coberto acima.\n"
-            "4. Só chame request_human_handoff se, após tentar as opções acima, "
-            "você realmente não tiver informação suficiente para ajudar.\n"
-            "5. NUNCA transfira para humano na primeira tentativa — sempre tente ajudar primeiro.\n"
+            "1. Toda dúvida sobre o procedimento começa com get_faq_answer. Você não tem\n"
+            "   a base de conhecimento na memória: ela vem da tool, e só de lá.\n"
+            "2. Responda com o que a tool devolveu. Pode resumir e adaptar o tom, nunca\n"
+            "   acrescentar informação que não veio nela.\n"
+            "3. Se get_faq_answer não devolver resposta, você NÃO SABE. Não complete com\n"
+            "   conhecimento geral sobre depilação a laser, por mais seguro que pareça:\n"
+            "   diga que vai confirmar com uma especialista e chame request_human_handoff.\n"
+            "4. Isso vale mesmo para o que parece óbvio - intervalo entre sessões, número\n"
+            "   de sessões, cuidados, contraindicações. Cada clínica tem o seu protocolo.\n"
         )
 
+        # Regra de datas: fica aqui, no prefixo cacheado, porque é estática. O
+        # que muda por mensagem é o bloco CALENDÁRIO, que entra no turno da
+        # pessoa. Sem esta regra o agente tinha a data e ainda assim não sabia o
+        # que fazer quando a data pedida não tinha vaga.
+        system_prompt += (
+            "\n═══ DATAS ═══\n"
+            "1. Toda mensagem traz um bloco CALENDÁRIO com a data de hoje e o que as\n"
+            "   referências da pessoa significam (\"amanhã\", \"sexta\", \"semana que vem\").\n"
+            "   Use-o. Nunca diga que não consegue calcular uma data.\n"
+            "2. O calendário diz que dia é, não que há vaga. Disponibilidade vem de\n"
+            "   check_availability, sempre.\n"
+            "3. Se a data que a pessoa pediu NÃO estiver entre as datas disponíveis:\n"
+            "   diga que naquele dia não há agenda, nomeando o dia como ela falou e\n"
+            "   com a data ao lado, e ofereça as datas que existem.\n"
+            "   Exemplo: 'Amanhã (05/09) não temos horário. As datas mais próximas\n"
+            "   são: quarta, 23/09 e quinta, 24/09. Alguma dessas serve?'\n"
+            "4. Não empurre a pessoa de volta para a lista sem responder o que ela\n"
+            "   perguntou. 'Escolha uma data da lista' não é resposta para 'tem\n"
+            "   amanhã?' - a resposta é sim ou não, e então as opções.\n"
+        )
+
+        system_prompt += (
+            "\n═══ ÁREAS ═══\n"
+            "1. As áreas são escolha da paciente. NUNCA escolha por ela, nem para\n"
+            "   'adiantar', nem porque pareciam prováveis, nem porque você as viu no\n"
+            "   histórico dela.\n"
+            "2. Antes de get_time_slots, calculate_discount ou book_appointment, as\n"
+            "   áreas precisam ter sido ditas nesta conversa: ou ela pediu, ou você\n"
+            "   perguntou e ela respondeu. As tools RECUSAM área que não passou por\n"
+            "   isso, e devolvem o que fazer.\n"
+            "3. Você NÃO consulta o histórico de áreas da paciente, e não tem tool para\n"
+            "   isso. O que ela tratou antes não diz o que ela quer agora: pergunte.\n"
+            "4. Horário depende de área: a duração da sessão vem das áreas. Passar\n"
+            "   horários antes de saber as áreas é passar horário errado.\n"
+        )
         system_prompt += (
             "\n═══ INSTRUÇÕES PÓS-AGENDAMENTO ═══\n"
             "Após confirmar um agendamento com book_appointment, SEMPRE chame "
@@ -284,7 +732,71 @@ class ConversationAgent:
             "Se houver instruções, envie-as ao cliente."
         )
 
+        bloco_da_campanha = self._bloco_da_campanha(clinic_id, phone, session)
+        if bloco_da_campanha:
+            # Tira o roteiro de lead ANTES de acrescentar o da campanha. Antes
+            # isto era so acrescimo, e o roteiro antigo continuava la: em
+            # 11/09/2026 o bot reproduziu palavra por palavra o passo 6 dele,
+            # pedindo CPF a uma paciente cadastrada.
+            system_prompt = adapta_para_campanha(system_prompt)
+        system_prompt += bloco_da_campanha
+
         return system_prompt
+
+    def _bloco_da_campanha(self, clinic_id, phone, session):
+        """O que muda quando a conversa e de campanha - e nada quando nao e.
+
+        Fica no FIM do prompt de proposito: tudo acima e identico nos dois
+        fluxos, entao o prefixo continua compartilhado e o cache do Anthropic
+        segue valendo. Dentro de uma conversa o bloco nao muda (mesma paciente,
+        mesmas datas), entao ele tambem nao invalida cache entre turnos.
+        """
+        if not campanha_viva(session):
+            return ""
+
+        datas = datas_da_campanha(session)
+        nome = ""
+        try:
+            linhas = self.db.execute_query(
+                "SELECT name FROM scheduler.patients "
+                "WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL LIMIT 1",
+                (clinic_id, phone),
+            )
+            if linhas:
+                nome = (linhas[0].get("name") or "").strip()
+        except Exception as e:
+            # Sem o nome o bot so evita chama-la pelo nome. Derrubar a conversa
+            # por causa disso seria trocar o essencial pelo enfeite.
+            logger.error(f"[Campanha] Nao consegui ler o cadastro de {phone}: {e}")
+
+        linha_nome = f"Nome dela (do cadastro): {nome}\n" if nome else ""
+
+        return (
+            "\n═══ CONVERSA DE CAMPANHA ═══\n"
+            "Esta pessoa JÁ É PACIENTE CADASTRADA e acabou de receber de nós a\n"
+            "mensagem com as datas abertas. A conversa começou por nossa iniciativa,\n"
+            "não pela dela.\n"
+            f"{linha_nome}"
+            f"Datas que anunciamos a ela: {', '.join(datas)}\n"
+            "\n"
+            "O que muda nesta conversa:\n"
+            "1. NÃO dê boas-vindas e não se apresente. A conversa já está em andamento.\n"
+            "2. NUNCA peça nome, CPF, data de nascimento ou e-mail. Já temos o cadastro\n"
+            "   dela. Pedir de novo é o erro mais visível que você pode cometer aqui.\n"
+            "3. NÃO anuncie preço, total nem desconto. Só fale de valor se ELA perguntar.\n"
+            "4. Comece pelas ÁREAS, antes de qualquer horário: pergunte quais áreas\n"
+            "   ela quer tratar DESTA VEZ. Sempre pergunte, mesmo que ela já seja\n"
+            "   cliente antiga - o que ela fez da última vez não diz o que ela quer\n"
+            "   agora, e supor por ela já custou caro aqui.\n"
+            "   Só depois da resposta dela vá para os horários.\n"
+            "5. Ofereça APENAS as datas anunciadas acima. Confirme os horários com\n"
+            "   check_availability e get_time_slots, como sempre.\n"
+            "6. Ao fechar, siga com get_pre_session_instructions normalmente.\n"
+            "\n"
+            "Continua valendo tudo o mais: calculate_discount antes de book_appointment\n"
+            "(o preço gravado tem de estar certo, mesmo sem ser anunciado), get_faq_answer\n"
+            "para dúvidas, e nunca afirmar data ou horário que não veio de uma tool.\n"
+        )
 
     # ── WhatsApp formatting fix ──
 
@@ -305,6 +817,33 @@ class ConversationAgent:
 
     # ── Outgoing message builder ──
 
+    @staticmethod
+    def _junta_texto(mensagem_das_opcoes, texto_final):
+        """As duas falas do modelo quando ele oferece opções, sem perder nenhuma.
+
+        Era `texto_final or mensagem_das_opcoes`: escrevendo os dois, o texto
+        final ganhava e a mensagem das opções sumia. Quase sempre dava no mesmo
+        porque o modelo repetia a mesma frase nos dois lugares - mas quando ele
+        responde numa e conduz na outra, o que sumia era a resposta:
+
+            opções: "Amanhã (05/09) não temos horário. As próximas datas são:"
+            final:  "Alguma dessas fica boa pra você?"
+
+        A paciente recebia só a segunda. O padrão "responde e então oferece" era
+        impossível de entregar.
+        """
+        primeira = (mensagem_das_opcoes or "").strip()
+        segunda = (texto_final or "").strip()
+        if not primeira or not segunda:
+            return primeira or segunda
+        # Repetiu a mesma frase nos dois lugares: manda a mais completa, não as
+        # duas coladas.
+        if primeira in segunda:
+            return segunda
+        if segunda in primeira:
+            return primeira
+        return f"{primeira}\n\n{segunda}"
+
     def _build_outgoing(self, text, pending_buttons):
         """Convert agent output into OutgoingMessage list."""
         messages = []
@@ -312,7 +851,7 @@ class ConversationAgent:
         if pending_buttons:
             options = pending_buttons.get("options", [])
             button_message = pending_buttons.get("message", "")
-            display_text = text or button_message
+            display_text = self._junta_texto(button_message, text)
 
             if len(options) <= 3:
                 # WhatsApp supports up to 3 inline buttons
@@ -396,6 +935,21 @@ class ConversationAgent:
         if isinstance(obj, list):
             return [ConversationAgent._convert_decimals(i) for i in obj]
         return obj
+
+    def rebuild_history_from_events(self, clinic_id, phone, limit=20):
+        """Reconstrói o histórico do MessageEvents quando a sessão está vazia."""
+        try:
+            eventos = self.message_tracker.get_conversation_messages(clinic_id, phone, limit=limit)
+            history = events_to_history(eventos)
+            if history:
+                logger.info(
+                    f"[ConversationAgent] Histórico reconstruído do MessageEvents para {phone}: "
+                    f"{len(history)} turnos"
+                )
+            return history
+        except Exception as e:
+            logger.warning(f"[ConversationAgent] Falha ao reconstruir histórico de {phone}: {e}")
+            return []
 
     def _truncate_history(self, history):
         """Keep the last MAX_HISTORY_PAIRS message pairs to stay within DynamoDB limits.

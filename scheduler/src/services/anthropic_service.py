@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+DEFAULT_MODEL = "claude-sonnet-5"
 
 
 class AnthropicService:
@@ -23,15 +24,20 @@ class AnthropicService:
         system,
         messages,
         tools=None,
-        model="claude-sonnet-4-20250514",
-        temperature=0.7,
+        model=DEFAULT_MODEL,
+        temperature=None,
         max_tokens=1024,
+        tool_choice=None,
     ):
         """
         Call Anthropic Messages API with optional tool use.
 
         Returns the parsed JSON response dict.
         Retries up to 5 times on 429/5xx with exponential backoff (3s base).
+
+        `temperature` só entra no payload quando o chamador informa um valor.
+        Enviá-lo sempre quebrava o modelo atual, que responde
+        400 "`temperature` is deprecated for this model."
         """
         headers = {
             "x-api-key": self.api_key,
@@ -39,16 +45,38 @@ class AnthropicService:
             "content-type": "application/json",
         }
 
+        # O system vai como bloco com cache_control, nao como string solta.
+        #
+        # A ordem de render e tools -> system -> messages, entao um breakpoint no
+        # ultimo bloco de system cobre tools + system: os ~17k chars de prompt
+        # mais as definicoes das 15 tools, que sao identicos em toda requisicao.
+        # O agent loop faz de 2 a 4 chamadas por mensagem e reenviava esse
+        # prefixo inteiro a preco cheio em cada uma.
+        #
+        # Leitura de cache custa ~0,1x; a escrita custa 1,25x e se paga na
+        # segunda chamada - ou seja, ja na primeira mensagem que use uma tool.
         payload = {
             "model": model,
             "max_tokens": max_tokens,
-            "temperature": temperature,
-            "system": system,
+            "system": [{
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"},
+            }] if system else system,
             "messages": messages,
         }
 
+        if temperature is not None:
+            payload["temperature"] = temperature
+
         if tools:
             payload["tools"] = tools
+
+        # Obriga o modelo a chamar uma tool específica nesta rodada. Usado quando
+        # a pergunta é sobre agenda: deixar a escolha com ele fez o bot listar
+        # horários inventados com tools=0, mesmo com o prompt mandando consultar.
+        if tool_choice:
+            payload["tool_choice"] = tool_choice
 
         max_retries = 5
 
@@ -90,11 +118,22 @@ class AnthropicService:
                     f"Anthropic API error {response.status_code}: {response.text[:200]}"
                 )
 
-            except requests.exceptions.Timeout:
+            # Timeout e conexão derrubada são a mesma classe de problema: falha
+            # transitória de rede, que uma segunda tentativa resolve. Só o
+            # timeout era retentado; ConnectionError caía no ramo genérico
+            # abaixo e estourava de primeira, e a pessoa recebia "estou com
+            # dificuldades" por um reset que ia passar sozinho.
+            #
+            # Apareceu no eval: 130 de 300 chamadas seguidas morreram com
+            # ConnectionResetError. Em produção o volume é menor, mas o caminho
+            # é o mesmo - e ali quem paga é a paciente esperando resposta.
+            except (requests.exceptions.Timeout,
+                    requests.exceptions.ConnectionError) as e:
                 wait_time = min(random.uniform(2.0, 2.0 * (3 ** (attempt + 1))), 60.0)
                 logger.warning(
-                    f"[AnthropicService] Request timeout, retrying in {wait_time:.1f}s "
-                    f"(attempt {attempt + 1}/{max_retries})"
+                    f"[AnthropicService] Falha de rede ({type(e).__name__}), "
+                    f"retentando em {wait_time:.1f}s "
+                    f"(tentativa {attempt + 1}/{max_retries})"
                 )
                 time.sleep(wait_time)
             except AnthropicError:

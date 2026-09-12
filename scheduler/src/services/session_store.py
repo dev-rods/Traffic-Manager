@@ -1,0 +1,133 @@
+"""Marca conversas como elegíveis para resposta automática do bot.
+
+A sessão é gravada aninhada: o item do DynamoDB tem {"pk", "sk", "session": {...}},
+e `_load_session` devolve o conteúdo de `session`. Um `SET bot_enabled` na raiz do
+item seria invisível para quem lê a sessão — com a política LEADS_ONLY o bot
+ficaria mudo para todo mundo, silenciosamente. Por isso a marca entra dentro de
+`session`.
+
+Lê, mescla e grava em vez de usar UpdateExpression com caminho aninhado: o
+`session` pode ainda não existir, e a leitura extra é irrelevante no volume aqui
+(uma abordagem a cada 10 minutos).
+"""
+import logging
+import time
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+def mark_conversation_eligible(table, clinic_id: str, phone: str,
+                               lead_id: Optional[str] = None) -> bool:
+    """Marca a conversa como elegível, preservando o histórico já gravado.
+
+    Devolve True se gravou. Nunca levanta: falhar aqui não pode derrubar o envio
+    que já aconteceu.
+    """
+    pk, sk = f"CLINIC#{clinic_id}", f"PHONE#{phone}"
+    try:
+        item = table.get_item(Key={"pk": pk, "sk": sk}).get("Item") or {}
+        session = item.get("session") or {}
+
+        session["bot_enabled"] = True
+        if lead_id:
+            session["lead_id"] = str(lead_id)
+
+        table.put_item(
+            Item={
+                "pk": pk,
+                "sk": sk,
+                "session": session,
+                "clinicId": clinic_id,
+                "phone": phone,
+                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(time.time()))),
+            }
+        )
+        logger.info(f"[SessionStore] Conversa {phone} marcada como elegível")
+        return True
+    except Exception as e:
+        logger.error(f"[SessionStore] Falha ao marcar {phone} como elegível: {e}")
+        return False
+
+
+def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
+    """Grava a campanha de reagendamento na sessão da paciente.
+
+    Chamada pelo disparo em massa, DEPOIS de a mensagem sair. Campanha aberta
+    sem mensagem entregue deixa o bot esperando resposta de algo que ninguém
+    recebeu.
+
+    Dentro de `session`, nunca na raiz - a raiz é invisível para quem lê a
+    sessão, e o bot ficaria mudo em silêncio (ver o docstring do módulo).
+
+    Devolve True se gravou. Nunca levanta: falhar aqui não pode derrubar o envio
+    que já aconteceu. Quem chama reporta o resultado para a tela.
+    """
+    pk, sk = f"CLINIC#{clinic_id}", f"PHONE#{phone}"
+    try:
+        item = table.get_item(Key={"pk": pk, "sk": sk}).get("Item") or {}
+        session = item.get("session") or {}
+        session["campanha"] = campanha
+
+        # A campanha COMECA uma conversa. Quem ja falou com o bot antes tem
+        # historico guardado, e sem limpar aqui o agente leria a conversa velha
+        # e a continuaria - o bloco de campanha diz "acabamos de te escrever" e
+        # o historico diz outra coisa, e quem decide na pratica e o historico.
+        #
+        # Encontrado no piloto de 09/09/2026: o numero de teste tinha 36 turnos
+        # de 04/09 parados na sessao. Sem TTL na tabela, esse historico fica
+        # para sempre - o mes que vem teria a conversa deste mes por baixo.
+        session["agent_history"] = []
+        session.pop("state", None)
+        session.pop("respaldo_anterior", None)
+        session.pop("efeito_na_ultima_rodada", None)
+
+        table.put_item(
+            Item={
+                "pk": pk,
+                "sk": sk,
+                "session": session,
+                "clinicId": clinic_id,
+                "phone": phone,
+                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(time.time()))),
+            }
+        )
+        logger.info(f"[SessionStore] Campanha aberta para {phone}")
+        return True
+    except Exception as e:
+        logger.error(f"[SessionStore] Falha ao abrir campanha para {phone}: {e}")
+        return False
+
+
+def vincula_lid(table, clinic_id: str, chat_lid: str, phone: str) -> None:
+    """Guarda a quem pertence um LID do WhatsApp.
+
+    Quando a atendente responde pelo celular, o z-api manda o LID no lugar do
+    número e a mensagem não teria dono. As mensagens normais da mesma conversa
+    trazem os dois campos juntos - é delas que o vínculo sai.
+
+    Vive na tabela de sessões com sk=LID#..., ao lado de PHONE#...: mesma
+    partição da clínica, sem tabela nova.
+    """
+    try:
+        table.put_item(Item={
+            "pk": f"CLINIC#{clinic_id}",
+            "sk": f"LID#{chat_lid}",
+            "phone": phone,
+            "clinicId": clinic_id,
+            "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        })
+    except Exception as e:
+        logger.warning(f"[SessionStore] Não consegui vincular {chat_lid} a {phone}: {e}")
+
+
+def telefone_do_lid(table, clinic_id: str, chat_lid: str) -> Optional[str]:
+    """O telefone vinculado a um LID, se já tivermos visto a conversa."""
+    try:
+        item = table.get_item(
+            Key={"pk": f"CLINIC#{clinic_id}", "sk": f"LID#{chat_lid}"}
+        ).get("Item") or {}
+        return item.get("phone") or None
+    except Exception as e:
+        logger.warning(f"[SessionStore] Não consegui resolver o LID {chat_lid}: {e}")
+        return None

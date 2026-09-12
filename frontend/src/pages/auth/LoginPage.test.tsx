@@ -77,6 +77,8 @@ describe('LoginPage', () => {
     await userEvent.type(screen.getByPlaceholderText('seu@email.com'), 'test@clinic.com')
     await userEvent.type(screen.getByPlaceholderText('••••••••'), 'secret123')
     await userEvent.click(screen.getByRole('button', { name: /entrar/i }))
-    expect(screen.getByRole('button', { name: /entrando/i })).toBeDisabled()
+    // O botao mantem o rotulo "Entrar" enquanto envia: o Button sinaliza o
+    // loading com spinner + disabled, nao trocando o texto.
+    await waitFor(() => expect(screen.getByRole('button', { name: /entrar/i })).toBeDisabled())
   })
 })

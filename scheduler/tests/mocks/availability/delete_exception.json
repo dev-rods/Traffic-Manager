@@ -1,0 +1,12 @@
+{
+  "httpMethod": "DELETE",
+  "path": "/clinics/clinic-test/availability-exceptions/00000000-0000-0000-0000-000000000002",
+  "pathParameters": {
+    "clinicId": "clinic-test",
+    "exceptionId": "00000000-0000-0000-0000-000000000002"
+  },
+  "headers": {
+    "x-api-key": "REPLACE_WITH_ENV_KEY"
+  },
+  "body": null
+}

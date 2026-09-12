@@ -165,10 +165,21 @@ class LeadService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         booked: Optional[bool] = None,
+        exclude_sources: Optional[List[str]] = None,
         limit: int = 50,
         offset: int = 0,
     ):
-        """List leads for a clinic with optional filters."""
+        """List leads for a clinic with optional filters.
+
+        `exclude_sources` remove origens do resultado. É exclusão e não lista
+        branca de propósito: as origens do site crescem (`landing-page`,
+        `harmonizacao`, a próxima campanha), e uma lista branca faria a origem
+        nova sumir da tela sem erro nenhum. O que se quer tirar tem nome fixo.
+
+        O filtro vive aqui, não no cliente, porque o LIMIT corta no banco antes
+        de qualquer filtro em JS - filtrar depois esconderia leads do site assim
+        que a clínica passasse do limite da página.
+        """
         conditions = ["clinic_id = %s"]
         params = [clinic_id]
 
@@ -181,6 +192,11 @@ class LeadService:
         if booked is not None:
             conditions.append("booked = %s")
             params.append(booked)
+        if exclude_sources:
+            marcadores = ", ".join(["%s"] * len(exclude_sources))
+            # COALESCE: source NULL não casa com NOT IN e o lead sumiria calado.
+            conditions.append(f"COALESCE(source, '') NOT IN ({marcadores})")
+            params.extend(exclude_sources)
 
         where = " AND ".join(conditions)
         params.extend([limit, offset])

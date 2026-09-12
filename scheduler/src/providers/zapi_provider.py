@@ -190,3 +190,36 @@ class ZApiProvider(WhatsAppProvider):
             lines.append(f"{i} - {btn['label']}")
 
         return self.send_text(phone, "\n".join(lines))
+
+    def list_chats(self, page_size: int = 1000, max_pages: int = 20):
+        """A lista de conversas da instância: quem tem conversa aberta.
+
+        É o único jeito de enxergar atendimento humano. A atendente responde
+        pelo celular, a mensagem chega com LID sem vínculo e o webhook a
+        descarta - a conversa existe no WhatsApp e não existe para nós.
+
+        O CONTEÚDO não vem: `GET /chat-messages/{phone}` devolve 400 "Does not
+        work in multi device version" nesta instância. Daqui sai que existe
+        conversa e quando foi a última mensagem, não quem disse o quê.
+
+        Medido em 05/09/2026: 3378 conversas em 4 requisições, 6,9s.
+        """
+        chats = []
+        for pagina in range(1, max_pages + 1):
+            response = requests.get(
+                f"{self.base_url}/chats",
+                headers=self.headers,
+                params={"page": pagina, "pageSize": page_size},
+                timeout=30,
+            )
+            if response.status_code != 200:
+                logger.error(
+                    f"[ZApi] list_chats falhou na pagina {pagina}: "
+                    f"{response.status_code} {response.text[:200]}"
+                )
+                break
+            lote = response.json()
+            if not lote:
+                break
+            chats.extend(lote)
+        return chats
