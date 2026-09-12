@@ -112,6 +112,8 @@ SQL_STATEMENTS = [
         birth_date DATE,
         cpf VARCHAR(14),
         email VARCHAR(255),
+        custom_discount_pct INTEGER CHECK (custom_discount_pct IS NULL
+            OR (custom_discount_pct >= 0 AND custom_discount_pct <= 100)),
         last_message_at TIMESTAMPTZ,
         deleted_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -582,6 +584,27 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS birth_date DATE",
     "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS cpf VARCHAR(14)",
     "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+
+    # Desconto fixo da paciente, em porcento. NULO e o normal: sem personalizado,
+    # vale a politica da clinica (primeira sessao, faixas de areas).
+    #
+    # NULO e nao zero, e a diferenca nao e detalhe: zero e um valor legitimo -
+    # "esta paciente nunca recebe desconto" - e so o nulo consegue dizer "nao ha
+    # personalizado aqui". Com zero como padrao, as duas situacoes ficariam
+    # indistinguiveis e ninguem descobriria o engano olhando a tabela.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS custom_discount_pct INTEGER",
+    """
+    DO $$ BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'patients_custom_discount_pct_range'
+        ) THEN
+            ALTER TABLE scheduler.patients
+                ADD CONSTRAINT patients_custom_discount_pct_range
+                CHECK (custom_discount_pct IS NULL
+                       OR (custom_discount_pct >= 0 AND custom_discount_pct <= 100));
+        END IF;
+    END $$;
+    """,
 
     # Rastreio do primeiro contato ativo com o lead.
     # first_contact_at é "falamos com ele"; conversation_started_at é "ele respondeu".

@@ -9,6 +9,8 @@ from src.services.confirmacao_de_areas import (
     recado_de_recusa,
     separa,
 )
+from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
+from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita
 from src.services.duration_rules import calcula_duracao
 
@@ -873,6 +875,40 @@ class ToolExecutor:
 
     # ── New tools ──
 
+    def _resultado_de_desconto(self, total_cents, pct, razao, is_first=False):
+        """O formato de resposta da calculate_discount, num lugar so.
+
+        Extraido quando o desconto personalizado entrou: passaram a existir dois
+        caminhos ate a resposta, e montar o dicionario duas vezes faria os
+        campos divergirem - o bot le `discounted_price_display` para anunciar o
+        valor, e um caminho sem esse campo daria preco vazio na conversa.
+        """
+        descontado = total_cents * (100 - pct) // 100
+
+        def reais(centavos):
+            return f"R$ {centavos / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        original_display, descontado_display = reais(total_cents), reais(descontado)
+        result = {
+            "discount_pct": pct,
+            "discount_reason": razao,
+            "original_price_cents": total_cents,
+            "discounted_price_cents": descontado,
+            "original_price_display": original_display,
+            "discounted_price_display": descontado_display,
+            "is_first_session": is_first,
+        }
+        if pct > 0:
+            result["discount_message"] = (
+                f"Desconto de {pct}% aplicado! "
+                f"De {original_display} por {descontado_display}"
+            )
+        logger.info(
+            f"[ToolExecutor] calculate_discount: pct={pct} reason={razao} "
+            f"original={total_cents} discounted={descontado}"
+        )
+        return result
+
     def _tool_calculate_discount(self, args, clinic_id, phone, ctx):
         recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
         if recusa:
@@ -904,6 +940,14 @@ class ToolExecutor:
                 "discounted_price_cents": 0,
                 "price_display": "Valor a consultar",
             }
+
+        # Combinado com a paciente vence a politica. E o ponto do campo: um
+        # percentual acertado com ela vale em todo agendamento, no lugar de
+        # primeira sessao e faixas de areas.
+        personalizado = desconto_do_paciente(self.db, clinic_id, phone)
+        if personalizado is not None:
+            return self._resultado_de_desconto(
+                total_price_cents, personalizado, RAZAO_PERSONALIZADA)
 
         # Fetch discount rules
         rules_rows = self.db.execute_query(
@@ -951,33 +995,8 @@ class ToolExecutor:
             discount_pct = 0
             discount_reason = None
 
-        discounted_price = total_price_cents * (100 - discount_pct) // 100
-
-        original_display = f"R$ {total_price_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        discounted_display = f"R$ {discounted_price / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-        result = {
-            "discount_pct": discount_pct,
-            "discount_reason": discount_reason,
-            "original_price_cents": total_price_cents,
-            "discounted_price_cents": discounted_price,
-            "original_price_display": original_display,
-            "discounted_price_display": discounted_display,
-            "is_first_session": is_first,
-        }
-
-        if discount_pct > 0:
-            result["discount_message"] = (
-                f"Desconto de {discount_pct}% aplicado! "
-                f"De {original_display} por {discounted_display}"
-            )
-
-        logger.info(
-            f"[ToolExecutor] calculate_discount: pct={discount_pct} reason={discount_reason} "
-            f"original={total_price_cents} discounted={discounted_price}"
-        )
-
-        return result
+        return self._resultado_de_desconto(
+            total_price_cents, discount_pct, discount_reason, is_first)
 
     def _tool_get_pre_session_instructions(self, args, clinic_id, phone, ctx):
         service_area_pairs = args.get("service_area_pairs", [])

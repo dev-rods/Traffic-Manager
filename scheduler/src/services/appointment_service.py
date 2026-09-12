@@ -3,6 +3,8 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
+from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
+from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
@@ -93,6 +95,23 @@ class AppointmentService:
                 f"[Duracao] {clinic_id}: ignorando total_duration_minutes="
                 f"{total_duration_minutes} do chamador; calculado={duration_minutes}"
             )
+
+        # 2a-bis. Desconto combinado com a paciente.
+        #
+        # So quando o chamador NAO opinou: `discount_pct` zerado E sem razao
+        # significa "ninguem decidiu". O bot sempre opina, porque a
+        # calculate_discount ja considera o personalizado; o painel opina quando
+        # a atendente escolhe parceria ou digita um percentual - e a escolha
+        # dela vale para AQUELE agendamento, porque e decisao de agora contra
+        # uma regra permanente.
+        #
+        # Fica antes do bloco de precos de proposito: o final_price_cents e
+        # calculado logo abaixo a partir do discount_pct, e mudar o desconto
+        # depois deixaria o valor gravado divergente do desconto gravado.
+        if not discount_pct and not discount_reason:
+            personalizado = desconto_do_paciente(self.db, clinic_id, phone)
+            if personalizado is not None:
+                discount_pct, discount_reason = personalizado, RAZAO_PERSONALIZADA
 
         # 2b. Auto-calculate prices when not provided by caller
         if original_price_cents is None:

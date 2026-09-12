@@ -18,10 +18,34 @@ export const cadastroSchema = {
     .optional()
     .refine((v) => !v || v.replace(/\D/g, '').length === 11, 'CPF deve ter 11 dígitos'),
   birth_date: z.string().optional(),
+  /**
+   * Desconto fixo da paciente. Texto no formulario porque vazio precisa
+   * sobreviver ate o envio: e assim que a clinica desfaz um combinado. Virar
+   * numero cedo transformaria o vazio em 0, que significa outra coisa.
+   */
+  custom_discount_pct: z
+    .string()
+    .optional()
+    .refine((v) => {
+      if (!v || !v.trim()) return true
+      const n = Number(v)
+      return Number.isInteger(n) && n >= 0 && n <= 100
+    }, 'Informe um numero inteiro de 0 a 100'),
   email: z
     .string()
     .optional()
     .refine((v) => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), 'E-mail inválido'),
+}
+
+/**
+ * O que vai a API no campo de desconto: `null` quando a clinica apagou o campo,
+ * inteiro quando digitou. Undefined nunca - a diferenca entre "nao mexi" e
+ * "apaguei" nao existe neste formulario, e mandar undefined deixaria o
+ * combinado antigo intacto quando a intencao era remove-lo.
+ */
+export function descontoParaApi(valor: string | undefined): number | null {
+  if (!valor || !valor.trim()) return null
+  return Number(valor)
 }
 
 /** `07903984519` → `079.039.845-19`. Só formata quando está completo. */

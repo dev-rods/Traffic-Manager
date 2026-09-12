@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { CadastroFields } from './CadastroFields'
-import { cadastroSchema } from '@/lib/cadastroPaciente'
+import { cadastroSchema, descontoParaApi } from '@/lib/cadastroPaciente'
 import { useUpdatePatient } from '@/hooks/usePatients'
 import { normalizePhone } from '@/utils/normalizePhone'
 import type { PatientWithStats } from '@/types'
@@ -47,6 +47,13 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
         cpf: patient.cpf ?? '',
         birth_date: patient.birth_date ?? '',
         email: patient.email ?? '',
+        // String vazia quando nao ha combinado. `?? 0` aqui inventaria um
+        // desconto de zero por cento, que significa outra coisa.
+        custom_discount_pct:
+          patient.custom_discount_pct === null ||
+          patient.custom_discount_pct === undefined
+            ? ''
+            : String(patient.custom_discount_pct),
       })
     }
   }, [patient, reset])
@@ -66,6 +73,7 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
           cpf: data.cpf ?? '',
           birth_date: data.birth_date ?? '',
           email: data.email ?? '',
+          custom_discount_pct: descontoParaApi(data.custom_discount_pct),
         },
       })
       onClose()

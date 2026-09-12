@@ -49,6 +49,14 @@ export interface Patient {
   /** ISO `YYYY-MM-DD`. */
   birth_date: string | null
   email: string | null
+  /**
+   * Desconto fixo combinado com a paciente, em porcento.
+   *
+   * `null` e `0` sao coisas DIFERENTES: null significa "sem combinado, vale a
+   * politica da clinica"; 0 significa "combinado, e o combinado e nenhum
+   * desconto". Nunca troque um pelo outro com `?? 0`.
+   */
+  custom_discount_pct: number | null
   deleted_at?: string | null
   created_at: string
   updated_at: string
@@ -62,6 +70,8 @@ export interface CreatePatientPayload {
   cpf?: string
   birth_date?: string
   email?: string
+  /** null = sem combinado; inteiro = o percentual fixo da paciente. */
+  custom_discount_pct?: number | null
 }
 
 export interface CreatePatientResponse {

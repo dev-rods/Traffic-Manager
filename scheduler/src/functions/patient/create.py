@@ -5,6 +5,7 @@ from datetime import datetime, date, time
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
 from src.utils.phone import normalize_phone
 from src.services.db.postgres import PostgresService
+from src.services.desconto_personalizado import normaliza_entrada as normaliza_desconto
 from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,11 @@ def handler(event, context):
         # Opcionais: o cadastro completo raramente existe no primeiro contato.
         # Vazio grava NULL - o campo fica visivelmente pendente na tela, em vez
         # de parecer preenchido com string vazia.
+        ok, desconto = normaliza_desconto(body.get("custom_discount_pct"))
+        if not ok:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "custom_discount_pct deve ser um inteiro de 0 a 100"})
         cpf = normaliza_cpf(body.get("cpf"))
         birth_date = normaliza_data_nascimento(body.get("birth_date"))
         if cpf is False:
@@ -128,10 +134,11 @@ def handler(event, context):
             })
 
         result = db.execute_write_returning("""
-            INSERT INTO scheduler.patients (clinic_id, name, phone, gender, cpf, birth_date, email, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s::date, %s, NOW(), NOW())
+            INSERT INTO scheduler.patients (clinic_id, name, phone, gender, cpf, birth_date, email,
+                                             custom_discount_pct, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s::date, %s, %s, NOW(), NOW())
             RETURNING *
-        """, (clinic_id, name, phone, gender, cpf, birth_date, email))
+        """, (clinic_id, name, phone, gender, cpf, birth_date, email, desconto))
 
         if not result:
             return http_response(500, {

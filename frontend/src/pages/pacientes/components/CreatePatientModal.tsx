@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { CadastroFields } from './CadastroFields'
-import { cadastroSchema } from '@/lib/cadastroPaciente'
+import { cadastroSchema, descontoParaApi } from '@/lib/cadastroPaciente'
 import { useCreatePatient } from '@/hooks/usePatients'
 import { normalizePhone } from '@/utils/normalizePhone'
 import { useState } from 'react'
@@ -45,6 +45,7 @@ export function CreatePatientModal({ open, onClose, onSuccess }: CreatePatientMo
         // So vao quando preenchidos: mandar string vazia gravaria NULL, que da
         // no mesmo, mas o payload fica dizendo o que a atendente informou.
         ...(data.cpf ? { cpf: data.cpf } : {}),
+        custom_discount_pct: descontoParaApi(data.custom_discount_pct),
         ...(data.birth_date ? { birth_date: data.birth_date } : {}),
         ...(data.email ? { email: data.email } : {}),
       })
