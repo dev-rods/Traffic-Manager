@@ -1,52 +1,8 @@
-PublicBookingBootstrap:
-  handler: src.functions.public_booking.bootstrap.handler
+PublicBooking:
+  handler: src.functions.public_booking.router.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBookingBootstrap-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
-  events:
-    - http:
-        path: public/clinics/{clinicId}/bootstrap
-        method: get
-        cors: true
-
-PublicBookingSlots:
-  handler: src.functions.public_booking.slots.handler
-  memorySize: 512
-  timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBookingSlots-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
-  events:
-    - http:
-        path: public/clinics/{clinicId}/available-slots
-        method: get
-        cors: true
-
-PublicBookingSendOtp:
-  handler: src.functions.public_booking.send_otp.handler
-  memorySize: 512
-  timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBookingSendOtp-lambdaRole
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBooking-lambdaRole
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -67,99 +23,29 @@ PublicBookingSendOtp:
       Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
+        path: public/clinics/{clinicId}/bootstrap
+        method: get
+        cors: true
+    - http:
+        path: public/clinics/{clinicId}/available-slots
+        method: get
+        cors: true
+    - http:
         path: public/clinics/{clinicId}/verify/send
         method: post
         cors: true
-
-PublicBookingConfirmOtp:
-  handler: src.functions.public_booking.confirm_otp.handler
-  memorySize: 512
-  timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBookingConfirmOtp-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - dynamodb:GetItem
-        - dynamodb:UpdateItem
-      Resource:
-        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-booking-otp-codes"
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
-  events:
     - http:
         path: public/clinics/{clinicId}/verify/confirm
         method: post
         cors: true
-
-PublicBookingCreateAppointment:
-  handler: src.functions.public_booking.create_appointment.handler
-  memorySize: 512
-  timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBookingCreateAppt-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
-  events:
     - http:
         path: public/clinics/{clinicId}/appointments
         method: post
         cors: true
-
-PublicBookingMyAppointments:
-  handler: src.functions.public_booking.list_appointments.handler
-  memorySize: 512
-  timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBookingMyAppts-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
-  events:
     - http:
         path: public/clinics/{clinicId}/my-appointments
         method: get
         cors: true
-
-PublicBookingCancelAppointment:
-  handler: src.functions.public_booking.cancel_appointment.handler
-  memorySize: 512
-  timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-PublicBookingCancelAppt-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource: "arn:aws:ssm:${self:provider.region}:${self:custom.accountId}:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
-  events:
     - http:
         path: public/clinics/{clinicId}/appointments/{appointmentId}/cancel
         method: post
