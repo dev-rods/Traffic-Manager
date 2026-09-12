@@ -39,6 +39,7 @@ SQL_STATEMENTS = [
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         logo_url VARCHAR(500),
+        favicon_url VARCHAR(500),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -547,6 +548,9 @@ SQL_STATEMENTS = [
     # Logo do salão (header/hero do site público) e foto do profissional (avatar no wizard)
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
     "ALTER TABLE scheduler.professionals ADD COLUMN IF NOT EXISTS photo_url VARCHAR(500)",
+
+    # Favicon do salão (ícone da aba do navegador no site público), configurável no painel
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS favicon_url VARCHAR(500)",
 ]
 
 

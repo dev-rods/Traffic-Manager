@@ -39,7 +39,7 @@ def handler(event, context):
 
         clinics = db.execute_query(
             """
-            SELECT clinic_id, name, display_name, logo_url, timezone
+            SELECT clinic_id, name, display_name, logo_url, favicon_url, timezone
             FROM scheduler.clinics
             WHERE clinic_id = %s AND active = TRUE
             """,

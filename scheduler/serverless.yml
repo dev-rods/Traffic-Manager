@@ -36,6 +36,7 @@ provider:
     MESSAGE_EVENTS_TABLE: ${self:custom.resourcePrefix}-message-events
     SCHEDULED_REMINDERS_TABLE: ${self:custom.resourcePrefix}-scheduled-reminders
     BOOKING_OTP_TABLE: ${self:custom.resourcePrefix}-booking-otp-codes
+    CLINIC_ASSETS_BUCKET: ${self:custom.resourcePrefix}-clinic-assets
     RDS_HOST: ${ssm:/${self:custom.stage}/SUPABASE_DB_HOST}
     RDS_PORT: ${ssm:/${self:custom.stage}/SUPABASE_DB_PORT}
     RDS_DATABASE: ${ssm:/${self:custom.stage}/SUPABASE_DB_NAME}
@@ -83,6 +84,7 @@ resources:
   - ${file(sls/resources/dynamodb/message-events-table.yml)}
   - ${file(sls/resources/dynamodb/scheduled-reminders-table.yml)}
   - ${file(sls/resources/dynamodb/booking-otp-table.yml)}
+  - ${file(sls/resources/s3/clinic-assets-bucket.yml)}
 
 plugins:
   - serverless-python-requirements

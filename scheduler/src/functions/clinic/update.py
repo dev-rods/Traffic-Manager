@@ -30,6 +30,8 @@ ALLOWED_FIELDS = {
     "welcome_intro_message",
     "bot_paused",
     "batch_message_template",
+    "logo_url",
+    "favicon_url",
 }
 
 JSONB_FIELDS = {"business_hours"}
