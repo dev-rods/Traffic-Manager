@@ -22,6 +22,7 @@ function IconGrid() { return <Icon d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-
 function IconLink() { return <Icon d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /> }
 function IconTag() { return <Icon d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z" /> }
 function IconClock() { return <Icon d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /> }
+function IconGlobe() { return <Icon d="M12 21a9 9 0 100-18 9 9 0 000 18zM3.6 9h16.8M3.6 15h16.8M12 3a14.5 14.5 0 010 18M12 3a14.5 14.5 0 000 18" /> }
 function IconBot() { return <Icon d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.3 24.3 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-1.5 4.5H6.5L5 14.5m14 0H5m14 0l-.938-2.813M5 14.5l.938-2.813M12 20.5v-2" /> }
 function IconTarget() { return <Icon d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" /> }
 function IconHelp() { return <Icon d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> }
@@ -38,6 +39,7 @@ const ICON_MAP: Record<string, () => React.ReactNode> = {
   '/servicos-areas': () => <IconLink />,
   '/descontos': () => <IconTag />,
   '/horarios': () => <IconClock />,
+  '/site-agendamento': () => <IconGlobe />,
   '/bot': () => <IconBot />,
   '/leads': () => <IconTarget />,
   '/faq': () => <IconHelp />,
@@ -72,6 +74,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/servicos-areas', label: 'Serviços & Áreas' },
       { to: '/descontos', label: 'Descontos' },
       { to: '/horarios', label: 'Horários' },
+      { to: '/site-agendamento', label: 'Site de Agendamento' },
     ],
   },
   {

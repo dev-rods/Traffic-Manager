@@ -1,12 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
 import { CartProvider } from '@/store/CartProvider'
 import { MyAppointmentsModal } from '@/components/MyAppointmentsModal'
 import { Button } from '@/components/ui/Button'
+import { useClinicBootstrap } from '@/hooks/useBooking'
+
+function useDynamicFavicon(faviconUrl: string | null | undefined) {
+  useEffect(() => {
+    if (!faviconUrl) return
+    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'icon'
+      document.head.appendChild(link)
+    }
+    link.href = faviconUrl
+  }, [faviconUrl])
+}
 
 export function BookingLayout() {
   const { clinicId } = useParams<{ clinicId: string }>()
   const [myAppointmentsOpen, setMyAppointmentsOpen] = useState(false)
+  const bootstrap = useClinicBootstrap(clinicId as string)
+
+  useDynamicFavicon(bootstrap.data?.clinic.favicon_url)
 
   if (!clinicId) return null
 

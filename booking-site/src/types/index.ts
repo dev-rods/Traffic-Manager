@@ -3,6 +3,7 @@ export interface Clinic {
   name: string
   display_name: string | null
   logo_url: string | null
+  favicon_url: string | null
   timezone: string
 }
 

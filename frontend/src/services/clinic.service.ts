@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { Clinic, UpdateClinicPayload } from '@/types'
+import type { AssetUploadUrlResponse, Clinic, ClinicAssetKind, UpdateClinicPayload } from '@/types'
 
 interface GetClinicResponse {
   status: string
@@ -17,5 +17,11 @@ export const clinicService = {
     return api
       .put<GetClinicResponse>(`/clinics/${clinicId}`, payload)
       .then((r) => r.data.clinic)
+  },
+
+  getAssetUploadUrl(clinicId: string, kind: ClinicAssetKind, contentType: string) {
+    return api
+      .post<AssetUploadUrlResponse>(`/clinics/${clinicId}/assets/upload-url`, { kind, contentType })
+      .then((r) => r.data)
   },
 }
