@@ -5,8 +5,8 @@ import type { CreateAppointmentPayload } from '@/types'
 export const bookingKeys = {
   all: ['booking'] as const,
   bootstrap: (clinicId: string) => [...bookingKeys.all, 'bootstrap', clinicId] as const,
-  slots: (clinicId: string, date: string, serviceId: string, totalDuration: number) =>
-    [...bookingKeys.all, 'slots', clinicId, date, serviceId, totalDuration] as const,
+  weekAvailability: (clinicId: string, dates: string[], totalDuration: number) =>
+    [...bookingKeys.all, 'week-availability', clinicId, dates.join(','), totalDuration] as const,
   myAppointments: (clinicId: string, phone: string) =>
     [...bookingKeys.all, 'my-appointments', clinicId, phone] as const,
 }
@@ -20,16 +20,11 @@ export function useClinicBootstrap(clinicId: string) {
   })
 }
 
-export function useAvailableSlots(
-  clinicId: string,
-  date: string | null,
-  serviceId: string,
-  totalDuration: number
-) {
+export function useWeekAvailability(clinicId: string, dates: string[], totalDuration: number) {
   return useQuery({
-    queryKey: bookingKeys.slots(clinicId, date ?? '', serviceId, totalDuration),
-    queryFn: () => bookingService.availableSlots(clinicId, { date: date as string, serviceId, totalDuration }),
-    enabled: Boolean(date && serviceId && totalDuration > 0),
+    queryKey: bookingKeys.weekAvailability(clinicId, dates, totalDuration),
+    queryFn: () => bookingService.weekAvailability(clinicId, dates, totalDuration),
+    enabled: dates.length > 0 && totalDuration > 0,
   })
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useClinicBootstrap } from '@/hooks/useBooking'
 import { useCart } from '@/store/useCart'
@@ -16,12 +16,25 @@ export function Home() {
   const cart = useCart()
   const [justAdded, setJustAdded] = useState<Service | null>(null)
 
+  const services = bootstrap.data?.services
+  const singleService = services?.length === 1 ? services[0] : null
+
+  // Um único serviço ativo: nem mostramos a etapa de escolha, igual ao bot
+  // (ConversationEngine._on_enter_select_services: "single service -> auto-selecting").
+  useEffect(() => {
+    if (singleService && cart.items.length === 0) {
+      cart.addItem(singleService)
+      navigate(`/${clinicId}/agendar`, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [singleService?.id])
+
   function handleReserve(service: Service) {
     cart.addItem(service)
     setJustAdded(service)
   }
 
-  if (bootstrap.isLoading) {
+  if (bootstrap.isLoading || singleService) {
     return (
       <div className="flex justify-center py-24">
         <Spinner size="lg" />
@@ -38,7 +51,7 @@ export function Home() {
     )
   }
 
-  const { clinic, services } = bootstrap.data
+  const { clinic } = bootstrap.data
 
   return (
     <div>
@@ -58,18 +71,18 @@ export function Home() {
 
       <h2 className="mb-3 font-display text-lg font-semibold text-ink-900">Serviços</h2>
 
-      {services.length === 0 ? (
+      {services && services.length === 0 ? (
         <EmptyState
           title="Nenhum serviço disponível"
           description="Esse salão ainda não cadastrou serviços para agendamento online."
         />
       ) : (
         <div>
-          {services.map((service) => (
+          {services?.map((service) => (
             <ServiceCard
               key={service.id}
               service={service}
-              inCart={cart.items.some((s) => s.id === service.id)}
+              inCart={cart.items.some((i) => i.service.id === service.id)}
               onReserve={handleReserve}
             />
           ))}

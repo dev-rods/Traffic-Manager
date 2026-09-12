@@ -32,7 +32,10 @@ def handler(event, context):
         "serviceIds": ["uuid", ...], // carrinho — 1+ serviços
         "date": "YYYY-MM-DD",
         "time": "HH:MM",
-        "professionalId": "uuid"     // opcional
+        "professionalId": "uuid",     // opcional
+        "serviceAreaPairs": [          // opcional — quando os serviços têm áreas
+            {"serviceId": "uuid", "areaId": "uuid"}
+        ]
     }
     """
     try:
@@ -64,6 +67,15 @@ def handler(event, context):
         if not verify_token(clinic_id, phone, token):
             return http_response(401, {"status": "ERROR", "message": "Verificação por WhatsApp expirada. Confirme o código novamente."})
 
+        raw_pairs = body.get("serviceAreaPairs")
+        service_area_pairs = None
+        if raw_pairs and isinstance(raw_pairs, list):
+            service_area_pairs = [
+                {"service_id": p.get("serviceId"), "area_id": p.get("areaId")}
+                for p in raw_pairs
+                if p.get("serviceId") and p.get("areaId")
+            ]
+
         db = PostgresService()
         service = AppointmentService(db)
 
@@ -75,6 +87,7 @@ def handler(event, context):
             time=appt_time,
             professional_id=body.get("professionalId"),
             service_ids=service_ids,
+            service_area_pairs=service_area_pairs if service_area_pairs else None,
             full_name=full_name,
         )
 

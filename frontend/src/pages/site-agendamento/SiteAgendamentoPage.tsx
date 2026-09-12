@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
+import { useProfessionals } from '@/hooks/useProfessionals'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { ImageUploadField } from '@/components/ui/ImageUploadField'
 
 export function SiteAgendamentoPage() {
   const { data: clinic, isLoading, isError, error, refetch } = useClinic()
+  const professionals = useProfessionals()
   const updateClinic = useUpdateClinic()
   const [savedField, setSavedField] = useState<'logo_url' | 'favicon_url' | null>(null)
 
@@ -38,6 +40,48 @@ export function SiteAgendamentoPage() {
       </div>
 
       <div className="space-y-8 max-w-xl">
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">Profissional</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Quem atende os agendamentos feitos pelo site público
+            </p>
+          </div>
+
+          {professionals.isLoading ? (
+            <SkeletonTable rows={2} />
+          ) : professionals.isError ? (
+            <ErrorState
+              message="Erro ao carregar profissionais."
+              onRetry={() => professionals.refetch()}
+            />
+          ) : professionals.data && professionals.data.length > 0 ? (
+            <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white">
+              {professionals.data.map((prof) => (
+                <li key={prof.id} className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm font-medium text-gray-800">{prof.name}</span>
+                  {prof.role ? <span className="text-xs text-gray-400">{prof.role}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+              <span className="text-amber-500" aria-hidden>
+                ⚠
+              </span>
+              <div>
+                <p className="text-sm font-medium text-amber-800">Nenhum profissional cadastrado</p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Cadastre pelo menos um profissional para que ele apareça no site de
+                  agendamento dos seus clientes.
+                </p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <hr className="border-gray-100" />
+
         <section className="space-y-4">
           <div>
             <h2 className="text-sm font-semibold text-gray-800">Identidade visual</h2>

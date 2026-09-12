@@ -1,7 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import type { DayAvailability } from '@/types'
 import { cx } from '@/utils/cx'
+import { startOfToday, startOfWeekMonday, toISODate, weekDates } from '@/utils/weekDates'
 
 interface WeekPickerProps {
+  weekStart: Date
+  onPrevWeek: () => void
+  onNextWeek: () => void
+  days: Record<string, DayAvailability> | undefined
+  isLoading: boolean
   selectedDate: string | null
   onSelectDate: (isoDate: string) => void
 }
@@ -22,57 +29,21 @@ const MONTH_LABELS = [
   'Dezembro',
 ]
 
-function startOfToday(): Date {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function startOfWeekMonday(date: Date): Date {
-  const d = new Date(date)
-  const day = d.getDay() // 0=Dom..6=Sáb
-  const diff = day === 0 ? -6 : 1 - day
-  d.setDate(d.getDate() + diff)
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-function toISODate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-export function WeekPicker({ selectedDate, onSelectDate }: WeekPickerProps) {
+export function WeekPicker({
+  weekStart,
+  onPrevWeek,
+  onNextWeek,
+  days,
+  isLoading,
+  selectedDate,
+  onSelectDate,
+}: WeekPickerProps) {
   const today = useMemo(() => startOfToday(), [])
   const currentWeekStart = useMemo(() => startOfWeekMonday(today), [today])
-  const [weekStart, setWeekStart] = useState<Date>(currentWeekStart)
-
-  const days = useMemo(
-    () =>
-      Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(weekStart)
-        d.setDate(d.getDate() + i)
-        return d
-      }),
-    [weekStart]
-  )
+  const dates = useMemo(() => weekDates(weekStart), [weekStart])
 
   const monthLabel = `${MONTH_LABELS[weekStart.getMonth()]} ${weekStart.getFullYear()}`
   const canGoPrev = weekStart.getTime() > currentWeekStart.getTime()
-
-  function goPrevWeek() {
-    const prev = new Date(weekStart)
-    prev.setDate(prev.getDate() - 7)
-    setWeekStart(prev)
-  }
-
-  function goNextWeek() {
-    const next = new Date(weekStart)
-    next.setDate(next.getDate() + 7)
-    setWeekStart(next)
-  }
 
   return (
     <div>
@@ -80,7 +51,7 @@ export function WeekPicker({ selectedDate, onSelectDate }: WeekPickerProps) {
       <div className="flex items-center gap-1.5">
         <button
           type="button"
-          onClick={goPrevWeek}
+          onClick={onPrevWeek}
           disabled={!canGoPrev}
           aria-label="Semana anterior"
           className="flex h-9 w-6 shrink-0 items-center justify-center text-ink-400 transition-colors hover:text-ink-900 disabled:opacity-0"
@@ -88,32 +59,39 @@ export function WeekPicker({ selectedDate, onSelectDate }: WeekPickerProps) {
           ‹
         </button>
         <div className="grid flex-1 grid-cols-7 gap-1.5">
-          {days.map((d) => {
+          {dates.map((d) => {
             const iso = toISODate(d)
             const isPast = d.getTime() < today.getTime()
             const isSelected = iso === selectedDate
+            const dayInfo = days?.[iso]
+            const isClosed = !isLoading && dayInfo?.status === 'CLOSED'
+            const isFull = !isLoading && dayInfo?.status === 'FULL'
+            const isDisabled = isPast || isClosed || isFull
+
             return (
               <button
                 key={iso}
                 type="button"
-                disabled={isPast}
+                disabled={isDisabled}
                 onClick={() => onSelectDate(iso)}
+                title={isFull ? 'Sem horários — dia lotado' : isClosed ? 'Sem atendimento neste dia' : undefined}
                 className={cx(
                   'flex flex-col items-center gap-1 rounded-xl border py-2.5 text-sm transition-colors',
-                  isPast && 'cursor-not-allowed border-transparent text-ink-300',
-                  !isPast && isSelected && 'border-accent-500 bg-accent-50 font-semibold text-accent-700',
-                  !isPast && !isSelected && 'border-ink-200 text-ink-700 hover:border-ink-400'
+                  isDisabled && 'cursor-not-allowed border-transparent text-ink-300',
+                  !isDisabled && isSelected && 'border-accent-500 bg-accent-50 font-semibold text-accent-700',
+                  !isDisabled && !isSelected && 'border-ink-200 text-ink-700 hover:border-ink-400'
                 )}
               >
                 <span className="text-xs text-ink-400">{WEEKDAY_LABELS[(d.getDay() + 6) % 7]}</span>
                 <span>{d.getDate()}</span>
+                {isFull ? <span className="text-[10px] leading-none text-danger-500">lotado</span> : null}
               </button>
             )
           })}
         </div>
         <button
           type="button"
-          onClick={goNextWeek}
+          onClick={onNextWeek}
           aria-label="Próxima semana"
           className="flex h-9 w-6 shrink-0 items-center justify-center text-ink-400 transition-colors hover:text-ink-900"
         >

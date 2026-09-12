@@ -1,23 +1,20 @@
 import { api } from './api'
-import type { Appointment, BootstrapResponse, CreateAppointmentPayload } from '@/types'
+import type { Appointment, BootstrapResponse, CreateAppointmentPayload, DayAvailability } from '@/types'
 
 export const bookingService = {
   bootstrap: (clinicId: string) =>
     api.get<BootstrapResponse>(`/public/clinics/${clinicId}/bootstrap`).then((r) => r.data),
 
-  availableSlots: (
-    clinicId: string,
-    params: { date: string; serviceId: string; totalDuration?: number }
-  ) =>
+  // Status (CLOSED | FULL | AVAILABLE) + horários livres para uma lista de datas —
+  // mesma AvailabilityEngine do bot de WhatsApp (get_days_status). Uma chamada só
+  // já traz tudo que o seletor de semana precisa (dias abertos/lotados) e os
+  // horários da data selecionada, sem endpoint separado de slots.
+  weekAvailability: (clinicId: string, dates: string[], totalDuration: number) =>
     api
-      .get<{ slots: string[] }>(`/public/clinics/${clinicId}/available-slots`, {
-        params: {
-          date: params.date,
-          serviceId: params.serviceId,
-          totalDuration: params.totalDuration,
-        },
+      .get<{ days: Record<string, DayAvailability> }>(`/public/clinics/${clinicId}/availability`, {
+        params: { dates: dates.join(','), totalDuration },
       })
-      .then((r) => r.data.slots),
+      .then((r) => r.data.days),
 
   sendOtp: (clinicId: string, phone: string) =>
     api.post<{ status: string }>(`/public/clinics/${clinicId}/verify/send`, { phone }).then((r) => r.data),

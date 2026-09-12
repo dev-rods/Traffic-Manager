@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, date, time, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
 
@@ -199,6 +199,82 @@ class AvailabilityEngine:
         except Exception as e:
             logger.error(f"[AvailabilityEngine] Erro ao buscar dias disponiveis multi: {e}")
             return []
+
+    def get_days_status(self, clinic_id: str, dates: List[str], duration_minutes: int) -> Dict[str, dict]:
+        """Status por dia (CLOSED | FULL | AVAILABLE) + horários livres, para uma lista de datas.
+
+        Mesma lógica de `get_available_slots_multi`, rodada por várias datas de uma vez,
+        mas sem descartar o motivo de "sem horário": distingue clínica fechada nesse dia
+        (sem regra / bloqueada) de clínica aberta mas com a agenda cheia — usado pelo
+        seletor de semana do booking-site. O bot de WhatsApp usa `get_available_days*`
+        (que só filtra os dias com vaga); esta função reaproveita as mesmas queries e
+        helpers, só que preservando os três estados para exibição.
+        """
+        clinics = self.db.execute_query(
+            "SELECT buffer_minutes FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
+            (clinic_id,),
+        )
+        buffer_minutes = clinics[0]["buffer_minutes"] if clinics else 10
+
+        result: Dict[str, dict] = {}
+        for target_date in dates:
+            dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+            day_of_week = dt.isoweekday() % 7
+
+            rules = self.db.execute_query(
+                """
+                SELECT start_time, end_time, rule_date FROM scheduler.availability_rules
+                WHERE clinic_id = %s AND active = TRUE
+                  AND (day_of_week = %s OR rule_date = %s)
+                """,
+                (clinic_id, day_of_week, target_date),
+            )
+            if not rules:
+                result[target_date] = {"status": "CLOSED", "slots": []}
+                continue
+
+            fixed_rules = [r for r in rules if r.get("rule_date")]
+            if fixed_rules:
+                rules = fixed_rules
+
+            exceptions = self.db.execute_query(
+                """
+                SELECT exception_type, start_time, end_time FROM scheduler.availability_exceptions
+                WHERE clinic_id = %s AND exception_date = %s
+                """,
+                (clinic_id, target_date),
+            )
+
+            blocked = False
+            for exc in exceptions:
+                if exc["exception_type"] == "BLOCKED":
+                    blocked = True
+                    break
+                elif exc["exception_type"] == "SPECIAL_HOURS":
+                    rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
+
+            if blocked:
+                result[target_date] = {"status": "CLOSED", "slots": []}
+                continue
+
+            appointments = self.db.execute_query(
+                """
+                SELECT start_time, end_time FROM scheduler.appointments
+                WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
+                """,
+                (clinic_id, target_date),
+            )
+
+            free_windows = self._calculate_free_windows(rules, appointments, buffer_minutes)
+            slot_minutes = self._generate_slots_in_windows(free_windows, duration_minutes, buffer_minutes)
+            slots = [_minutes_to_time_str(s) for s in slot_minutes]
+
+            result[target_date] = {
+                "status": "AVAILABLE" if slots else "FULL",
+                "slots": slots,
+            }
+
+        return result
 
     @staticmethod
     def _calculate_free_windows(rules: list, appointments: list, buffer_minutes: int) -> List[tuple]:

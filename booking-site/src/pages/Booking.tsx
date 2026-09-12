@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useAvailableSlots, useClinicBootstrap, useCreateAppointment } from '@/hooks/useBooking'
+import { useClinicBootstrap, useCreateAppointment, useWeekAvailability } from '@/hooks/useBooking'
 import { useCart } from '@/store/useCart'
 import { ProfessionalPicker } from '@/components/ProfessionalPicker'
+import { AreaPicker } from '@/components/AreaPicker'
 import { WeekPicker } from '@/components/WeekPicker'
+import { startOfWeekMonday, startOfToday, toISODate, weekDates } from '@/utils/weekDates'
 import { TimeSlotGrid } from '@/components/TimeSlotGrid'
 import { CartSummary } from '@/components/CartSummary'
 import { CustomerInfoForm } from '@/components/CustomerInfoForm'
@@ -13,6 +15,7 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { formatDateLong, toApiPhone } from '@/utils/format'
+import { buildServiceAreaPairs, cartPendingAreaSelection, computeCartTotals } from '@/utils/cartTotals'
 import type { WizardStep } from '@/types'
 
 export function Booking() {
@@ -23,11 +26,15 @@ export function Booking() {
   const createAppointment = useCreateAppointment(clinicId as string)
 
   const [step, setStep] = useState<WizardStep>('cart')
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(startOfToday()))
   const [otpOpen, setOtpOpen] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const primaryServiceId = cart.items[0]?.id ?? ''
-  const slots = useAvailableSlots(clinicId as string, cart.date, primaryServiceId, cart.totalDurationMinutes)
+  const serviceAreas = bootstrap.data?.serviceAreas ?? []
+  const { durationMinutes, priceCents } = computeCartTotals(cart.items, serviceAreas)
+
+  const weekIsoDates = weekDates(weekStart).map(toISODate)
+  const weekAvailability = useWeekAvailability(clinicId as string, weekIsoDates, durationMinutes)
 
   useEffect(() => {
     if (cart.items.length === 0 && step !== 'success') {
@@ -51,6 +58,15 @@ export function Booking() {
 
   const { professionals } = bootstrap.data
   const selectedProfessional = professionals.find((p) => p.id === cart.professionalId)
+  const pendingAreas = cartPendingAreaSelection(cart.items, serviceAreas)
+
+  function goToAreasOrNext() {
+    if (cartPendingAreaSelection(cart.items, serviceAreas).length > 0) {
+      setStep('areas')
+    } else {
+      goToScheduleOrProfessional()
+    }
+  }
 
   function goToScheduleOrProfessional() {
     if (professionals.length > 1) {
@@ -59,6 +75,31 @@ export function Booking() {
     }
     if (professionals.length === 1) cart.setProfessionalId(professionals[0].id)
     setStep('schedule')
+  }
+
+  function handleToggleArea(serviceId: string, areaId: string) {
+    const item = cart.items.find((i) => i.service.id === serviceId)
+    if (!item) return
+    const next = item.areaIds.includes(areaId)
+      ? item.areaIds.filter((id) => id !== areaId)
+      : [...item.areaIds, areaId]
+    cart.setItemAreas(serviceId, next)
+  }
+
+  function handleSelectDate(iso: string) {
+    cart.setDate(iso)
+  }
+
+  function handlePrevWeek() {
+    const prev = new Date(weekStart)
+    prev.setDate(prev.getDate() - 7)
+    setWeekStart(prev)
+  }
+
+  function handleNextWeek() {
+    const next = new Date(weekStart)
+    next.setDate(next.getDate() + 7)
+    setWeekStart(next)
   }
 
   function handleCustomerSubmit(data: CustomerInfoFormData) {
@@ -72,15 +113,18 @@ export function Booking() {
     setOtpOpen(false)
     if (!cart.date || !cart.time) return
 
+    const serviceAreaPairs = buildServiceAreaPairs(cart.items, serviceAreas)
+
     createAppointment.mutate(
       {
         token,
         phone: cart.customerPhone,
         fullName: cart.customerName,
-        serviceIds: cart.items.map((s) => s.id),
+        serviceIds: cart.items.map((i) => i.service.id),
         date: cart.date,
         time: cart.time,
         professionalId: cart.professionalId ?? undefined,
+        serviceAreaPairs: serviceAreaPairs.length > 0 ? serviceAreaPairs : undefined,
       },
       {
         onSuccess: () => setStep('success'),
@@ -121,12 +165,13 @@ export function Booking() {
         </p>
         <CartSummary
           items={cart.items}
+          serviceAreas={serviceAreas}
           onRemove={step === 'cart' ? cart.removeItem : undefined}
           professionalName={selectedProfessional?.name}
           date={step === 'customer' ? cart.date : undefined}
           time={step === 'customer' ? cart.time : undefined}
-          totalDurationMinutes={cart.totalDurationMinutes}
-          totalPriceCents={cart.totalPriceCents}
+          totalDurationMinutes={durationMinutes}
+          totalPriceCents={priceCents}
         />
       </div>
 
@@ -134,11 +179,32 @@ export function Booking() {
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link
             to={`/${clinicId}`}
-            className="inline-flex h-12 items-center justify-center rounded-full border border-ink-200 px-6 text-sm font-medium text-ink-700 transition-colors hover:border-ink-400"
+            className="inline-flex h-12 items-center justify-center rounded-lg border border-ink-200 px-6 text-sm font-medium text-ink-700 transition-colors hover:border-ink-400"
           >
             Adicionar outro serviço
           </Link>
-          <Button onClick={goToScheduleOrProfessional}>Continuar</Button>
+          <Button onClick={goToAreasOrNext}>Continuar</Button>
+        </div>
+      ) : null}
+
+      {step === 'areas' ? (
+        <div>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
+            Selecione as áreas de tratamento
+          </h2>
+          <AreaPicker items={cart.items} serviceAreas={serviceAreas} onToggleArea={handleToggleArea} />
+          <div className="mt-6 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setStep('cart')}
+              className="text-sm font-medium text-ink-500 underline underline-offset-2"
+            >
+              Voltar
+            </button>
+            <Button disabled={pendingAreas.length > 0} onClick={goToScheduleOrProfessional}>
+              Continuar
+            </Button>
+          </div>
         </div>
       ) : null}
 
@@ -162,16 +228,24 @@ export function Booking() {
 
       {step === 'schedule' ? (
         <div className="flex flex-col gap-6">
-          <WeekPicker selectedDate={cart.date} onSelectDate={cart.setDate} />
+          <WeekPicker
+            weekStart={weekStart}
+            onPrevWeek={handlePrevWeek}
+            onNextWeek={handleNextWeek}
+            days={weekAvailability.data}
+            isLoading={weekAvailability.isLoading}
+            selectedDate={cart.date}
+            onSelectDate={handleSelectDate}
+          />
           {cart.date ? (
             <div>
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-500">
                 Selecione o horário de início
               </h2>
               <TimeSlotGrid
-                slots={slots.data}
-                isLoading={slots.isLoading}
-                isError={slots.isError}
+                slots={weekAvailability.data?.[cart.date]?.slots}
+                isLoading={weekAvailability.isLoading}
+                isError={weekAvailability.isError}
                 selectedTime={cart.time}
                 onSelect={(time) => cart.setSchedule(cart.date as string, time)}
               />

@@ -31,6 +31,10 @@ PublicBooking:
         method: get
         cors: true
     - http:
+        path: public/clinics/{clinicId}/availability
+        method: get
+        cors: true
+    - http:
         path: public/clinics/{clinicId}/verify/send
         method: post
         cors: true

@@ -11,6 +11,7 @@ continuam intactos, testáveis e importáveis individualmente.
 import logging
 
 from src.functions.public_booking import (
+    availability,
     bootstrap,
     cancel_appointment,
     confirm_otp,
@@ -27,6 +28,7 @@ logger.setLevel(logging.INFO)
 ROUTES = {
     ("GET", "public/clinics/{clinicId}/bootstrap"): bootstrap.handler,
     ("GET", "public/clinics/{clinicId}/available-slots"): slots.handler,
+    ("GET", "public/clinics/{clinicId}/availability"): availability.handler,
     ("POST", "public/clinics/{clinicId}/verify/send"): send_otp.handler,
     ("POST", "public/clinics/{clinicId}/verify/confirm"): confirm_otp.handler,
     ("POST", "public/clinics/{clinicId}/appointments"): create_appointment.handler,

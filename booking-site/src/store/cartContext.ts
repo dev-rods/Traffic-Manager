@@ -1,10 +1,11 @@
 import { createContext } from 'react'
-import type { Service } from '@/types'
+import type { CartItem, Service } from '@/types'
 
 export interface CartContextValue {
-  items: Service[]
+  items: CartItem[]
   addItem: (service: Service) => void
   removeItem: (serviceId: string) => void
+  setItemAreas: (serviceId: string, areaIds: string[]) => void
   clearCart: () => void
   professionalId: string | null
   setProfessionalId: (id: string | null) => void
@@ -18,8 +19,6 @@ export interface CartContextValue {
   setCustomer: (name: string, phone: string) => void
   otpToken: string | null
   setOtpToken: (token: string | null) => void
-  totalDurationMinutes: number
-  totalPriceCents: number
 }
 
 export const CartContext = createContext<CartContextValue | null>(null)
