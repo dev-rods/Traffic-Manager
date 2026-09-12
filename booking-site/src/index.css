@@ -23,12 +23,22 @@
   --color-accent-600: #9c4a1f;
   --color-accent-700: #77391a;
 
-  --color-success-500: #4a7c4e;
+  --color-success-500: #03a561;
+  --color-success-600: #028f54;
   --color-success-100: #e5efe2;
   --color-danger-500: #b3462f;
   --color-danger-100: #f6e6e0;
 
-  --font-display: 'Fraunces', Georgia, serif;
+  /* Fiel ao site de referência: botão de reservar (creme) e botão neutro (cinza) */
+  --color-cream-100: #fcf6d7;
+  --color-cream-200: #f5e9b0;
+  --color-muted-100: #f3f3f4;
+  --color-muted-200: #e9e9ea;
+  --color-muted-700: #515164;
+
+  /* Site de referência não usa serif em nenhum lugar — só sans, como aqui */
+  --font-display:
+    'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-sans:
     'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }

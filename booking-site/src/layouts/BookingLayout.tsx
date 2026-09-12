@@ -32,11 +32,11 @@ export function BookingLayout() {
       <div className="min-h-screen bg-ink-50">
         <header className="flex items-center justify-between border-b border-ink-100 bg-white px-6 py-4 sm:px-10">
           <span className="font-display text-lg tracking-wide text-ink-900">Agende online</span>
-          <Button variant="secondary" size="sm" onClick={() => setMyAppointmentsOpen(true)}>
+          <Button variant="muted" size="sm" onClick={() => setMyAppointmentsOpen(true)}>
             Meus agendamentos
           </Button>
         </header>
-        <main className="mx-auto max-w-2xl px-6 py-10 sm:px-10">
+        <main className="mx-auto max-w-[960px] px-6 py-10 sm:px-10">
           <Outlet />
         </main>
       </div>

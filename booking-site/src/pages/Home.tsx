@@ -52,7 +52,7 @@ export function Home() {
         </span>
         <div>
           <p className="text-sm text-ink-500">Seja bem vindo(a) ao</p>
-          <h1 className="font-display text-2xl text-ink-900">{clinic.display_name || clinic.name}</h1>
+          <h1 className="font-display text-2xl font-bold text-ink-900">{clinic.display_name || clinic.name}</h1>
         </div>
       </div>
 

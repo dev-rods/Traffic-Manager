@@ -11,10 +11,10 @@ interface ServiceCardProps {
 
 export function ServiceCard({ service, inCart, onReserve }: ServiceCardProps) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-ink-100 py-5 last:border-0">
-      <div className="min-w-0">
-        <p className="font-medium text-ink-900">{service.name}</p>
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-500">
+    <div className="border-b border-ink-100 py-5 last:border-0">
+      <p className="mb-2 font-bold text-ink-900">{service.name}</p>
+      <div className="flex items-center gap-4">
+        <div className="flex flex-1 flex-col gap-1 text-sm text-ink-500">
           <span className="inline-flex items-center gap-1.5">
             <IconClock />
             {formatDuration(service.duration_minutes)}
@@ -26,20 +26,20 @@ export function ServiceCard({ service, inCart, onReserve }: ServiceCardProps) {
             </span>
           ) : null}
         </div>
+        <Button size="sm" variant={inCart ? 'ghost' : 'secondary'} onClick={() => onReserve(service)}>
+          {inCart ? (
+            <>
+              <IconCheck />
+              Adicionado
+            </>
+          ) : (
+            <>
+              <IconCalendarCheck />
+              Reservar
+            </>
+          )}
+        </Button>
       </div>
-      <Button size="sm" variant={inCart ? 'ghost' : 'secondary'} onClick={() => onReserve(service)}>
-        {inCart ? (
-          <>
-            <IconCheck />
-            Adicionado
-          </>
-        ) : (
-          <>
-            <IconCalendarCheck />
-            Reservar
-          </>
-        )}
-      </Button>
     </div>
   )
 }
