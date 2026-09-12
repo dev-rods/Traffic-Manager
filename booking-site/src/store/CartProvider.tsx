@@ -19,7 +19,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [time, setTime] = useState<string | null>(null)
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
-  const [otpToken, setOtpToken] = useState<string | null>(null)
 
   function addItem(service: Service) {
     setItems((prev) => (prev.some((i) => i.service.id === service.id) ? prev : [...prev, { service, areaIds: [] }]))
@@ -44,7 +43,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setProfessionalId(null)
     setDateState(null)
     setTime(null)
-    setOtpToken(null)
   }
 
   function setDateOnly(nextDate: string) {
@@ -83,8 +81,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     customerName,
     customerPhone,
     setCustomer,
-    otpToken,
-    setOtpToken,
   }
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>

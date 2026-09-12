@@ -10,12 +10,11 @@ import { TimeSlotGrid } from '@/components/TimeSlotGrid'
 import { CartSummary } from '@/components/CartSummary'
 import { CustomerInfoForm } from '@/components/CustomerInfoForm'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
-import { OtpConfirmModal } from '@/components/OtpConfirmModal'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { formatDateLong, toApiPhone } from '@/utils/format'
-import { buildServiceAreaPairs, cartPendingAreaSelection, computeCartTotals } from '@/utils/cartTotals'
+import { buildServiceAreaPairs, cartHasAreas, cartPendingAreaSelection, computeCartTotals } from '@/utils/cartTotals'
 import type { WizardStep } from '@/types'
 
 export function Booking() {
@@ -27,7 +26,6 @@ export function Booking() {
 
   const [step, setStep] = useState<WizardStep>('cart')
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(startOfToday()))
-  const [otpOpen, setOtpOpen] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const serviceAreas = bootstrap.data?.serviceAreas ?? []
@@ -77,6 +75,21 @@ export function Booking() {
     setStep('schedule')
   }
 
+  function goBack() {
+    if (step === 'cart') {
+      navigate(`/${clinicId}`)
+    } else if (step === 'areas') {
+      setStep('cart')
+    } else if (step === 'professional') {
+      setStep(cartHasAreas(cart.items, serviceAreas) ? 'areas' : 'cart')
+    } else if (step === 'schedule') {
+      if (professionals.length > 1) setStep('professional')
+      else setStep(cartHasAreas(cart.items, serviceAreas) ? 'areas' : 'cart')
+    } else if (step === 'customer') {
+      setStep('schedule')
+    }
+  }
+
   function handleToggleArea(serviceId: string, areaId: string) {
     const item = cart.items.find((i) => i.service.id === serviceId)
     if (!item) return
@@ -103,23 +116,18 @@ export function Booking() {
   }
 
   function handleCustomerSubmit(data: CustomerInfoFormData) {
-    cart.setCustomer(data.fullName, toApiPhone(data.phone))
+    const phone = toApiPhone(data.phone)
+    cart.setCustomer(data.fullName, phone)
     setSubmitError(null)
-    setOtpOpen(true)
-  }
 
-  function handleVerified(token: string) {
-    cart.setOtpToken(token)
-    setOtpOpen(false)
     if (!cart.date || !cart.time) return
 
     const serviceAreaPairs = buildServiceAreaPairs(cart.items, serviceAreas)
 
     createAppointment.mutate(
       {
-        token,
-        phone: cart.customerPhone,
-        fullName: cart.customerName,
+        phone,
+        fullName: data.fullName,
         serviceIds: cart.items.map((i) => i.service.id),
         date: cart.date,
         time: cart.time,
@@ -145,6 +153,9 @@ export function Booking() {
             {formatDateLong(cart.date)}, {cart.time}
           </p>
         ) : null}
+        <p className="max-w-sm text-sm text-ink-500">
+          Enviamos a confirmação por WhatsApp para {cart.customerPhone}.
+        </p>
         <Button
           onClick={() => {
             cart.clearCart()
@@ -159,6 +170,14 @@ export function Booking() {
 
   return (
     <div className="flex flex-col gap-8">
+      <button
+        type="button"
+        onClick={goBack}
+        className="inline-flex w-fit cursor-pointer items-center gap-1 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
+      >
+        <span aria-hidden>‹</span> Voltar
+      </button>
+
       <div>
         <p className="mb-3 text-sm text-ink-500">
           {cart.items.length === 1 ? 'Serviço selecionado' : `${cart.items.length} serviços selecionados`}
@@ -193,14 +212,7 @@ export function Booking() {
             Selecione as áreas de tratamento
           </h2>
           <AreaPicker items={cart.items} serviceAreas={serviceAreas} onToggleArea={handleToggleArea} />
-          <div className="mt-6 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setStep('cart')}
-              className="text-sm font-medium text-ink-500 underline underline-offset-2"
-            >
-              Voltar
-            </button>
+          <div className="mt-6 flex justify-end">
             <Button disabled={pendingAreas.length > 0} onClick={goToScheduleOrProfessional}>
               Continuar
             </Button>
@@ -270,23 +282,8 @@ export function Booking() {
             submitting={createAppointment.isPending}
           />
           {submitError ? <p className="mt-3 text-sm text-danger-500">{submitError}</p> : null}
-          <button
-            type="button"
-            onClick={() => setStep('schedule')}
-            className="mt-4 text-sm font-medium text-ink-500 underline underline-offset-2"
-          >
-            Voltar
-          </button>
         </div>
       ) : null}
-
-      <OtpConfirmModal
-        open={otpOpen}
-        clinicId={clinicId as string}
-        phone={cart.customerPhone}
-        onClose={() => setOtpOpen(false)}
-        onVerified={handleVerified}
-      />
     </div>
   )
 }

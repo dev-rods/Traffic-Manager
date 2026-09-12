@@ -17,8 +17,6 @@ export interface CartContextValue {
   customerName: string
   customerPhone: string
   setCustomer: (name: string, phone: string) => void
-  otpToken: string | null
-  setOtpToken: (token: string | null) => void
 }
 
 export const CartContext = createContext<CartContextValue | null>(null)

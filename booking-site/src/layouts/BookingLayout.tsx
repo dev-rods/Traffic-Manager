@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Outlet, useParams } from 'react-router-dom'
+import { Link, Outlet, useParams } from 'react-router-dom'
 import { CartProvider } from '@/store/CartProvider'
 import { MyAppointmentsModal } from '@/components/MyAppointmentsModal'
 import { Button } from '@/components/ui/Button'
@@ -22,8 +22,9 @@ export function BookingLayout() {
   const { clinicId } = useParams<{ clinicId: string }>()
   const [myAppointmentsOpen, setMyAppointmentsOpen] = useState(false)
   const bootstrap = useClinicBootstrap(clinicId as string)
+  const clinic = bootstrap.data?.clinic
 
-  useDynamicFavicon(bootstrap.data?.clinic.favicon_url)
+  useDynamicFavicon(clinic?.favicon_url)
 
   if (!clinicId) return null
 
@@ -31,7 +32,17 @@ export function BookingLayout() {
     <CartProvider key={clinicId}>
       <div className="min-h-screen bg-ink-50">
         <header className="flex items-center justify-between border-b border-ink-100 bg-white px-6 py-4 sm:px-10">
-          <span className="font-display text-lg tracking-wide text-ink-900">Agende online</span>
+          <Link to={`/${clinicId}`} className="flex items-center transition-opacity hover:opacity-70">
+            {clinic?.logo_url ? (
+              <img
+                src={clinic.logo_url}
+                alt={clinic.display_name || clinic.name}
+                className="h-9 w-9 rounded-full object-cover"
+              />
+            ) : (
+              <span className="font-display text-lg tracking-wide text-ink-900">Agende online</span>
+            )}
+          </Link>
           <Button variant="muted" size="sm" onClick={() => setMyAppointmentsOpen(true)}>
             Meus agendamentos
           </Button>

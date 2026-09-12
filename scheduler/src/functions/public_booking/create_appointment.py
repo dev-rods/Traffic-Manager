@@ -2,9 +2,11 @@ import logging
 from datetime import datetime, date, time
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
-from src.utils.booking_verification import verify_token
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
+from src.services.template_service import TemplateService
+from src.providers.zapi_provider import ZApiProvider
+import os
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -20,13 +22,58 @@ def _serialize_row(row):
     return result
 
 
+def _format_date_br(iso_date: str) -> str:
+    try:
+        y, m, d = iso_date.split("-")
+        return f"{d}/{m}/{y}"
+    except Exception:
+        return iso_date
+
+
+def _format_price_brl(price_cents):
+    if not price_cents:
+        return "Consultar"
+    return f"R$ {price_cents / 100:.2f}".replace(".", ",")
+
+
+def _send_confirmation_whatsapp(db: PostgresService, clinic: dict, phone: str, appointment: dict, duration_minutes) -> None:
+    """
+    Envia a mesma confirmação que o bot de WhatsApp manda ao fechar um
+    agendamento (template "BOOKED", customizável por clínica). Falha aqui
+    nunca derruba a criação do agendamento — ele já foi persistido.
+    """
+    try:
+        hours, mins = divmod(int(duration_minutes or 0), 60)
+        duration_str = f"{hours}h{mins:02d}min" if hours else f"{duration_minutes}min"
+
+        variables = {
+            "date": _format_date_br(str(appointment.get("appointment_date", ""))[:10]),
+            "time": str(appointment.get("start_time", ""))[:5],
+            "duration": duration_str,
+            "price": _format_price_brl(appointment.get("final_price_cents")),
+        }
+
+        template_service = TemplateService(db)
+        content = template_service.get_and_render(clinic["clinic_id"], "BOOKED", variables)
+
+        provider = ZApiProvider(
+            instance_id=clinic.get("zapi_instance_id") or "",
+            instance_token=clinic.get("zapi_instance_token") or "",
+            client_token=os.environ.get("ZAPI_CLIENT_TOKEN", ""),
+        )
+        result = provider.send_text(phone, content)
+        if not result.success:
+            logger.error(f"[PublicBooking] Falha ao enviar confirmação por WhatsApp: {result.error}")
+    except Exception as e:
+        logger.error(f"[PublicBooking] Erro ao montar/enviar confirmação por WhatsApp: {e}", exc_info=True)
+
+
 def handler(event, context):
     """
     POST /public/clinics/{clinicId}/appointments
 
     Body:
     {
-        "token": "string",           // emitido por /verify/confirm
         "phone": "string",
         "fullName": "string",
         "serviceIds": ["uuid", ...], // carrinho — 1+ serviços
@@ -37,6 +84,12 @@ def handler(event, context):
             {"serviceId": "uuid", "areaId": "uuid"}
         ]
     }
+
+    Sem verificação por código: o agendamento é criado direto e a confirmação
+    chega pelo próprio WhatsApp (mesmo template "BOOKED" do bot) — a posse do
+    número não precisa ser confirmada antes de agendar, só de ver/cancelar
+    (endpoints /my-appointments e /appointments/{id}/cancel continuam exigindo
+    o token de /verify/confirm).
     """
     try:
         api_key, error_response = require_booking_intake_api_key(event)
@@ -52,20 +105,16 @@ def handler(event, context):
             return http_response(400, {"status": "ERROR", "message": "Corpo da requisição vazio ou inválido"})
 
         phone = body.get("phone")
-        token = body.get("token")
         service_ids = body.get("serviceIds")
         appt_date = body.get("date")
         appt_time = body.get("time")
         full_name = body.get("fullName")
 
-        if not all([phone, token, service_ids, appt_date, appt_time, full_name]):
+        if not all([phone, service_ids, appt_date, appt_time, full_name]):
             return http_response(400, {
                 "status": "ERROR",
-                "message": "Campos obrigatorios: phone, token, serviceIds, date, time, fullName",
+                "message": "Campos obrigatorios: phone, serviceIds, date, time, fullName",
             })
-
-        if not verify_token(clinic_id, phone, token):
-            return http_response(401, {"status": "ERROR", "message": "Verificação por WhatsApp expirada. Confirme o código novamente."})
 
         raw_pairs = body.get("serviceAreaPairs")
         service_area_pairs = None
@@ -77,6 +126,14 @@ def handler(event, context):
             ]
 
         db = PostgresService()
+
+        clinics = db.execute_query(
+            "SELECT clinic_id, zapi_instance_id, zapi_instance_token FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
+            (clinic_id,),
+        )
+        if not clinics:
+            return http_response(404, {"status": "ERROR", "message": "Salão não encontrado"})
+
         service = AppointmentService(db)
 
         result = service.create_appointment(
@@ -90,6 +147,8 @@ def handler(event, context):
             service_area_pairs=service_area_pairs if service_area_pairs else None,
             full_name=full_name,
         )
+
+        _send_confirmation_whatsapp(db, clinics[0], phone, result, result.get("total_duration_minutes"))
 
         return http_response(201, {
             "status": "SUCCESS",

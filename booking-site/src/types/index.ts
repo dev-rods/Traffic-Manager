@@ -60,7 +60,6 @@ export interface Appointment {
 }
 
 export interface CreateAppointmentPayload {
-  token: string
   phone: string
   fullName: string
   serviceIds: string[]
