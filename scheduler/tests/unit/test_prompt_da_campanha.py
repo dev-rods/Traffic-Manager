@@ -19,6 +19,21 @@ AGORA = int(time.time())
 
 MARCA = "CONVERSA DE CAMPANHA"
 
+# O template real traz um roteiro numerado com TEXTO PRONTO. Era dele que saia,
+# palavra por palavra, o pedido de CPF que a Camila recebeu em 11/09/2026.
+_C = chr(0x2550) * 3
+PROMPT_BASE = (
+    "PROMPT BASE\n"
+    f"{_C} COMO CONDUZIR A CONVERSA {_C}\n"
+    "1. PRIMEIRO CONTATO\n"
+    "   Confirme as areas, chame calculate_discount e mostre o valor.\n"
+    "6. CADASTRO\n"
+    "   \"Perfeito! Para finalizar o cadastro, me envia:\n"
+    "   Nome completo:\nCPF:\"\n"
+    f"{_C} AO FECHAR O AGENDAMENTO {_C}\n"
+    "Rua Augusta, 2709.\n"
+)
+
 
 def agente(nome_do_paciente="Maria Silva", erro_no_banco=False):
     a = object.__new__(ConversationAgent)
@@ -33,7 +48,7 @@ def agente(nome_do_paciente="Maria Silva", erro_no_banco=False):
 
     a.db.execute_query.side_effect = consulta
     a.template_service = mock.MagicMock()
-    a.template_service.get_and_render.return_value = "PROMPT BASE"
+    a.template_service.get_and_render.return_value = PROMPT_BASE
     return a
 
 
@@ -85,7 +100,16 @@ class TestBlocoDaCampanha(unittest.TestCase):
         self.assertIn("Maria Silva", prompt)
 
     def test_manda_nao_pedir_cadastro(self):
-        """A instrução que mais importa: é o erro mais visível deste fluxo."""
+        """Reforço, NÃO a defesa - e este teste existe para deixar isso claro.
+
+        Em 11/09/2026 esta instrução estava no prompt e o bot pediu CPF a uma
+        paciente cadastrada mesmo assim, reproduzindo o roteiro base. Quem
+        garante é o roteiro sair do prompt (test_o_roteiro_de_lead_sai_do_prompt)
+        e a trava de saída (test_trava_de_cadastro_ligada).
+
+        O teste fica porque a instrução ainda ajuda e ninguém deve removê-la
+        sem perceber - mas quem ler não pode achar que ela é o que segura.
+        """
         prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
         self.assertIn("CPF", prompt)
         self.assertIn("NUNCA peça", prompt)
@@ -106,6 +130,36 @@ class TestBlocoDaCampanha(unittest.TestCase):
         no agendamento tem de continuar certo."""
         prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
         self.assertIn("calculate_discount", prompt)
+
+    def test_o_roteiro_de_lead_sai_do_prompt(self):
+        """O nucleo da correcao de 11/09/2026.
+
+        Nao basta o bloco de campanha PROIBIR o pedido de cadastro - ele ja
+        proibia, e o bot pediu assim mesmo, reproduzindo o texto pronto do
+        roteiro base. O que nao esta no prompt nao pode ser reproduzido.
+        """
+        prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
+
+        self.assertNotIn("Para finalizar o cadastro", prompt)
+        self.assertNotIn("Nome completo", prompt)
+        self.assertNotIn("mostre o valor", prompt)
+        self.assertIn("COMO CONDUZIR A CONVERSA (CAMPANHA)", prompt)
+
+    def test_o_que_vale_nos_dois_fluxos_continua(self):
+        prompt = agente()._build_system_prompt(CLINIC, FONE, com_campanha())
+        self.assertIn("Rua Augusta", prompt)
+
+    def test_o_roteiro_de_lead_FICA_na_conversa_de_lead(self):
+        """A outra metade: quem e lead precisa do roteiro completo."""
+        prompt = agente()._build_system_prompt(CLINIC, FONE, {"bot_enabled": True})
+
+        self.assertIn("Para finalizar o cadastro", prompt)
+        self.assertIn("mostre o valor", prompt)
+        self.assertNotIn("(CAMPANHA)", prompt)
+
+    def test_campanha_vencida_mantem_o_roteiro_de_lead(self):
+        prompt = agente()._build_system_prompt(CLINIC, FONE, campanha_vencida())
+        self.assertIn("Para finalizar o cadastro", prompt)
 
     def test_o_bloco_vem_depois_do_prompt_base(self):
         """No fim de propósito: o prefixo compartilhado mantém o cache válido."""
