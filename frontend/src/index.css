@@ -25,3 +25,16 @@
   background-color: #0f1117;
   color: #e2e4e9;
 }
+
+/* Tailwind's preflight resets <button> cursor to "default" — todo elemento
+   clicável precisa deixar isso óbvio pro usuário (mãozinha no hover). Regra
+   global em vez de repetir cursor-pointer em cada botão/label. */
+button:not(:disabled),
+[role='button']:not(:disabled) {
+  cursor: pointer;
+}
+
+label:has(input[type='checkbox']),
+label:has(input[type='radio']) {
+  cursor: pointer;
+}
