@@ -19,6 +19,8 @@ O aviso sai pelo código, como o de preparo - o texto tem consequência jurídic
 não é para o modelo reescrever. Ver orientacoes_pos_sessao.
 """
 import logging
+import re
+import unicodedata
 
 from src.services.idade import e_menor_de_idade
 from src.services.primeira_visita import e_primeira_visita
@@ -35,6 +37,55 @@ Como você ainda é menor de idade, a *primeira sessão* só pode ser realizada 
 Isso vale apenas para a primeira sessão. Nas seguintes, você pode vir sozinho(a).
 
 Qualquer dúvida sobre a autorização, é só nos chamar!"""
+
+
+# ── A trava contra o falso positivo ──
+#
+# O aviso que o CÓDIGO envia é seguro: só sai com data de nascimento no
+# cadastro dizendo menor de 18. Mas o prompt também manda o modelo informar a
+# restrição durante a conversa, e aí quem decide é ele - a partir de "estou no
+# ensino médio", de um "17" solto numa frase sobre outra coisa, ou de nada.
+#
+# Medido em 14/09/2026: dos 295 pacientes de prod, 6 têm data de nascimento e
+# NENHUM é menor. Ou seja, hoje o caminho do código praticamente não dispara, e
+# o caminho que realmente vai rodar é o do modelo - justamente o que não tinha
+# trava. Dizer a uma adulta que ela precisa de responsável legal é o erro que
+# ela conta para as amigas, e não havia nada impedindo.
+#
+# Aqui é a mesma ideia de proveniencia.py: a afirmação só passa se uma tool
+# desta conversa a respaldar.
+
+_MARCAS_DA_RESTRICAO = re.compile(
+    r"responsavel legal|responsavel presente|autorizacao do responsavel|"
+    r"gov\s*\.?\s*br|menor de idade|menor de 18|acompanhad[oa] por um responsavel",
+)
+
+
+def _sem_acento(texto):
+    plano = unicodedata.normalize("NFKD", (texto or "").lower())
+    return "".join(c for c in plano if not unicodedata.combining(c))
+
+
+def afirma_restricao(texto: str) -> bool:
+    """A mensagem fala da exigência de responsável legal?"""
+    return bool(_MARCAS_DA_RESTRICAO.search(_sem_acento(texto)))
+
+
+def tem_respaldo_de_menoridade(respaldo_das_tools) -> bool:
+    """Alguma tool desta conversa disse que a pessoa é menor?
+
+    Vale o respaldo da conversa inteira, não só desta rodada: a idade foi
+    apurada uma vez e continua valendo nos turnos seguintes.
+    """
+    for resultado in respaldo_das_tools or []:
+        if isinstance(resultado, dict) and resultado.get("is_minor") is True:
+            return True
+    return False
+
+
+def afirmacao_sem_respaldo(texto: str, respaldo_das_tools) -> bool:
+    """Falou da restrição sem nenhuma tool ter confirmado a menoridade?"""
+    return afirma_restricao(texto) and not tem_respaldo_de_menoridade(respaldo_das_tools)
 
 
 def _nascimento(db, clinic_id, phone):

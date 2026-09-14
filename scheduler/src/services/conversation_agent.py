@@ -16,6 +16,7 @@ from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services.calendario import bloco_de_contexto
 from src.services.menor_de_idade import TEXTO as AVISO_DE_MENOR
+from src.services.menor_de_idade import afirmacao_sem_respaldo as afirmacao_de_menor_sem_respaldo
 from src.services.menor_de_idade import precisa_avisar as precisa_avisar_menor
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.preco_minimo import preco_minimo_por_area
@@ -528,6 +529,30 @@ class ConversationAgent:
                 session["human_handoff_requested_at"] = int(time.time())
                 session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
                 session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+
+        # A restrição do menor de idade é afirmação sobre a pessoa, não sobre a
+        # agenda - fatos_sem_origem não a enxerga. Sem esta trava, "você precisa
+        # de responsável legal" chega a uma adulta e nada impede. Ver
+        # menor_de_idade.
+        try:
+            if afirmacao_de_menor_sem_respaldo(final_text, respaldo_das_tools):
+                logger.error(
+                    f"[MenorDeIdade] BLOQUEADO {phone}: afirmou a restrição de menor "
+                    f"sem nenhuma tool ter confirmado a idade | "
+                    f"resposta={final_text[:200]!r}"
+                )
+                final_text = (
+                    "Deixa eu confirmar uma informação aqui certinho para não te "
+                    "passar nada errado. Já te falo 😊"
+                )
+                pending_buttons = None
+                handoff_requested = True
+                session["state"] = "HUMAN_HANDOFF"
+                session["human_handoff_requested_at"] = int(time.time())
+                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+        except Exception as e:
+            logger.error(f"[MenorDeIdade] Falha ao conferir a resposta de {phone}: {e}")
 
         try:
             sem_origem = fatos_sem_origem(final_text, respaldo_das_tools)
