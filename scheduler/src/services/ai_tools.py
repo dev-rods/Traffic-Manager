@@ -9,9 +9,12 @@ from src.services.confirmacao_de_areas import (
     recado_de_recusa,
     separa,
 )
+from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
+from src.services.areas_ambiguas import recado_de_recusa as recado_de_ambiguidade
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
+from src.services.orientacoes_do_faq import busca as orientacoes_do_faq
 from src.services.primeira_visita import e_primeira_visita
 from src.services.duration_rules import calcula_duracao
 
@@ -397,7 +400,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_pre_session_instructions",
-            "description": "Get pre-session care instructions for the booked service areas. Call this AFTER a successful booking to inform the patient about preparation steps.",
+            "description": "Get pre- and post-procedure care instructions (clinic, service-area and clinic FAQ) for the booked areas. ALWAYS call this after a successful booking and send the result to the patient, starting with the preparation steps.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -512,6 +515,15 @@ class ToolExecutor:
         ) or []
         _, barrados = separa(pares, areas_conversadas(turnos, areas))
         if not barrados:
+            # Conversada não quer dizer sem ambiguidade: "barriga" e "virilha"
+            # cobrem mais de uma área vendida. Ver areas_ambiguas.
+            pendentes = ambiguidades_pendentes(pares, areas, turnos)
+            if pendentes:
+                logger.warning(
+                    f"[Areas] barradas por ambiguidade: "
+                    f"{[p['area'] for p in pendentes]}"
+                )
+                return recado_de_ambiguidade(pendentes)
             return None
 
         por_id = {str(a["id"]): a["name"] for a in areas}
@@ -1036,7 +1048,18 @@ class ToolExecutor:
         parts = [p for p in [sa_instructions, clinic_instructions] if p]
         instructions = "\n\n".join(parts)
 
+        # As orientações do FAQ entram aqui, na mesma tool, para não dependerem
+        # de o modelo lembrar de uma segunda chamada depois de fechar o
+        # agendamento. Ver orientacoes_do_faq.
+        orientacoes = orientacoes_do_faq(self.db, clinic_id)
+
         return {
-            "has_instructions": bool(instructions),
+            "has_instructions": bool(instructions) or bool(orientacoes),
             "instructions": instructions,
+            "orientacoes_do_faq": orientacoes,
+            "o_que_fazer": (
+                "Envie estas orientações à paciente agora, em mensagem própria, "
+                "começando pelas de preparo (tipo='preparo'). Use o texto como "
+                "veio: pode resumir e ajustar o tom, nunca acrescentar."
+            ) if (instructions or orientacoes) else "",
         }
