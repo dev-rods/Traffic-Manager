@@ -15,6 +15,9 @@ from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services.calendario import bloco_de_contexto
+from src.services.menor_de_idade import TEXTO as AVISO_DE_MENOR
+from src.services.menor_de_idade import afirmacao_sem_respaldo as afirmacao_de_menor_sem_respaldo
+from src.services.menor_de_idade import precisa_avisar as precisa_avisar_menor
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.preco_minimo import preco_minimo_por_area
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
@@ -341,6 +344,7 @@ class ConversationAgent:
         ja_refez_cadastro = False
         em_campanha = campanha_viva(session)
         efeito_cometido = None
+        efeito_gravado = {}
 
         try:
             for iteration in range(MAX_AGENT_ITERATIONS):
@@ -450,6 +454,11 @@ class ConversationAgent:
 
                     if tool_use["name"] in TOOLS_COM_EFEITO and not result.get("error"):
                         efeito_cometido = tool_use["name"]
+                        # A data e o id do que foi gravado: quem decide sobre o
+                        # aviso de menor de idade precisa da data DA SESSÃO, e
+                        # do id para não contar o próprio agendamento como
+                        # histórico. Ver menor_de_idade.
+                        efeito_gravado = result
 
                     tool_results.append({
                         "type": "tool_result",
@@ -521,6 +530,30 @@ class ConversationAgent:
                 session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
                 session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
 
+        # A restrição do menor de idade é afirmação sobre a pessoa, não sobre a
+        # agenda - fatos_sem_origem não a enxerga. Sem esta trava, "você precisa
+        # de responsável legal" chega a uma adulta e nada impede. Ver
+        # menor_de_idade.
+        try:
+            if afirmacao_de_menor_sem_respaldo(final_text, respaldo_das_tools):
+                logger.error(
+                    f"[MenorDeIdade] BLOQUEADO {phone}: afirmou a restrição de menor "
+                    f"sem nenhuma tool ter confirmado a idade | "
+                    f"resposta={final_text[:200]!r}"
+                )
+                final_text = (
+                    "Deixa eu confirmar uma informação aqui certinho para não te "
+                    "passar nada errado. Já te falo 😊"
+                )
+                pending_buttons = None
+                handoff_requested = True
+                session["state"] = "HUMAN_HANDOFF"
+                session["human_handoff_requested_at"] = int(time.time())
+                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+        except Exception as e:
+            logger.error(f"[MenorDeIdade] Falha ao conferir a resposta de {phone}: {e}")
+
         try:
             sem_origem = fatos_sem_origem(final_text, respaldo_das_tools)
             inventado = fatos_de_agenda(sem_origem)
@@ -579,6 +612,26 @@ class ConversationAgent:
         # contraindicação médica que têm de chegar palavra por palavra. Ver
         # orientacoes_pos_sessao. Vale para agendamento novo e remarcação - quem
         # remarcou vai à sessão do mesmo jeito e precisa se preparar igual.
+        # O aviso do menor de idade vem ANTES do de preparo: saber se pode fazer
+        # a sessão vale mais do que saber como se preparar para ela. Só no fluxo
+        # de lead - na campanha estão pacientes que já estrearam. Ver
+        # menor_de_idade.
+        if efeito_cometido == "book_appointment" and not em_campanha:
+            try:
+                if precisa_avisar_menor(
+                    self.db, clinic_id, phone,
+                    efeito_gravado.get("date"),
+                    efeito_gravado.get("appointment_id"),
+                ):
+                    outgoing.append(OutgoingMessage(
+                        message_type="text", content=AVISO_DE_MENOR,
+                    ))
+            except Exception as e:
+                # O agendamento existe e a pessoa precisa saber disso. Falhar a
+                # resposta inteira por causa do aviso seria trocar o essencial
+                # pelo complemento - e o aviso ainda pode ser dado pela clínica.
+                logger.error(f"[MenorDeIdade] Falha ao decidir o aviso de {phone}: {e}")
+
         if efeito_cometido in TOOLS_QUE_MARCAM_SESSAO:
             outgoing.append(OutgoingMessage(
                 message_type="text",
@@ -766,6 +819,31 @@ class ConversationAgent:
             "3. Se ela perguntar sobre preparo DEPOIS de receber o aviso, aí sim\n"
             "   responda, via get_faq_answer como qualquer outra dúvida."
         )
+
+        # Só no fluxo de lead. Quem vem pela campanha já é paciente cadastrada:
+        # a primeira sessão dela já aconteceu, e a exigência não se aplica.
+        # Ver menor_de_idade.
+        if not campanha_viva(session):
+            system_prompt += (
+                "\n═══ IDADE DA PACIENTE ═══\n"
+                "1. Você NÃO calcula idade. Nunca. Se a pessoa disser a data de\n"
+                "   nascimento, disser a idade, ou der qualquer sinal de ser menor\n"
+                "   (\"tenho 16\", \"minha mãe vai junto\", \"estou no ensino médio\"),\n"
+                "   chame calculate_patient_age. Ela responde a idade NA DATA DA\n"
+                "   SESSÃO, que é o que importa - quem faz 18 antes da sessão chega\n"
+                "   maior de idade.\n"
+                "2. Se a tool devolver is_minor=true, diga a ela, com suas palavras,\n"
+                "   que a PRIMEIRA sessão só acontece de uma destas duas formas:\n"
+                "   - com um responsável legal acompanhando no dia; ou\n"
+                "   - com autorização formal do responsável legal, assinada\n"
+                "     digitalmente pelo Gov.br.\n"
+                "   Diga também que isso vale só para a primeira sessão.\n"
+                "3. Isso NÃO impede o agendamento. Ela pode escolher data e horário\n"
+                "   normalmente - a exigência é sobre o dia da sessão, não sobre\n"
+                "   marcar. Não transfira para humano por causa disso.\n"
+                "4. Se a tool disser que não há data de nascimento, pergunte a data\n"
+                "   de nascimento antes de seguir. Não presuma que é maior de idade.\n"
+            )
 
         bloco_da_campanha = self._bloco_da_campanha(clinic_id, phone, session)
         if bloco_da_campanha:

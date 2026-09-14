@@ -11,6 +11,14 @@ from src.services.confirmacao_de_areas import (
 )
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
 from src.services.areas_ambiguas import recado_de_recusa as recado_de_ambiguidade
+from src.services.calendario import hoje_brt
+from src.services.idade import (
+    dias_para_a_maioridade,
+    e_menor_de_idade,
+    em_anos as idade_em_anos,
+    em_dias as idade_em_dias,
+    para_data,
+)
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
@@ -395,6 +403,38 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculate_patient_age",
+            "description": (
+                "Calculate how old the patient will be ON THE SESSION DATE: age in days, "
+                "age in full years, and whether they are under 18. NEVER compute age "
+                "yourself — call this. Use it whenever the patient's age matters or when "
+                "they mention being a minor, a student, or give a birth date."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "appointment_date": {
+                        "type": "string",
+                        "description": (
+                            "Session date in YYYY-MM-DD. Defaults to today when the date "
+                            "is not chosen yet."
+                        ),
+                    },
+                    "birth_date": {
+                        "type": "string",
+                        "description": (
+                            "Patient's birth date (YYYY-MM-DD or DD/MM/YYYY). Omit to use "
+                            "the one already on file."
+                        ),
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -696,6 +736,69 @@ class ToolExecutor:
                 "especialista e chame request_human_handoff."
             ),
         }
+
+    def _tool_calculate_patient_age(self, args, clinic_id, phone, ctx):
+        """A idade na DATA DA SESSÃO, em dias e em anos.
+
+        Data de referência é a da sessão, não a de hoje: quem faz 18 entre a
+        conversa e a sessão chega maior de idade. Sem data escolhida ainda, hoje
+        é a melhor aproximação - e o retorno diz qual foi usada, para o modelo
+        não afirmar "você será maior" a partir de uma data que ninguém marcou.
+        """
+        referencia = para_data(args.get("appointment_date")) or hoje_brt()
+
+        nascimento = para_data(args.get("birth_date"))
+        origem = "informada na conversa"
+        if not nascimento:
+            nascimento = para_data(self._nascimento_do_cadastro(clinic_id, phone))
+            origem = "cadastro"
+
+        if not nascimento:
+            return {
+                "error": "sem_data_de_nascimento",
+                "o_que_fazer": (
+                    "Não há data de nascimento para esta pessoa. Pergunte a data de "
+                    "nascimento dela e chame esta tool de novo com o valor. Não "
+                    "estime a idade e não siga supondo que é maior de idade."
+                ),
+            }
+
+        dias = idade_em_dias(nascimento, referencia)
+        if dias is not None and dias < 0:
+            # Nascimento depois da sessão: digitação trocada, quase sempre ano.
+            return {
+                "error": "data_de_nascimento_invalida",
+                "birth_date": nascimento.isoformat(),
+                "o_que_fazer": (
+                    "A data de nascimento é posterior à data da sessão, então está "
+                    "errada. Confirme a data de nascimento com a pessoa antes de seguir."
+                ),
+            }
+
+        return {
+            "birth_date": nascimento.isoformat(),
+            "birth_date_origem": origem,
+            "reference_date": referencia.isoformat(),
+            "age_in_days": dias,
+            "age_in_years": idade_em_anos(nascimento, referencia),
+            "is_minor": e_menor_de_idade(nascimento, referencia),
+            "days_until_18": dias_para_a_maioridade(nascimento, referencia),
+        }
+
+    def _nascimento_do_cadastro(self, clinic_id, phone):
+        """A data de nascimento gravada, ou None. Nunca levanta."""
+        try:
+            from src.utils.phone import normalize_phone
+
+            linhas = self.db.execute_query(
+                "SELECT birth_date FROM scheduler.patients "
+                "WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL LIMIT 1",
+                (clinic_id, normalize_phone(phone)),
+            )
+            return linhas[0].get("birth_date") if linhas else None
+        except Exception as e:
+            logger.error(f"[Idade] Falha ao ler o cadastro de {phone}: {e}")
+            return None
 
     def _tool_get_clinic_info(self, args, clinic_id, phone, ctx):
         rows = self.db.execute_query(

@@ -24,8 +24,14 @@ Invariantes
   I2  fato sem consulta     afirmacao factual com zero tools na rodada
   I3  bloqueio disparado    o guardrail derrubou a resposta (custo da rede)
   I4  fuga pela saida       sem_consulta_necessaria numa pergunta factual
+  I5  restricao de menor    exigiu responsavel legal sem tool confirmar a idade
 
-I1 e I2 sao defeito. I3 e I4 sao CUSTO: I3 alto significa guardrail salvando
+I1, I2 e I5 sao defeito. I5 e o pior dos tres em consequencia: dizer a uma
+adulta que ela precisa de responsavel legal e constrangedor e ela conta para as
+amigas. O corpus inteiro e de adultos, entao I5 deve ser SEMPRE zero - qualquer
+valor acima disso e a trava de menor_de_idade falhando.
+
+I3 e I4 sao CUSTO: I3 alto significa guardrail salvando
 demais (modelo ruim ou prompt fraco), I4 alto significa que a saida virou
 desculpa. Nenhum dos quatro deve piorar quando o prompt encolher ou o modelo
 ficar mais barato - e para isso que a nota existe.
@@ -55,6 +61,7 @@ os.environ.setdefault("MESSAGE_EVENTS_TABLE", "eval-sem-dynamo")
 from tests.evaluation.corpus_conversas import carrega  # noqa: E402
 from src.providers.whatsapp_provider import IncomingMessage  # noqa: E402
 from src.services.conversation_agent import RESPALDO_GUARDADO, ConversationAgent  # noqa: E402
+from src.services.menor_de_idade import afirmacao_sem_respaldo as restricao_sem_respaldo  # noqa: E402
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem, fatos_sensiveis  # noqa: E402
 
 RESULTADOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados")
@@ -99,7 +106,13 @@ FIXTURES = {
          "resfriamento; a maioria descreve como morno e confortável."},
     ]},
     "get_clinic_info": {"name": "Clínica Essência", "address": "Rua Augusta, 2709"},
-    "get_pre_session_instructions": {"instructions": "Não se expor ao sol por 48h."},
+    # Maior de idade: o caminho comum. O caso da menor tem teste proprio,
+    # em test_menor_de_idade.
+    "calculate_patient_age": {
+        "birth_date": "1994-05-11", "reference_date": "2026-09-23",
+        "age_in_days": 11823, "age_in_years": 32, "is_minor": False,
+        "days_until_18": -5251,
+    },
     "book_appointment": {
         "success": True, "appointment_id": "eval-0001", "date": "2026-09-23",
         "time": "07:45", "full_name": "Fulana", "total_duration_minutes": 20,
@@ -305,6 +318,9 @@ def avalia_turno(texto, tools_da_rodada, tools_da_conversa, estado_antes, estado
         "I2_fato_sem_consulta": afirmou_fato and not consultou,
         "I3_bloqueio": virou_handoff and HANDOFF_PEDIDO not in tools_da_rodada,
         "I4_fuga_pela_saida": SEM_CONSULTA in tools_da_rodada and afirmou_fato,
+        # O corpus e de adultos: qualquer True aqui e uma paciente ouvindo que
+        # precisa de responsavel legal sem ninguem ter conferido a idade dela.
+        "I5_restricao_de_menor": restricao_sem_respaldo(texto, respaldo),
         "tools": consultou,
         "handoff_pedido_pelo_modelo": virou_handoff and HANDOFF_PEDIDO in tools_da_rodada,
     }
@@ -344,7 +360,7 @@ def roda(conversas, verboso, prompt):
                 tipos["handoff_pedido_pelo_modelo"] += 1
 
             for chave in ("I1_agenda_sem_respaldo", "I2_fato_sem_consulta",
-                          "I3_bloqueio", "I4_fuga_pela_saida"):
+                          "I3_bloqueio", "I4_fuga_pela_saida", "I5_restricao_de_menor"):
                 if v[chave]:
                     tipos[chave] += 1
                     achados.append({"conversa": c["id"], "turno": n, "invariante": chave,
@@ -359,7 +375,7 @@ def roda(conversas, verboso, prompt):
 
             if verboso:
                 marca = "".join(k[1] for k in ("I1_agenda_sem_respaldo", "I2_fato_sem_consulta",
-                                               "I3_bloqueio", "I4_fuga_pela_saida") if v[k])
+                                               "I3_bloqueio", "I4_fuga_pela_saida", "I5_restricao_de_menor") if v[k])
                 print(f"  [{n}] {'!' + marca if marca else 'ok'} tools={v['tools']} "
                       f"| {texto_usuario[:45]!r}")
 
@@ -368,7 +384,7 @@ def roda(conversas, verboso, prompt):
         "conversas": len(conversas),
         "violacoes": {k: tipos[k] for k in
                       ("I1_agenda_sem_respaldo", "I2_fato_sem_consulta",
-                       "I3_bloqueio", "I4_fuga_pela_saida")},
+                       "I3_bloqueio", "I4_fuga_pela_saida", "I5_restricao_de_menor")},
         "falhas_execucao": tipos["falha_execucao"],
         "handoff_pedido_pelo_modelo": tipos["handoff_pedido_pelo_modelo"],
         "chamadas_modelo": anthropic.chamadas,
