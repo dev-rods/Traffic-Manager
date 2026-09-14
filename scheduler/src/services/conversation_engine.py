@@ -20,6 +20,10 @@ from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
 
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
+from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
+from src.services.areas_ambiguas import perguntas as perguntas_de_ambiguidade
+from src.services.orientacoes_do_faq import busca as orientacoes_do_faq
+from src.services.orientacoes_do_faq import como_texto as orientacoes_como_texto
 
 logger = logging.getLogger(__name__)
 
@@ -370,6 +374,7 @@ FLOW_SESSION_KEYS = [
     "_is_first_session", "_skipped_services", "_welcome_intro", "_prepend_message",
     "_classifier_suggested_areas", "_classifier_faq_topic", "_classifier_service_hint",
     "_pending_classifier_transition",
+    "_ambiguidades_perguntadas",
 ]
 
 
@@ -477,6 +482,7 @@ class ConversationEngine:
                 session.pop("selected_service_area_pairs", None)
                 session.pop("_available_areas", None)
                 session.pop("_areas_input", None)
+                session.pop("_ambiguidades_perguntadas", None)
                 logger.info("[ConversationEngine] Back navigation: cleared area selection keys")
         elif user_input == "human":
             next_state = ConversationState.HUMAN_HANDOFF
@@ -1319,6 +1325,41 @@ class ConversationEngine:
             session["dynamic_buttons"] = back_button
             return {}, content
 
+        # "Barriga" e "virilha" cobrem mais de uma área da lista, e aqui a
+        # escolha veio por número: ela pode ter apontado a errada sem saber que
+        # existia a outra. Ver areas_ambiguas. Devolve para a lista com a
+        # pergunta - uma vez por ambiguidade, senão a pessoa não sai daqui.
+        ja_perguntadas = set(session.get("_ambiguidades_perguntadas") or [])
+        pendentes = [
+            p for p in ambiguidades_pendentes(
+                selected_service_area_pairs, available_areas, []
+            )
+            if p["id"] not in ja_perguntadas
+        ]
+        if pendentes:
+            session["_ambiguidades_perguntadas"] = sorted(
+                ja_perguntadas | {p["id"] for p in pendentes}
+            )
+            session["state"] = ConversationState.SELECT_AREAS.value
+            service_names = list(dict.fromkeys(a.get("service_name", "") for a in available_areas))
+            multi_service = len(service_names) > 1
+            price_map = {(a["service_id"], a["id"]): a.get("price_cents") for a in available_areas}
+            areas_list = self._build_areas_list(available_areas, multi_service, price_map)
+            perguntas = "\n\n".join(perguntas_de_ambiguidade(pendentes))
+            logger.info(
+                f"[ConversationEngine] _on_enter_confirm_areas: ambiguidade "
+                f"{[p['id'] for p in pendentes]} -> voltando para SELECT_AREAS"
+            )
+            session["dynamic_buttons"] = [
+                {"id": "human", "label": "Falar com atendente"},
+                {"id": "back", "label": "Voltar"},
+            ]
+            return {}, (
+                f"{perguntas}\n\nSe quiser trocar, é só digitar os *números* das "
+                f"áreas de novo. Para seguir com o que você escolheu, repita os "
+                f"mesmos números.\n\n{areas_list}"
+            )
+
         session["selected_area_ids"] = selected_area_ids
         session["selected_service_area_pairs"] = selected_service_area_pairs
         areas_display = ", ".join(selected_area_names)
@@ -1626,7 +1667,12 @@ class ConversationEngine:
             sa_parts = [r["pre_session_instructions"] for r in rows if r.get("pre_session_instructions")]
             sa_instructions = "\n".join(sa_parts)
 
-        parts = [p for p in [sa_instructions, clinic_instructions] if p]
+        # Orientações pré e pós-procedimento do FAQ, sempre que houver: fechar
+        # o agendamento sem dizer como se preparar é o erro que só aparece no
+        # dia da sessão. Ver orientacoes_do_faq.
+        faq_instructions = orientacoes_como_texto(orientacoes_do_faq(self.db, clinic_id)) if self.db else ""
+
+        parts = [p for p in [sa_instructions, clinic_instructions, faq_instructions] if p]
         pre_instructions = "\n\n".join(parts)
 
         total_min = session.get("total_duration_minutes")

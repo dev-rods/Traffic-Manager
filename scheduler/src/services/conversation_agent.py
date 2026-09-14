@@ -724,12 +724,28 @@ class ConversationAgent:
             "   isso. O que ela tratou antes não diz o que ela quer agora: pergunte.\n"
             "4. Horário depende de área: a duração da sessão vem das áreas. Passar\n"
             "   horários antes de saber as áreas é passar horário errado.\n"
+            "5. Dois nomes populares cobrem mais de uma área, e a paciente costuma\n"
+            "   usá-los achando que está sendo específica. Antes de seguir, PERGUNTE:\n"
+            "   - barriga ou abdômen: confirme se ela não está se referindo à LINHA\n"
+            "     ALBA (a faixa vertical no centro da barriga).\n"
+            "   - virilha, em qualquer variação: ofereça incluir a região do ÂNUS\n"
+            "     (perianal). Vale também para 'virilha completa' - muita gente chama\n"
+            "     de completa a que já inclui o períneo.\n"
+            "   Faça a pergunta e espere a resposta dela. As tools RECUSAM essas\n"
+            "   áreas enquanto o assunto não aparecer na conversa.\n"
         )
         system_prompt += (
             "\n═══ INSTRUÇÕES PÓS-AGENDAMENTO ═══\n"
-            "Após confirmar um agendamento com book_appointment, SEMPRE chame "
-            "get_pre_session_instructions para obter as instruções de cuidados pré-sessão. "
-            "Se houver instruções, envie-as ao cliente."
+            "Após confirmar um agendamento com book_appointment, SEMPRE chame\n"
+            "get_pre_session_instructions. Ela devolve as instruções da clínica e as\n"
+            "orientações pré e pós-procedimento do FAQ.\n"
+            "1. Envie TUDO o que ela devolver, em mensagem própria, logo após a\n"
+            "   confirmação. Isso vale para todo agendamento, inclusive remarcação.\n"
+            "2. Comece pelas orientações de PREPARO (tipo='preparo'): é o que ela\n"
+            "   precisa fazer ANTES da sessão, e é o que faz a sessão acontecer.\n"
+            "3. Use o texto como veio. Pode resumir e ajustar o tom, nunca acrescentar\n"
+            "   cuidado que não estava lá.\n"
+            "4. Se a tool não devolver nada, não invente orientação: siga sem ela."
         )
 
         bloco_da_campanha = self._bloco_da_campanha(clinic_id, phone, session)
