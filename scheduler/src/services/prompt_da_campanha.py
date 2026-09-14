@@ -60,8 +60,8 @@ FLUXO_DA_CAMPANHA = (
     "   ela ja e cadastrada e o nome dela esta no seu contexto.\n"
     "\n"
     "5. ENCERRAMENTO\n"
-    "   Chame get_pre_session_instructions e envie as orientacoes completas,\n"
-    "   junto com o endereco.\n"
+    "   Confirme e informe o endereco. O aviso de preparo pre-sessao e enviado\n"
+    "   pelo sistema logo depois da sua mensagem: nao escreva esse aviso.\n"
 )
 
 

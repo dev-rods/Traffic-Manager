@@ -99,7 +99,13 @@ FIXTURES = {
          "resfriamento; a maioria descreve como morno e confortável."},
     ]},
     "get_clinic_info": {"name": "Clínica Essência", "address": "Rua Augusta, 2709"},
-    "get_pre_session_instructions": {"instructions": "Não se expor ao sol por 48h."},
+    # Maior de idade: o caminho comum. O caso da menor tem teste proprio,
+    # em test_menor_de_idade.
+    "calculate_patient_age": {
+        "birth_date": "1994-05-11", "reference_date": "2026-09-23",
+        "age_in_days": 11823, "age_in_years": 32, "is_minor": False,
+        "days_until_18": -5251,
+    },
     "book_appointment": {
         "success": True, "appointment_id": "eval-0001", "date": "2026-09-23",
         "time": "07:45", "full_name": "Fulana", "total_duration_minutes": 20,
