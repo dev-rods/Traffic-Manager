@@ -91,6 +91,13 @@ def usa_tool(nome, args=None):
     }
 
 
+class TemplateFalso:
+    """Sem template próprio no banco - o aviso pré-sessão cai no texto padrão."""
+
+    def get_and_render(self, clinic_id, chave, variables=None):
+        return ""
+
+
 def monta_agente(anthropic=None, tool_executor=None, resultado_da_tool=None,
                  registro_de_ordem=None):
     """Um ConversationAgent pronto para `process_message`.
@@ -103,6 +110,7 @@ def monta_agente(anthropic=None, tool_executor=None, resultado_da_tool=None,
     agente.tool_executor = tool_executor or ToolExecutorFalso(resultado_da_tool)
     agente.anthropic = anthropic or AnthropicFalso()
     agente.sessao_salva = {}
+    agente.template_service = TemplateFalso()
     # Devolve a sessão salva, não um dict novo: sem isso nada sobrevive entre
     # turnos e um teste de conversa multi-turno mediria três conversas de um
     # turno. Foi o que escondeu a janela curta de respaldo.
