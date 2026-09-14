@@ -20,10 +20,9 @@ from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
 
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
+from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
 from src.services.areas_ambiguas import perguntas as perguntas_de_ambiguidade
-from src.services.orientacoes_do_faq import busca as orientacoes_do_faq
-from src.services.orientacoes_do_faq import como_texto as orientacoes_como_texto
 
 logger = logging.getLogger(__name__)
 
@@ -1643,37 +1642,10 @@ class ConversationEngine:
                 logger.error(f"[ConversationEngine] _on_enter_booked: FAILED to create appointment: {e}", exc_info=True)
                 return {}, "Desculpe, ocorreu um erro ao confirmar seu agendamento. Tente novamente."
 
-        clinic = self._get_clinic(clinic_id)
-        clinic_instructions = (clinic.get("pre_session_instructions") or "") if clinic else ""
-
-        # Hierarchical: service_area instructions take priority, then clinic-level
-        sa_instructions = ""
-        service_area_pairs = session.get("selected_service_area_pairs")
-        if service_area_pairs and self.db:
-            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
-            params = ()
-            for pair in service_area_pairs:
-                params += (pair["service_id"], pair["area_id"])
-            rows = self.db.execute_query(
-                f"""
-                SELECT pre_session_instructions
-                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
-                JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id
-                WHERE sa.pre_session_instructions IS NOT NULL
-                AND sa.active = TRUE
-                """,
-                params,
-            )
-            sa_parts = [r["pre_session_instructions"] for r in rows if r.get("pre_session_instructions")]
-            sa_instructions = "\n".join(sa_parts)
-
-        # Orientações pré e pós-procedimento do FAQ, sempre que houver: fechar
-        # o agendamento sem dizer como se preparar é o erro que só aparece no
-        # dia da sessão. Ver orientacoes_do_faq.
-        faq_instructions = orientacoes_como_texto(orientacoes_do_faq(self.db, clinic_id)) if self.db else ""
-
-        parts = [p for p in [sa_instructions, clinic_instructions, faq_instructions] if p]
-        pre_instructions = "\n\n".join(parts)
+        # O mesmo aviso do outro fluxo, do mesmo lugar: os dois fluxos fecham
+        # agendamento, e a pessoa não sabe por qual deles passou. Ver
+        # orientacoes_pos_sessao.
+        pre_instructions = orientacoes_da_clinica(self.template_service, clinic_id)
 
         total_min = session.get("total_duration_minutes")
         if total_min:
@@ -1692,12 +1664,11 @@ class ConversationEngine:
         }
         content = self.template_service.get_and_render(clinic_id, "BOOKED", variables)
 
-        # If there are pre-session instructions, append recommendations and override buttons
+        # O aviso vai cru, sem o embrulho do RECOMMENDATIONS: ele é a orientação
+        # exata que a clínica escreveu, e cabeçalho em cima dela é texto que
+        # ninguém revisou entrando junto com contraindicação médica.
         if pre_instructions:
-            recommendations_msg = self.template_service.get_and_render(
-                clinic_id, "RECOMMENDATIONS", {"recommendations": pre_instructions}
-            )
-            content = content + "\n\n" + recommendations_msg
+            content = content + "\n\n" + pre_instructions
             session["dynamic_buttons"] = [
                 {"id": "confirm_read", "label": "Li e entendi"},
                 {"id": "human", "label": "Falar com atendente"},

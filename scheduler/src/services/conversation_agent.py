@@ -15,6 +15,7 @@ from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services.calendario import bloco_de_contexto
+from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.preco_minimo import preco_minimo_por_area
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
 from src.services.roteador import exige_consulta, intencoes, tools_obrigatorias
@@ -45,6 +46,13 @@ TOOLS_COM_EFEITO = frozenset({
     "book_appointment",
     "reschedule_appointment",
     "cancel_appointment",
+})
+
+# As que deixam a pessoa com uma sessão marcada - e portanto com preparo a
+# fazer. Cancelar não entra: quem cancelou não precisa raspar nada.
+TOOLS_QUE_MARCAM_SESSAO = frozenset({
+    "book_appointment",
+    "reschedule_appointment",
 })
 
 
@@ -567,6 +575,20 @@ class ConversationAgent:
 
         outgoing = self._build_outgoing(final_text, pending_buttons)
 
+        # O aviso pré-sessão sai daqui, não da boca do modelo: são 15 linhas com
+        # contraindicação médica que têm de chegar palavra por palavra. Ver
+        # orientacoes_pos_sessao. Vale para agendamento novo e remarcação - quem
+        # remarcou vai à sessão do mesmo jeito e precisa se preparar igual.
+        if efeito_cometido in TOOLS_QUE_MARCAM_SESSAO:
+            outgoing.append(OutgoingMessage(
+                message_type="text",
+                content=orientacoes_da_clinica(self.template_service, clinic_id),
+            ))
+            logger.info(
+                f"[OrientacoesPosSessao] {phone}: aviso pré-sessão anexado "
+                f"após {efeito_cometido}"
+            )
+
         # 8. Save history (truncated)
         session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
         session["mode"] = "agent"
@@ -736,16 +758,13 @@ class ConversationAgent:
         )
         system_prompt += (
             "\n═══ INSTRUÇÕES PÓS-AGENDAMENTO ═══\n"
-            "Após confirmar um agendamento com book_appointment, SEMPRE chame\n"
-            "get_pre_session_instructions. Ela devolve as instruções da clínica e as\n"
-            "orientações pré e pós-procedimento do FAQ.\n"
-            "1. Envie TUDO o que ela devolver, em mensagem própria, logo após a\n"
-            "   confirmação. Isso vale para todo agendamento, inclusive remarcação.\n"
-            "2. Comece pelas orientações de PREPARO (tipo='preparo'): é o que ela\n"
-            "   precisa fazer ANTES da sessão, e é o que faz a sessão acontecer.\n"
-            "3. Use o texto como veio. Pode resumir e ajustar o tom, nunca acrescentar\n"
-            "   cuidado que não estava lá.\n"
-            "4. Se a tool não devolver nada, não invente orientação: siga sem ela."
+            "Confirmado o agendamento (ou a remarcação), o sistema envia SOZINHO, logo\n"
+            "depois da sua mensagem, o aviso de preparo pré-sessão da clínica.\n"
+            "1. Você NÃO escreve esse aviso e NÃO o resume. Ele já vai, inteiro.\n"
+            "2. Sua mensagem de confirmação termina normalmente. Não diga 'seguem as\n"
+            "   orientações abaixo' nem anuncie o que vem - apenas confirme.\n"
+            "3. Se ela perguntar sobre preparo DEPOIS de receber o aviso, aí sim\n"
+            "   responda, via get_faq_answer como qualquer outra dúvida."
         )
 
         bloco_da_campanha = self._bloco_da_campanha(clinic_id, phone, session)
@@ -807,7 +826,8 @@ class ConversationAgent:
             "   Só depois da resposta dela vá para os horários.\n"
             "5. Ofereça APENAS as datas anunciadas acima. Confirme os horários com\n"
             "   check_availability e get_time_slots, como sempre.\n"
-            "6. Ao fechar, siga com get_pre_session_instructions normalmente.\n"
+            "6. Ao fechar, apenas confirme: o aviso de preparo pré-sessão é enviado\n"
+            "   pelo sistema, como em qualquer agendamento.\n"
             "\n"
             "Continua valendo tudo o mais: calculate_discount antes de book_appointment\n"
             "(o preço gravado tem de estar certo, mesmo sem ser anunciado), get_faq_answer\n"

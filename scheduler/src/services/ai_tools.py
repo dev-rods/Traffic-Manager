@@ -14,7 +14,6 @@ from src.services.areas_ambiguas import recado_de_recusa as recado_de_ambiguidad
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
-from src.services.orientacoes_do_faq import busca as orientacoes_do_faq
 from src.services.primeira_visita import e_primeira_visita
 from src.services.duration_rules import calcula_duracao
 
@@ -390,31 +389,6 @@ TOOL_DEFINITIONS = [
                             "required": ["service_id", "area_id"],
                         },
                         "description": "List of service-area pairs selected by the patient",
-                    },
-                },
-                "required": ["service_area_pairs"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_pre_session_instructions",
-            "description": "Get pre- and post-procedure care instructions (clinic, service-area and clinic FAQ) for the booked areas. ALWAYS call this after a successful booking and send the result to the patient, starting with the preparation steps.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "service_area_pairs": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "service_id": {"type": "string"},
-                                "area_id": {"type": "string"},
-                            },
-                            "required": ["service_id", "area_id"],
-                        },
-                        "description": "List of service-area pairs that were booked",
                     },
                 },
                 "required": ["service_area_pairs"],
@@ -1011,55 +985,3 @@ class ToolExecutor:
         return self._resultado_de_desconto(
             total_price_cents, discount_pct, discount_reason, is_first)
 
-    def _tool_get_pre_session_instructions(self, args, clinic_id, phone, ctx):
-        service_area_pairs = args.get("service_area_pairs", [])
-        if not service_area_pairs:
-            return {"has_instructions": False, "instructions": ""}
-
-        # Get clinic-level instructions
-        clinic_rows = self.db.execute_query(
-            "SELECT pre_session_instructions FROM scheduler.clinics WHERE clinic_id = %s",
-            (clinic_id,),
-        )
-        clinic_instructions = ""
-        if clinic_rows and clinic_rows[0].get("pre_session_instructions"):
-            clinic_instructions = clinic_rows[0]["pre_session_instructions"]
-
-        # Get service_area-level instructions (more specific, take priority)
-        sa_instructions = ""
-        if service_area_pairs:
-            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
-            params = ()
-            for pair in service_area_pairs:
-                params += (pair["service_id"], pair["area_id"])
-            rows = self.db.execute_query(
-                f"""
-                SELECT pre_session_instructions
-                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
-                JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id
-                WHERE sa.pre_session_instructions IS NOT NULL
-                AND sa.active = TRUE
-                """,
-                params,
-            )
-            sa_parts = [r["pre_session_instructions"] for r in rows if r.get("pre_session_instructions")]
-            sa_instructions = "\n".join(sa_parts)
-
-        parts = [p for p in [sa_instructions, clinic_instructions] if p]
-        instructions = "\n\n".join(parts)
-
-        # As orientações do FAQ entram aqui, na mesma tool, para não dependerem
-        # de o modelo lembrar de uma segunda chamada depois de fechar o
-        # agendamento. Ver orientacoes_do_faq.
-        orientacoes = orientacoes_do_faq(self.db, clinic_id)
-
-        return {
-            "has_instructions": bool(instructions) or bool(orientacoes),
-            "instructions": instructions,
-            "orientacoes_do_faq": orientacoes,
-            "o_que_fazer": (
-                "Envie estas orientações à paciente agora, em mensagem própria, "
-                "começando pelas de preparo (tipo='preparo'). Use o texto como "
-                "veio: pode resumir e ajustar o tom, nunca acrescentar."
-            ) if (instructions or orientacoes) else "",
-        }

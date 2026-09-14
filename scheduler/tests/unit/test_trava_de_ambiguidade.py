@@ -24,7 +24,7 @@ FAQ = [
 
 
 class BancoFake:
-    """Devolve áreas para a consulta de áreas, FAQ para a de FAQ, nada no resto."""
+    """Devolve áreas para a consulta de áreas, nada no resto."""
 
     def __init__(self):
         self.consultas = []
@@ -80,17 +80,6 @@ class TestATravaSegura(unittest.TestCase):
             "service_area_pairs": [{"service_id": "s1", "area_id": "a-axilas"}],
         }, ctx(("user", "quero axilas")))
         self.assertNotEqual(r.get("error"), "areas_ambiguas")
-
-
-class TestOrientacoesNoPosAgendamento(unittest.TestCase):
-    def test_a_tool_de_pos_agendamento_traz_o_faq(self):
-        executor = ToolExecutor(BancoFake(), availability_engine=None,
-                                appointment_service=None)
-        r = executor.execute("get_pre_session_instructions", PARES, ctx(("user", "ok")))
-        self.assertTrue(r["has_instructions"])
-        self.assertEqual(r["orientacoes_do_faq"][0]["pergunta"], "Como me preparar?")
-        self.assertEqual(r["orientacoes_do_faq"][0]["tipo"], "preparo")
-        self.assertIn("preparo", r["o_que_fazer"])
 
 
 if __name__ == "__main__":
