@@ -2,7 +2,7 @@
 """A regra conferida contra o catálogo que está no banco (dev e prod, 13/09/2026).
 
 A regra casa por NOME de área, então ela depende de como a clínica escreve o
-nome. Renomear "Virilha Comp. + ânus" para "Virilha Total", por exemplo, faria a
+nome. Renomear "Virilha Completa + ânus" para "Virilha Total", por exemplo, faria a
 área voltar a ser ambígua - e ninguém perceberia sem este teste, porque nada
 quebra: a sessão só é marcada errada.
 
@@ -35,8 +35,7 @@ class TestCatalogoReal(unittest.TestCase):
     def test_as_areas_que_ja_dizem_tudo_passam_direto(self):
         """'Virilha Comp. + ânus', 'Perianal/ânus' e 'Linha alba' não são ambíguas:
         o nome que ela escolheu já diz o que ela quer."""
-        for nome in ("Virilha Comp. + ânus", "Virilha Completa + ânus",
-                     "Perianal/ânus", "Linha alba"):
+        for nome in ("Virilha Completa + ânus", "Perianal/ânus", "Linha alba"):
             with self.subTest(area=nome):
                 self.assertEqual(
                     pendencias([{"service_id": "s1", "area_id": nome}], AREAS, []), []

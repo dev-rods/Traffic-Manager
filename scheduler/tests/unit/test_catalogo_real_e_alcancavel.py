@@ -61,8 +61,7 @@ FRASES = {
     "Pescoço": "pescoço",
     "Rosto Completo": "rosto completo",
     "Virilha Cavada": "virilha cavada",
-    # A frase exata da paciente de 16/09/2026, contra as duas grafias.
-    "Virilha Comp. + ânus": "Virilha completa + Ânus",
+    # A frase exata da paciente de 16/09/2026.
     "Virilha Completa + ânus": "Virilha completa + Ânus",
     "Virilha Completa": "virilha completa",
     "Virilha Simples": "virilha simples",
@@ -96,7 +95,7 @@ class TestNaoLiberaAVizinha(unittest.TestCase):
     def test_virilha_completa_nao_libera_a_que_inclui_anus(self):
         liberadas = areas_conversadas(dita_pela_paciente("virilha completa"), AREAS)
         self.assertIn("Virilha Completa", liberadas)
-        self.assertNotIn("Virilha Comp. + ânus", liberadas)
+        self.assertNotIn("Virilha Completa + ânus", liberadas)
 
     def test_virilha_sozinha_nao_libera_nenhuma_virilha(self):
         liberadas = areas_conversadas(dita_pela_paciente("quero virilha"), AREAS)
@@ -112,8 +111,8 @@ class TestNaoLiberaAVizinha(unittest.TestCase):
         self.assertNotIn("Lombar", areas_conversadas(dita_pela_paciente("lombardia"), AREAS))
 
     def test_a_abreviacao_nao_vale_para_quem_nao_e_abreviacao(self):
-        """'Comp.' casa por começo porque o cadastro a marcou com ponto. 'Coxa'
-        não tem ponto, então 'coxas' não é 'coxa'."""
+        """'Comp.' de 'Barba Comp. + Pescoço' casa por começo porque o cadastro
+        a marcou com ponto. 'Coxa' não tem ponto, então 'coxas' não é 'coxa'."""
         liberadas = areas_conversadas(dita_pela_paciente("1/2 coxa"), AREAS)
         self.assertIn("1/2 Coxa", liberadas)
         self.assertNotIn("Coxas", liberadas)

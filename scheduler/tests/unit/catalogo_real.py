@@ -19,11 +19,11 @@ CATALOGO = [
     "Peitoral", "Peitoral + abdômen", "Perianal/ânus", "Perna Completa",
     "Pernas Completas", "Pescoço",
     "Rosto Completo", "Virilha Cavada", "Virilha Completa", "Virilha Simples",
-    # As duas grafias convivem de propósito. A Essência foi renomeada para
-    # "Virilha Completa + ânus" em 16/09/2026, depois do defeito; Nobre Laser e
-    # Depilação Premium continuam com a abreviada. Tirar a abreviada daqui
-    # desligaria a auditoria justamente onde ela ainda é necessária.
-    "Virilha Comp. + ânus", "Virilha Completa + ânus",
+    # Era "Virilha Comp. + ânus" nas três clínicas até 16/09/2026, e o nome
+    # abreviado tornava a área inalcançável. Renomeada em prod no mesmo dia.
+    # A abreviação continua coberta pela auditoria por "Barba Comp. + Pescoço",
+    # que ainda está assim no cadastro - dado real, não caso inventado.
+    "Virilha Completa + ânus",
 ]
 
 AREAS = [{"id": n, "name": n} for n in CATALOGO]
