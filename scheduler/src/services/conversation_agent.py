@@ -9,8 +9,17 @@ from typing import Dict, List, Optional
 import boto3
 
 from src.services.anthropic_service import AnthropicService, AnthropicError
+from src.services.anthropic_service import DEFAULT_MODEL as MODELO_DO_AGENTE
+from src.services.consumo import do_retorno as consumo_do_retorno
+from src.services.consumo import registra_total as registra_consumo_total
+from src.services.consumo import soma as soma_consumo
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
-from src.services.bot_policy import CAMPO_DE_PAUSA, PAUSA_HANDOFF, esta_pausado
+from src.services.bot_policy import (
+    CAMPO_DE_PAUSA,
+    PAUSA_HANDOFF,
+    entrega_por_instabilidade,
+    esta_pausado,
+)
 from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
@@ -345,6 +354,8 @@ class ConversationAgent:
         em_campanha = campanha_viva(session)
         efeito_cometido = None
         efeito_gravado = {}
+        consumo_da_mensagem = {}
+        chamadas_ao_modelo = 0
 
         try:
             for iteration in range(MAX_AGENT_ITERATIONS):
@@ -364,6 +375,15 @@ class ConversationAgent:
                     max_tokens=1024,
                     tool_choice=forcar_tool,
                 )
+
+                # O consumo desta chamada, somado ao da mensagem. Cada chamada
+                # já se registra sozinha em anthropic_service; aqui monta-se o
+                # total, que é o número que responde "quanto custou atender
+                # esta pessoa". Ver consumo.py.
+                consumo_da_mensagem = soma_consumo(
+                    consumo_da_mensagem, consumo_do_retorno(response)
+                )
+                chamadas_ao_modelo += 1
 
                 # Parse response content blocks
                 content_blocks = response.get("content", [])
@@ -472,19 +492,27 @@ class ConversationAgent:
 
         except AnthropicError as e:
             logger.error(f"[ConversationAgent] Anthropic API error for {phone}: {e}")
-            # Persist whatever history we have (including the user's just-arrived
-            # message) so the next attempt has the full context. Without this,
-            # the user's message is silently dropped and they have to repeat it.
+            # A paciente NÃO recebe nada. Ver bot_policy.entrega_por_instabilidade:
+            # até 15/09/2026 saía daqui "estou com dificuldades, tente de novo",
+            # que não ajuda ninguém e ainda convida a tentar contra um sistema
+            # que vai falhar igual. Agora a conversa vai para uma pessoa.
             try:
                 session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
                 session["mode"] = "agent"
+                entrega_por_instabilidade(session)
                 self._save_session(clinic_id, phone, session)
+                logger.error(
+                    f"[Instabilidade] {phone}: bot calado e conversa entregue a "
+                    f"uma pessoa. A paciente está sem resposta."
+                )
             except Exception as save_err:
-                logger.error(f"[ConversationAgent] Failed to persist session after API error: {save_err}")
-            return [OutgoingMessage(
-                message_type="text",
-                content="Desculpe, estou com dificuldades no momento. Tente novamente em instantes.",
-            )]
+                # Sem a sessão salva ninguém fica sabendo - por isso o log é ERROR
+                # e não warning. Calar continua certo: a mensagem ruim seria pior.
+                logger.error(
+                    f"[Instabilidade] {phone}: falha ao registrar a pausa após o "
+                    f"erro de API: {save_err}"
+                )
+            return []
 
         # 6. Handle handoff
         if handoff_requested:
@@ -659,6 +687,11 @@ class ConversationAgent:
         # resposta pode ser descartada em favor da rajada completa.
         session["efeito_na_ultima_rodada"] = bool(efeito_cometido)
         self._save_session(clinic_id, phone, session)
+
+        if chamadas_ao_modelo:
+            registra_consumo_total(
+                consumo_da_mensagem, MODELO_DO_AGENTE, phone, chamadas_ao_modelo
+            )
 
         elapsed = time.time() - start_time
         logger.info(f"[ConversationAgent] Processed message for {phone} in {elapsed:.2f}s, {len(outgoing)} outgoing messages")

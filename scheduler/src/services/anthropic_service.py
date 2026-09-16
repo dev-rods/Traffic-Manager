@@ -5,6 +5,8 @@ import logging
 
 import requests
 
+from src.services.consumo import registra_chamada as registra_consumo
+
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
@@ -87,7 +89,12 @@ class AnthropicService:
                 )
 
                 if response.status_code == 200:
-                    return response.json()
+                    corpo = response.json()
+                    # O `usage` vem em toda resposta e era descartado aqui. Ver
+                    # consumo.py: sem esta linha, "o que gastou os créditos?"
+                    # não tem resposta nos logs.
+                    registra_consumo(corpo, model)
+                    return corpo
 
                 if response.status_code == 429 or response.status_code >= 500:
                     # Honor Retry-After when the API provides it (429 / 503).
