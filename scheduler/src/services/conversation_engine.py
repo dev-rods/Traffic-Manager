@@ -20,6 +20,7 @@ from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
 
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
+from src.services.bot_policy import TTL_DO_ATENDIMENTO, entrega_por_instabilidade
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
 from src.services.areas_ambiguas import perguntas as perguntas_de_ambiguidade
@@ -413,7 +414,6 @@ class ConversationEngine:
         )
 
         # 1.5 Check if human attendant mode is active
-        HANDOFF_TTL_SECONDS = 24 * 60 * 60  # 24h
         if current_state in (ConversationState.HUMAN_ATTENDANT_ACTIVE, ConversationState.HUMAN_HANDOFF):
             # Allow "Retomar atendimento" button to reactivate bot from HUMAN_HANDOFF
             if current_state == ConversationState.HUMAN_HANDOFF and incoming.button_id == "resume_bot":
@@ -430,7 +430,7 @@ class ConversationEngine:
                     is_active = now < session.get("attendant_active_until", 0)
                 else:
                     handoff_at = session.get("human_handoff_requested_at", 0)
-                    is_active = now < (handoff_at + HANDOFF_TTL_SECONDS)
+                    is_active = now < (handoff_at + TTL_DO_ATENDIMENTO)
 
                 if is_active:
                     logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone} state={current_state}")
@@ -518,6 +518,16 @@ class ConversationEngine:
         template_vars, dynamic_buttons, override_content = self._on_enter(
             next_state, clinic_id, phone, session
         )
+
+        # O on_enter falhou: ninguém recebe mensagem de erro. A sessão já foi
+        # marcada como entregue a uma pessoa; aqui só se garante o silêncio.
+        if session.pop("_falha_de_sistema", False):
+            logger.error(
+                f"[Instabilidade] {phone}: bot calado e conversa entregue a uma "
+                f"pessoa. A paciente está sem resposta."
+            )
+            self._save_session(clinic_id, phone, session)
+            return []
 
         # 5. Build outgoing messages (use effective state — on_enter may redirect)
         effective_state = ConversationState(session["state"])
@@ -923,8 +933,12 @@ class ConversationEngine:
 
         except Exception as e:
             logger.error(f"[ConversationEngine] Error in on_enter for {state}: {e}", exc_info=True)
-            override_content = "Desculpe, ocorreu um erro. Tente novamente."
-            session["state"] = ConversationState.MAIN_MENU.value
+            # Saía daqui "Desculpe, ocorreu um erro. Tente novamente." - a mesma
+            # classe de mensagem que o agente mandava, e que não pode chegar ao
+            # cliente. A conversa vai para uma pessoa e o bot cala. Ver
+            # bot_policy.entrega_por_instabilidade.
+            entrega_por_instabilidade(session)
+            session["_falha_de_sistema"] = True
 
         # If on_enter redirected and set dynamic_buttons in session, pick them up
         effective_state = ConversationState(session.get("state", state.value))
