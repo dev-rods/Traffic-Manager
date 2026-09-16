@@ -17,7 +17,9 @@ from src.services.bot_policy import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-ATTENDANT_TTL_SECONDS = 24 * 60 * 60
+# O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
+# e regra duplicada diverge em silencio quando alguem muda so um deles.
+from src.services.bot_policy import TTL_DO_ATENDIMENTO as ATTENDANT_TTL_SECONDS
 
 # Payload da auto-invocação assíncrona. Não vem do API Gateway.
 TAREFA_RETOMADA = "responder_retomada"

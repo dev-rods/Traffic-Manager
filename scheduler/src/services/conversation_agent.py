@@ -37,7 +37,9 @@ logger = logging.getLogger(__name__)
 
 MAX_AGENT_ITERATIONS = 5
 MAX_HISTORY_PAIRS = 20
-ATTENDANT_TTL_SECONDS = 24 * 60 * 60
+# O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
+# e regra duplicada diverge em silencio quando alguem muda so um deles.
+from src.services.bot_policy import TTL_DO_ATENDIMENTO as ATTENDANT_TTL_SECONDS
 
 # Quantos resultados de tool a sessão carrega adiante para respaldar repetição
 # de fato já consultado. Alto o bastante para uma negociação de data (a pessoa

@@ -638,7 +638,9 @@ def _get_appointment_service(db):
         return None
 
 
-ATTENDANT_TTL_SECONDS = 24 * 60 * 60  # 24 hours
+# O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
+# e regra duplicada diverge em silencio quando alguem muda so um deles.
+from src.services.bot_policy import TTL_DO_ATENDIMENTO as ATTENDANT_TTL_SECONDS
 
 
 def _resolve_clinic_id(db: PostgresService, instance_id: str):

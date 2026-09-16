@@ -126,5 +126,37 @@ class TestOFluxoDeterministico(unittest.TestCase):
         self.assertIsNotNone(ConversationEngine)
 
 
+class TestOPrazoTemUmaFonteSo(unittest.TestCase):
+    """O mesmo 24h estava escrito em cinco arquivos.
+
+    Quatro já existiam e o quinto veio com esta mudança - o que é exatamente
+    como uma regra duplicada nasce. Mudar o prazo em um lugar e esquecer os
+    outros não quebra nada na hora: as conversas passam a expirar em prazos
+    diferentes conforme o caminho que as pausou, e ninguém percebe.
+    """
+
+    def test_so_bot_policy_define_o_prazo(self):
+        import pathlib
+        import re
+
+        raiz = pathlib.Path(__file__).resolve().parents[2] / "src"
+        definem = []
+        for arquivo in raiz.rglob("*.py"):
+            texto = arquivo.read_text(encoding="utf-8")
+            for linha in texto.splitlines():
+                if re.match(r"\s*[A-Z_]*TTL[A-Z_]*\s*=\s*24 \* 60 \* 60", linha):
+                    definem.append(arquivo.name)
+        self.assertEqual(definem, ["bot_policy.py"], f"prazo duplicado em {definem}")
+
+    def test_quem_usa_importa_de_la(self):
+        from src.functions.webhook import handler as webhook
+        from src.services import conversation_agent
+        from src.services.bot_policy import TTL_DO_ATENDIMENTO
+
+        self.assertEqual(webhook.ATTENDANT_TTL_SECONDS, TTL_DO_ATENDIMENTO)
+        self.assertEqual(conversation_agent.ATTENDANT_TTL_SECONDS, TTL_DO_ATENDIMENTO)
+
+
+
 if __name__ == "__main__":
     unittest.main()

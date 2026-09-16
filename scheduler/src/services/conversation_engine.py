@@ -20,7 +20,7 @@ from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
 
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
-from src.services.bot_policy import entrega_por_instabilidade
+from src.services.bot_policy import TTL_DO_ATENDIMENTO, entrega_por_instabilidade
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
 from src.services.areas_ambiguas import perguntas as perguntas_de_ambiguidade
@@ -414,7 +414,6 @@ class ConversationEngine:
         )
 
         # 1.5 Check if human attendant mode is active
-        HANDOFF_TTL_SECONDS = 24 * 60 * 60  # 24h
         if current_state in (ConversationState.HUMAN_ATTENDANT_ACTIVE, ConversationState.HUMAN_HANDOFF):
             # Allow "Retomar atendimento" button to reactivate bot from HUMAN_HANDOFF
             if current_state == ConversationState.HUMAN_HANDOFF and incoming.button_id == "resume_bot":
@@ -431,7 +430,7 @@ class ConversationEngine:
                     is_active = now < session.get("attendant_active_until", 0)
                 else:
                     handoff_at = session.get("human_handoff_requested_at", 0)
-                    is_active = now < (handoff_at + HANDOFF_TTL_SECONDS)
+                    is_active = now < (handoff_at + TTL_DO_ATENDIMENTO)
 
                 if is_active:
                     logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone} state={current_state}")
