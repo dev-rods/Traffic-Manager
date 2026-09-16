@@ -21,8 +21,13 @@ PAUSA_ATENDENTE = "ATENDENTE"          # alguém da clínica respondeu
 PAUSA_CONTATO_MANUAL = "CONTATO_MANUAL"  # marcaram "Já iniciada" no painel
 PAUSA_CHAT_ANTERIOR = "CHAT_ANTERIOR"    # já havia conversa antes de nós
 PAUSA_HANDOFF = "HANDOFF"                # o próprio bot pediu ajuda humana
+PAUSA_INSTABILIDADE = "INSTABILIDADE"    # o sistema falhou; ninguém decidiu nada
 
 CAMPO_DE_PAUSA = "bot_pausado_por"
+
+# Quanto tempo uma conversa entregue a uma pessoa fica com ela. Decisão do
+# André em 06/09/2026.
+TTL_DO_ATENDIMENTO = 24 * 60 * 60
 
 # As que NAO vencem por tempo. Elas nao descrevem um atendimento em curso, e sim
 # de quem e a conversa - e isso nao muda no dia seguinte.
@@ -95,3 +100,37 @@ def should_bot_reply(clinic: Optional[Dict], session: Optional[Dict], phone: str
     # OFF e qualquer valor inesperado falham fechado: só chegariam aqui por
     # escrita manual fora do CHECK da coluna.
     return False
+
+
+def entrega_por_instabilidade(session: Optional[Dict], agora: Optional[int] = None) -> Dict:
+    """Cala o bot e passa a conversa para uma pessoa, porque o sistema falhou.
+
+    Em 14 e 15/09/2026, com a conta da Anthropic sem saldo, o bot respondeu
+    "Desculpe, estou com dificuldades no momento. Tente novamente em instantes."
+    a quem escreveu. É a pior resposta possível: não ajuda a paciente, expõe que
+    o problema é nosso, e ainda a convida a tentar de novo - contra um sistema
+    que vai falhar igual. Numa das conversas, a atendente respondeu à mão duas
+    horas depois; nas outras, ninguém respondeu.
+
+    Regra do André, 15/09/2026: mensagem de instabilidade NUNCA chega ao
+    cliente. O bot cala, e a conversa vira uma pessoa esperando resposta - que
+    é exatamente o que a clínica já sabe tratar.
+
+    Calar sem pausar seria pior do que a mensagem ruim: a paciente ficaria sem
+    resposta e ninguém saberia. A pausa é o que põe a conversa na frente de um
+    atendente, com o mesmo prazo e o mesmo "Retomar bot" de qualquer
+    atendimento humano.
+
+    O motivo é próprio, e não HANDOFF, porque as duas coisas não são a mesma:
+    HANDOFF é o bot decidindo que precisa de ajuda, INSTABILIDADE é ele não ter
+    conseguido decidir nada. Só separadas dá para medir quanto de transferência
+    é falha nossa.
+    """
+    session = session if session is not None else {}
+    agora = int(agora if agora is not None else time.time())
+
+    session["state"] = "HUMAN_HANDOFF"
+    session["human_handoff_requested_at"] = agora
+    session["attendant_active_until"] = agora + TTL_DO_ATENDIMENTO
+    session[CAMPO_DE_PAUSA] = PAUSA_INSTABILIDADE
+    return session
