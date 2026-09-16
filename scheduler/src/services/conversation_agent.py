@@ -30,6 +30,8 @@ from src.services.menor_de_idade import precisa_avisar as precisa_avisar_menor
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.preco_minimo import preco_minimo_por_area
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
+from src.services.recusa_repetida import CAMPO as CAMPO_DE_RECUSAS
+from src.services.recusa_repetida import e_laco as recusa_em_laco
 from src.services.roteador import exige_consulta, intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
 
@@ -354,6 +356,11 @@ class ConversationAgent:
         ja_refez = False
         ja_refez_cadastro = False
         em_campanha = campanha_viva(session)
+        # O contador do quebra-laço atravessa turnos: cada pergunta da trava é
+        # uma mensagem nova, e um contador de uma rodada só veria a primeira
+        # recusa. Ver recusa_repetida.
+        recusas_da_conversa = dict(session.get(CAMPO_DE_RECUSAS) or {})
+        laco_de_recusa = False
         efeito_cometido = None
         efeito_gravado = {}
         consumo_da_mensagem = {}
@@ -474,6 +481,12 @@ class ConversationAgent:
                     if tool_use["name"] == "request_human_handoff" and result.get("handoff_requested"):
                         handoff_requested = True
 
+                    # Trava que recusa o mesmo duas vezes não está protegendo,
+                    # está presa: a resposta da paciente não destrava, e
+                    # perguntar de novo é pedir que ela conserte um bug nosso.
+                    if recusa_em_laco(recusas_da_conversa, result, phone):
+                        laco_de_recusa = True
+
                     if tool_use["name"] in TOOLS_COM_EFEITO and not result.get("error"):
                         efeito_cometido = tool_use["name"]
                         # A data e o id do que foi gravado: quem decide sobre o
@@ -491,6 +504,13 @@ class ConversationAgent:
                 # Append assistant response + tool results for next iteration
                 history.append({"role": "assistant", "content": content_blocks})
                 history.append({"role": "user", "content": tool_results})
+
+                # Os dois append acima vêm antes do break de propósito: o
+                # tool_result precisa fechar o tool_use, senão o histórico
+                # salvo fica inválido e a próxima mensagem da conversa morre
+                # num 400 da API.
+                if laco_de_recusa:
+                    break
 
         except AnthropicError as e:
             logger.error(f"[ConversationAgent] Anthropic API error for {phone}: {e}")
@@ -538,6 +558,23 @@ class ConversationAgent:
         # Só data e horário derrubam a mensagem. Preço, duração e status
         # continuam apenas registrados: erram para o lado do constrangimento,
         # não o da paciente que vem num dia que não existe.
+        # A trava recusou a mesma coisa duas vezes. A paciente já respondeu o que
+        # foi perguntado, e responder de novo não vai mudar nada: quem não
+        # destrava é o nosso catálogo ou a nossa regra. Entregar a conversa aqui
+        # custa uma atendente; insistir custou, em 16/09/2026, uma hora e meia
+        # da paciente e um pedido de desculpas da clínica. Ver recusa_repetida.
+        if laco_de_recusa:
+            final_text = (
+                "Deixa eu confirmar essas áreas certinho com uma especialista "
+                "para não te passar nada errado. Já te falo 😊"
+            )
+            pending_buttons = None
+            handoff_requested = True
+            session["state"] = "HUMAN_HANDOFF"
+            session["human_handoff_requested_at"] = int(time.time())
+            session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
+            session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+
         # Ultima rede do pedido de cadastro. So chega aqui quem ja levou um PARE
         # explicito e insistiu. Rarissimo por construcao - o roteiro nem esta
         # mais no prompt - mas pedir CPF a uma paciente cadastrada e o erro que
@@ -688,6 +725,7 @@ class ConversationAgent:
         # meio: um agendamento existe e ela precisa saber. Se nao gravou, a
         # resposta pode ser descartada em favor da rajada completa.
         session["efeito_na_ultima_rodada"] = bool(efeito_cometido)
+        session[CAMPO_DE_RECUSAS] = recusas_da_conversa
         self._save_session(clinic_id, phone, session)
 
         if chamadas_ao_modelo:

@@ -24,6 +24,31 @@ Isso cobre os dois caminhos e força o terceiro:
 Não julga se a resposta foi "sim" ou "não" - isso é interpretação, e é
 justamente o que não se pode terceirizar para quem errou. A trava garante o
 mínimo verificável: ninguém é agendado numa área que nunca foi conversada.
+
+16/09/2026 - a trava recusou uma área que a paciente nomeou certo
+------------------------------------------------------------------
+Ela pediu "Virilha completa + Ânus". A área chama-se "Virilha Comp. + ânus" no
+cadastro, e a comparação era com a string INTEIRA do nome: "virilha comp anus"
+não é subsequência de "virilha completa anus", porque depois de "comp" vem
+"leta". A área era inalcançável - nenhuma frase humana a liberaria, nunca.
+
+O bot perguntou cinco vezes, ela respondeu certo cinco vezes, e a conversa
+terminou uma hora e meia depois com o modelo pedindo uma atendente, que teve de
+pedir desculpa por um defeito nosso.
+
+Duas lições, e a segunda é a que dói:
+
+  - Comparar com o nome do cadastro é comparar com uma string que uma atendente
+    digitou num formulário. Ela abrevia, usa barra, põe ponto. Quem tem de ser
+    entendida é a paciente, então o casamento é por PALAVRAS da área, não pela
+    string. Ver `_aparece`.
+
+  - Uma trava que recusa o mesmo duas vezes não está protegendo, está presa, e
+    insistir cobra o preço da paciente. Ver [recusa_repetida].
+
+E o defeito era invisível: nada quebrou, nada logou ERROR, a trava funcionou
+exatamente como escrita. O que faltava era conferi-la contra o catálogo REAL -
+que é o que [tests/unit/test_catalogo_real_e_alcancavel] passou a fazer.
 """
 import re
 import unicodedata
@@ -39,17 +64,77 @@ def _normaliza(texto: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", sem_acento.lower()).strip()
 
 
-def _aparece(nome: str, texto: str) -> bool:
-    """O nome da área aparece no texto?
+# Palavras que ligam, não identificam. Exigi-las barraria quem escreveu
+# "costas total E ombros" onde o cadastro diz "+".
+CONECTORES = frozenset({
+    "e", "ou", "de", "da", "do", "das", "dos", "com", "a", "o", "as", "os",
+})
 
-    Compara por palavras inteiras para 'Axilas' não casar dentro de outra
-    palavra, e aceita o nome inteiro em sequência - 'Costas total + ombros'
-    vira 'costas total ombros'.
+
+def _sem_glosa(nome: str) -> str:
+    """Tira o parêntese explicativo: 'Glabela (entre as sobrancelhas)' é 'Glabela'.
+
+    A glosa existe para a atendente entender o cadastro, não para a paciente
+    repetir. Exigi-la tornaria a área inalcançável.
     """
-    alvo = _normaliza(nome)
-    if not alvo:
+    return re.sub(r"\([^)]*\)", " ", nome or "")
+
+
+def _tokens(trecho: str) -> List[Tuple[str, bool]]:
+    """As palavras que identificam a área, cada uma com a marca de abreviação.
+
+    Abreviada é a palavra que vinha seguida de ponto no cadastro - o 'Comp.' de
+    'Virilha Comp. + ânus'. Só essas casam por começo de palavra, e é por isso
+    que 'Lombar' continua não casando dentro de 'lombardia': 'Lombar' não é
+    abreviação de nada, o cadastro não põe ponto nela.
+    """
+    saida = []
+    for palavra, ponto in re.findall(r"([^\W_]+)(\.?)", trecho, flags=re.UNICODE):
+        plano = _normaliza(palavra)
+        if not plano or plano in CONECTORES:
+            continue
+        saida.append((plano, bool(ponto)))
+    return saida
+
+
+def _alternativas(nome: str) -> List[List[Tuple[str, bool]]]:
+    """Os jeitos de nomear a área. 'Perianal/ânus' aceita qualquer um dos dois.
+
+    A barra separa sinônimos no cadastro ('Mento/Queixo'), mas também escreve
+    fração ('1/2 Braço'). Por isso só separa quando os dois lados são palavra.
+    """
+    partes = re.split(
+        r"(?<=[^\W\d_])\s*/\s*(?=[^\W\d_])|\s+ou\s+",
+        _sem_glosa(nome),
+        flags=re.UNICODE,
+    )
+    return [t for t in (_tokens(p) for p in partes) if t]
+
+
+def _aparece(nome: str, texto: str) -> bool:
+    """A área foi nomeada neste texto?
+
+    Casa por palavras, não pela string inteira do cadastro. Até 16/09/2026 era
+    pela string inteira, e o resultado foi o defeito descrito no cabeçalho:
+    'Virilha Comp. + ânus' ficou inalcançável, porque ninguém escreve 'Comp.'
+    no WhatsApp. A paciente escreveu 'Virilha completa + Ânus', a tool recusou
+    cinco vezes seguidas, e a conversa caiu para uma atendente que teve de pedir
+    desculpa por um defeito nosso.
+
+    Exige TODAS as palavras da área. Por isso 'virilha completa' sozinho NÃO
+    libera 'Virilha Comp. + ânus' - falta o 'ânus'. Frouxo o bastante para a
+    paciente ser entendida, apertado o bastante para não liberar a área vizinha.
+    """
+    palavras = re.findall(r"[a-z0-9]+", texto or "")
+    if not palavras:
         return False
-    return re.search(rf"(?<![a-z0-9]){re.escape(alvo)}(?![a-z0-9])", texto) is not None
+    for alternativa in _alternativas(nome):
+        if all(
+            any(p.startswith(alvo) if abreviado else p == alvo for p in palavras)
+            for alvo, abreviado in alternativa
+        ):
+            return True
+    return False
 
 
 def areas_conversadas(turnos: Sequence[Dict], areas_da_clinica: Iterable[Dict]) -> set:

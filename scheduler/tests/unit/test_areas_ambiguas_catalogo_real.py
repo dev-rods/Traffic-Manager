@@ -12,17 +12,7 @@ import unittest
 
 from src.services.areas_ambiguas import pendencias
 
-CATALOGO = [
-    "1/2 Braço", "1/2 Coxa", "1/2 Glúteo", "1/2 Perna", "1/2 Virilha", "Abdômen",
-    "Aréola", "Axilas", "Barba Comp. + Pescoço", "Barba contorno", "Braço Completo",
-    "Buço", "Costas total + ombros", "Costeleta", "Coxas",
-    "Glabela (entre as sobrancelhas)", "Glúteo", "Linha alba", "Lombar",
-    "Mão ou Pé + Dedos", "Mento/Queixo", "Nariz", "Nuca", "Ombros", "Orelhas",
-    "Peitoral", "Peitoral + abdômen", "Perianal/ânus", "Perna Completa", "Pescoço",
-    "Rosto Completo", "Virilha Cavada", "Virilha Comp. + ânus", "Virilha Completa",
-    "Virilha Simples",
-]
-AREAS = [{"id": n, "name": n} for n in CATALOGO]
+from tests.unit.catalogo_real import AREAS, CATALOGO
 
 # Sem nada conversado: o que exige pergunta antes de seguir.
 ESPERADO = {
@@ -45,7 +35,8 @@ class TestCatalogoReal(unittest.TestCase):
     def test_as_areas_que_ja_dizem_tudo_passam_direto(self):
         """'Virilha Comp. + ânus', 'Perianal/ânus' e 'Linha alba' não são ambíguas:
         o nome que ela escolheu já diz o que ela quer."""
-        for nome in ("Virilha Comp. + ânus", "Perianal/ânus", "Linha alba"):
+        for nome in ("Virilha Comp. + ânus", "Virilha Completa + ânus",
+                     "Perianal/ânus", "Linha alba"):
             with self.subTest(area=nome):
                 self.assertEqual(
                     pendencias([{"service_id": "s1", "area_id": nome}], AREAS, []), []
