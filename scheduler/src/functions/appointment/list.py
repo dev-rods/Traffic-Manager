@@ -53,6 +53,7 @@ def handler(event, context):
                 a.is_first_visit,
                 a.discount_pct, a.discount_reason, a.original_price_cents, a.final_price_cents,
                 a.full_name, a.total_duration_minutes as duration_minutes,
+                a.manual_duration_minutes,
                 p.name as patient_name, p.phone as patient_phone,
                 s.name as service_name,
                 pr.name as professional_name,

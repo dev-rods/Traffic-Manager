@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { useCreateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
 import { calculaDuracao } from '@/lib/duracao'
+import { DuracaoField } from './DuracaoField'
 import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { usePatients, useCreatePatient } from '@/hooks/usePatients'
@@ -41,6 +42,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     services?.length === 1 ? services[0].id : ''
   )
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([])
+  const [manualDuration, setManualDuration] = useState<number | null>(null)
   const [discountMode, setDiscountMode] = useState<'none' | 'partnership' | 'custom'>('none')
   const [customDiscountPct, setCustomDiscountPct] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -90,11 +92,15 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   const totalDuration =
     somaDasAreas === undefined ? undefined : calculaDuracao(somaDasAreas, durationRules)
 
+  // A duração que a sessão vai de fato ocupar. Os horários vêm dela, não da
+  // calculada: senão a tela oferece um horário em que a sessão não cabe.
+  const duracaoEfetiva = manualDuration ?? totalDuration
+
   // Fetch available slots when date + service are set
   const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(
     date || undefined,
     serviceId || undefined,
-    totalDuration,
+    duracaoEfetiva,
   )
   const slots = slotsData?.slots ?? []
 
@@ -102,11 +108,22 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   if (serviceId !== prevServiceId) {
     setPrevServiceId(serviceId)
     setSelectedAreaIds([])
+    // Trocar de serviço zera as áreas, e a duração fixada foi decidida para
+    // elas. Mesma razão do descarte na edição.
+    setManualDuration(null)
+  }
+
+  // Trocar as áreas também solta a duração fixada.
+  const areasKey = [...selectedAreaIds].sort().join(',')
+  const [prevAreasKey, setPrevAreasKey] = useState(areasKey)
+  if (areasKey !== prevAreasKey) {
+    setPrevAreasKey(areasKey)
+    setManualDuration(null)
   }
 
   // Mudou data, serviço ou áreas, os horários disponíveis mudam junto: manter a
   // hora escolhida deixaria selecionado um horário que pode não existir mais.
-  const chaveDosHorarios = `${date}|${serviceId}|${totalDuration ?? ''}`
+  const chaveDosHorarios = `${date}|${serviceId}|${duracaoEfetiva ?? ''}`
   const [prevChaveDosHorarios, setPrevChaveDosHorarios] = useState(chaveDosHorarios)
   if (chaveDosHorarios !== prevChaveDosHorarios) {
     setPrevChaveDosHorarios(chaveDosHorarios)
@@ -219,6 +236,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         // Sempre enviado, inclusive `false`: omitir devolveria a decisao ao
         // backend, que e exatamente o que se reverteu.
         isFirstVisit: primeiraVisita,
+        ...(manualDuration !== null ? { manualDurationMinutes: manualDuration } : {}),
         ...(discountMode === 'partnership'
           ? { discountPct: 100, discountReason: 'partnership' }
           : discountMode === 'custom' && customDiscountPct
@@ -433,6 +451,13 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         <PrimeiraVisitaField checked={primeiraVisita} onChange={setPrimeiraVisita} />
 
         <ObservacaoField value={notes} onChange={setNotes} />
+
+        {/* Antes do horário de propósito: a duração decide quais horários cabem. */}
+        <DuracaoField
+          calculada={totalDuration}
+          manual={manualDuration}
+          onChange={setManualDuration}
+        />
 
         <TimeField
           value={time}

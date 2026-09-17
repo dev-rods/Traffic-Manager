@@ -136,6 +136,7 @@ SQL_STATEMENTS = [
         status VARCHAR(20) DEFAULT 'CONFIRMED',
         notes TEXT,
         full_name VARCHAR(255),
+        manual_duration_minutes INTEGER,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -221,6 +222,18 @@ SQL_STATEMENTS = [
 
     # Add total_duration_minutes to appointments
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER",
+
+    # A duracao que uma PESSOA fixou para ESTE agendamento. NULL = sem override,
+    # que e o comportamento de sempre.
+    #
+    # Separada de total_duration_minutes de proposito: aquela guarda a duracao
+    # que vale (a efetiva), esta guarda que alguem decidiu. Poder comparar as
+    # duas e o que permite mostrar "a regra calcula 30, a recepcao marcou 50" e
+    # o que permite voltar atras. Ver src/services/duracao_manual.py.
+    #
+    # Sem CHECK de faixa aqui: a faixa vive em duracao_manual.py, e escreve-la
+    # tambem no schema criaria duas fontes que divergem quando uma muda.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS manual_duration_minutes INTEGER",
 
     # Add rule_date column to availability_rules (fixed-date rules)
     "ALTER TABLE scheduler.availability_rules ALTER COLUMN day_of_week DROP NOT NULL",

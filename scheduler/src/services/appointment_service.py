@@ -9,6 +9,8 @@ from src.services.desconto_personalizado import do_paciente as desconto_do_pacie
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
+from src.services.duracao_manual import efetiva as duracao_efetiva
+from src.services.duracao_manual import valida as valida_duracao_manual
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ class AppointmentService:
         professional_id: Optional[str] = None,
         service_ids: Optional[List[str]] = None,
         total_duration_minutes: Optional[int] = None,
+        manual_duration_minutes: Optional[int] = None,
         service_area_pairs: Optional[List[Dict[str, str]]] = None,
         discount_pct: int = 0,
         discount_reason: Optional[str] = None,
@@ -96,6 +99,19 @@ class AppointmentService:
                 f"[Duracao] {clinic_id}: ignorando total_duration_minutes="
                 f"{total_duration_minutes} do chamador; calculado={duration_minutes}"
             )
+
+        # A duracao que uma PESSOA fixou vale sobre o calculo - e so ela.
+        # `total_duration_minutes` acima continua valendo zero: quem passa aquele
+        # campo e o bot (ai_tools e conversation_engine), e foi ele que pediu
+        # horario para uma sessao de 4 minutos. Sao dois campos com significados
+        # diferentes de proposito. Ver duracao_manual.
+        manual = valida_duracao_manual(manual_duration_minutes)
+        if manual:
+            logger.info(
+                f"[Duracao] {clinic_id}: duracao manual de {manual}min "
+                f"(calculado={duration_minutes})"
+            )
+        duration_minutes = duracao_efetiva(duration_minutes, manual)
 
         # 2a-bis. Desconto combinado com a paciente.
         #
@@ -177,14 +193,14 @@ class AppointmentService:
             INSERT INTO scheduler.appointments (
                 clinic_id, patient_id, professional_id, service_id,
                 appointment_date, start_time, end_time,
-                total_duration_minutes,
+                total_duration_minutes, manual_duration_minutes,
                 discount_pct, discount_reason, original_price_cents, final_price_cents,
                 full_name, notes,
                 status, created_at, updated_at, version
             ) VALUES (
                 %s, %s::uuid, %s::uuid, %s::uuid,
                 %s, %s::time, %s::time,
-                %s,
+                %s, %s,
                 %s, %s, %s, %s,
                 %s, %s,
                 'CONFIRMED', NOW(), NOW(), 1
@@ -193,7 +209,7 @@ class AppointmentService:
             """,
             (clinic_id, patient_id, prof_id_param, primary_service_id,
              date, time, end_time,
-             duration_minutes,
+             duration_minutes, manual,
              discount_pct, discount_reason, original_price_cents, final_price_cents,
              full_name, (notes or None)),
         )
@@ -355,11 +371,21 @@ class AppointmentService:
                     duration_minutes = services[0]["duration_minutes"] if services else 60
 
         # 3. Calculate new end_time
-        # Passa pelo cálculo mesmo quando o valor veio gravado: agendamento
-        # criado sob a regra antiga (faixas por quantidade de áreas) é
-        # normalizado aqui em vez de arrastar a duração velha para a agenda nova.
-        duration_minutes = duracao_da_sessao(
-            duration_minutes, get_duration_rules(self.db, clinic_id))
+        #
+        # A normalização existe para agendamento criado sob a regra antiga
+        # (faixas por quantidade de áreas): ele é normalizado aqui em vez de
+        # arrastar a duração velha para a agenda nova. Isso continua valendo.
+        #
+        # Mas duração que uma PESSOA fixou não é regra velha. Até 16/09/2026
+        # esta linha rodava sobre ela também, e um override de 75min virava 50
+        # no teto assim que alguém remarcasse - sem ninguém pedir e sem nada
+        # avisar. Ver duracao_manual.
+        manual = appointment.get("manual_duration_minutes")
+        if manual:
+            duration_minutes = duracao_efetiva(duration_minutes, manual)
+        else:
+            duration_minutes = duracao_da_sessao(
+                duration_minutes, get_duration_rules(self.db, clinic_id))
         start_parts = new_time.split(":")
         start_hour, start_min = int(start_parts[0]), int(start_parts[1])
         total_minutes = start_hour * 60 + start_min + duration_minutes
@@ -389,10 +415,16 @@ class AppointmentService:
             """
             UPDATE scheduler.appointments
             SET appointment_date = %s, start_time = %s::time, end_time = %s::time,
+                total_duration_minutes = %s,
                 version = version + 1, updated_at = NOW()
             WHERE id = %s::uuid AND version = %s
             """,
-            (new_date, new_time, new_end_time, appointment_id, current_version),
+            # A duracao vai junto do end_time, SEMPRE - com e sem override.
+            # Ate 16/09/2026 o reschedule mudava o end_time e deixava a coluna
+            # com o valor velho: a agenda mostrava uma coisa e o banco guardava
+            # outra, e isso ja acontecia sem override nenhum.
+            (new_date, new_time, new_end_time, duration_minutes,
+             appointment_id, current_version),
         )
 
         if updated_rows == 0:
@@ -468,6 +500,20 @@ class AppointmentService:
 
         svc = services[0]
 
+        # Trocar as areas DESCARTA a duracao manual, por decisao do Andre em
+        # 16/09/2026: o override foi decidido para OUTRO conjunto de areas.
+        # Mudou a area, mudou a premissa - manter seria carregar 50 minutos
+        # escolhidos para quatro areas numa sessao que agora tem uma.
+        #
+        # Quem chamou precisa SABER que descartou, senao o valor some da tela e
+        # a atendente nao entende por que. Ver o handler de update.
+        duracao_manual_descartada = bool(appointment.get("manual_duration_minutes"))
+        if duracao_manual_descartada:
+            logger.info(
+                f"[Duracao] {appointment_id}: duracao manual de "
+                f"{appointment['manual_duration_minutes']}min descartada - as areas mudaram"
+            )
+
         # 3. Calculate new duration and price
         discount_pct = appointment.get("discount_pct") or 0
         if service_area_pairs:
@@ -524,6 +570,7 @@ class AppointmentService:
             """
             UPDATE scheduler.appointments
             SET service_id = %s::uuid, end_time = %s::time, total_duration_minutes = %s,
+                manual_duration_minutes = NULL,
                 original_price_cents = %s, final_price_cents = %s,
                 version = version + 1, updated_at = NOW()
             WHERE id = %s::uuid AND version = %s
@@ -592,7 +639,122 @@ class AppointmentService:
             f"service={service_id} areas={len(service_area_pairs) if service_area_pairs else 0}"
         )
 
+        # A bandeira viaja junto do agendamento porque quem responde a atendente
+        # e o handler, e ele nao tem como saber o que havia antes do UPDATE.
+        updated_appointment = dict(updated_appointment)
+        updated_appointment["manual_duration_descartada"] = duracao_manual_descartada
+
         return updated_appointment
+
+    def set_manual_duration(
+        self,
+        appointment_id: str,
+        minutos: Optional[int],
+        verificar_conflito: bool = True,
+    ) -> Dict[str, Any]:
+        """Fixa (ou solta) a duração de UM agendamento.
+
+        `minutos=None` solta: a duração volta a ser CALCULADA a partir das áreas
+        gravadas, não ao último valor que estava na coluna. Voltar ao cálculo tem
+        de voltar ao cálculo, senão "soltar" só congela o override com outro nome.
+
+        `verificar_conflito=False` existe para o caso de o mesmo request também
+        remarcar. A checagem aqui roda contra a data ATUAL, que o reschedule vai
+        trocar em seguida - conferir duas vezes acusaria conflito numa data que a
+        paciente nem vai ocupar. Quem confere, nesse caso, é o reschedule, já com
+        a data final. Ver o handler de update.
+        """
+        manual = valida_duracao_manual(minutos)
+
+        appointments = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
+            (appointment_id,),
+        )
+        if not appointments:
+            raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou não confirmado")
+
+        appointment = appointments[0]
+        current_version = appointment.get("version", 1)
+        clinic_id = appointment["clinic_id"]
+        appt_date = str(appointment["appointment_date"])
+        start_time = str(appointment["start_time"])[:5]
+
+        if manual:
+            duration_minutes = manual
+        else:
+            # Recalcula das áreas gravadas, passando pela regra da clínica -
+            # exatamente o que a criação faria hoje para este agendamento.
+            areas = self.db.execute_query(
+                """SELECT service_id, area_id FROM scheduler.appointment_service_areas
+                   WHERE appointment_id = %s::uuid""",
+                (appointment_id,),
+            ) or []
+            pares = [{"service_id": str(a["service_id"]), "area_id": str(a["area_id"])}
+                     for a in areas]
+            if pares:
+                duration_minutes = calcula_duracao(self.db, clinic_id, pares)
+            else:
+                # Serviço sem área detalhada: a duração do próprio serviço,
+                # pelos mesmos piso, teto e passo.
+                svc = self.db.execute_query(
+                    "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid",
+                    (str(appointment["service_id"]),),
+                )
+                duration_minutes = duracao_da_sessao(
+                    svc[0]["duration_minutes"] if svc else 0,
+                    get_duration_rules(self.db, clinic_id),
+                )
+
+        start_hour, start_min = (int(p) for p in start_time.split(":")[:2])
+        total_minutes = start_hour * 60 + start_min + duration_minutes
+        new_end_time = f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+        if verificar_conflito:
+            conflicts = self.db.execute_query(
+                """
+                SELECT id FROM scheduler.appointments
+                WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
+                AND id != %s::uuid
+                AND (
+                    (start_time < %s::time AND end_time > %s::time)
+                    OR (start_time < %s::time AND end_time > %s::time)
+                    OR (start_time >= %s::time AND end_time <= %s::time)
+                )
+                """,
+                (clinic_id, appt_date, appointment_id, new_end_time, start_time,
+                 new_end_time, start_time, start_time, new_end_time),
+            )
+            if conflicts:
+                raise ConflictError(
+                    f"Conflito de horário com a duração de {duration_minutes} minutos: "
+                    f"{appt_date} {start_time}-{new_end_time}"
+                )
+
+        updated_rows = self.db.execute_write(
+            """
+            UPDATE scheduler.appointments
+            SET manual_duration_minutes = %s, total_duration_minutes = %s,
+                end_time = %s::time,
+                version = version + 1, updated_at = NOW()
+            WHERE id = %s::uuid AND version = %s
+            """,
+            (manual, duration_minutes, new_end_time, appointment_id, current_version),
+        )
+        if updated_rows == 0:
+            raise OptimisticLockError("Agendamento foi modificado por outro processo")
+
+        logger.info(
+            f"[Duracao] {appointment_id}: "
+            + (f"duracao manual de {manual}min" if manual
+               else f"override solto, voltou ao calculado ({duration_minutes}min)")
+            + f" | {start_time}-{new_end_time}"
+        )
+
+        result = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid",
+            (appointment_id,),
+        )
+        return result[0] if result else appointment
 
     def cancel_appointment(self, appointment_id: str) -> Dict[str, Any]:
         result = self.db.execute_write_returning(
