@@ -164,6 +164,8 @@ export interface Appointment {
   areas: string | null       // comma-separated area names
   area_ids: string | null    // comma-separated area UUIDs
   duration_minutes: number | null
+  /** Duracao que uma pessoa fixou para ESTE agendamento. null = segue o calculo. */
+  manual_duration_minutes: number | null
   discount_pct: number
   discount_reason: DiscountReason
   original_price_cents: number | null
@@ -200,6 +202,8 @@ export interface CreateAppointmentPayload {
    * 09/09/2026. Pelo painel quem decide e a recepcao.
    */
   isFirstVisit: boolean
+  /** Fixa a duracao DESTE agendamento. Omitir = calculada pelas areas. */
+  manualDurationMinutes?: number | null
 }
 
 export interface UpdateAppointmentPayload {
@@ -213,6 +217,11 @@ export interface UpdateAppointmentPayload {
   serviceAreaPairs?: { serviceId: string; areaId: string }[]
   discountPct?: number
   discountReason?: string | null
+  /**
+   * Fixa a duracao DESTE agendamento. `null` volta ao calculado; omitir nao mexe.
+   * A distincao importa: e `null` que solta o override.
+   */
+  manualDurationMinutes?: number | null
 }
 
 // ── Availability Rule ────────────────────────────────────────

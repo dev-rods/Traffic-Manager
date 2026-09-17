@@ -84,6 +84,18 @@ class TestNaToolDoBot(unittest.TestCase):
             self.assertIn(campo, r)
 
 
+def colunas_do_insert(sql):
+    """Os nomes das colunas do INSERT, na ordem em que aparecem.
+
+    Lê o SQL em vez de contar posições. Era `params[8]`, e em 16/09/2026 uma
+    coluna nova (`manual_duration_minutes`) entrou antes do desconto e derrubou
+    quatro testes que não tinham nada a ver com duração. O teste passa a falhar
+    só quando o COMPORTAMENTO muda, que é para isso que ele existe.
+    """
+    dentro = sql.split("scheduler.appointments (", 1)[1].split(")", 1)[0]
+    return [c.strip() for c in dentro.split(",") if c.strip()]
+
+
 class DbDoAgendamento:
     def __init__(self, personalizado):
         self.personalizado = personalizado
@@ -111,8 +123,14 @@ class DbDoAgendamento:
 
     def execute_write_returning(self, sql, params=None):
         if "INSERT INTO scheduler.appointments" in sql:
-            self.gravado = {"pct": params[8], "razao": params[9],
-                            "original": params[10], "final": params[11]}
+            colunas = colunas_do_insert(sql)
+            gravado = dict(zip(colunas, params))
+            self.gravado = {
+                "pct": gravado.get("discount_pct"),
+                "razao": gravado.get("discount_reason"),
+                "original": gravado.get("original_price_cents"),
+                "final": gravado.get("final_price_cents"),
+            }
         return {"id": "ap1"}
 
 

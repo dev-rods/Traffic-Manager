@@ -6,6 +6,7 @@ from src.utils.http import parse_body, http_response, require_api_key, extract_p
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, NotFoundError, OptimisticLockError, ConflictError
+from src.services.duracao_manual import DuracaoInvalida
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -32,7 +33,10 @@ def handler(event, context):
         "date": "2026-03-15",
         "time": "14:00",
         "serviceId": "uuid",
-        "serviceAreaPairs": [{"serviceId":"..","areaId":".."}]
+        "serviceAreaPairs": [{"serviceId":"..","areaId":".."}],
+        "manualDurationMinutes": 75      // fixa a duracao DESTE agendamento.
+                                         // null volta ao calculado; ausente
+                                         // nao mexe.
     }
 
     Supports combined operations in a single request (e.g. reschedule + change service + update notes).
@@ -60,6 +64,12 @@ def handler(event, context):
         new_discount_pct = body.get("discountPct")
         new_discount_reason = body.get("discountReason")
         nova_primeira_visita = body.get("isFirstVisit")
+        # `in body` e nao `.get()`: o payload manda `null` para SOLTAR a duracao
+        # manual, e `.get()` devolve None tanto para "null" quanto para "nao
+        # veio". Tratar os dois igual tiraria o unico jeito de voltar ao
+        # calculado, e o defeito seria mudo - a atendente clica e nada acontece.
+        mexeu_na_duracao = "manualDurationMinutes" in body
+        nova_duracao_manual = body.get("manualDurationMinutes")
 
         service = AppointmentService(db)
 
@@ -76,15 +86,42 @@ def handler(event, context):
         changed = False
         messages = []
 
+        # A ORDEM DAS ETAPAS IMPORTA, e mudou em 16/09/2026.
+        #
+        #   1. serviço/áreas  descarta a duração manual (premissa mudou)
+        #   2. duração manual grava e recalcula o end_time
+        #   3. reschedule     move a sessão, JÁ com a duração certa
+        #   4. campos simples notes, status, desconto, primeira visita
+        #
+        # A duração não pode entrar em 4: o end_time já teria sido calculado em
+        # 3 com a duração antiga, e a sessão ocuparia a sala errada.
+
         # 1. Update service/areas first (changes duration → affects end_time calculation)
         if new_service_id:
-            service.update_appointment_services(
+            resultado_areas = service.update_appointment_services(
                 appointment_id, new_service_id, new_service_area_pairs
             )
             changed = True
             messages.append("serviço/áreas")
+            # A atendente precisa saber por que o valor que ela fixou sumiu.
+            if resultado_areas.get("manual_duration_descartada") and not mexeu_na_duracao:
+                messages.append("duração manual descartada (as áreas mudaram)")
 
-        # 2. Reschedule date/time (recalculates end_time with current duration)
+        # 2. Duração manual, ANTES do reschedule.
+        if mexeu_na_duracao:
+            # O conflito é conferido pelo reschedule quando ele vem a seguir:
+            # aqui a data ainda é a antiga, e conferir contra ela acusaria
+            # conflito num dia que a paciente nem vai ocupar.
+            service.set_manual_duration(
+                appointment_id, nova_duracao_manual,
+                verificar_conflito=not (new_date or new_time),
+            )
+            changed = True
+            messages.append(
+                "duração" if nova_duracao_manual else "duração (voltou ao cálculo)"
+            )
+
+        # 3. Reschedule date/time (recalculates end_time with current duration)
         if new_date or new_time:
             if not new_date or not new_time:
                 existing = db.execute_query(
@@ -102,7 +139,7 @@ def handler(event, context):
             changed = True
             messages.append("data/horário")
 
-        # 3. Update simple fields (notes, status, discount)
+        # 4. Update simple fields (notes, status, discount)
         updates = []
         params = []
 
@@ -167,6 +204,10 @@ def handler(event, context):
             "message": f"Agendamento atualizado ({', '.join(messages)})",
             "appointment": _serialize_row(final[0]),
         })
+
+    except DuracaoInvalida as e:
+        # Dedo errado no formulario e 400, nao 500.
+        return http_response(400, {"status": "ERROR", "message": str(e)})
 
     except NotFoundError as e:
         return http_response(404, {"status": "ERROR", "message": str(e)})

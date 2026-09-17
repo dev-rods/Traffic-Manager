@@ -109,6 +109,7 @@ def handler(event, context):
                 a.status,
                 a.full_name as patient_name,
                 a.total_duration_minutes as duration_minutes,
+                a.manual_duration_minutes,
                 a.discount_pct,
                 a.discount_reason,
                 a.original_price_cents,

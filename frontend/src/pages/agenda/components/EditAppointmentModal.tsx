@@ -8,6 +8,7 @@ import { calculaDuracao } from '@/lib/duracao'
 import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
+import { DuracaoField } from './DuracaoField'
 import { TimeField } from './TimeField'
 import { ObservacaoField } from './ObservacaoField'
 import { PrimeiraVisitaField } from './PrimeiraVisitaField'
@@ -33,6 +34,10 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const [serviceId, setServiceId] = useState(appointment?.service_id ?? '')
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>(initialAreaIds)
   const [prevServiceId, setPrevServiceId] = useState(serviceId)
+  const [manualDuration, setManualDuration] = useState<number | null>(
+    appointment?.manual_duration_minutes ?? null
+  )
+  const [duracaoDescartada, setDuracaoDescartada] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Discount state
@@ -62,12 +67,16 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   // Preview: o backend reaplica a mesma regra antes de devolver horários.
   const totalDuration =
     somaDasAreas === undefined ? undefined : calculaDuracao(somaDasAreas, durationRules)
+  // A duração que a sessão vai de fato ocupar. Os horários têm de ser buscados
+  // com ela, não com a calculada: senão a tela oferece um horário em que a
+  // sessão não cabe, e o conflito só aparece ao salvar.
+  const duracaoEfetiva = manualDuration ?? totalDuration
 
   // Fetch available slots
   const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(
     date || undefined,
     serviceId || undefined,
-    totalDuration,
+    duracaoEfetiva,
   )
   const slots = slotsData?.slots ?? []
 
@@ -88,12 +97,25 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   }
 
   // Clear selected time when date, service, or areas change (derived state pattern)
-  const [prevSlotKey, setPrevSlotKey] = useState(`${date}|${serviceId}|${totalDuration}`)
-  const slotKey = `${date}|${serviceId}|${totalDuration}`
+  const [prevSlotKey, setPrevSlotKey] = useState(`${date}|${serviceId}|${duracaoEfetiva}`)
+  const slotKey = `${date}|${serviceId}|${duracaoEfetiva}`
   if (slotKey !== prevSlotKey) {
     setPrevSlotKey(slotKey)
     if (date !== appointment?.appointment_date) {
       setTime('')
+    }
+  }
+
+  // Trocar as áreas DESCARTA a duração fixada: ela foi decidida para outro
+  // conjunto de áreas. O backend faz o mesmo em update_appointment_services, e
+  // a tela precisa concordar - senão ela promete 50 min e o servidor grava 30.
+  const areasKey = [...selectedAreaIds].sort().join(',')
+  const [prevAreasKey, setPrevAreasKey] = useState(areasKey)
+  if (areasKey !== prevAreasKey) {
+    setPrevAreasKey(areasKey)
+    if (manualDuration !== null) {
+      setManualDuration(null)
+      setDuracaoDescartada(true)
     }
   }
 
@@ -119,7 +141,9 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     return false
   })()
 
-  const hasChanges = dateChanged || timeChanged || primeiraChanged || notesChanged || serviceChanged || areasChanged || discountChanged
+  const manualChanged = manualDuration !== (a.manual_duration_minutes ?? null)
+
+  const hasChanges = dateChanged || timeChanged || primeiraChanged || notesChanged || serviceChanged || areasChanged || discountChanged || manualChanged
 
   const toggleArea = (areaId: string) => {
     setSelectedAreaIds((prev) =>
@@ -160,6 +184,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     try {
       const payload: UpdateAppointmentPayload = {}
 
+      // `null` explícito é o que SOLTA o override no backend; omitir não mexe.
+      if (manualChanged) payload.manualDurationMinutes = manualDuration
       if (dateChanged) payload.date = date
       if (timeChanged) payload.time = time
       if (notesChanged) payload.notes = notes
@@ -262,6 +288,17 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
             </div>
           </div>
         )}
+
+        {/* Antes do horário de propósito: a duração decide quais horários cabem. */}
+        <DuracaoField
+          calculada={totalDuration}
+          manual={manualDuration}
+          onChange={(v) => {
+            setManualDuration(v)
+            setDuracaoDescartada(false)
+          }}
+          avisoDeDescarte={duracaoDescartada}
+        />
 
         <TimeField
           value={time}

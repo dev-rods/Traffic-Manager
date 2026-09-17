@@ -5,6 +5,7 @@ from datetime import datetime, date, time
 from src.utils.http import parse_body, http_response, require_api_key
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
+from src.services.duracao_manual import DuracaoInvalida
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -35,7 +36,9 @@ def handler(event, context):
         "serviceAreaPairs": [            // optional, for services with areas
             {"serviceId": "uuid", "areaId": "uuid"}
         ],
-        "professionalId": "uuid"         // optional
+        "professionalId": "uuid",        // optional
+        "manualDurationMinutes": 75      // optional, fixa a duracao DESTE
+                                         // agendamento; vazio = calculada
     }
     """
     try:
@@ -107,6 +110,10 @@ def handler(event, context):
             # automatica so enxerga este banco, e a clinica atende desde antes
             # dele existir.
             is_first_visit=bool(body.get("isFirstVisit")),
+            # A duracao que a recepcao fixou para ESTE agendamento. Nao mexe na
+            # regra da clinica, e o bot nao chega aqui: nenhuma tool do agente
+            # expoe este campo. Ver duracao_manual.
+            manual_duration_minutes=body.get("manualDurationMinutes"),
         )
 
         appointment = _serialize_row(result)
@@ -116,6 +123,10 @@ def handler(event, context):
             "message": "Agendamento criado com sucesso",
             "appointment": appointment,
         })
+
+    except DuracaoInvalida as e:
+        # Dedo errado no formulario e 400, nao 500.
+        return http_response(400, {"status": "ERROR", "message": str(e)})
 
     except ConflictError as e:
         return http_response(409, {"status": "ERROR", "message": str(e)})
