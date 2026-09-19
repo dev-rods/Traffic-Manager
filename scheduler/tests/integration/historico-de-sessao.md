@@ -24,8 +24,18 @@ curl -s "${H[@]}" "$BASE/clinics/$CLINIC/laser-protocol" \
       print('ligacoes:', len(d['area_map']))"
 ```
 
-**Esperado:** 80 parâmetros, 3 métodos, 40 ligações (36 áreas, 4 compostas
-abrindo em duas).
+**Esperado:** 80 parâmetros e 3 métodos. As ligações variam por clínica, porque
+`area_map` é filtrado pelo catálogo dela — conferido em prod em 19/09/2026:
+
+| clínica | áreas ativas | ligações |
+|---|---|---|
+| Essência | 35 | 39 |
+| Nobre Laser | 35 | 39 |
+| Depilação Premium | 32 | 36 |
+
+A diferença entre áreas e ligações são as 4 compostas, que abrem em duas.
+`Pernas Completas` existe na fixture de teste (que é a união das clínicas) e não
+no catálogo da Essência.
 
 ---
 
