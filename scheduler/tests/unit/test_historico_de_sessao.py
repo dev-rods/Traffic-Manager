@@ -158,6 +158,22 @@ class TestValidacao(unittest.TestCase):
             valida_aplicacoes([{"area_name": "Axilas", "method": "SHR",
                                 "fluence_j": "muito"}])
 
+    def test_metodo_sem_sugestao_no_protocolo_e_aceito(self):
+        """O protocolo diz qual método COMEÇAR, não qual é permitido.
+
+        Axilas só tem SHR e HR no material. A profissional pode aplicar
+        Stacking nela e registrar - decisão do André em 19/09/2026, depois de a
+        tela ter transformado "sem sugestão" em "proibido".
+        """
+        limpa = valida_aplicacoes([{
+            "area_name": "Axilas", "protocol_area_key": "axilas",
+            "method": "SHR_STACKING", "fluence_j": 6, "stacks": 3, "passes": 2,
+        }])[0]
+
+        self.assertEqual(limpa["method"], "SHR_STACKING")
+        self.assertEqual(limpa["fluence_j"], 6)
+        self.assertEqual(limpa["stacks"], 3)
+
     def test_aplicacao_sem_metodo_e_valida(self):
         """Área fora do protocolo: ela escreve o que fez sem método."""
         limpa = valida_aplicacoes([{"area_name": "Área nova"}])[0]

@@ -150,6 +150,7 @@ Decisões acrescentadas depois da leitura dos protocolos (19/09/2026):
 | Pele bronzeada | **Marca por sessão**, não no cadastro: é estado que vai e volta |
 | Navegação | Documentos abre **direto no histórico**, com seletor de documento no topo |
 | Atalho pela Agenda | **Incluído**: `Registrar sessão` no popover do agendamento |
+| Escolha do método (19/09, pós-deploy) | **Os três, sempre, em qualquer área.** O protocolo sugere o inicial; não restringe. Nem o HR em pele bronzeada é bloqueado |
 
 ---
 

@@ -16,6 +16,16 @@ export const CAMPOS_POR_METODO: Record<MetodoLaser, readonly string[]> = {
   HR: ['fluence_j', 'energy_kj'],
 } as const
 
+/**
+ * Os três métodos, na ordem em que o material os apresenta.
+ *
+ * A profissional pode escolher QUALQUER um em QUALQUER área. O protocolo diz
+ * qual começar, não qual é permitido - decisão do André em 19/09/2026, depois
+ * de não conseguir escolher Stacking numa axila, que no material só tem SHR e
+ * HR. Área sem sugestão continua editável; ela informa o que usou.
+ */
+export const TODOS_OS_METODOS: MetodoLaser[] = ['SHR', 'SHR_STACKING', 'HR']
+
 export const ROTULO_DO_METODO: Record<MetodoLaser, string> = {
   SHR: 'SHR',
   SHR_STACKING: 'SHR Stacking',
@@ -65,7 +75,13 @@ export function sugestao(
   )
 }
 
-/** Os métodos que o protocolo tem para esta área, na ordem de CAMPOS_POR_METODO. */
+/**
+ * Os métodos para os quais o protocolo TEM sugestão nesta área.
+ *
+ * Não é a lista do que ela pode escolher - isso é TODOS_OS_METODOS. Serve para
+ * dois usos: pré-selecionar quando há exatamente um, e marcar na tela os que
+ * vão entrar sem parâmetro preenchido.
+ */
 export function metodosDaArea(
   parametros: ParametroDoProtocolo[],
   protocolAreaKey: string | null,
