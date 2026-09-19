@@ -8,6 +8,7 @@ import type {
 } from '@/types'
 import {
   ROTULO_DO_METODO,
+  TODOS_OS_METODOS,
   hrDesaconselhado,
   metodosDaArea,
   sugestao,
@@ -102,8 +103,11 @@ export function AplicacoesField({
       ) : (
         <ul className="space-y-3">
           {aplicacoes.map((ap, i) => {
-            const metodos = metodosDaArea(parametros, ap.protocol_area_key)
-            const semProtocolo = metodos.length === 0
+            // TODOS os métodos, sempre. O protocolo diz qual COMEÇAR, não
+            // qual é permitido: decisão do André em 19/09/2026, depois de não
+            // conseguir escolher Stacking numa axila (que tem SHR e HR no
+            // material). Quem decide conduta é quem aplica.
+            const comSugestao = metodosDaArea(parametros, ap.protocol_area_key)
             return (
               <li key={`${ap.area_name}-${i}`} className="rounded-lg border border-gray-200 p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -119,45 +123,47 @@ export function AplicacoesField({
                   </button>
                 </div>
 
-                {semProtocolo ? (
-                  <p className="mt-1.5 text-xs text-gray-400">
-                    Sem parâmetro sugerido — o protocolo não tem esta área. Anote
-                    o que usou nas observações.
-                  </p>
-                ) : (
-                  <div className="mt-2 flex flex-wrap items-end gap-4">
-                    <label className="flex flex-col gap-1">
-                      <span className="text-[11px] font-medium text-gray-500">Método</span>
-                      <select
-                        value={ap.method ?? ''}
-                        disabled={disabled}
-                        onChange={(e) =>
-                          trocaMetodo(i, (e.target.value || null) as MetodoLaser | null)
-                        }
-                        className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-                      >
-                        <option value="">Escolher…</option>
-                        {metodos.map((m) => (
-                          <option
-                            key={m}
-                            value={m}
-                            disabled={m === 'HR' && hrDesaconselhado(bronzeada)}
-                          >
-                            {ROTULO_DO_METODO[m]}
-                            {m === 'HR' && hrDesaconselhado(bronzeada)
-                              ? ' — não usar em pele bronzeada'
-                              : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <ParametrosDoMetodo
-                      aplicacao={ap}
-                      onChange={(campo, valor) => altera(i, { [campo]: valor })}
+                <div className="mt-2 flex flex-wrap items-end gap-4">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[11px] font-medium text-gray-500">Método</span>
+                    <select
+                      value={ap.method ?? ''}
                       disabled={disabled}
-                    />
-                  </div>
+                      onChange={(e) =>
+                        trocaMetodo(i, (e.target.value || null) as MetodoLaser | null)
+                      }
+                      className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                    >
+                      <option value="">Escolher…</option>
+                      {TODOS_OS_METODOS.map((m) => (
+                        // Nenhuma opção é `disabled`. O aviso da pele bronzeada
+                        // aparece no rótulo e em AvisosDoProtocolo, e para por
+                        // aí: software que impede conduta clínica é contornado
+                        // por fora, e aí a sessão acontece sem registro nenhum.
+                        <option key={m} value={m}>
+                          {ROTULO_DO_METODO[m]}
+                          {m === 'HR' && hrDesaconselhado(bronzeada)
+                            ? ' — não indicado em pele bronzeada'
+                            : !comSugestao.includes(m)
+                              ? ' — sem sugestão para esta área'
+                              : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <ParametrosDoMetodo
+                    aplicacao={ap}
+                    onChange={(campo, valor) => altera(i, { [campo]: valor })}
+                    disabled={disabled}
+                  />
+                </div>
+
+                {ap.method && !comSugestao.includes(ap.method) && (
+                  <p className="mt-1.5 text-xs text-gray-400">
+                    O protocolo não traz {ROTULO_DO_METODO[ap.method]} para esta
+                    área. Informe os parâmetros que você usou.
+                  </p>
                 )}
               </li>
             )

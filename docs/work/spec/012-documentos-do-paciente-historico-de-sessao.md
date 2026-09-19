@@ -317,9 +317,18 @@ usa.
 Uma linha por aplicação: área, método, parâmetros, remover. `+ Adicionar área`
 com combo do catálogo e texto livre.
 
-Sem sugestão para a área, a linha mostra `sem parâmetro sugerido` em vez de
-campo vazio mudo — a profissional precisa saber que o silêncio é do protocolo,
-não da tela.
+**Os três métodos estão sempre disponíveis, em qualquer área.** O protocolo diz
+qual COMEÇAR, não qual é permitido - corrigido em 19/09/2026, depois de o André
+não conseguir escolher Stacking numa axila (que no material só tem SHR e HR). O
+que não tem sugestão aparece marcado na lista, e escolhê-lo deixa os campos
+vazios para ela informar o que usou.
+
+Área que o protocolo não conhece **continua editável**, com método e parâmetros.
+Antes ela não mostrava campo nenhum, e a profissional simplesmente não conseguia
+registrar o que tinha feito.
+
+Nenhuma opção fica `disabled` - nem o HR em pele bronzeada. O aviso é o que o
+documento manda mostrar; impedir seria conduta, e conduta é de quem aplica.
 
 ### `frontend/src/pages/documentos/DocumentosPage.tsx` — **criar**
 
