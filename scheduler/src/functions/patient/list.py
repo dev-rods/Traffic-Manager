@@ -122,6 +122,7 @@ def handler(event, context):
                 p.birth_date,
                 p.email,
                 p.custom_discount_pct,
+                p.skin_type,
                 p.created_at,
                 p.updated_at,
                 p.last_message_at,

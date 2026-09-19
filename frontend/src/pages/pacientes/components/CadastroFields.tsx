@@ -3,10 +3,13 @@ import { Input } from '@/components/ui/Input'
 interface CadastroFieldsProps {
   /** `register` do react-hook-form do formulário que embute estes campos. */
   register: (
-    nome: 'cpf' | 'birth_date' | 'email' | 'custom_discount_pct',
+    nome: 'cpf' | 'birth_date' | 'email' | 'custom_discount_pct' | 'skin_type',
   ) => Record<string, unknown>
   errors: Partial<
-    Record<'cpf' | 'birth_date' | 'email' | 'custom_discount_pct', { message?: string }>
+    Record<
+      'cpf' | 'birth_date' | 'email' | 'custom_discount_pct' | 'skin_type',
+      { message?: string }
+    >
   >
 }
 
@@ -42,6 +45,29 @@ export function CadastroFields({ register, errors }: CadastroFieldsProps) {
         error={errors.email?.message}
         {...register('email')}
       />
+      <div>
+        <label
+          htmlFor="skin_type"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
+          Tipo de pele
+        </label>
+        <select
+          id="skin_type"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+          {...register('skin_type')}
+        >
+          <option value="">Não informado</option>
+          <option value="BRANCA">Pele branca ou clara</option>
+          <option value="NEGRA">Pele morena ou negra</option>
+        </select>
+        <p className="text-xs text-gray-500 mt-1">
+          Marcado pela profissional, presencialmente. Define qual protocolo de
+          laser sugere os parâmetros no histórico de sessão.{' '}
+          <strong>O bot nunca preenche nem usa este campo.</strong>
+        </p>
+      </div>
+
       <div>
         <Input
           label="Desconto personalizado (%)"

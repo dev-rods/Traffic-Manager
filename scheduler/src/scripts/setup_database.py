@@ -736,7 +736,190 @@ SQL_STATEMENTS = [
     # clinics.max_session_minutes era um segundo teto, aplicado so no engine
     # antigo e em desacordo com ceiling_minutes. O teto agora e um so.
     "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS max_session_minutes",
+
+    # -- Prontuario: historico por sessao -------------------------------------
+    #
+    # O tipo de pele decide qual dos dois protocolos alimenta a sugestao de
+    # parametro. Marcado SO pela profissional, no painel: o bot nunca escreve
+    # aqui e nenhuma tool dele expoe este campo. Ver protocolo_laser.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS skin_type VARCHAR(10)",
+    "ALTER TABLE scheduler.patients DROP CONSTRAINT IF EXISTS patients_skin_type_check",
+    """
+    ALTER TABLE scheduler.patients ADD CONSTRAINT patients_skin_type_check
+        CHECK (skin_type IS NULL OR skin_type IN ('BRANCA', 'NEGRA'))
+    """,
+
+    # Os parametros iniciais dos tres metodos, por tipo de pele. Sem clinic_id:
+    # uma tabela so, decisao do Andre em 19/09/2026. `source` distingue o que
+    # veio dos PDFs do que veio da clinica - a tabela e referencia clinica, e
+    # quem ler daqui a um ano precisa saber a procedencia de cada numero.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.laser_protocol_parameters (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        skin_type VARCHAR(10) NOT NULL,
+        method VARCHAR(20) NOT NULL,
+        protocol_area_key VARCHAR(60) NOT NULL,
+        protocol_area_name VARCHAR(120) NOT NULL,
+        fluence_j NUMERIC(5,2) NOT NULL,
+        energy_kj NUMERIC(5,2),
+        stacks SMALLINT,
+        passes SMALLINT,
+        source VARCHAR(20) NOT NULL DEFAULT 'PDF',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (skin_type, method, protocol_area_key)
+    )
+    """,
+
+    # A ligacao entre area vendida e area do protocolo. Tabela explicita, e nao
+    # casamento de nome: em 16/09/2026 comparar nomes por aproximacao deixou
+    # uma area inalcancavel e custou cinco perguntas repetidas a uma paciente.
+    # Aqui o mesmo erro sugeriria a fluencia de OUTRA area. Uma area pode ter
+    # DUAS linhas - a composta abre em duas aplicacoes.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.area_protocol_map (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        area_id UUID NOT NULL REFERENCES scheduler.areas(id) ON DELETE CASCADE,
+        protocol_area_key VARCHAR(60) NOT NULL,
+        display_order SMALLINT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (area_id, protocol_area_key)
+    )
+    """,
+
+    # O registro de uma sessao.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.patient_session_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        patient_id UUID NOT NULL REFERENCES scheduler.patients(id),
+        appointment_id UUID REFERENCES scheduler.appointments(id),
+        professional_id UUID REFERENCES scheduler.professionals(id),
+        session_date DATE NOT NULL,
+        tanned_skin BOOLEAN NOT NULL DEFAULT FALSE,
+        skin_type_snapshot VARCHAR(10),
+        notes TEXT,
+        created_by_user_id UUID,
+        deleted_at TIMESTAMPTZ,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+
+    # Uma linha por area aplicada. `area_name` e snapshot de texto e nunca e
+    # nulo: renomear a area no catalogo NAO pode reescrever o passado, e e isso
+    # que tambem permite digitar area fora do catalogo. Mesmo padrao de
+    # appointment_service_areas.
+    #
+    # Colunas explicitas em vez de JSONB porque a pergunta que justifica a
+    # tabela inteira - "qual fluencia usei nesta area" - tem de ser um WHERE.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.patient_session_applications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        record_id UUID NOT NULL REFERENCES scheduler.patient_session_records(id) ON DELETE CASCADE,
+        area_id UUID REFERENCES scheduler.areas(id),
+        area_name VARCHAR(160) NOT NULL,
+        protocol_area_key VARCHAR(60),
+        method VARCHAR(20),
+        fluence_j NUMERIC(5,2),
+        energy_kj NUMERIC(5,2),
+        stacks SMALLINT,
+        passes SMALLINT,
+        display_order SMALLINT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+
+    # A trilha. SEM foreign key em record_id, de proposito: ela tem de
+    # sobreviver ao registro. Snapshot completo e nao diff - diff parece
+    # economico e depois nao reconstitui nada sozinho.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.patient_session_record_audit (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        record_id UUID NOT NULL,
+        clinic_id VARCHAR(100) NOT NULL,
+        action VARCHAR(10) NOT NULL,
+        snapshot JSONB NOT NULL,
+        changed_by_name VARCHAR(255),
+        changed_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+
+    """CREATE INDEX IF NOT EXISTS idx_session_records_patient
+       ON scheduler.patient_session_records(patient_id, session_date DESC)
+       WHERE deleted_at IS NULL""",
+    """CREATE INDEX IF NOT EXISTS idx_session_records_appointment
+       ON scheduler.patient_session_records(appointment_id)
+       WHERE deleted_at IS NULL""",
+    """CREATE INDEX IF NOT EXISTS idx_session_applications_record
+       ON scheduler.patient_session_applications(record_id)""",
+    # "qual fluencia usei nesta area" - a pergunta que justifica a tabela
+    # separada, e que sem indice varre o historico inteiro da clinica.
+    """CREATE INDEX IF NOT EXISTS idx_session_applications_area
+       ON scheduler.patient_session_applications(area_id)""",
+    """CREATE INDEX IF NOT EXISTS idx_session_audit_record
+       ON scheduler.patient_session_record_audit(record_id, changed_at)""",
+    """CREATE INDEX IF NOT EXISTS idx_area_protocol_map_area
+       ON scheduler.area_protocol_map(area_id)""",
 ]
+
+
+# O protocolo e o mapa vivem em src/services/protocolo_laser.py, que e a fonte
+# unica lida pelo app e conferida pelos testes. Semear a partir de la evita a
+# copia que diverge em silencio - e numero de laser divergindo em silencio e
+# exatamente o que nao pode acontecer.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from src.services.protocolo_laser import MAPA_DE_AREAS, PROTOCOLO  # noqa: E402
+
+
+def _seed_do_protocolo():
+    """Todas as linhas do protocolo, num INSERT. Idempotente e corretivo.
+
+    ON CONFLICT DO UPDATE e nao DO NOTHING: se um valor for corrigido no
+    modulo, rodar o setup tem de propagar a correcao. Valor de laser errado
+    parado no banco e pior que qualquer duplicacao de escrita.
+    """
+    valores, params = [], []
+    for pele, metodo, chave, nome, fluencia, energia, stacks, passadas, origem in PROTOCOLO:
+        valores.append("(%s, %s, %s, %s, %s, %s, %s, %s, %s)")
+        params += [pele, metodo, chave, nome, fluencia, energia, stacks, passadas, origem]
+    sql = (
+        "INSERT INTO scheduler.laser_protocol_parameters "
+        "(skin_type, method, protocol_area_key, protocol_area_name, "
+        " fluence_j, energy_kj, stacks, passes, source) VALUES "
+        + ", ".join(valores) +
+        " ON CONFLICT (skin_type, method, protocol_area_key) DO UPDATE SET"
+        "   protocol_area_name = EXCLUDED.protocol_area_name,"
+        "   fluence_j = EXCLUDED.fluence_j,"
+        "   energy_kj = EXCLUDED.energy_kj,"
+        "   stacks = EXCLUDED.stacks,"
+        "   passes = EXCLUDED.passes,"
+        "   source = EXCLUDED.source"
+    )
+    return sql, tuple(params)
+
+
+def _seed_do_mapa():
+    """Liga area do catalogo a chave do protocolo, por NOME EXATO.
+
+    Casamento exato aqui e so aqui, porque e seed conferido contra o catalogo
+    real por tests/unit/test_mapa_de_areas.py. Area renomeada no painel deixa
+    de casar, e quem avisa e aquele teste - nao o silencio.
+    """
+    valores, params = [], []
+    for nome, chaves in MAPA_DE_AREAS.items():
+        for ordem, chave in enumerate(chaves):
+            valores.append("(%s, %s, %s)")
+            params += [nome, chave, ordem]
+    sql = (
+        "INSERT INTO scheduler.area_protocol_map (area_id, protocol_area_key, display_order) "
+        "SELECT a.id, m.chave, m.ordem FROM (VALUES "
+        + ", ".join(valores) +
+        ") AS m(area_name, chave, ordem) "
+        "JOIN scheduler.areas a ON a.name = m.area_name "
+        "ON CONFLICT (area_id, protocol_area_key) DO NOTHING"
+    )
+    return sql, tuple(params)
 
 
 def main():
@@ -761,6 +944,19 @@ def main():
             conn.rollback()
             label = sql.strip().split('\n')[0][:80]
             print(f"[{i+1}/{len(SQL_STATEMENTS)}] ERRO: {label} -> {e}")
+
+    # Seeds parametrizados, depois de as tabelas existirem.
+    for rotulo, (sql, params) in (
+        ("protocolo do laser", _seed_do_protocolo()),
+        ("mapa de areas", _seed_do_mapa()),
+    ):
+        try:
+            cursor.execute(sql, params)
+            conn.commit()
+            print("[seed] OK: " + rotulo + " (" + str(cursor.rowcount) + " linhas)")
+        except Exception as e:
+            conn.rollback()
+            print("[seed] ERRO: " + rotulo + " -> " + str(e))
 
     cursor.close()
     conn.close()

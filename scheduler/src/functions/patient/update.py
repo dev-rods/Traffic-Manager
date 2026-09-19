@@ -66,13 +66,26 @@ def handler(event, context):
         # `birth_date` e `cpf` entram aqui porque a clinica precisa deles para
         # nota e cadastro, e ate agora so o bot conseguia grava-los - quem
         # chegou por outro caminho ficava sem, sem forma de corrigir pela tela.
+        #
+        # `skin_type` entra aqui e SO aqui. E a profissional que marca, no
+        # painel, olhando a paciente: e o que decide qual protocolo de laser
+        # alimenta a sugestao de parametro. Nenhuma tool do agente expoe este
+        # campo, e test_bot_nao_ve_prontuario garante isso.
         allowed_fields = {"name", "phone", "gender", "birth_date", "cpf", "email",
-                          "custom_discount_pct"}
+                          "custom_discount_pct", "skin_type"}
         sets = []
         params = []
         for field in allowed_fields:
             if field in body:
                 val = body[field]
+                if field == "skin_type":
+                    # Vazio volta a NULO: e assim que se desfaz uma marcacao
+                    # errada, e sem tipo de pele a tela simplesmente nao sugere.
+                    val = (val or "").strip().upper() or None
+                    if val and val not in ("BRANCA", "NEGRA"):
+                        return http_response(400, {
+                            "status": "ERROR",
+                            "message": "Tipo de pele deve ser BRANCA ou NEGRA"})
                 if field == "gender" and val and val not in ("M", "F"):
                     return http_response(400, {
                         "status": "ERROR",

@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/Badge'
-import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon } from '@/components/ui/Icons'
+import { Link } from 'react-router-dom'
+import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon } from '@/components/ui/Icons'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
@@ -119,6 +120,15 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDe
                       <PauseIcon className="w-[18px] h-[18px]" />
                     )}
                   </button>
+                  <Link
+                    to={`/pacientes/${p.id}/documentos`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-500 hover:text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/40"
+                    title="Documentos do paciente"
+                    aria-label="Documentos do paciente"
+                  >
+                    <DocumentIcon className="w-[18px] h-[18px]" />
+                  </Link>
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(p) }}
                     className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"

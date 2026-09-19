@@ -1,0 +1,642 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Prontuario (historico por sessao)",
+    "description": "PRD/Spec 012. Os valores esperados vem do anexo docs/work/prd/012-anexo-mapa-areas-protocolo.md - confira contra ele, nao contra a memoria.\n\nO caso que mais importa e o 3: a area composta 'Virilha Completa + anus' tem de abrir em DUAS aplicacoes, com metodos diferentes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "patientId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "recordId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Protocolo do laser (referencia)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/laser-protocol",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "laser-protocol"
+          ]
+        },
+        "description": "A tabela de referencia inteira, numa chamada so."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "",
+              "// 74 linhas dos PDFs + 6 dadas pela clinica.",
+              "pm.test(\"80 parametros\", function () {",
+              "    pm.expect(pm.response.json().parameters).to.have.lengthOf(80);",
+              "});",
+              "",
+              "pm.test(\"Os tres metodos, com seus campos\", function () {",
+              "    var m = pm.response.json().methods;",
+              "    var porChave = {};",
+              "    m.forEach(function (x) { porChave[x.key] = x.fields; });",
+              "    pm.expect(porChave.SHR).to.eql([\"fluence_j\", \"energy_kj\"]);",
+              "    pm.expect(porChave.SHR_STACKING).to.eql([\"fluence_j\", \"stacks\", \"passes\"]);",
+              "});",
+              "",
+              "// Varia por clinica: o area_map e filtrado pelo catalogo dela.",
+        "// Essencia e Nobre Laser: 39. Depilacao Premium: 36.",
+              "pm.test(\"As ligacoes de area chegaram\", function () {",
+              "    pm.expect(pm.response.json().area_map.length).to.be.at.least(30);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Marcar tipo de pele (BRANCA)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/{{patientId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "patients",
+            "{{patientId}}"
+          ]
+        },
+        "description": "Marcado SO pela profissional. O bot nunca escreve aqui.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"skin_type\": \"BRANCA\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Gravou\", function () {",
+              "    pm.expect(pm.response.json().patient.skin_type).to.eql(\"BRANCA\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tipo de pele invalido e 400",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/{{patientId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "patients",
+            "{{patientId}}"
+          ]
+        },
+        "description": "Dedo errado no formulario e 400, nunca 500.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"skin_type\": \"AZUL\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criar registro a partir do agendamento",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/{{patientId}}/session-records",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "patients",
+            "{{patientId}}",
+            "session-records"
+          ]
+        },
+        "description": "Escolhida a sessao, as areas vem prontas com o parametro do protocolo.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"appointmentId\": \"{{appointmentId}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "",
+              "// O CASO CENTRAL. Use um agendamento com 'Virilha Completa +",
+              "// anus': no catalogo e uma area, no protocolo sao duas, com",
+              "// metodos diferentes - e e o que ela de fato aplica.",
+              "pm.test(\"A area composta abriu em duas aplicacoes\", function () {",
+              "    var aps = pm.response.json().record.applications;",
+              "    var virilha = aps.filter(function (a) {",
+              "        return a.protocol_area_key === \"virilha_completa\";",
+              "    })[0];",
+              "    var perianal = aps.filter(function (a) {",
+              "        return a.protocol_area_key === \"regiao_perianal\";",
+              "    })[0];",
+              "    pm.expect(virilha, 'virilha_completa').to.not.be.undefined;",
+              "    pm.expect(perianal, 'regiao_perianal').to.not.be.undefined;",
+              "    pm.expect(virilha.method).to.eql(\"SHR\");",
+              "    pm.expect(perianal.method).to.eql(\"SHR_STACKING\");",
+              "});",
+              "",
+              "// Pele branca: virilha completa = 7 J / 6 kJ no SHR.",
+              "pm.test(\"O parametro veio do protocolo da pele certa\", function () {",
+              "    var aps = pm.response.json().record.applications;",
+              "    var v = aps.filter(function (a) {",
+              "        return a.protocol_area_key === \"virilha_completa\";",
+              "    })[0];",
+              "    pm.expect(Number(v.fluence_j)).to.eql(7);",
+              "    pm.expect(Number(v.energy_kj)).to.eql(6);",
+              "});",
+              "",
+              "pm.collectionVariables.set(\"recordId\", pm.response.json().record.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Editar: o anterior nao se perde",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/session-records/{{recordId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "session-records",
+            "{{recordId}}"
+          ]
+        },
+        "description": "Decisao do Andre: edita, e o estado anterior fica guardado.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"notes\": \"Pele reagiu bem.\", \"applications\": [{\"areaName\": \"Axilas\", \"method\": \"SHR\", \"fluenceJ\": 8, \"energyKj\": 8, \"protocolAreaKey\": \"axilas\", \"areaId\": null, \"stacks\": null, \"passes\": null, \"displayOrder\": 0}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Marcado como editado\", function () {",
+              "    pm.expect(pm.response.json().record.edit_count).to.be.above(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Campo que o metodo nao usa e descartado",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/session-records/{{recordId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "session-records",
+            "{{recordId}}"
+          ]
+        },
+        "description": "Tela desatualizada mandando campo a mais nao polui o historico.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"applications\": [{\"areaName\": \"Axilas\", \"method\": \"SHR\", \"fluenceJ\": 7, \"energyKj\": 8, \"stacks\": 3, \"passes\": 2, \"protocolAreaKey\": \"axilas\", \"areaId\": null, \"displayOrder\": 0}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "",
+              "// O SHR nao usa stacks. Gravar sujaria a consulta que",
+              "// justifica a tabela de aplicacoes existir.",
+              "pm.test(\"stacks e passes viraram null\", function () {",
+              "    var a = pm.response.json().record.applications[0];",
+              "    pm.expect(a.stacks).to.be.null;",
+              "    pm.expect(a.passes).to.be.null;",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Aplicacao sem nome de area e 400",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/session-records/{{recordId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "session-records",
+            "{{recordId}}"
+          ]
+        },
+        "description": "areaName e o snapshot que sobrevive ao catalogo.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"applications\": [{\"method\": \"SHR\", \"fluenceJ\": 7}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fluencia zero e 400",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/session-records/{{recordId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "session-records",
+            "{{recordId}}"
+          ]
+        },
+        "description": null,
+        "body": {
+          "mode": "raw",
+          "raw": "{\"applications\": [{\"areaName\": \"Axilas\", \"method\": \"SHR\", \"fluenceJ\": 0}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trilha de alteracoes",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/session-records/{{recordId}}/history",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "session-records",
+            "{{recordId}}",
+            "history"
+          ]
+        },
+        "description": "O que o selo 'editado' abre na tela."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Tem CREATE e UPDATE\", function () {",
+              "    var acoes = pm.response.json().history.map(function (h) { return h.action; });",
+              "    pm.expect(acoes).to.include(\"CREATE\");",
+              "    pm.expect(acoes).to.include(\"UPDATE\");",
+              "});",
+              "",
+              "// Snapshot completo e nao diff: o estado do CREATE tem de",
+              "// reconstituir sozinho o que havia antes da edicao.",
+              "pm.test(\"O snapshot do CREATE tem as aplicacoes de antes\", function () {",
+              "    var criacao = pm.response.json().history.filter(function (h) {",
+              "        return h.action === \"CREATE\";",
+              "    })[0];",
+              "    pm.expect(criacao.snapshot.applications.length).to.be.above(0);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Listar registros do paciente",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/patients/{{patientId}}/session-records",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "patients",
+            "{{patientId}}",
+            "session-records"
+          ]
+        },
+        "description": "Registros em ordem decrescente, com as aplicacoes embutidas."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "",
+              "// O paciente vem junto: a tela nao tem um GET de paciente.",
+              "pm.test(\"Traz o paciente\", function () {",
+              "    pm.expect(pm.response.json().patient).to.have.property('skin_type');",
+              "});",
+              "",
+              "// So os CONFIRMED que ainda nao viraram registro. E o que",
+              "// evita a sessao duplicada.",
+              "pm.test(\"Agendamentos sem registro nao incluem o ja registrado\", function () {",
+              "    var pendentes = pm.response.json().appointments_without_record;",
+              "    var ids = pendentes.map(function (a) { return a.id; });",
+              "    pm.expect(ids).to.not.include(pm.collectionVariables.get(\"appointmentId\"));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Excluir: sai da lista, fica na trilha",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/session-records/{{recordId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "session-records",
+            "{{recordId}}"
+          ]
+        },
+        "description": "Soft delete. A trilha sobrevive ao registro."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "",
+              "// Rode a trilha depois deste request: o DELETE tem de estar la,",
+              "// com o estado completo de antes. Prontuario apagado sem rastro",
+              "// nao serve como registro de nada."
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -39,6 +39,11 @@ export interface UpdateClinicPayload {
 
 // ── Patient ───────────────────────────────────────────────────
 export interface Patient {
+  /**
+   * Marcado SO pela profissional, no painel. Decide qual protocolo de laser
+   * alimenta a sugestao de parametro. O bot nunca escreve aqui.
+   */
+  skin_type: SkinType | null
   id: string
   clinic_id: string
   phone: string
@@ -72,6 +77,12 @@ export interface CreatePatientPayload {
   email?: string
   /** null = sem combinado; inteiro = o percentual fixo da paciente. */
   custom_discount_pct?: number | null
+  /**
+   * Tipo de pele. Marcado pela profissional, no painel, e so por ela: decide
+   * qual protocolo de laser sugere os parametros no historico de sessao.
+   * `null` desfaz a marcacao.
+   */
+  skin_type?: SkinType | null
 }
 
 export interface CreatePatientResponse {
@@ -150,6 +161,8 @@ export interface Appointment {
   id: string
   clinic_id: string
   service_id: string
+  /** Leva ao prontuario pelo atalho "Registrar sessao" na agenda. */
+  patient_id: string | null
   appointment_date: string   // YYYY-MM-DD
   start_time: string         // HH:MM:SS
   end_time: string           // HH:MM:SS
@@ -432,4 +445,129 @@ export interface Lead {
   contact_started_message: string | null
   created_at: string
   updated_at: string
+}
+
+
+// ── Prontuario: historico por sessao ─────────────────────────
+
+export type SkinType = 'BRANCA' | 'NEGRA'
+
+export type MetodoLaser = 'SHR' | 'SHR_STACKING' | 'HR'
+
+/** Uma linha da tabela de referencia dos protocolos. */
+export interface ParametroDoProtocolo {
+  skin_type: SkinType
+  method: MetodoLaser
+  protocol_area_key: string
+  protocol_area_name: string
+  fluence_j: number
+  energy_kj: number | null
+  stacks: number | null
+  passes: number | null
+  /** 'PDF' = material da clinica; 'CLINICA' = acrescentado depois. */
+  source: 'PDF' | 'CLINICA'
+}
+
+export interface LigacaoDeArea {
+  area_id: string
+  area_name: string
+  protocol_area_key: string
+  display_order: number
+}
+
+export interface ProtocoloLaser {
+  methods: { key: MetodoLaser; label: string; fields: string[]; movement: string }[]
+  parameters: ParametroDoProtocolo[]
+  area_map: LigacaoDeArea[]
+}
+
+/** Uma area aplicada na sessao. */
+export interface AplicacaoDeSessao {
+  id?: string
+  area_id: string | null
+  /** Snapshot: renomear a area no catalogo nao reescreve o passado. */
+  area_name: string
+  protocol_area_key: string | null
+  method: MetodoLaser | null
+  fluence_j: number | null
+  energy_kj: number | null
+  stacks: number | null
+  passes: number | null
+  display_order: number
+}
+
+export interface RegistroDeSessao {
+  id: string
+  clinic_id: string
+  patient_id: string
+  appointment_id: string | null
+  professional_id: string | null
+  professional_name: string | null
+  session_date: string
+  tanned_skin: boolean
+  skin_type_snapshot: SkinType | null
+  notes: string | null
+  applications: AplicacaoDeSessao[]
+  /** Quantas vezes foi editado. Alimenta o selo "editado". */
+  edit_count: number
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+/** Agendamento do paciente que ainda nao virou registro. */
+export interface SessaoSemRegistro {
+  id: string
+  appointment_date: string
+  start_time: string
+  areas: string
+}
+
+export interface PacienteDoProntuario {
+  id: string
+  name: string | null
+  phone: string
+  skin_type: SkinType | null
+}
+
+export interface ListaDeRegistros {
+  /** Vem junto para a pagina nao precisar de uma segunda chamada. */
+  patient: PacienteDoProntuario
+  records: RegistroDeSessao[]
+  appointments_without_record: SessaoSemRegistro[]
+}
+
+export interface AplicacaoPayload {
+  areaId: string | null
+  areaName: string
+  protocolAreaKey: string | null
+  method: MetodoLaser | null
+  fluenceJ: number | null
+  energyKj: number | null
+  stacks: number | null
+  passes: number | null
+  displayOrder: number
+}
+
+export interface RegistroPayload {
+  appointmentId?: string | null
+  sessionDate?: string
+  professionalId?: string | null
+  tannedSkin?: boolean
+  notes?: string
+  applications?: AplicacaoPayload[]
+  /** Quem declarou a edicao. Autoria declarada, nao provada - ver PRD 012. */
+  changedBy?: string
+}
+
+export interface EdicaoDoRegistro {
+  id: string
+  action: 'CREATE' | 'UPDATE' | 'DELETE'
+  snapshot: RegistroDeSessao
+  changed_by_name: string | null
+  changed_at: string
+}
+
+export interface TrilhaDeEdicoes {
+  history: EdicaoDoRegistro[]
 }

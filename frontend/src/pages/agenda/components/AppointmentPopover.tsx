@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { formatCurrency } from '@/utils/formatCurrency'
 import type { Appointment } from '@/types'
@@ -143,6 +144,19 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
               >
                 Editar agendamento
               </button>
+              {/* O caminho curto do caso mais comum: ela acabou de atender e
+                  a paciente esta na tela. Ir ate Pacientes, buscar pelo nome e
+                  abrir Documentos seria o caminho longo para o que acontece
+                  todo dia. Leva a mesma tela, com a sessao ja escolhida. */}
+              {a.patient_id && (
+                <Link
+                  to={`/pacientes/${a.patient_id}/documentos?agendamento=${a.id}`}
+                  onClick={onClose}
+                  className="block w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Registrar sessão
+                </Link>
+              )}
               <button
                 onClick={() => { onCancel(a); onClose() }}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors cursor-pointer"

@@ -54,6 +54,7 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
           patient.custom_discount_pct === undefined
             ? ''
             : String(patient.custom_discount_pct),
+        skin_type: patient.skin_type ?? '',
       })
     }
   }, [patient, reset])
@@ -74,6 +75,9 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
           birth_date: data.birth_date ?? '',
           email: data.email ?? '',
           custom_discount_pct: descontoParaApi(data.custom_discount_pct),
+          // Vazio vira NULL: e assim que se desfaz uma marcacao errada, e sem
+          // tipo de pele a tela simplesmente nao sugere parametro.
+          skin_type: data.skin_type || null,
         },
       })
       onClose()
