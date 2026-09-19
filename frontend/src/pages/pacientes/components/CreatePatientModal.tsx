@@ -48,6 +48,7 @@ export function CreatePatientModal({ open, onClose, onSuccess }: CreatePatientMo
         custom_discount_pct: descontoParaApi(data.custom_discount_pct),
         ...(data.birth_date ? { birth_date: data.birth_date } : {}),
         ...(data.email ? { email: data.email } : {}),
+        ...(data.skin_type ? { skin_type: data.skin_type } : {}),
       })
       onSuccess?.(result.status, result.patient.name ?? data.name)
       reset()

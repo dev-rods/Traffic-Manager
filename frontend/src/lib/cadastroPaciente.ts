@@ -13,6 +13,17 @@ import { z } from 'zod'
  * toma a mesma decisão, e as duas precisam concordar.
  */
 export const cadastroSchema = {
+  /**
+   * Tipo de pele, marcado pela profissional presencialmente.
+   *
+   * Decide qual dos dois protocolos de laser sugere os parametros no historico
+   * de sessao. Opcional: quem nao foi marcada simplesmente nao tem sugestao, e
+   * a tela pede em vez de chutar.
+   *
+   * O bot nunca le nem escreve este campo - garantido por
+   * scheduler/tests/unit/test_bot_nao_ve_prontuario.py.
+   */
+  skin_type: z.enum(['BRANCA', 'NEGRA']).optional().or(z.literal('')),
   cpf: z
     .string()
     .optional()

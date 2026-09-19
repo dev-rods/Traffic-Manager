@@ -83,6 +83,7 @@ functions:
   - ${file(sls/functions/duration_rules/interface.yml)}
   - ${file(sls/functions/auth/interface.yml)}
   - ${file(sls/functions/patient/interface.yml)}
+  - ${file(sls/functions/patient_record/interface.yml)}
   - ${file(sls/functions/lead/interface.yml)}
   - ${file(sls/functions/attendant/interface.yml)}
   - ${file(sls/functions/outbound/interface.yml)}

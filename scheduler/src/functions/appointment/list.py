@@ -39,12 +39,19 @@ def handler(event, context):
         date_from = extract_query_param(event, "date_from")
         date_to = extract_query_param(event, "date_to")
         status_filter = extract_query_param(event, "status")
+        # O prontuario precisa dos agendamentos de UMA paciente para oferecer
+        # "de qual sessao e este registro?". Sem este filtro a tela puxaria a
+        # agenda inteira da clinica para achar tres linhas.
+        patient_filter = extract_query_param(event, "patientId")
 
         db = PostgresService()
 
         query = """
             SELECT
                 a.id, a.clinic_id, a.service_id, a.appointment_date, a.start_time, a.end_time,
+                -- A agenda precisa dele para o atalho "Registrar sessao" saber
+                -- de qual paciente e o prontuario.
+                a.patient_id,
                 a.status, a.notes, a.version, a.created_at, a.updated_at,
                 -- A agenda colore por este campo e o modal de edicao marca a
                 -- caixinha com ele. Sem estar no SELECT, o PUT gravava e a tela
@@ -87,6 +94,10 @@ def handler(event, context):
         if status_filter:
             query += " AND a.status = %s"
             params.append(status_filter)
+
+        if patient_filter:
+            query += " AND a.patient_id = %s::uuid"
+            params.append(patient_filter)
 
         query += " ORDER BY a.appointment_date ASC, a.start_time ASC"
 
