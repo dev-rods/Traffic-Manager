@@ -135,34 +135,47 @@ class TestAsLinhasQueNaoVieramDoPDF(unittest.TestCase):
     clínica: daqui a um ano ninguém lembra o que era do material impresso."""
 
     def test_glabela_e_nariz_sao_da_clinica(self):
+        """4 J na branca, 2 J na negra. Ponteira pontual, 2 stacks - todas as
+        linhas dos PDFs são 3."""
         for chave in ("glabela", "nariz"):
-            for pele in (BRANCA, NEGRA):
+            for pele, fluencia in ((BRANCA, 4.0), (NEGRA, 2.0)):
                 with self.subTest(area=chave, pele=pele):
                     s = sugestao(chave, SHR_STACKING, pele)
                     self.assertEqual(s["source"], "CLINICA")
-                    self.assertEqual(float(s["fluence_j"]), 4.0)
+                    self.assertEqual(float(s["fluence_j"]), fluencia)
                     self.assertEqual(s["stacks"], 2, "ponteira pontual, 2 stacks")
                     self.assertEqual(s["passes"], 2)
 
-    def test_meio_gluteo_e_da_clinica_e_so_pele_branca(self):
-        """Metade da energia do glúteo inteiro, mesma fluência.
+    def test_meio_gluteo_e_da_clinica_nas_duas_peles(self):
+        """Mesma fluência do glúteo inteiro, metade da energia.
 
-        Na pele negra NÃO há linha de propósito: o 8 J é o valor da branca, e na
-        negra o glúteo inteiro é 7 J. Copiar sugeriria acima do protocolo dela.
+        A energia escala com a área tratada, e isso vale nas duas peles:
+        branca 8/14 -> 8/7, negra 7/12 -> 7/6.
         """
-        s = sugestao("meio_gluteo", SHR, BRANCA)
-        self.assertEqual(s["source"], "CLINICA")
-        self.assertEqual(float(s["fluence_j"]), 8.0)
-        self.assertEqual(float(s["energy_kj"]), 7.0)
+        for pele, fluencia, energia in ((BRANCA, 8.0, 7.0), (NEGRA, 7.0, 6.0)):
+            with self.subTest(pele=pele):
+                s = sugestao("meio_gluteo", SHR, pele)
+                self.assertEqual(s["source"], "CLINICA")
+                self.assertEqual(float(s["fluence_j"]), fluencia)
+                self.assertEqual(float(s["energy_kj"]), energia)
 
-        self.assertIsNone(sugestao("meio_gluteo", SHR, NEGRA))
+    def test_o_meio_gluteo_nunca_passa_do_gluteo_inteiro(self):
+        """A fluência da metade não pode ser maior que a da área inteira na
+        MESMA pele: seria sugerir acima do protocolo, que é a direção que
+        queima. Foi por isso que a linha da pele negra ficou aberta até o André
+        dar o número."""
+        for pele in (BRANCA, NEGRA):
+            with self.subTest(pele=pele):
+                metade = float(sugestao("meio_gluteo", SHR, pele)["fluence_j"])
+                inteiro = float(sugestao("gluteos", SHR, pele)["fluence_j"])
+                self.assertLessEqual(metade, inteiro)
 
     def test_todo_o_resto_veio_do_pdf(self):
         da_clinica = {(p[0], p[1], p[2]) for p in PROTOCOLO if p[8] == "CLINICA"}
         self.assertEqual(da_clinica, {
             (BRANCA, SHR_STACKING, "glabela"), (NEGRA, SHR_STACKING, "glabela"),
             (BRANCA, SHR_STACKING, "nariz"), (NEGRA, SHR_STACKING, "nariz"),
-            (BRANCA, SHR, "meio_gluteo"),
+            (BRANCA, SHR, "meio_gluteo"), (NEGRA, SHR, "meio_gluteo"),
         })
 
 
@@ -172,11 +185,14 @@ class TestSugestaoNuncaAproxima(unittest.TestCase):
     def test_sem_linha_devolve_none(self):
         self.assertIsNone(sugestao("joelho", SHR, BRANCA))
         self.assertIsNone(sugestao("gluteos", HR, BRANCA))
+        self.assertIsNone(sugestao("glabela", HR, BRANCA))
 
     def test_nao_cai_no_outro_tipo_de_pele(self):
-        """meio_gluteo existe na branca e não na negra. Cair para a branca
-        sugeriria 8 J numa pele cujo protocolo é 7."""
-        self.assertIsNone(sugestao("meio_gluteo", SHR, NEGRA))
+        """Cada pele tem o seu número, e nunca o da outra."""
+        self.assertEqual(float(sugestao("meio_gluteo", SHR, BRANCA)["fluence_j"]), 8.0)
+        self.assertEqual(float(sugestao("meio_gluteo", SHR, NEGRA)["fluence_j"]), 7.0)
+        self.assertEqual(float(sugestao("glabela", SHR_STACKING, BRANCA)["fluence_j"]), 4.0)
+        self.assertEqual(float(sugestao("glabela", SHR_STACKING, NEGRA)["fluence_j"]), 2.0)
 
     def test_nao_cai_no_outro_metodo(self):
         """rosto_completo existe no Stacking e não no SHR nem no HR."""
@@ -246,8 +262,8 @@ class TestAvisos(unittest.TestCase):
 
 class TestTabelaCompleta(unittest.TestCase):
     def test_o_total_de_linhas(self):
-        """74 dos PDFs + 5 da clínica."""
-        self.assertEqual(len(PROTOCOLO), 79)
+        """74 dos PDFs + 6 da clínica."""
+        self.assertEqual(len(PROTOCOLO), 80)
 
     def test_nao_ha_linha_duplicada(self):
         chaves = [(p[0], p[1], p[2]) for p in PROTOCOLO]

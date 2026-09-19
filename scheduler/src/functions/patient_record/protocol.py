@@ -14,7 +14,7 @@ def handler(event, context):
 
     O protocolo inteiro mais o mapa da clinica, num payload so.
 
-    Sao 79 linhas e elas quase nunca mudam. Uma chamada cacheada no frontend
+    Sao 80 linhas e elas quase nunca mudam. Uma chamada cacheada no frontend
     evita uma consulta por linha de aplicacao enquanto a profissional digita -
     e ela digita com a paciente esperando.
 

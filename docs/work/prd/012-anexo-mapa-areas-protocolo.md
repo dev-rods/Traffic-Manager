@@ -4,7 +4,7 @@
 > migration.** É ele que decide qual fluência a tela sugere para cada área.
 >
 > Montado por leitura dos PDFs em `Documentos Laser/` e **confirmado pelo André
-> em 19/09/2026**. Uma única linha segue aberta, marcada com ⚠️.
+> em 19/09/2026**. Nenhuma linha em aberto.
 
 O mapa existe porque os nomes **não** batem, e casar por aproximação é o defeito
 de 16/09/2026 repetido num lugar onde ele queima pele. Área sem linha aqui não é
@@ -89,35 +89,33 @@ separo em duas chaves.
 
 ## 3b. Sem protocolo nos PDFs — parâmetro dado pelo André
 
-⚠️ **Estas duas linhas não constam em nenhum dos dois documentos.** O parâmetro
-veio do André em 19/09/2026 e está semeado como SHR Stacking, ponteira pontual:
+**Estas linhas não constam em nenhum dos dois documentos.** O parâmetro veio do
+André em 19/09/2026, como SHR Stacking com ponteira pontual:
 
-| `protocol_area_key` | Fluência (J) | Stacks | Passadas |
-|---|---|---|---|
-| `glabela` | 4 | 2 | 2 |
-| `nariz` | 4 | 2 | 2 |
+| `protocol_area_key` | Branca | Negra | Stacks | Passadas |
+|---|---|---|---|---|
+| `glabela` | 4 J | 2 J | 2 | 2 |
+| `nariz` | 4 J | 2 J | 2 | 2 |
 
-**Aberto:** foi dado **um valor só**, e todas as outras linhas têm valor
-diferente para pele branca e negra. Semeei **4 para as duas**, que erra para o
-lado seguro na pele branca (as demais áreas de Stacking vão de 5 a 6 na branca).
-Se a pele negra tiver de ser menor, me diga o número.
+Dois detalhes que destoam do resto da tabela, e são intencionais: **2 stacks**
+(todas as linhas dos PDFs são 3) e uma queda de 4 para 2 entre as peles (o
+degrau das outras linhas costuma ser 1 J). São áreas pequenas e delicadas, ao
+redor dos olhos.
 
-### `meio_gluteo` — só pele branca
+### `meio_gluteo`
 
 | `protocol_area_key` | Método | Branca | Negra |
 |---|---|---|---|
-| `meio_gluteo` | SHR | 8 J / 7 kJ | **sem linha** |
+| `meio_gluteo` | SHR | 8 J / 7 kJ | 7 J / 6 kJ |
 
 Dado pelo André em 19/09/2026: mesma fluência do glúteo inteiro, metade da
-energia (14 → 7). O raciocínio é claro e a energia escala com a área tratada.
+energia (14 → 7 na branca, 12 → 6 na negra). A energia escala com a área
+tratada.
 
-**Aberto, e de propósito:** o 8 J é o valor da pele **branca** — na negra o
-glúteo inteiro é 7 J. Copiar 8 para a pele negra seria sugerir **acima** do
-protocolo dela, que é a direção que queima. Preferi não semear: na pele negra a
-tela vai dizer "sem parâmetro sugerido" até alguém dar o número.
-
-Pelo padrão das outras linhas seria 7 J / 6 kJ, mas esse número tem de vir de
-quem aplica.
+A linha da pele negra ficou **em aberto por um dia**, de propósito: o 8 J é o
+valor da branca, e na negra o glúteo inteiro é 7 J. Copiar teria sugerido
+**acima** do protocolo dela, que é a direção que queima. O número veio de quem
+aplica, e `test_o_meio_gluteo_nunca_passa_do_gluteo_inteiro` fixa a relação.
 
 Registrado aqui com procedência explícita porque a tabela é referência clínica:
 quem ler daqui a um ano precisa saber o que veio do PDF e o que veio de decisão
@@ -141,9 +139,8 @@ Ficam na tabela de referência e aparecem quando a profissional **adiciona uma
 
 ## 5. Os valores, como serão semeados
 
-79 linhas: 74 transcritas dos PDFs e 5 dadas pelo André — `glabela` e `nariz`
-(nos dois tipos de pele) e `meio_gluteo` (só pele branca). Conferir antes do
-deploy.
+80 linhas: 74 transcritas dos PDFs e 6 dadas pelo André — `glabela`, `nariz` e
+`meio_gluteo`, nos dois tipos de pele. Conferir antes do deploy.
 
 ### SHR — Fluência (J) / Energia (kJ)
 
@@ -154,7 +151,7 @@ deploy.
 | `meio_braco` | 7 / 8 | 5 / 7 |
 | `lombar` | 7 / 8 | 5 / 7 |
 | `gluteos` | 8 / 14 | 7 / 12 |
-| `meio_gluteo` ⚠️ | 8 / 7 | — sem linha |
+| `meio_gluteo` | 8 / 7 | 7 / 6 |  ← fora dos PDFs, ver 3b |
 | `coxas` | 8 / 14 | 7 / 12 |
 | `meia_perna` | 8 / 14 | 7 / 12 |
 | `virilha_simples` | 7 / 5 | 5 / 4 |
@@ -186,8 +183,8 @@ são 2 stacks, por serem acréscimo do André e não dos documentos.
 | `barba_completa` | 5 / 3 / 2 | 4 / 3 / 2 |
 | `nuca` | 5 / 3 / 2 | 4 / 3 / 2 |
 | `orelha_externa` | 5 / 3 / 2 | 4 / 3 / 2 |
-| `glabela` ⚠️ | 4 / 2 / 2 | 4 / 2 / 2 |  ← fora dos PDFs, ver 3b |
-| `nariz` ⚠️ | 4 / 2 / 2 | 4 / 2 / 2 |  ← fora dos PDFs, ver 3b |
+| `glabela` | 4 / 2 / 2 | 2 / 2 / 2 |  ← fora dos PDFs, ver 3b |
+| `nariz` | 4 / 2 / 2 | 2 / 2 / 2 |  ← fora dos PDFs, ver 3b |
 
 ### HR — Fluência (J) / Energia (kJ)
 

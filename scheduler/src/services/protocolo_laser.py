@@ -135,13 +135,9 @@ PROTOCOLO = (
 
     # Meio glúteo: dado pelo André em 19/09/2026, não está nos PDFs. Mesma
     # fluência do glúteo inteiro, metade da energia - a energia escala com a
-    # área tratada.
-    #
-    # SÓ pele branca, de propósito. O 8 J é o valor da branca; na negra o glúteo
-    # inteiro é 7 J, e copiar 8 para lá sugeriria ACIMA do protocolo dela, que é
-    # a direção que queima. Na pele negra a tela dirá "sem parâmetro sugerido"
-    # até alguém de dentro da clínica dar o número.
+    # área tratada, e isso vale nas duas peles.
     _shr(BRANCA, "meio_gluteo", "Meio glúteo", 8, 7, ORIGEM_CLINICA),
+    _shr(NEGRA, "meio_gluteo", "Meio glúteo", 7, 6, ORIGEM_CLINICA),
 
     # ── SHR Stacking ─────────────────────────────────────────────────────────
     _stack(BRANCA, "buco", "Buço", 6),
@@ -173,18 +169,17 @@ PROTOCOLO = (
     _stack(NEGRA, "orelha_externa", "Orelha externa", 4),
 
     # Glabela e nariz: dados pelo André em 19/09/2026, fora dos PDFs. Ponteira
-    # pontual, 2 stacks (todas as linhas dos documentos são 3).
+    # pontual, e 2 stacks - todas as linhas dos documentos são 3.
     #
-    # Veio UM valor só, e todas as demais linhas diferem entre branca e negra.
-    # Semeado 4 para as duas: nas áreas de Stacking a branca vai de 5 a 6, então
-    # 4 erra para o lado seguro nela. Se a negra tiver de ser menor, alguém da
-    # clínica precisa dar o número.
+    # A queda de 4 para 2 entre branca e negra é maior que o degrau das outras
+    # linhas (que costuma ser 1 J). São áreas pequenas e delicadas, ao redor dos
+    # olhos, e o número é de quem aplica.
     _stack(BRANCA, "glabela", "Glabela (entre as sobrancelhas)", 4, stacks=2,
            origem=ORIGEM_CLINICA),
-    _stack(NEGRA, "glabela", "Glabela (entre as sobrancelhas)", 4, stacks=2,
+    _stack(NEGRA, "glabela", "Glabela (entre as sobrancelhas)", 2, stacks=2,
            origem=ORIGEM_CLINICA),
     _stack(BRANCA, "nariz", "Nariz", 4, stacks=2, origem=ORIGEM_CLINICA),
-    _stack(NEGRA, "nariz", "Nariz", 4, stacks=2, origem=ORIGEM_CLINICA),
+    _stack(NEGRA, "nariz", "Nariz", 2, stacks=2, origem=ORIGEM_CLINICA),
 
     # ── HR ───────────────────────────────────────────────────────────────────
     _hr(BRANCA, "buco", "Buço", 17),
@@ -363,7 +358,7 @@ def hr_desaconselhado(skin_type: Optional[str], bronzeada: bool) -> bool:
 def tabela_para_a_tela() -> List[Dict]:
     """O protocolo inteiro num payload, para a tela sugerir sem ida e volta.
 
-    São 79 linhas e elas quase nunca mudam: uma chamada cacheada evita uma
+    São 80 linhas e elas quase nunca mudam: uma chamada cacheada evita uma
     consulta por linha de aplicação enquanto ela digita.
     """
     return [

@@ -94,14 +94,18 @@ class TestONascimentoDoRegistro(unittest.TestCase):
         self.assertEqual(aps[0]["method"], "SHR")
         self.assertIsNone(aps[0]["fluence_j"])
 
-    def test_meio_gluteo_na_pele_negra_fica_sem_sugestao(self):
-        """O protocolo só tem a linha da pele branca, de propósito. Cair para
-        ela sugeriria 8 J numa pele cujo glúteo inteiro é 7."""
-        aps = aplicacoes_do_agendamento(
-            db_com_areas([area("1/2 Glúteo", "meio_gluteo")]), APPT, "NEGRA")
+    def test_meio_gluteo_tem_valor_proprio_em_cada_pele(self):
+        """Ficou sem linha na pele negra entre 19/09 e a resposta do André,
+        justamente porque copiar os 8 J da branca sugeriria acima do protocolo
+        dela - o glúteo inteiro na negra é 7 J."""
+        for pele, fluencia, energia in (("BRANCA", 8, 7), ("NEGRA", 7, 6)):
+            with self.subTest(pele=pele):
+                aps = aplicacoes_do_agendamento(
+                    db_com_areas([area("1/2 Glúteo", "meio_gluteo")]), APPT, pele)
 
-        self.assertEqual(aps[0]["method"], "SHR")
-        self.assertIsNone(aps[0]["fluence_j"])
+                self.assertEqual(aps[0]["method"], "SHR")
+                self.assertEqual(aps[0]["fluence_j"], fluencia)
+                self.assertEqual(aps[0]["energy_kj"], energia)
 
     def test_agendamento_sem_area(self):
         self.assertEqual(aplicacoes_do_agendamento(db_com_areas([]), APPT, "BRANCA"), [])

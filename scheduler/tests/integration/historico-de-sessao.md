@@ -24,7 +24,7 @@ curl -s "${H[@]}" "$BASE/clinics/$CLINIC/laser-protocol" \
       print('ligacoes:', len(d['area_map']))"
 ```
 
-**Esperado:** 79 parâmetros, 3 métodos, 40 ligações (36 áreas, 4 compostas
+**Esperado:** 80 parâmetros, 3 métodos, 40 ligações (36 áreas, 4 compostas
 abrindo em duas).
 
 ---

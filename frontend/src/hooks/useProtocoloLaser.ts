@@ -10,7 +10,7 @@ export const protocoloKeys = {
 /**
  * O protocolo inteiro, cacheado.
  *
- * São 79 linhas de referência que quase nunca mudam. Sem o cache, sugerir um
+ * São 80 linhas de referência que quase nunca mudam. Sem o cache, sugerir um
  * parâmetro custaria uma chamada por linha de aplicação enquanto a profissional
  * digita — com a paciente esperando.
  */

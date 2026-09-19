@@ -80,9 +80,9 @@
             "exec": [
               "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
               "",
-              "// 74 linhas dos PDFs + 5 dadas pela clinica.",
-              "pm.test(\"79 parametros\", function () {",
-              "    pm.expect(pm.response.json().parameters).to.have.lengthOf(79);",
+              "// 74 linhas dos PDFs + 6 dadas pela clinica.",
+              "pm.test(\"80 parametros\", function () {",
+              "    pm.expect(pm.response.json().parameters).to.have.lengthOf(80);",
               "});",
               "",
               "pm.test(\"Os tres metodos, com seus campos\", function () {",
