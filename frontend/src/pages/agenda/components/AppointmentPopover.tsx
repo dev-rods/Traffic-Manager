@@ -71,6 +71,14 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
                   PARCERIA
                 </span>
               )}
+              {/* A caixa da agenda passou a mostrar so horario e nome, entao a
+                  estreia precisa aparecer aqui - senao a informacao existia na
+                  tela e deixou de existir. */}
+              {a.is_first_visit && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-fuchsia-100 text-fuchsia-700 flex-shrink-0">
+                  1ª VEZ
+                </span>
+              )}
             </div>
             {serviceLine && <p className="text-sm text-gray-500">{serviceLine}</p>}
           </div>

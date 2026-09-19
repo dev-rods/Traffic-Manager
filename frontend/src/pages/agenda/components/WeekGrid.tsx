@@ -1,10 +1,32 @@
 import { shortDayName, dayNumber, shortMonthName, todayStr, timeToMinutes } from '@/utils/dateHelpers'
+import { distribuiEmColunas } from '@/lib/agendaLayout'
 import type { Appointment } from '@/types'
 
 const FIRST_HOUR = 7
 const LAST_HOUR = 22
 const SLOT_MINUTES = 15
-const HOUR_HEIGHT = 112 // px per hour
+const HOUR_HEIGHT = 112 // px per hour  (1 min = 1,87px)
+// Altura mínima de uma caixa. Cabe UMA linha de 11px com o padding apertado -
+// nem uma sessão de 5 minutos fica ilegível, e nem por isso a caixa invade
+// meia hora de agenda como antes.
+const ALTURA_MINIMA = 18
+// O que a ALTURA_MINIMA vale em minutos de agenda. Uma sessão mais curta que
+// isso ocupa na tela mais do que ocupa na sala.
+const MINUTOS_MINIMOS = Math.ceil((ALTURA_MINIMA / HOUR_HEIGHT) * 60)
+
+/**
+ * O intervalo que a caixa OCUPA NA TELA, que nem sempre é o da sessão.
+ *
+ * Uma sessão de 5 minutos é esticada até ALTURA_MINIMA para o nome caber. No
+ * tempo ela não colide com a das 7h20; na tela, colide. Alimentar o layout com
+ * o intervalo visual é o que faz as duas irem para colunas diferentes em vez de
+ * uma ficar por cima da outra.
+ */
+function intervaloVisual(a: Appointment) {
+  const inicio = timeToMinutes(a.start_time)
+  const fim = timeToMinutes(a.end_time)
+  return { inicio, fim: Math.max(fim, inicio + MINUTOS_MINIMOS) }
+}
 const SLOT_HEIGHT = HOUR_HEIGHT / (60 / SLOT_MINUTES) // px per 15-min slot
 const TOTAL_HOURS = LAST_HOUR - FIRST_HOUR
 const HOURS = Array.from({ length: TOTAL_HOURS }, (_, i) => FIRST_HOUR + i)
@@ -24,31 +46,48 @@ function getAppointmentsForDay(appointments: Appointment[], date: string): Appoi
   return appointments.filter((a) => a.appointment_date === date && a.status !== 'CANCELLED')
 }
 
-function appointmentStyle(a: Appointment): React.CSSProperties {
+/**
+ * Onde a caixa fica e que tamanho tem.
+ *
+ * A altura é a duração REAL. Até 19/09/2026 havia um `Math.max(..., 30)` aqui,
+ * e desde que o piso da duração caiu para 10 minutos (PR #46) isso virou
+ * sobreposição garantida: uma sessão de 10 min era desenhada com 30 e cobria as
+ * duas seguintes. Quem precisa de espaço para ler é o texto, e disso cuida
+ * ALTURA_MINIMA - que custa 8px de folga, não 20 minutos de agenda.
+ *
+ * `coluna`/`colunas` vêm de [distribuiEmColunas]: só quem se sobrepõe DE FATO
+ * divide a largura. Num dia normal todas ficam com a largura inteira.
+ */
+function appointmentStyle(a: Appointment, coluna: number, colunas: number): React.CSSProperties {
   const startMin = timeToMinutes(a.start_time)
   const endMin = timeToMinutes(a.end_time)
   const topMin = startMin - FIRST_HOUR * 60
-  const durationMin = Math.max(endMin - startMin, 30)
+  const durationMin = Math.max(endMin - startMin, 0)
+
+  const largura = 100 / colunas
 
   return {
     position: 'absolute',
     top: `${(topMin / 60) * HOUR_HEIGHT}px`,
-    height: `${(durationMin / 60) * HOUR_HEIGHT - 2}px`,
-    left: '2px',
-    right: '2px',
+    height: `${Math.max((durationMin / 60) * HOUR_HEIGHT - 2, ALTURA_MINIMA)}px`,
+    left: `calc(${coluna * largura}% + 2px)`,
+    width: `calc(${largura}% - 4px)`,
   }
 }
 
 function AppointmentBlock({
   appointment,
+  coluna,
+  colunas,
   onClick,
 }: {
   appointment: Appointment
+  coluna: number
+  colunas: number
   onClick: (a: Appointment, rect: DOMRect) => void
 }) {
   const a = appointment
   const displayName = a.patient_name || a.full_name || 'Sem nome'
-  const serviceLine = [a.service_name, a.areas].filter(Boolean).join(' · ')
   const isPartnership = a.discount_reason === 'partnership'
   const isPrimeira = a.is_first_visit
 
@@ -59,9 +98,12 @@ function AppointmentBlock({
         const rect = e.currentTarget.getBoundingClientRect()
         onClick(a, rect)
       }}
-      style={appointmentStyle(a)}
+      style={appointmentStyle(a, coluna, colunas)}
+      title={[a.start_time.slice(0, 5), displayName, a.service_name, a.areas]
+        .filter(Boolean)
+        .join(' · ')}
       className={[
-        'w-full text-left rounded-md px-2 py-1 border-l-3 overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
+        'absolute text-left rounded-md px-1.5 py-0.5 border-l-3 overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
         // Parceria vence a estreia: quem vem por parceria quase sempre esta
         // vindo pela primeira vez, e as duas cores no mesmo card nao cabem.
         // A que muda o atendimento e a parceria.
@@ -81,11 +123,16 @@ function AppointmentBlock({
             : 'bg-brand-50 border-l-brand-500 text-brand-900',
       ].join(' ')}
     >
-      {/* O horário ao lado do nome. Sem ele, acompanhar quem entra às 14h
-          exigia clicar em cada agendamento - a posição no grid dá a hora
-          aproximada, não a exata. `tabular-nums` mantém os dígitos alinhados
-          entre as linhas, senão a coluna de nomes serrilha. */}
-      <p className="text-xs font-semibold truncate leading-tight">
+      {/* Horário e nome, e mais nada.
+          
+          Serviço, áreas, profissional, preço e observações estão todos no
+          popover, a um clique - e a caixa precisa caber numa sessão de 10
+          minutos sem invadir a seguinte. Repetir aqui o que o popover já mostra
+          custava a legibilidade do dia inteiro.
+          
+          `tabular-nums` mantém os dígitos alinhados entre as linhas, senão a
+          coluna de nomes serrilha. */}
+      <p className="text-[11px] font-semibold truncate leading-tight">
         <span className="tabular-nums opacity-70">{a.start_time.slice(0, 5)}</span>
         {' '}
         {/* Cor sozinha nao basta: quem tem daltonismo, ou olha a agenda no
@@ -100,9 +147,6 @@ function AppointmentBlock({
         )}
         {displayName}
       </p>
-      {serviceLine && (
-        <p className="text-[11px] truncate leading-tight opacity-75">{serviceLine}</p>
-      )}
     </button>
   )
 }
@@ -210,10 +254,12 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
                 })}
 
                 {/* Appointment blocks */}
-                {dayAppts.map((a) => (
+                {distribuiEmColunas(dayAppts, intervaloVisual).map(({ item, coluna, colunas }) => (
                   <AppointmentBlock
-                    key={a.id}
-                    appointment={a}
+                    key={item.id}
+                    appointment={item}
+                    coluna={coluna}
+                    colunas={colunas}
                     onClick={onAppointmentClick}
                   />
                 ))}
