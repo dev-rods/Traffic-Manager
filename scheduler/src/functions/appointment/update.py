@@ -5,7 +5,13 @@ from datetime import datetime, date, time
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.db.postgres import PostgresService
-from src.services.appointment_service import AppointmentService, NotFoundError, OptimisticLockError, ConflictError
+from src.services.appointment_service import (
+    SEM_MUDANCA,
+    AppointmentService,
+    ConflictError,
+    NotFoundError,
+    OptimisticLockError,
+)
 from src.services.duracao_manual import DuracaoInvalida
 
 logger = logging.getLogger(__name__)
@@ -96,27 +102,44 @@ def handler(event, context):
         # A duração não pode entrar em 4: o end_time já teria sido calculado em
         # 3 com a duração antiga, e a sessão ocuparia a sala errada.
 
+        # A duração só é conferida contra a data FINAL. Quando um reschedule vem
+        # a seguir, a data ainda é a antiga aqui, e conferir contra ela acusaria
+        # conflito num dia que a paciente nem vai ocupar.
+        confere_conflito_agora = not (new_date or new_time)
+        duracao_ja_aplicada = False
+
         # 1. Update service/areas first (changes duration → affects end_time calculation)
         if new_service_id:
+            # A duração do MESMO pedido vai junto. Sem isso, a troca de área
+            # recalcula a duração pelas áreas novas e confere o conflito com
+            # ESSE número - antes de ler a duração que a atendente digitou.
+            # Foi o que recusou a edição da Larissa em 20/09/2026: área nova
+            # dava 15 minutos, ela fixou 10, e o conflito era com os 15.
             resultado_areas = service.update_appointment_services(
-                appointment_id, new_service_id, new_service_area_pairs
+                appointment_id, new_service_id, new_service_area_pairs,
+                manual_duration_minutes=(
+                    nova_duracao_manual if mexeu_na_duracao else SEM_MUDANCA
+                ),
+                verificar_conflito=confere_conflito_agora,
             )
             changed = True
             messages.append("serviço/áreas")
+            duracao_ja_aplicada = mexeu_na_duracao
             # A atendente precisa saber por que o valor que ela fixou sumiu.
-            if resultado_areas.get("manual_duration_descartada") and not mexeu_na_duracao:
+            if resultado_areas.get("manual_duration_descartada"):
                 messages.append("duração manual descartada (as áreas mudaram)")
 
-        # 2. Duração manual, ANTES do reschedule.
-        if mexeu_na_duracao:
-            # O conflito é conferido pelo reschedule quando ele vem a seguir:
-            # aqui a data ainda é a antiga, e conferir contra ela acusaria
-            # conflito num dia que a paciente nem vai ocupar.
+        # 2. Duração manual, ANTES do reschedule - e só se a etapa 1 não a
+        #    aplicou. Repetir aqui refaria a conta e conferiria o conflito duas
+        #    vezes, pelo mesmo motivo e com o mesmo resultado.
+        if mexeu_na_duracao and not duracao_ja_aplicada:
             service.set_manual_duration(
                 appointment_id, nova_duracao_manual,
-                verificar_conflito=not (new_date or new_time),
+                verificar_conflito=confere_conflito_agora,
             )
             changed = True
+
+        if mexeu_na_duracao:
             messages.append(
                 "duração" if nova_duracao_manual else "duração (voltou ao cálculo)"
             )

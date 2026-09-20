@@ -15,6 +15,21 @@ from src.services.duracao_manual import valida as valida_duracao_manual
 logger = logging.getLogger(__name__)
 
 
+class _SemMudanca:
+    """Marca "o pedido nao falou sobre isso".
+
+    `None` ja significa outra coisa - limpar a duracao manual - entao nao serve
+    como padrao. Sem separar os dois, trocar a area sempre pareceria um pedido
+    de limpar o override.
+    """
+
+    def __repr__(self):
+        return "SEM_MUDANCA"
+
+
+SEM_MUDANCA = _SemMudanca()
+
+
 class ConflictError(Exception):
     pass
 
@@ -474,8 +489,27 @@ class AppointmentService:
         appointment_id: str,
         service_id: str,
         service_area_pairs: Optional[List[Dict[str, str]]] = None,
+        manual_duration_minutes=SEM_MUDANCA,
+        verificar_conflito: bool = True,
     ) -> Dict[str, Any]:
-        """Update the service and areas of an existing appointment, recalculating duration/end_time."""
+        """Troca o servico e as areas, recalculando duracao e fim da sessao.
+
+        `manual_duration_minutes` existe porque trocar a area e fixar a duracao
+        costumam ser o MESMO pedido. Em 20/09/2026 o Andre trocou a area da
+        Larissa de "Virilha Completa" para "Virilha Completa + anus" e fixou 10
+        minutos; recebeu conflito de horario. A troca de area recalculava 15
+        minutos, conferia o conflito com ESSE numero e recusava - antes de a
+        duracao que ele digitou sequer ser lida.
+
+        Trocar a area continua DESCARTANDO um override anterior, como o Andre
+        decidiu em 17/09: aquele valor foi escolhido para outras areas. Mas um
+        valor mandado no MESMO pedido nao e override anterior - e a decisao de
+        agora, e ela vence.
+
+        `verificar_conflito=False` para quando um reschedule vem logo em
+        seguida: aqui a data ainda e a antiga, e conferir contra ela acusaria
+        conflito num dia que a paciente nem vai ocupar.
+        """
         # 1. Fetch appointment with optimistic lock
         appointments = self.db.execute_query(
             "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
@@ -507,7 +541,13 @@ class AppointmentService:
         #
         # Quem chamou precisa SABER que descartou, senao o valor some da tela e
         # a atendente nao entende por que. Ver o handler de update.
-        duracao_manual_descartada = bool(appointment.get("manual_duration_minutes"))
+        # So e descarte quando o pedido NAO trouxe duracao nova: se trouxe, o
+        # valor nao foi perdido, foi substituido - e avisar "descartada" na tela
+        # seria mentira.
+        duracao_manual_descartada = (
+            bool(appointment.get("manual_duration_minutes"))
+            and manual_duration_minutes is SEM_MUDANCA
+        )
         if duracao_manual_descartada:
             logger.info(
                 f"[Duracao] {appointment_id}: duracao manual de "
@@ -538,6 +578,14 @@ class AppointmentService:
                 svc.get("duration_minutes"), get_duration_rules(self.db, appointment["clinic_id"]))
             original_price_cents = svc.get("price_cents")
 
+        # A duracao mandada no mesmo pedido vence a recalculada. Sem isto, o
+        # conflito abaixo seria conferido contra um numero que o pedido ja
+        # substituiu.
+        manual_do_pedido = None
+        if manual_duration_minutes is not SEM_MUDANCA:
+            manual_do_pedido = valida_duracao_manual(manual_duration_minutes)
+            duration_minutes = duracao_efetiva(duration_minutes, manual_do_pedido)
+
         final_price_cents = (aplica_desconto(original_price_cents, discount_pct)
                              if original_price_cents else original_price_cents)
 
@@ -562,20 +610,24 @@ class AppointmentService:
             """,
             (clinic_id, appt_date, appointment_id, new_end_time, start_time, new_end_time, start_time, start_time, new_end_time),
         )
-        if conflicts:
-            raise ConflictError(f"Conflito de horário com nova duração: {appt_date} {start_time}-{new_end_time}")
+        if conflicts and verificar_conflito:
+            raise ConflictError(
+                f"Conflito de horário com nova duração: {appt_date} "
+                f"{start_time}-{new_end_time}"
+            )
 
         # 6. Update appointment record
         updated_rows = self.db.execute_write(
             """
             UPDATE scheduler.appointments
             SET service_id = %s::uuid, end_time = %s::time, total_duration_minutes = %s,
-                manual_duration_minutes = NULL,
+                manual_duration_minutes = %s,
                 original_price_cents = %s, final_price_cents = %s,
                 version = version + 1, updated_at = NOW()
             WHERE id = %s::uuid AND version = %s
             """,
-            (service_id, new_end_time, duration_minutes, original_price_cents, final_price_cents, appointment_id, current_version),
+            (service_id, new_end_time, duration_minutes, manual_do_pedido,
+             original_price_cents, final_price_cents, appointment_id, current_version),
         )
         if updated_rows == 0:
             raise OptimisticLockError("Agendamento foi modificado por outro processo")
