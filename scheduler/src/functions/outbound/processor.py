@@ -185,6 +185,17 @@ def handler(event, context):
                 skipped += 1
                 continue
 
+            # Toma o item ANTES de falar, e so aqui: uma guarda acima pode ter
+            # adiado, e adiar precisa deixar o item em PENDING para a proxima
+            # execucao. Reivindicar no topo obrigaria a devolver, e devolver e
+            # mais um lugar para errar.
+            if not queue.reivindica(message_id, item["pk"], item["sk"]):
+                logger.info(
+                    f"{prefixo} {message_id} ja tomado por outra execucao, pulando"
+                )
+                skipped += 1
+                continue
+
             provider = get_provider(clinic)
             enviou_alguma, quantas = falar(
                 clinic_id, phone, GATILHO_ABERTURA,
