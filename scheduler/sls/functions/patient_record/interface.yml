@@ -10,19 +10,6 @@ CreateSessionRecord:
   handler: src.functions.patient_record.create.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateSessionRecord-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/patients/{patientId}/session-records
@@ -33,19 +20,6 @@ ListSessionRecords:
   handler: src.functions.patient_record.list.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListSessionRecords-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/patients/{patientId}/session-records
@@ -56,19 +30,6 @@ UpdateSessionRecord:
   handler: src.functions.patient_record.update.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-UpdateSessionRecord-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/session-records/{recordId}
@@ -79,19 +40,6 @@ DeleteSessionRecord:
   handler: src.functions.patient_record.delete.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DeleteSessionRecord-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/session-records/{recordId}
@@ -102,19 +50,6 @@ SessionRecordHistory:
   handler: src.functions.patient_record.history.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-SessionRecordHistory-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/session-records/{recordId}/history
@@ -125,19 +60,6 @@ LaserProtocol:
   handler: src.functions.patient_record.protocol.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-LaserProtocol-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/laser-protocol

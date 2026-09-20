@@ -2,19 +2,6 @@ CreateService:
   handler: src.functions.service.create.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateService-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/services
@@ -25,19 +12,6 @@ ListServices:
   handler: src.functions.service.list.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListServices-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/services
@@ -48,19 +22,6 @@ UpdateService:
   handler: src.functions.service.update.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-UpdateService-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: services/{serviceId}

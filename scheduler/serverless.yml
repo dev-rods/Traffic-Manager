@@ -33,6 +33,21 @@ provider:
   # redeploy do commit anterior, que ja era como faziamos - nunca apontamos
   # alias para versao nenhuma.
   versionFunctions: false
+
+  # As funcoes que nao tocam nenhum servico da AWS usam a role COMPARTILHADA
+  # que o provider cria, e nao uma propria.
+  #
+  # Eram 75 roles para 74 funcoes, e 57 delas concediam exatamente a mesma
+  # coisa: logs mais `ssm:GetParameter`. O ssm era permissao MORTA - os
+  # segredos sao resolvidos no deploy por `${ssm:/...}` aqui embaixo e chegam
+  # como variavel de ambiente, entao nenhuma Lambda le SSM em runtime.
+  #
+  # Cada role custava um recurso de CloudFormation, e a stack de prod estava em
+  # 497 de 500: a proxima Lambda com endpoint nao subia. Fazer 57 copias da
+  # mesma politica nao comprava isolamento nenhum - comprava o limite.
+  #
+  # As 17 que tocam DynamoDB ou invocam outra Lambda MANTEM role propria, e
+  # ai a separacao significa alguma coisa. Ver o PR que fez a mudanca.
   name: aws
   runtime: python3.8
   stage: ${opt:stage, 'dev'}
