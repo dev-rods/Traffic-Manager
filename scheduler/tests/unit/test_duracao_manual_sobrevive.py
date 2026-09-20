@@ -159,6 +159,9 @@ class TestRemarcarSemOverrideNaoMuda(unittest.TestCase):
 
 class TestTrocarAreasDescartaOOverride(unittest.TestCase):
     def test_a_coluna_e_zerada(self):
+        """Confere o VALOR gravado, não o texto do SQL: desde 20/09 a coluna é
+        parametrizada, porque a troca de área pode vir com uma duração nova no
+        mesmo pedido."""
         db = DbFalso({"manual_duration_minutes": 75})
 
         servico(db).update_appointment_services(
@@ -166,8 +169,9 @@ class TestTrocarAreasDescartaOOverride(unittest.TestCase):
             [{"serviceId": "s1", "areaId": "a1"}],
         )
 
-        sql, _ = db.update_em("service_id")
-        self.assertIn("manual_duration_minutes = NULL", sql)
+        sql, params = db.update_em("service_id")
+        self.assertIn("manual_duration_minutes", sql)
+        self.assertIn(None, params, "o override tinha de ter sido zerado")
 
     def test_e_quem_chamou_fica_sabendo(self):
         """Sem isto o valor some da tela e a atendente não entende por quê."""
