@@ -55,6 +55,8 @@ def item(**over):
 class FilaFalsa:
     def __init__(self):
         self.acoes = []
+        # Quem "perde a corrida" para outra execucao. Ver reivindica().
+        self.tomado_por_outro = False
 
     def pending_due(self, agora_iso, limit=50):
         return self._pendentes
@@ -67,6 +69,13 @@ class FilaFalsa:
 
     def mark_failed(self, mid, pk, sk, motivo):
         self.acoes.append(("falha", motivo))
+
+    def reivindica(self, mid, pk, sk):
+        if self.tomado_por_outro:
+            self.acoes.append(("perdeu_a_corrida", mid))
+            return False
+        self.acoes.append(("reivindicou", mid))
+        return True
 
     def mark_sent(self, mid, pk, sk):
         self.acoes.append(("enviou", None))

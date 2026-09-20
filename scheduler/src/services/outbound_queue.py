@@ -113,6 +113,43 @@ class OutboundQueueService:
         )
         return response.get("Items", [])
 
+    def reivindica(self, message_id: str, pk: str, sk: str) -> bool:
+        """Toma o item para si. `False` significa que outra execução já tomou.
+
+        Sem isto, `pending_due` entrega o MESMO item a duas execuções e as duas
+        enviam. Aconteceu em 18/09/2026 com a Ana Clara: o clique da atendente
+        acordou o dispatcher às 14:54:17 e o cron de 10 minutos entrou às
+        14:54:23, dentro dos 8 segundos que o agente leva para escrever. Ela
+        recebeu duas mensagens de abertura, com redação diferente.
+
+        Não é caso raro: o cron roda 144 vezes por dia e todo clique abre uma
+        janela. O comentário do processador diz que "o próprio intervalo do cron
+        é o limitador, não precisa de lock" - e era verdade antes de existir o
+        `_acorda_o_dispatcher`. Duas decisões boas isoladamente; a interação
+        entre elas é que falha.
+
+        A transição é condicional: só sai de PENDING quem ainda está em PENDING.
+        Quem perder a corrida recebe ConditionalCheckFailedException e pula.
+        """
+        try:
+            self.table.update_item(
+                Key={"pk": pk, "sk": sk},
+                UpdateExpression="SET #s = :novo, claimedAt = :agora",
+                ConditionExpression="#s = :pendente",
+                ExpressionAttributeNames={"#s": "status"},
+                ExpressionAttributeValues={
+                    ":novo": "SENDING",
+                    ":pendente": "PENDING",
+                    ":agora": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+            )
+            return True
+        except self.table.meta.client.exceptions.ConditionalCheckFailedException:
+            logger.info(
+                f"[OutboundQueue] {message_id} ja foi tomado por outra execucao"
+            )
+            return False
+
     def mark_sent(self, message_id: str, pk: str, sk: str) -> None:
         self.table.update_item(
             Key={"pk": pk, "sk": sk},

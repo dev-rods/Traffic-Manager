@@ -7,7 +7,7 @@ import logging
 import boto3
 
 from src.utils.http import parse_body, http_response
-from src.utils.phone import normalize_phone
+from src.utils.phone import normalize_phone, variantes_do_numero
 from src.services.db.postgres import PostgresService
 from src.services.template_service import TemplateService
 from src.services.conversation_engine import ConversationEngine, ConversationState
@@ -259,13 +259,21 @@ def handler(event, context):
         # a data original. first_contact_at é "falamos com ele";
         # conversation_started_at é "ele respondeu" — sem separar não dá para medir
         # a taxa de resposta da abordagem.
+        #
+        # Casa por VARIANTE, não por igualdade. O formulário da landing page
+        # grava `5561981864151` e o WhatsApp entrega `556181864151`: fora da
+        # faixa de DDD 11-28 o nono dígito não vem. Casando exato, o lead nunca
+        # é encontrado e fica para sempre como "nunca respondeu" - e aí o botão
+        # "iniciar pelo bot" continua habilitado numa conversa que a pessoa já
+        # começou. Ver variantes_do_numero.
+        variantes = list(variantes_do_numero(incoming.phone)) or [incoming.phone]
         try:
             db.execute_write(
                 "UPDATE scheduler.leads "
                 "SET conversation_started_at = COALESCE(conversation_started_at, NOW()), "
                 "    updated_at = NOW() "
-                "WHERE clinic_id = %s AND phone = %s AND conversation_started_at IS NULL",
-                (clinic_id, incoming.phone),
+                "WHERE clinic_id = %s AND phone = ANY(%s) AND conversation_started_at IS NULL",
+                (clinic_id, variantes),
             )
         except Exception as e:
             logger.warning(f"[Webhook] Falha ao marcar conversation_started_at: {e}")
@@ -283,10 +291,14 @@ def handler(event, context):
         # política LEADS_ONLY, tenha o bot falado primeiro ou não. A marca é gravada
         # uma vez só: nas mensagens seguintes ela já está na sessão.
         if not session.get("bot_enabled"):
+            # Mesma variante da marcação acima, e pela MESMA razão - só que
+            # aqui o preço é maior: sem achar o lead, `bot_enabled` não é
+            # marcado, a política LEADS_ONLY cala o bot, e quem escreveu fica
+            # sem resposta. Em 18/09/2026 a Ana Clara esperou 3 horas.
             leads_lp = db.execute_query(
                 "SELECT id, first_contact_channel FROM scheduler.leads "
-                "WHERE clinic_id = %s AND phone = %s AND source = 'landing-page' LIMIT 1",
-                (clinic_id, incoming.phone),
+                "WHERE clinic_id = %s AND phone = ANY(%s) AND source = 'landing-page' LIMIT 1",
+                (clinic_id, variantes),
             )
             if leads_lp:
                 mark_conversation_eligible(
