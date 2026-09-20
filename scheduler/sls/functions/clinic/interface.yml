@@ -2,19 +2,6 @@ CreateClinic:
   handler: src.functions.clinic.create.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateClinic-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics
@@ -25,19 +12,6 @@ ListClinics:
   handler: src.functions.clinic.list.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListClinics-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics
@@ -48,19 +22,6 @@ GetClinic:
   handler: src.functions.clinic.get.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetClinic-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}
@@ -71,19 +32,6 @@ GetClinicDashboard:
   handler: src.functions.clinic.dashboard.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetClinicDashboard-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/dashboard
@@ -94,19 +42,6 @@ GetAgendaSummary:
   handler: src.functions.clinic.agenda_summary.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetAgendaSummary-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/agenda-summary
@@ -117,19 +52,6 @@ GetClinicReports:
   handler: src.functions.clinic.reports.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetClinicReports-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/reports
@@ -140,19 +62,6 @@ UpdateClinic:
   handler: src.functions.clinic.update.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-UpdateClinic-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}
@@ -171,11 +80,6 @@ BotMetrics:
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events/index/*"
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup

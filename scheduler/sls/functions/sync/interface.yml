@@ -2,19 +2,6 @@ SyncWhatsAppChats:
   handler: src.functions.sync.conversas.handler
   memorySize: 512
   timeout: 300
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-SyncWhatsAppChats-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     # Diario as 06:00 BRT (09:00 UTC): antes de a clinica abrir, entao o painel
     # comeca o dia com a informacao do dia anterior inteira.

@@ -30,11 +30,6 @@ WhatsAppWebhook:
         - "arn:aws:lambda:${self:provider.region}:${self:custom.accountId}:function:${self:service}-${self:custom.stage}-WhatsAppWebhook"
     - Effect: Allow
       Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
         - logs:CreateLogGroup
         - logs:CreateLogStream
         - logs:PutLogEvents
@@ -56,11 +51,6 @@ WhatsAppStatusWebhook:
         - dynamodb:PutItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
