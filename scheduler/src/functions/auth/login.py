@@ -112,6 +112,8 @@ def handler(event, context):
                 u.role as user_role,
                 u.agenda_days_ahead,
                 u.agenda_visible_until,
+                u.can_see_prices,
+                u.can_see_patient_list,
                 c.clinic_id,
                 c.name as clinic_name,
                 c.owner_email,
@@ -185,6 +187,13 @@ def handler(event, context):
             "agenda_window": None if papel == ADMIN else {
                 "from": inicio.isoformat(),
                 "to": fim.isoformat(),
+            },
+            # A tela usa isto para nao oferecer o que nao ha. O servidor aplica
+            # os mesmos dois interruptores por conta propria.
+            "permissions": {
+                "see_prices": papel == ADMIN or bool(user.get("can_see_prices")),
+                "see_patient_list": papel == ADMIN or bool(
+                    user.get("can_see_patient_list", True)),
             },
             "clinic": {
                 "clinic_id": user["clinic_id"],

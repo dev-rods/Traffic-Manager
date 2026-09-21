@@ -108,6 +108,37 @@ function Vazio() {
   )
 }
 
+function Interruptor({
+  ligado,
+  rotulo,
+  ajuda,
+  desabilitado,
+  onChange,
+}: {
+  ligado: boolean
+  rotulo: string
+  ajuda: string
+  desabilitado: boolean
+  onChange: (valor: boolean) => void
+}) {
+  return (
+    <label className="flex items-start gap-2 text-xs text-gray-600 cursor-pointer max-w-xs">
+      <input
+        type="checkbox"
+        checked={ligado}
+        disabled={desabilitado}
+        onChange={(e) => onChange(e.target.checked)}
+        className="rounded border-gray-300 mt-0.5"
+      />
+      <span>
+        {rotulo}
+        <span className="block text-[11px] leading-snug text-gray-400">{ajuda}</span>
+      </span>
+    </label>
+  )
+}
+
+
 function LinhaDeFuncionario({
   usuario,
   onAviso,
@@ -144,6 +175,23 @@ function LinhaDeFuncionario({
           />
           {usuario.active ? 'Ativo' : 'Desativado'}
         </label>
+      </div>
+
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        <Interruptor
+          ligado={usuario.can_see_prices}
+          rotulo="Ve valores em reais"
+          ajuda="Preco do agendamento e dos servicos. Relatorio financeiro continua fechado."
+          desabilitado={isPending}
+          onChange={(v) => salvar({ can_see_prices: v })}
+        />
+        <Interruptor
+          ligado={usuario.can_see_patient_list}
+          rotulo="Ve a lista de pacientes"
+          ajuda="Desligado, ela ainda agenda pelo telefone e ainda registra sessao pela agenda."
+          desabilitado={isPending}
+          onChange={(v) => salvar({ can_see_patient_list: v })}
+        />
       </div>
 
       <JanelaDaAgendaField

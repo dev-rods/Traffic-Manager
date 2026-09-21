@@ -82,6 +82,11 @@ def handler(event, context):
             sets.append("agenda_visible_until = %s")
             params.append(ate)
 
+        for campo in ("can_see_prices", "can_see_patient_list"):
+            if campo in body:
+                sets.append("%s = %%s" % campo)
+                params.append(bool(body[campo]))
+
         if "active" in body:
             sets.append("active = %s")
             params.append(bool(body["active"]))
@@ -106,7 +111,8 @@ def handler(event, context):
         # janela dele, so faria efeito no proximo login sem esta linha - e o
         # motivo de apertar costuma ser urgente.
         mexeu_no_acesso = any(c in body for c in
-                              ("active", "agenda_days_ahead", "agenda_visible_until"))
+                              ("active", "agenda_days_ahead", "agenda_visible_until",
+                               "can_see_prices", "can_see_patient_list"))
         if mexeu_no_acesso:
             db.execute_write(
                 "UPDATE scheduler.user_sessions SET revoked_at = NOW() "
@@ -114,7 +120,7 @@ def handler(event, context):
 
         depois = db.execute_query(
             "SELECT id, email, name, role, active, agenda_days_ahead, "
-            "       agenda_visible_until "
+            "       agenda_visible_until, can_see_prices, can_see_patient_list "
             "FROM scheduler.clinic_users WHERE id = %s::uuid", (user_id,))[0]
 
         logger.info(f"Usuario atualizado: {user_id} ({clinic_id})")
@@ -132,6 +138,8 @@ def handler(event, context):
                 "agenda_days_ahead": depois["agenda_days_ahead"],
                 "agenda_visible_until": (depois["agenda_visible_until"].isoformat()
                                          if depois["agenda_visible_until"] else None),
+                "can_see_prices": depois["can_see_prices"],
+                "can_see_patient_list": depois["can_see_patient_list"],
             },
         })
 

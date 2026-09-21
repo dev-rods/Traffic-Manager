@@ -12,10 +12,10 @@ import { podeVer, rotaInicial } from '@/lib/permissoes'
  * sistema quebrou.
  */
 export function RotaPermitida() {
-  const { papel } = useAuth()
+  const { papel, permissoes } = useAuth()
   const { pathname } = useLocation()
 
-  if (!podeVer(papel, pathname)) {
+  if (!podeVer({ papel, permissoes }, pathname)) {
     return <Navigate to={rotaInicial(papel)} replace />
   }
 

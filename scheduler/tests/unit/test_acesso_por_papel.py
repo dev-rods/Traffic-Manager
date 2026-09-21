@@ -337,5 +337,62 @@ class TestHojeEODaClinicaENaoODaAWS(unittest.TestCase):
         self.assertEqual(Identidade(papel=STAFF).fuso, "America/Sao_Paulo")
 
 
+class TestOsDoisInterruptores(unittest.TestCase):
+    """Decisao do Andre em 21/09/2026: nem toda recepcao e igual.
+
+    Quem cobra no balcao precisa do valor; quem so agenda nao precisa. E a
+    clinica que nao quer a base inteira de pacientes a mao de quem atende
+    tambem tem como fechar isso, sem tirar dela o prontuario.
+    """
+
+    def setUp(self):
+        self.ve_preco = Identidade(papel=STAFF, clinic_id="essencia",
+                                   ve_precos=True)
+        self.nao_ve = Identidade(papel=STAFF, clinic_id="essencia",
+                                 ve_precos=False)
+
+    def test_com_o_interruptor_ligado_o_preco_passa(self):
+        dado = {"final_price_cents": 19500}
+
+        self.assertEqual(para_o_staff(self.ve_preco, dado), dado)
+
+    def test_desligado_o_preco_sai(self):
+        self.assertEqual(para_o_staff(self.nao_ve, {"final_price_cents": 1}), {})
+
+    def test_o_admin_nao_depende_do_interruptor(self):
+        admin_sem = Identidade(papel=ADMIN, chave_mestra=True, ve_precos=False)
+
+        self.assertTrue(admin_sem.mostra_valores)
+
+    def test_o_padrao_e_nao_mostrar_valor(self):
+        """Ligar a coluna nao pode revelar preco para quem ja existia."""
+        self.assertFalse(Identidade(papel=STAFF).ve_precos)
+
+    def test_sem_a_lista_a_permissao_de_ler_pacientes_cai(self):
+        sem_lista = Identidade(papel=STAFF, ve_lista_de_pacientes=False)
+
+        self.assertFalse(sem_lista.pode("pacientes.ler"))
+
+    def test_mas_o_prontuario_e_o_agendamento_ficam(self):
+        """Ela chega ao prontuario pelo atalho da agenda, e cadastra paciente
+        pelo telefone. Fechar esses junto trancaria a recepcao fora do proprio
+        trabalho."""
+        sem_lista = Identidade(papel=STAFF, ve_lista_de_pacientes=False)
+
+        for permissao in ("prontuario.ler", "prontuario.escrever",
+                          "pacientes.escrever", "agenda.ler", "agenda.escrever"):
+            with self.subTest(permissao):
+                self.assertTrue(sem_lista.pode(permissao))
+
+    def test_o_padrao_e_ver_a_lista(self):
+        """Era o comportamento no ar antes do interruptor existir."""
+        self.assertTrue(Identidade(papel=STAFF).ve_lista_de_pacientes)
+
+    def test_o_admin_ve_a_lista_mesmo_com_o_interruptor_desligado(self):
+        admin_sem = Identidade(papel=ADMIN, ve_lista_de_pacientes=False)
+
+        self.assertTrue(admin_sem.pode("pacientes.ler"))
+
+
 if __name__ == "__main__":
     unittest.main()

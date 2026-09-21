@@ -4,6 +4,7 @@ import type {
   Clinic,
   JanelaDaAgenda,
   PapelDoUsuario,
+  PermissoesDoUsuario,
 } from '@/types'
 import { api } from '@/services/api'
 import { AuthContext } from './auth-context'
@@ -17,6 +18,7 @@ interface AuthState {
   papel: PapelDoUsuario
   janela: JanelaDaAgenda | null
   nome: string | null
+  permissoes: PermissoesDoUsuario
 }
 
 const TOKEN_KEY = 'tm_token'
@@ -24,6 +26,11 @@ const CLINIC_ID_KEY = 'tm_clinic_id'
 const PAPEL_KEY = 'tm_papel'
 const JANELA_KEY = 'tm_janela'
 const NOME_KEY = 'tm_nome'
+const PERMISSOES_KEY = 'tm_permissoes'
+
+// Sessao antiga, de antes dos interruptores, era de administrador: os dois
+// ligados. Tratar ausencia como "negado" trancaria quem ja estava logado.
+const TUDO_LIGADO: PermissoesDoUsuario = { see_prices: true, see_patient_list: true }
 
 interface RespostaDeLogin {
   token: string
@@ -31,6 +38,7 @@ interface RespostaDeLogin {
   clinic: Clinic
   role?: PapelDoUsuario
   agenda_window?: JanelaDaAgenda | null
+  permissions?: PermissoesDoUsuario
   user?: { id: string; name: string | null; email: string }
 }
 
@@ -42,6 +50,16 @@ function leJanela(): JanelaDaAgenda | null {
   } catch {
     // Storage corrompido não pode derrubar o app na inicialização.
     return null
+  }
+}
+
+function lePermissoes(): PermissoesDoUsuario {
+  const cru = localStorage.getItem(PERMISSOES_KEY)
+  if (!cru) return TUDO_LIGADO
+  try {
+    return JSON.parse(cru) as PermissoesDoUsuario
+  } catch {
+    return TUDO_LIGADO
   }
 }
 
@@ -58,6 +76,7 @@ function getInitialState(): AuthState {
       papel: (localStorage.getItem(PAPEL_KEY) as PapelDoUsuario) ?? 'ADMIN',
       janela: leJanela(),
       nome: localStorage.getItem(NOME_KEY),
+      permissoes: lePermissoes(),
     }
   }
   return {
@@ -68,6 +87,7 @@ function getInitialState(): AuthState {
     papel: 'ADMIN',
     janela: null,
     nome: null,
+    permissoes: TUDO_LIGADO,
   }
 }
 
@@ -77,10 +97,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async ({ email, password }: AuthCredentials) => {
     const response = await api.post<RespostaDeLogin>('/auth/login', { email, password })
 
-    const { token, clinic_id, clinic, role, agenda_window, user } = response.data
+    const { token, clinic_id, clinic, role, agenda_window, permissions, user } =
+      response.data
     const papel: PapelDoUsuario = role ?? 'ADMIN'
     const janela = agenda_window ?? null
     const nome = user?.name ?? null
+    const permissoes = permissions ?? TUDO_LIGADO
 
     localStorage.setItem(TOKEN_KEY, token)
     localStorage.setItem(CLINIC_ID_KEY, clinic_id)
@@ -89,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     else localStorage.removeItem(JANELA_KEY)
     if (nome) localStorage.setItem(NOME_KEY, nome)
     else localStorage.removeItem(NOME_KEY)
+    localStorage.setItem(PERMISSOES_KEY, JSON.stringify(permissoes))
 
     setState({
       isAuthenticated: true,
@@ -98,11 +121,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       papel,
       janela,
       nome,
+      permissoes,
     })
   }, [])
 
   const logout = useCallback(() => {
-    for (const chave of [TOKEN_KEY, CLINIC_ID_KEY, PAPEL_KEY, JANELA_KEY, NOME_KEY]) {
+    for (const chave of [TOKEN_KEY, CLINIC_ID_KEY, PAPEL_KEY, JANELA_KEY,
+                         NOME_KEY, PERMISSOES_KEY]) {
       localStorage.removeItem(chave)
     }
     setState({
@@ -113,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       papel: 'ADMIN',
       janela: null,
       nome: null,
+      permissoes: TUDO_LIGADO,
     })
   }, [])
 

@@ -31,6 +31,7 @@ def handler(event, context):
             """
             SELECT u.id, u.email, u.name, u.role, u.active,
                    u.agenda_days_ahead, u.agenda_visible_until,
+                   u.can_see_prices, u.can_see_patient_list,
                    u.created_at,
                    (SELECT MAX(s.created_at) FROM scheduler.user_sessions s
                      WHERE s.user_id = u.id) AS last_login_at
@@ -50,6 +51,8 @@ def handler(event, context):
             "agenda_days_ahead": u["agenda_days_ahead"],
             "agenda_visible_until": (u["agenda_visible_until"].isoformat()
                                      if u["agenda_visible_until"] else None),
+            "can_see_prices": u["can_see_prices"],
+            "can_see_patient_list": u["can_see_patient_list"],
             "last_login_at": (u["last_login_at"].isoformat()
                               if u["last_login_at"] else None),
         } for u in linhas]

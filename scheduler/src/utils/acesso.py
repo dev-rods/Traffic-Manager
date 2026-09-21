@@ -74,6 +74,9 @@ class Identidade:
     dias_a_frente: Optional[int] = None
     visivel_ate: Optional[date] = None
     fuso: str = FUSO_PADRAO
+    # Dois interruptores por pessoa. Ignorados para ADMIN, que ve tudo.
+    ve_precos: bool = False
+    ve_lista_de_pacientes: bool = True
 
     @property
     def e_admin(self) -> bool:
@@ -82,7 +85,16 @@ class Identidade:
     def pode(self, permissao: str) -> bool:
         if self.e_admin:
             return True
+        if permissao == "pacientes.ler" and not self.ve_lista_de_pacientes:
+            # Sem a lista ela ainda agenda (o cadastro sai pelo telefone) e
+            # ainda registra a sessao (chega pelo atalho da agenda). O que
+            # some e so a busca livre pela base inteira de pacientes.
+            return False
         return permissao in PERMISSOES_DO_STAFF
+
+    @property
+    def mostra_valores(self) -> bool:
+        return self.e_admin or self.ve_precos
 
 
 def hash_do_token(token: str) -> str:
@@ -156,6 +168,7 @@ def _sessao(token: str) -> Optional[Identidade]:
             """
             SELECT u.id, u.clinic_id, u.name, u.role, u.active,
                    u.agenda_days_ahead, u.agenda_visible_until,
+                   u.can_see_prices, u.can_see_patient_list,
                    c.timezone
               FROM scheduler.user_sessions s
               JOIN scheduler.clinic_users u ON u.id = s.user_id
@@ -191,6 +204,8 @@ def _sessao(token: str) -> Optional[Identidade]:
         dias_a_frente=u.get("agenda_days_ahead"),
         visivel_ate=u.get("agenda_visible_until"),
         fuso=u.get("timezone") or FUSO_PADRAO,
+        ve_precos=bool(u.get("can_see_prices")),
+        ve_lista_de_pacientes=bool(u.get("can_see_patient_list", True)),
     )
 
 

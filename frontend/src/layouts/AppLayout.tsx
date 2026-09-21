@@ -107,7 +107,7 @@ function useActiveGroup(): string {
 }
 
 export default function AppLayout() {
-  const { clinic, logout, papel } = useAuth()
+  const { clinic, logout, papel, permissoes } = useAuth()
   const { isDark, setTheme } = useTheme()
   useBranding(clinic?.display_name || clinic?.name)
 
@@ -117,9 +117,11 @@ export default function AppLayout() {
     () =>
       NAV_GROUPS.map((grupo) => ({
         ...grupo,
-        items: grupo.items.filter((item) => podeVer(papel, item.to)),
+        items: grupo.items.filter((item) =>
+          podeVer({ papel, permissoes }, item.to),
+        ),
       })).filter((grupo) => grupo.items.length > 0),
-    [papel],
+    [papel, permissoes],
   )
 
   const activeGroupLabel = useActiveGroup()
@@ -206,7 +208,7 @@ export default function AppLayout() {
         </nav>
 
         {/* Footer */}
-        {podeVer(papel, '/configuracoes') && (
+        {podeVer({ papel, permissoes }, '/configuracoes') && (
           <div className="border-t border-gray-100 dark:border-gray-800">
             <SidebarLink to="/configuracoes" label="Configurações" className="px-6" />
           </div>

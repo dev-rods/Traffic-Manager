@@ -1,4 +1,4 @@
-import type { PapelDoUsuario } from '@/types'
+import type { PapelDoUsuario, PermissoesDoUsuario } from '@/types'
 
 /**
  * O que cada papel enxerga no painel.
@@ -23,11 +23,33 @@ export const ROTAS_DO_STAFF = [
 /** Para onde o STAFF vai quando entra, ou quando tenta uma rota fechada. */
 export const ROTA_INICIAL_DO_STAFF = '/agenda'
 
-export function podeVer(papel: PapelDoUsuario, caminho: string): boolean {
-  if (papel === 'ADMIN') return true
-  return ROTAS_DO_STAFF.some(
-    (rota) => caminho === rota || caminho.startsWith(`${rota}/`),
-  )
+export interface AcessoDoUsuario {
+  papel: PapelDoUsuario
+  permissoes: PermissoesDoUsuario
+}
+
+function casa(caminho: string, rota: string): boolean {
+  return caminho === rota || caminho.startsWith(`${rota}/`)
+}
+
+export function podeVer(acesso: AcessoDoUsuario, caminho: string): boolean {
+  if (acesso.papel === 'ADMIN') return true
+
+  if (!ROTAS_DO_STAFF.some((rota) => casa(caminho, rota))) return false
+
+  /**
+   * A lista de pacientes é um interruptor à parte.
+   *
+   * Importa o `===`: só a LISTA é fechada. O prontuário
+   * (`/pacientes/:id/documentos`) continua aberto, porque ela chega nele pelo
+   * atalho da agenda e precisa dele para registrar a sessão. Usar `casa()`
+   * aqui trancaria a funcionária fora do próprio trabalho.
+   */
+  if (caminho === '/pacientes' && !acesso.permissoes.see_patient_list) {
+    return false
+  }
+
+  return true
 }
 
 export function rotaInicial(papel: PapelDoUsuario): string {

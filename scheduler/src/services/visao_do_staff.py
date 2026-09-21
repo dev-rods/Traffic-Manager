@@ -73,8 +73,14 @@ def sem_segredos(clinica: dict) -> dict:
 
 
 def para_o_staff(identidade, dado: Any) -> Any:
-    """Atalho: admin recebe tudo, funcionário recebe sem valores."""
-    if identidade is None or identidade.e_admin:
+    """A resposta como esta pessoa pode vê-la.
+
+    Quem decide é `identidade.mostra_valores`: admin sempre, e o funcionário
+    conforme o interruptor que o administrador ligou para ele. Nem toda
+    recepção é igual - quem cobra no balcão precisa do valor, quem só agenda
+    não precisa.
+    """
+    if identidade is None or identidade.mostra_valores:
         return dado
     return sem_valores(dado)
 

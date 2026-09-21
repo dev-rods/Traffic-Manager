@@ -11,6 +11,10 @@ export interface UsuarioDaClinica {
   agenda_days_ahead: number | null
   /** Data limite, YYYY-MM-DD. `null` = sem limite fixo. */
   agenda_visible_until: string | null
+  /** Ve valores em reais. */
+  can_see_prices: boolean
+  /** Ve a lista completa de pacientes. O prontuario nao depende disto. */
+  can_see_patient_list: boolean
   last_login_at?: string | null
 }
 
@@ -19,6 +23,8 @@ export interface AlteracaoDeUsuario {
   agenda_visible_until?: string | null
   active?: boolean
   name?: string
+  can_see_prices?: boolean
+  can_see_patient_list?: boolean
 }
 
 interface ListaDeUsuarios {

@@ -46,7 +46,7 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
 
   const a = appointment
   const displayName = a.patient_name || a.full_name || 'Sem nome'
-  const serviceLine = [a.service_name, a.areas].filter(Boolean).join(' · ')
+  const duracao = a.duration_minutes ?? null
   const timeSlot = `${a.start_time.slice(0, 5)}–${a.end_time.slice(0, 5)}`
   const isCancelled = a.status === 'CANCELLED'
 
@@ -80,7 +80,9 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
                 </span>
               )}
             </div>
-            {serviceLine && <p className="text-sm text-gray-500">{serviceLine}</p>}
+            {a.service_name && (
+              <p className="text-sm text-gray-500">{a.service_name}</p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -90,12 +92,37 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
           </button>
         </div>
 
-        {/* Details */}
+        {/* Details
+
+            Areas e Duracao ganharam linha propria em 21/09/2026. Antes, a area
+            vivia espremida no subtitulo cinza junto do nome do servico, e a
+            duracao nao aparecia em lugar nenhum - so dava para deduzir do
+            intervalo. Para quem NAO ve preco, essas duas sao a informacao
+            principal da caixa, e estavam sendo as menos visiveis dela. */}
         <div className="px-4 pb-3 space-y-1.5 text-sm">
+          {a.areas && (
+            <div className="flex justify-between gap-3">
+              <span className="text-gray-400 flex-shrink-0">Áreas</span>
+              {/* Sem truncar: "Virilha Completa + ânus, Axilas" cortado no meio
+                  é pior do que uma linha a mais. */}
+              <span className="font-medium text-gray-800 text-right">{a.areas}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-gray-400">Horario</span>
             <span className="font-medium text-gray-800">{timeSlot}</span>
           </div>
+          {duracao != null && (
+            <div className="flex justify-between">
+              <span className="text-gray-400">Duração</span>
+              <span className="font-medium text-gray-800">
+                {duracao} min
+                {a.manual_duration_minutes != null && (
+                  <span className="text-gray-400 font-normal"> · ajustada</span>
+                )}
+              </span>
+            </div>
+          )}
           {a.professional_name && (
             <div className="flex justify-between">
               <span className="text-gray-400">Profissional</span>

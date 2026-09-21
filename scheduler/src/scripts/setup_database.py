@@ -910,6 +910,16 @@ SQL_STATEMENTS = [
        ON scheduler.user_sessions(token_hash)""",
     """CREATE INDEX IF NOT EXISTS idx_user_sessions_user
        ON scheduler.user_sessions(user_id)""",
+
+    # Dois interruptores por pessoa, decisao do Andre em 21/09/2026: nem toda
+    # recepcao e igual, e a clinica que cobra no balcao precisa de uma coisa
+    # que a que so agenda nao precisa.
+    #
+    # Os DEFAULTs reproduzem o comportamento que ja estava no ar, para ligar a
+    # coluna nao mudar nada para quem ja existe: preco escondido, lista de
+    # pacientes visivel. Sao ignorados para ADMIN, que enxerga tudo.
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS can_see_prices BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS can_see_patient_list BOOLEAN NOT NULL DEFAULT TRUE",
 ]
 
 
