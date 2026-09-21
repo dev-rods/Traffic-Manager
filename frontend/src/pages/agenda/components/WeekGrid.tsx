@@ -40,6 +40,10 @@ interface WeekGridProps {
   appointments: Appointment[]
   onSlotClick: (date: string, time: string) => void
   onAppointmentClick: (appointment: Appointment, rect: DOMRect) => void
+  /** Clique no cabeçalho do dia. Sem isto, o cabeçalho não é clicável. */
+  onDayClick?: (date: string) => void
+  /** Está mostrando um único dia em tela cheia. */
+  expandido?: boolean
 }
 
 function getAppointmentsForDay(appointments: Appointment[], date: string): Appointment[] {
@@ -80,11 +84,13 @@ function AppointmentBlock({
   coluna,
   colunas,
   onClick,
+  expandido = false,
 }: {
   appointment: Appointment
   coluna: number
   colunas: number
   onClick: (a: Appointment, rect: DOMRect) => void
+  expandido?: boolean
 }) {
   const a = appointment
   const displayName = a.patient_name || a.full_name || 'Sem nome'
@@ -146,12 +152,26 @@ function AppointmentBlock({
           </span>
         )}
         {displayName}
+        {/* Com um dia só na tela a caixa fica larga demais para horário e nome,
+            e a área sobrava em branco. Na MESMA linha, e não numa segunda:
+            a altura continua sendo a duração, e uma sessão de 10 minutos tem
+            18px - não cabe segunda linha. `truncate` corta sem quebrar. */}
+        {expandido && a.areas && (
+          <span className="font-normal opacity-60"> · {a.areas}</span>
+        )}
       </p>
     </button>
   )
 }
 
-export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentClick }: WeekGridProps) {
+export function WeekGrid({
+  weekDays,
+  appointments,
+  onSlotClick,
+  onAppointmentClick,
+  onDayClick,
+  expandido = false,
+}: WeekGridProps) {
   const today = todayStr()
   const colCount = weekDays.length
   const gridCols = `52px repeat(${colCount}, 1fr)`
@@ -163,14 +183,8 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
         <div className="border-r border-gray-100" />
         {weekDays.map((day) => {
           const isToday = day === today
-          return (
-            <div
-              key={day}
-              className={[
-                'text-center py-2 border-r border-gray-100 last:border-r-0',
-                isToday ? 'bg-brand-500 text-white' : '',
-              ].join(' ')}
-            >
+          const conteudo = (
+            <>
               <p className={['text-[11px] font-medium leading-tight uppercase tracking-wide', isToday ? 'text-white/70' : 'text-gray-400'].join(' ')}>
                 {shortDayName(day)}
               </p>
@@ -180,7 +194,39 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
               <p className={['text-[10px] font-medium leading-tight mt-0.5', isToday ? 'text-white/60' : 'text-gray-300'].join(' ')}>
                 {shortMonthName(day)}
               </p>
-            </div>
+              {/* A saída fica no mesmo lugar da entrada: quem expandiu clicando
+                  no dia procura o caminho de volta ali, não no topo da página. */}
+              {expandido && (
+                <p className={['text-[10px] font-semibold leading-tight mt-1', isToday ? 'text-white/70' : 'text-brand-500'].join(' ')}>
+                  ‹ todos os dias
+                </p>
+              )}
+            </>
+          )
+
+          const estilo = [
+            'text-center py-2 border-r border-gray-100 last:border-r-0',
+            isToday ? 'bg-brand-500 text-white' : '',
+          ].join(' ')
+
+          if (!onDayClick) {
+            return <div key={day} className={estilo}>{conteudo}</div>
+          }
+
+          return (
+            <button
+              key={day}
+              type="button"
+              onClick={() => onDayClick(day)}
+              title={expandido ? 'Ver todos os dias' : 'Ver só este dia'}
+              className={[
+                estilo,
+                'w-full cursor-pointer transition-colors',
+                isToday ? 'hover:bg-brand-600' : 'hover:bg-gray-50',
+              ].join(' ')}
+            >
+              {conteudo}
+            </button>
           )
         })}
       </div>
@@ -261,6 +307,7 @@ export function WeekGrid({ weekDays, appointments, onSlotClick, onAppointmentCli
                     coluna={coluna}
                     colunas={colunas}
                     onClick={onAppointmentClick}
+                    expandido={expandido}
                   />
                 ))}
               </div>
