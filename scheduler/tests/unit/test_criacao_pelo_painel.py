@@ -13,6 +13,14 @@ import json
 import unittest
 from unittest import mock
 
+# O handler passou a autorizar por PAPEL (21/09/2026). Estes testes cobrem a
+# REGRA DE NEGOCIO, entao entram como administrador: quem cobre a autorizacao e
+# o test_acesso_por_papel.
+from src.utils.acesso import ADMIN, Identidade
+
+_ADMIN = Identidade(papel=ADMIN, chave_mestra=True)
+
+
 CLINIC = "clinicaessenciaestetica-9668a4"
 
 
@@ -28,7 +36,7 @@ def chama_o_handler(corpo):
     service = mock.MagicMock()
     service.create_appointment.return_value = {"id": "ap1"}
 
-    with mock.patch.object(modulo, "require_api_key", return_value=("k", None)), \
+    with mock.patch.object(modulo, "require_acesso", return_value=(_ADMIN, None)), \
          mock.patch.object(modulo, "PostgresService"), \
          mock.patch.object(modulo, "AppointmentService", return_value=service), \
          mock.patch.object(modulo, "_serialize_row", side_effect=lambda r: r):

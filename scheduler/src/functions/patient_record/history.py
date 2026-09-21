@@ -1,5 +1,7 @@
 import logging
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
 from src.functions.patient_record._comum import serializa
@@ -16,7 +18,7 @@ def handler(event, context):
     de proposito.
     """
     try:
-        _, erro = require_api_key(event)
+        identidade, erro = require_acesso(event, "prontuario.ler")
         if erro:
             return erro
 
@@ -35,10 +37,10 @@ def handler(event, context):
             (record_id, clinic_id),
         ) or []
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "history": [serializa(l) for l in linhas],
-        })
+        }))
 
     except Exception as e:
         logger.error(f"[Prontuario] Erro ao ler a trilha: {e}")

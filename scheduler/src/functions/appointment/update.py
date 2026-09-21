@@ -2,7 +2,14 @@ import json
 import logging
 from datetime import datetime, date, time
 
-from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import (
+    dentro_da_janela,
+    fora_da_janela,
+    para_o_staff,
+    pode_tocar_agendamento,
+)
+from src.utils.http import parse_body, http_response, extract_path_param
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import (
@@ -48,7 +55,7 @@ def handler(event, context):
     Supports combined operations in a single request (e.g. reschedule + change service + update notes).
     """
     try:
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "agenda.escrever")
         if error_response:
             return error_response
 
@@ -77,16 +84,29 @@ def handler(event, context):
         mexeu_na_duracao = "manualDurationMinutes" in body
         nova_duracao_manual = body.get("manualDurationMinutes")
 
+        # Duas perguntas antes de deixar editar, e as duas por causa desta
+        # rota nao carregar clinica nenhuma na URL:
+        #   - o agendamento e da clinica dele?
+        #   - esta na janela de datas dele?
+        # Sem isto, bastaria ter o id - e ids circulam pela propria tela.
+        if not pode_tocar_agendamento(identidade, db, appointment_id):
+            return fora_da_janela()
+
+        # Mover para fora da janela e tao ruim quanto editar de fora dela: seria
+        # empurrar a sessao para um dia que ele nao enxerga mais.
+        if new_date and not dentro_da_janela(identidade, new_date):
+            return fora_da_janela()
+
         service = AppointmentService(db)
 
         # Cancel is exclusive — cannot combine with other operations
         if new_status == "CANCELLED":
             result = service.cancel_appointment(appointment_id)
-            return http_response(200, {
+            return http_response(200, para_o_staff(identidade, {
                 "status": "SUCCESS",
                 "message": "Agendamento cancelado com sucesso",
                 "appointment": _serialize_row(result),
-            })
+            }))
 
         # Process all non-cancel changes sequentially
         changed = False
@@ -222,11 +242,11 @@ def handler(event, context):
         if not final:
             return http_response(404, {"status": "ERROR", "message": "Agendamento não encontrado"})
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "message": f"Agendamento atualizado ({', '.join(messages)})",
             "appointment": _serialize_row(final[0]),
-        })
+        }))
 
     except DuracaoInvalida as e:
         # Dedo errado no formulario e 400, nao 500.

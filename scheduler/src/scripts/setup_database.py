@@ -861,6 +861,55 @@ SQL_STATEMENTS = [
        ON scheduler.patient_session_record_audit(record_id, changed_at)""",
     """CREATE INDEX IF NOT EXISTS idx_area_protocol_map_area
        ON scheduler.area_protocol_map(area_id)""",
+
+    # -- Acesso por papel ------------------------------------------------------
+    #
+    # Ate 21/09/2026 o login devolvia a SCHEDULER_API_KEY para todo mundo: uma
+    # chave so, sem identidade, com acesso a tudo.
+    #
+    # O DEFAULT 'ADMIN' e deliberado: todo usuario que ja existe continua
+    # exatamente como estava. Um default 'STAFF' trancaria o Andre para fora do
+    # proprio painel no instante da migration.
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'ADMIN'",
+    "ALTER TABLE scheduler.clinic_users DROP CONSTRAINT IF EXISTS clinic_users_role_check",
+    """
+    ALTER TABLE scheduler.clinic_users ADD CONSTRAINT clinic_users_role_check
+        CHECK (role IN ('ADMIN', 'STAFF'))
+    """,
+
+    # Ate onde o funcionario enxerga a agenda. Os dois controles convivem e o
+    # mais restritivo vence: travar numa data nao pode ser afrouxado pelo
+    # contador de dias, nem o contrario. NULL nos dois cai no padrao do codigo.
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS agenda_days_ahead SMALLINT",
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS agenda_visible_until DATE",
+    "ALTER TABLE scheduler.clinic_users DROP CONSTRAINT IF EXISTS clinic_users_days_ahead_check",
+    """
+    ALTER TABLE scheduler.clinic_users ADD CONSTRAINT clinic_users_days_ahead_check
+        CHECK (agenda_days_ahead IS NULL
+               OR (agenda_days_ahead >= 0 AND agenda_days_ahead <= 365))
+    """,
+
+    # A sessao de quem NAO usa a chave mestra. Guarda o hash, nunca o token:
+    # vazamento desta tabela nao pode virar sessao valida.
+    #
+    # Em banco, e nao JWT assinado, porque revogar e o ponto: funcionario que
+    # sai da clinica tem de perder o acesso no mesmo minuto, e nao quando o
+    # token expirar sozinho.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.user_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES scheduler.clinic_users(id) ON DELETE CASCADE,
+        token_hash CHAR(64) NOT NULL UNIQUE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        revoked_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_user_sessions_hash
+       ON scheduler.user_sessions(token_hash)""",
+    """CREATE INDEX IF NOT EXISTS idx_user_sessions_user
+       ON scheduler.user_sessions(user_id)""",
 ]
 
 

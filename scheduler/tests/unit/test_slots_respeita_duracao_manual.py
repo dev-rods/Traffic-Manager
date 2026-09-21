@@ -21,6 +21,14 @@ os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
 from src.functions.availability import slots
 
+# O handler passou a autorizar por PAPEL (21/09/2026). Estes testes cobrem a
+# REGRA DE NEGOCIO, entao entram como administrador: quem cobre a autorizacao e
+# o test_acesso_por_papel.
+from src.utils.acesso import ADMIN, Identidade
+
+_ADMIN = Identidade(papel=ADMIN, chave_mestra=True)
+
+
 CLINIC = "clinicaessenciaestetica-9668a4"
 
 # A regra da Essência. O teto de 50 é o que engolia os 75.
@@ -43,7 +51,7 @@ class TestADuracaoChegaInteira(unittest.TestCase):
     """O que o painel manda é o que o motor recebe."""
 
     def _chama(self, total_duration):
-        with mock.patch.object(slots, "require_api_key", return_value=("k", None)), \
+        with mock.patch.object(slots, "require_acesso", return_value=(_ADMIN, None)), \
              mock.patch.object(slots, "PostgresService"), \
              mock.patch.object(slots, "AvailabilityEngine") as Engine:
             motor = Engine.return_value
@@ -94,7 +102,7 @@ class TestSemDuracaoOCaminhoAntigoContinua(unittest.TestCase):
     def test_sem_totalDuration_usa_a_duracao_do_servico(self):
         """Quem não manda duração continua caindo no cálculo pelo serviço - é o
         caminho de quem ainda não escolheu áreas."""
-        with mock.patch.object(slots, "require_api_key", return_value=("k", None)), \
+        with mock.patch.object(slots, "require_acesso", return_value=(_ADMIN, None)), \
              mock.patch.object(slots, "PostgresService"), \
              mock.patch.object(slots, "AvailabilityEngine") as Engine:
             motor = Engine.return_value
@@ -111,7 +119,7 @@ class TestValorRuimE400(unittest.TestCase):
     duração absurda."""
 
     def _status(self, total_duration):
-        with mock.patch.object(slots, "require_api_key", return_value=("k", None)), \
+        with mock.patch.object(slots, "require_acesso", return_value=(_ADMIN, None)), \
              mock.patch.object(slots, "PostgresService"), \
              mock.patch.object(slots, "AvailabilityEngine"):
             return slots.handler(evento(total_duration), None)["statusCode"]

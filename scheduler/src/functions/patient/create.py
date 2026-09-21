@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import datetime, date, time
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
 from src.utils.phone import normalize_phone
 from src.services.db.postgres import PostgresService
@@ -31,7 +33,7 @@ def handler(event, context):
     try:
         logger.info("Create patient request received")
 
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "pacientes.escrever")
         if error_response:
             return error_response
 
@@ -128,10 +130,10 @@ def handler(event, context):
 
             patient = _serialize_row(restored)
             logger.info(f"Patient restored: {patient['id']} for clinic {clinic_id}")
-            return http_response(200, {
+            return http_response(200, para_o_staff(identidade, {
                 "status": "RESTORED",
                 "patient": patient,
-            })
+            }))
 
         result = db.execute_write_returning("""
             INSERT INTO scheduler.patients (clinic_id, name, phone, gender, cpf, birth_date, email,
@@ -149,10 +151,10 @@ def handler(event, context):
         patient = _serialize_row(result)
         logger.info(f"Patient created: {patient['id']} for clinic {clinic_id}")
 
-        return http_response(201, {
+        return http_response(201, para_o_staff(identidade, {
             "status": "CREATED",
             "patient": patient,
-        })
+        }))
 
     except Exception as e:
         error_msg = str(e)

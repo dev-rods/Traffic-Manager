@@ -38,14 +38,24 @@ class TestVersionamentoDesligado(unittest.TestCase):
 
 
 class TestNumeroDeFuncoes(unittest.TestCase):
-    """A folga é finita: 437 de 500 no dia em que isto foi escrito.
+    """A folga é finita, e o número agora é medido, não estimado.
 
-    Cada função HTTP nova custa ~7 recursos (função, role, log group,
-    permission, method, resource), então cabem ~9 antes de a parede voltar.
-    Este teste avisa antes de o deploy quebrar de novo.
+    Em 21/09/2026 contei os recursos do stack de produção direto no
+    CloudFormation: **440 de 500**, com **74 funções**. Isso dá **~5,9 recursos
+    por função** - função, log group, permission, method e resource de API
+    Gateway. (A role deixou de contar: o PR #60 passou as 57 funções que tinham
+    role própria a usar a compartilhada.)
+
+    Com as 2 funções de gestão de acesso, são 76 -> ~452, e sobram ~8 funções.
+
+    Quando essa folga acabar, o próximo movimento já está mapeado no PRD 013:
+    remover os 74 log groups explícitos devolve o stack para ~366. Depois disso
+    é dividir o stack (serverless-plugin-split-stacks) ou separar o serviço.
     """
 
-    LIMITE_DE_FUNCOES = 74  # 65 hoje + as ~9 que a folga comporta
+    # 76 em uso + 2 de margem. Subir isto exige MEDIR de novo, e não só somar:
+    #   aws cloudformation list-stack-resources --stack-name clinic-scheduler-infra-prod
+    LIMITE_DE_FUNCOES = 78
 
     def test_cabe_no_stack(self):
         pasta = SERVERLESS.parent / "sls" / "functions"

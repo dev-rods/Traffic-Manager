@@ -18,6 +18,14 @@ os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 from src.functions.appointment import update as handler_mod
 from src.services.appointment_service import SEM_MUDANCA
 
+# O handler passou a autorizar por PAPEL (21/09/2026). Estes testes cobrem a
+# REGRA DE NEGOCIO, entao entram como administrador: quem cobre a autorizacao e
+# o test_acesso_por_papel.
+from src.utils.acesso import ADMIN, Identidade
+
+_ADMIN = Identidade(papel=ADMIN, chave_mestra=True)
+
+
 APPT = "11111111-1111-1111-1111-111111111111"
 PARES = [{"serviceId": "s1", "areaId": "a1"}]
 
@@ -39,7 +47,7 @@ def chama(corpo):
         "pathParameters": {"clinicId": "c", "appointmentId": APPT},
         "body": None,
     }
-    with mock.patch.object(handler_mod, "require_api_key", return_value=("k", None)), \
+    with mock.patch.object(handler_mod, "require_acesso", return_value=(_ADMIN, None)), \
          mock.patch.object(handler_mod, "parse_body", return_value=corpo), \
          mock.patch.object(handler_mod, "PostgresService", return_value=db), \
          mock.patch.object(handler_mod, "AppointmentService", return_value=servico):

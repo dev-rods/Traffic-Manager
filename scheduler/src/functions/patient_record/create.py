@@ -1,5 +1,7 @@
 import logging
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
 from src.services.historico_de_sessao import (
@@ -38,7 +40,7 @@ def handler(event, context):
     }
     """
     try:
-        _, erro = require_api_key(event)
+        identidade, erro = require_acesso(event, "prontuario.escrever")
         if erro:
             return erro
 
@@ -104,7 +106,7 @@ def handler(event, context):
             f"[Prontuario] registro criado: {record_id} paciente={patient_id} "
             f"sessao={session_date} aplicacoes={len(aplicacoes)}"
         )
-        return http_response(201, {"status": "SUCCESS", "record": registro})
+        return http_response(201, para_o_staff(identidade, {"status": "SUCCESS", "record": registro}))
 
     except RegistroInvalido as e:
         return http_response(400, {"status": "ERROR", "message": str(e)})

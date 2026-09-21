@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import datetime, date, time
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
 from src.utils.phone import normalize_phone
 from src.services.desconto_personalizado import normaliza_entrada as normaliza_desconto
@@ -30,7 +32,7 @@ def handler(event, context):
     try:
         logger.info("Update patient request received")
 
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "pacientes.escrever")
         if error_response:
             return error_response
 
@@ -73,6 +75,12 @@ def handler(event, context):
         # campo, e test_bot_nao_ve_prontuario garante isso.
         allowed_fields = {"name", "phone", "gender", "birth_date", "cpf", "email",
                           "custom_discount_pct", "skin_type"}
+
+        # Desconto personalizado é decisão comercial, e o funcionário nem vê o
+        # valor atual - a resposta o remove. Deixá-lo ESCREVER um campo que não
+        # enxerga seria dar de graça a chave do preço a quem foi afastado dele.
+        if not identidade.e_admin:
+            allowed_fields = allowed_fields - {"custom_discount_pct"}
         sets = []
         params = []
         for field in allowed_fields:
@@ -140,10 +148,10 @@ def handler(event, context):
         patient = _serialize_row(result)
         logger.info(f"Patient updated: {patient_id}")
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "patient": patient,
-        })
+        }))
 
     except Exception as e:
         error_msg = str(e)
