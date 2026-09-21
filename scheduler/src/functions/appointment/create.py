@@ -2,7 +2,14 @@ import json
 import logging
 from datetime import datetime, date, time
 
-from src.utils.http import parse_body, http_response, require_api_key
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import (
+    clinica_confere,
+    dentro_da_janela,
+    fora_da_janela,
+    para_o_staff,
+)
+from src.utils.http import parse_body, http_response
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
 from src.services.duracao_manual import DuracaoInvalida
@@ -42,7 +49,7 @@ def handler(event, context):
     }
     """
     try:
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "agenda.escrever")
         if error_response:
             return error_response
 
@@ -56,6 +63,17 @@ def handler(event, context):
         service_ids = body.get("serviceIds")
         appt_date = body.get("date")
         appt_time = body.get("time")
+
+        # Esta rota recebe a clinica no CORPO, e nao no caminho: o
+        # `_confere_a_clinica` do require_acesso le o path e aqui nao alcanca.
+        # Sem esta linha, um token da Essencia agendaria na Nobre Laser.
+        if not clinica_confere(identidade, clinic_id):
+            return http_response(403, {
+                "status": "ERROR",
+                "message": "Seu usuario nao tem acesso a esta clinica"})
+
+        if not dentro_da_janela(identidade, appt_date):
+            return fora_da_janela()
 
         # Accept either serviceId (string) or serviceIds (array)
         if not service_id and not service_ids:
@@ -118,11 +136,11 @@ def handler(event, context):
 
         appointment = _serialize_row(result)
 
-        return http_response(201, {
+        return http_response(201, para_o_staff(identidade, {
             "status": "SUCCESS",
             "message": "Agendamento criado com sucesso",
             "appointment": appointment,
-        })
+        }))
 
     except DuracaoInvalida as e:
         # Dedo errado no formulario e 400, nao 500.

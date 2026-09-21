@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useBranding } from '@/hooks/useBranding'
 import { useTheme } from '@/hooks/useTheme'
+import { podeVer } from '@/lib/permissoes'
 
 // ── SVG Icon components (Lucide-style, 24x24) ──────────────
 function Icon({ d, className = '' }: { d: string; className?: string }) {
@@ -25,6 +26,7 @@ function IconClock() { return <Icon d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 
 function IconBot() { return <Icon d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.3 24.3 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-1.5 4.5H6.5L5 14.5m14 0H5m14 0l-.938-2.813M5 14.5l.938-2.813M12 20.5v-2" /> }
 function IconTarget() { return <Icon d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" /> }
 function IconHelp() { return <Icon d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> }
+function IconShield() { return <Icon d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /> }
 function IconSettings() { return <Icon d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z M15 12a3 3 0 11-6 0 3 3 0 016 0z" /> }
 function IconLogout() { return <Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /> }
 
@@ -42,6 +44,7 @@ const ICON_MAP: Record<string, () => React.ReactNode> = {
   '/bot': () => <IconBot />,
   '/leads': () => <IconTarget />,
   '/faq': () => <IconHelp />,
+  '/usuarios': () => <IconShield />,
   '/configuracoes': () => <IconSettings />,
 }
 
@@ -55,6 +58,12 @@ interface NavGroup {
   items: NavItemDef[]
 }
 
+/**
+ * Os grupos, antes de qualquer filtro. O que o STAFF enxerga sai de
+ * `podeVer`, em `lib/permissoes` - e a lista de la espelha as rotas que o
+ * backend abriu. Duas listas que precisam concordar: a daqui e so para nao
+ * oferecer uma tela que responderia 403.
+ */
 const NAV_GROUPS: NavGroup[] = [
   {
     label: '',
@@ -63,6 +72,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/agenda', label: 'Agenda' },
       { to: '/pacientes', label: 'Pacientes' },
       { to: '/relatorios', label: 'Relatórios' },
+      { to: '/usuarios', label: 'Usuários' },
     ],
   },
   {
@@ -97,9 +107,22 @@ function useActiveGroup(): string {
 }
 
 export default function AppLayout() {
-  const { clinic, logout } = useAuth()
+  const { clinic, logout, papel, permissoes } = useAuth()
   const { isDark, setTheme } = useTheme()
   useBranding(clinic?.display_name || clinic?.name)
+
+  // Grupo que fica sem nenhum item para este papel desaparece inteiro:
+  // um cabecalho "Catalogo" vazio so faria a pessoa clicar e nao achar nada.
+  const gruposVisiveis = useMemo(
+    () =>
+      NAV_GROUPS.map((grupo) => ({
+        ...grupo,
+        items: grupo.items.filter((item) =>
+          podeVer({ papel, permissoes }, item.to),
+        ),
+      })).filter((grupo) => grupo.items.length > 0),
+    [papel, permissoes],
+  )
 
   const activeGroupLabel = useActiveGroup()
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
@@ -141,7 +164,7 @@ export default function AppLayout() {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-1">
-          {NAV_GROUPS.map((group) => {
+          {gruposVisiveis.map((group) => {
             const isOpen = openGroups.has(group.label)
             const hasActiveChild = group.items.some((item) => location.pathname.startsWith(item.to))
 
@@ -185,9 +208,11 @@ export default function AppLayout() {
         </nav>
 
         {/* Footer */}
-        <div className="border-t border-gray-100 dark:border-gray-800">
-          <SidebarLink to="/configuracoes" label="Configurações" className="px-6" />
-        </div>
+        {podeVer({ papel, permissoes }, '/configuracoes') && (
+          <div className="border-t border-gray-100 dark:border-gray-800">
+            <SidebarLink to="/configuracoes" label="Configurações" className="px-6" />
+          </div>
+        )}
         <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <button
             onClick={logout}

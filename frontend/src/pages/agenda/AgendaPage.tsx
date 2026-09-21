@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useAppointments } from '@/hooks/useAppointments'
+import { useAuth } from '@/hooks/useAuth'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { AgendaHeader } from './components/AgendaHeader'
@@ -39,14 +40,22 @@ export function AgendaPage() {
   // Fetch availability rules — only specific dates (rule_date)
   const { data: rulesData } = useAvailabilityRules()
 
+  // O funcionário enxerga uma janela de datas. O servidor já recusa o que está
+  // fora dela; filtrar aqui evita o outro problema, que é a tela oferecer
+  // colunas de dias sempre vazios e a pessoa achar que a agenda sumiu.
+  const { janela: janelaDoUsuario } = useAuth()
+
   const allDates = useMemo(() => {
     const rules = rulesData?.data ?? []
     const dates = rules
       .filter((r) => r.rule_date !== null)
       .map((r) => r.rule_date as string)
-    // Deduplicate and sort ascending
-    return [...new Set(dates)].sort()
-  }, [rulesData])
+    const unicas = [...new Set(dates)].sort()
+    if (!janelaDoUsuario) return unicas
+    return unicas.filter(
+      (d) => d >= janelaDoUsuario.from && d <= janelaDoUsuario.to,
+    )
+  }, [rulesData, janelaDoUsuario])
 
   // A agenda abre nas próximas datas, e só nelas. O passado continua atrás do
   // botão de voltar.

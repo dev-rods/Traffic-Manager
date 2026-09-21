@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import datetime, date, time
 from psycopg2 import errors as pg_errors
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 
@@ -134,7 +136,7 @@ def create_handler(event, context):
 
 def list_handler(event, context):
     try:
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "agenda.ler")
         if error_response:
             return error_response
 
@@ -154,10 +156,10 @@ def list_handler(event, context):
 
         logger.info(f"[clinicId: {clinic_id}] Listed {len(results)} availability rules")
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "data": [_serialize_row(row) for row in results]
-        })
+        }))
 
     except Exception as e:
         logger.error(f"Error listing availability rules: {str(e)}")

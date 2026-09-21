@@ -2,8 +2,10 @@ import json
 import logging
 from datetime import datetime, date, time
 
-from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
+from src.utils.http import http_response, extract_path_param, extract_query_param
+from src.utils.acesso import require_acesso
 from src.services.db.postgres import PostgresService
+from src.services.visao_do_staff import limita_intervalo, para_o_staff
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -27,7 +29,7 @@ def handler(event, context):
     Includes patient name and phone via JOIN.
     """
     try:
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "agenda.ler")
         if error_response:
             return error_response
 
@@ -43,6 +45,16 @@ def handler(event, context):
         # "de qual sessao e este registro?". Sem este filtro a tela puxaria a
         # agenda inteira da clinica para achar tres linhas.
         patient_filter = extract_query_param(event, "patientId")
+
+        # A janela do funcionário vale SEMPRE, inclusive quando o pedido não
+        # trouxe data nenhuma - e é justamente esse o pedido perigoso: sem
+        # filtro, a consulta abaixo devolveria a agenda inteira da clínica,
+        # incluindo todo o passado.
+        if not identidade.e_admin:
+            if date_filter:
+                date_from = date_to = date_filter
+                date_filter = None
+            date_from, date_to = limita_intervalo(identidade, date_from, date_to)
 
         db = PostgresService()
 
@@ -104,12 +116,12 @@ def handler(event, context):
         results = db.execute_query(query, tuple(params))
         appointments = [_serialize_row(r) for r in results]
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "clinicId": clinic_id,
             "appointments": appointments,
             "total": len(appointments),
-        })
+        }))
 
     except Exception as e:
         logger.error(f"Erro ao listar agendamentos: {e}")

@@ -1,5 +1,7 @@
 import logging
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
 from src.services.protocolo_laser import METODOS, tabela_para_a_tela
@@ -23,7 +25,7 @@ def handler(event, context):
     que e pura referencia.
     """
     try:
-        _, erro = require_api_key(event)
+        identidade, erro = require_acesso(event, "prontuario.ler")
         if erro:
             return erro
 
@@ -43,7 +45,7 @@ def handler(event, context):
             (clinic_id,),
         ) or []
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "methods": [
                 {"key": chave, "label": d["rotulo"],
@@ -52,7 +54,7 @@ def handler(event, context):
             ],
             "parameters": tabela_para_a_tela(),
             "area_map": [serializa(m) for m in mapa],
-        })
+        }))
 
     except Exception as e:
         logger.error(f"[Prontuario] Erro ao ler o protocolo: {e}")

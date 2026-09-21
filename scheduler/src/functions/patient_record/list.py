@@ -1,5 +1,7 @@
 import logging
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
 from src.functions.patient_record._comum import serializa
@@ -16,7 +18,7 @@ def handler(event, context):
     tela oferece em "de qual sessao?", e o que evita a sessao duplicada.
     """
     try:
-        _, erro = require_api_key(event)
+        identidade, erro = require_acesso(event, "prontuario.ler")
         if erro:
             return erro
 
@@ -89,12 +91,12 @@ def handler(event, context):
             (clinic_id, patient_id),
         ) or []
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "patient": serializa(paciente[0]),
             "records": list(por_id.values()),
             "appointments_without_record": [serializa(a) for a in sem_registro],
-        })
+        }))
 
     except Exception as e:
         logger.error(f"[Prontuario] Erro ao listar registros: {e}")

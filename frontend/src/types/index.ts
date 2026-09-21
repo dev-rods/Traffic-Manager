@@ -317,10 +317,43 @@ export interface AuthCredentials {
   password: string
 }
 
+/**
+ * ADMIN vê tudo. STAFF vê a agenda, os pacientes e o prontuário, dentro de uma
+ * janela de datas, e sem nenhum valor em reais.
+ *
+ * Isto serve para a tela não OFERECER o que o servidor vai recusar. Quem
+ * autoriza de verdade é o backend: o token do funcionário chama a API direto
+ * se alguém quiser, e é lá que a porta está fechada.
+ */
+export type PapelDoUsuario = 'ADMIN' | 'STAFF'
+
+/**
+ * Os dois interruptores que o administrador liga por pessoa.
+ *
+ * Servem para a tela não oferecer o que não há. O servidor aplica os mesmos
+ * dois por conta própria - o preço nem sequer chega no navegador de quem não
+ * pode vê-lo.
+ */
+export interface PermissoesDoUsuario {
+  see_prices: boolean
+  see_patient_list: boolean
+}
+
+export interface JanelaDaAgenda {
+  /** YYYY-MM-DD, inclusive. */
+  from: string
+  /** YYYY-MM-DD, inclusive. */
+  to: string
+}
+
 export interface AuthResponse {
   token: string
   clinic_id: string
   clinic: Clinic
+  role?: PapelDoUsuario
+  agenda_window?: JanelaDaAgenda | null
+  permissions?: PermissoesDoUsuario
+  user?: { id: string; name: string | null; email: string }
 }
 
 // ── API responses ─────────────────────────────────────────────

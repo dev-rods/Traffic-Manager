@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import datetime, date, time
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff, sem_segredos
 from src.utils.http import http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
 
@@ -29,7 +31,7 @@ def handler(event, context):
         logger.info(f"Requisicao recebida para obter clinica: {json.dumps(event)}")
 
         # 1. Validar API key
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "clinica.basica")
         if error_response:
             return error_response
 
@@ -62,13 +64,20 @@ def handler(event, context):
 
         clinic = _serialize_row(rows[0])
 
+        # O funcionário precisa do nome e do horário da clínica para a agenda
+        # funcionar, e de mais nada. As credenciais do WhatsApp saem daqui:
+        # com elas, um token de funcionário viraria acesso a mandar mensagem
+        # em nome da clínica, que é justamente o que ele não pode.
+        if not identidade.e_admin:
+            clinic = sem_segredos(clinic)
+
         logger.info(f"Clinica encontrada: {clinic_id}")
 
         # 5. Retornar resposta
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "clinic": clinic
-        })
+        }))
 
     except Exception as e:
         error_msg = str(e)
