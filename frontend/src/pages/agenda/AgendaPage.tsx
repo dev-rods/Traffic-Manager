@@ -9,7 +9,7 @@ import { CancelAppointmentModal } from './components/CancelAppointmentModal'
 import { CreateAppointmentModal } from './components/CreateAppointmentModal'
 import { EditAppointmentModal } from './components/EditAppointmentModal'
 import { todayStr } from '@/utils/dateHelpers'
-import { paginaDaProximaData } from '@/utils/agendaPaging'
+import { janelaDaAgenda } from '@/utils/agendaPaging'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import type { Appointment } from '@/types'
 
@@ -20,6 +20,10 @@ export function AgendaPage() {
   // Guardar "não escolheu" em vez de um número evita que a página do usuário
   // seja sobrescrita quando a lista de datas recarrega.
   const [pageIndex, setPageIndex] = useState<number | null>(null)
+
+  // Um dia sozinho, ocupando a largura toda. Sete colunas espremem um dia cheio
+  // a ponto de as caixas não caberem lado a lado; aqui o mesmo dia respira.
+  const [diaExpandido, setDiaExpandido] = useState<string | null>(null)
 
   // Popover state
   const [popoverAppointment, setPopoverAppointment] = useState<Appointment | null>(null)
@@ -44,30 +48,56 @@ export function AgendaPage() {
     return [...new Set(dates)].sort()
   }, [rulesData])
 
-  // Paginate
-  const totalPages = Math.max(1, Math.ceil(allDates.length / PAGE_SIZE))
-  // A agenda abre no trabalho que está por vir, não no começo do histórico.
-  const paginaPadrao = useMemo(
-    () => paginaDaProximaData(allDates, todayStr(), PAGE_SIZE),
-    [allDates],
+  // A agenda abre nas próximas datas, e só nelas. O passado continua atrás do
+  // botão de voltar.
+  const janela = useMemo(
+    () => janelaDaAgenda(allDates, todayStr(), PAGE_SIZE, pageIndex),
+    [allDates, pageIndex],
   )
-  const safePageIndex = Math.min(pageIndex ?? paginaPadrao, totalPages - 1)
-  const visibleDates = allDates.slice(safePageIndex * PAGE_SIZE, (safePageIndex + 1) * PAGE_SIZE)
+  const visibleDates = janela.datas
+
+  // Expandido, a tela mostra um dia só - e a navegação passa a andar de dia em
+  // dia, porque avançar sete datas de uma vez não faz sentido nesse modo.
+  const indiceDoDiaExpandido = diaExpandido ? allDates.indexOf(diaExpandido) : -1
+  const diasNaTela = diaExpandido ? [diaExpandido] : visibleDates
 
   // Fetch appointments for the visible date range
-  const fetchParams = visibleDates.length > 0
-    ? { date_from: visibleDates[0], date_to: visibleDates[visibleDates.length - 1] }
+  const fetchParams = diasNaTela.length > 0
+    ? { date_from: diasNaTela[0], date_to: diasNaTela[diasNaTela.length - 1] }
     : undefined
 
   const { data, isLoading, isError, error, refetch } = useAppointments(fetchParams)
   const appointments = data?.appointments ?? []
 
   // Navigation
-  const handlePrev = () => setPageIndex(Math.max(0, safePageIndex - 1))
-  const handleNext = () => setPageIndex(Math.min(totalPages - 1, safePageIndex + 1))
+  const handlePrev = () => {
+    if (diaExpandido) {
+      if (indiceDoDiaExpandido > 0) setDiaExpandido(allDates[indiceDoDiaExpandido - 1])
+      return
+    }
+    setPageIndex(janela.pagina - 1)
+  }
 
-  // Volta ao padrão: o botão "Próximas" faz o mesmo que abrir a tela.
-  const handleToday = () => setPageIndex(null)
+  const handleNext = () => {
+    if (diaExpandido) {
+      if (indiceDoDiaExpandido >= 0 && indiceDoDiaExpandido < allDates.length - 1) {
+        setDiaExpandido(allDates[indiceDoDiaExpandido + 1])
+      }
+      return
+    }
+    setPageIndex(janela.pagina + 1)
+  }
+
+  // Volta ao padrão: o botão "Próximas" faz o mesmo que abrir a tela, e também
+  // desfaz a expansão - senão ele não teria efeito visível com um dia aberto.
+  const handleToday = () => {
+    setPageIndex(null)
+    setDiaExpandido(null)
+  }
+
+  const handleDayClick = useCallback((date: string) => {
+    setDiaExpandido((atual) => (atual === date ? null : date))
+  }, [])
 
   // Slot click → open create modal
   const handleSlotClick = useCallback((date: string, time: string) => {
@@ -83,7 +113,7 @@ export function AgendaPage() {
   }, [])
 
   const handleNewAppointment = () => {
-    setCreateDate(visibleDates[0] ?? todayStr())
+    setCreateDate(diasNaTela[0] ?? todayStr())
     setCreateTime('')
     setCreateOpen(true)
   }
@@ -91,13 +121,17 @@ export function AgendaPage() {
   return (
     <div className="p-6 pb-2 space-y-3">
       <AgendaHeader
-        visibleDates={visibleDates}
+        visibleDates={diasNaTela}
         onPrev={handlePrev}
         onNext={handleNext}
         onToday={handleToday}
         onNewAppointment={handleNewAppointment}
-        hasPrev={safePageIndex > 0}
-        hasNext={safePageIndex < totalPages - 1}
+        hasPrev={diaExpandido ? indiceDoDiaExpandido > 0 : janela.podeVoltar}
+        hasNext={
+          diaExpandido
+            ? indiceDoDiaExpandido >= 0 && indiceDoDiaExpandido < allDates.length - 1
+            : janela.podeAvancar
+        }
       />
 
       {isLoading ? (
@@ -109,10 +143,12 @@ export function AgendaPage() {
         />
       ) : (
         <WeekGrid
-          weekDays={visibleDates}
+          weekDays={diasNaTela}
           appointments={appointments}
           onSlotClick={handleSlotClick}
           onAppointmentClick={handleAppointmentClick}
+          onDayClick={handleDayClick}
+          expandido={diaExpandido !== null}
         />
       )}
 
