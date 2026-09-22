@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { useUpdateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
 import { calculaDuracao } from '@/lib/duracao'
+import { precisaMandarDuracao } from '@/lib/duracaoNoPedido'
 import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
@@ -143,6 +144,21 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
 
   const manualChanged = manualDuration !== (a.manual_duration_minutes ?? null)
 
+  /**
+   * Trocar a área faz o servidor DESCARTAR o override, a menos que o pedido
+   * traga uma duração. Então, nesse caminho, repetir o mesmo número não é
+   * "não mudou" - é preciso reafirmar.
+   *
+   * Sem isto (relatado em 21/09/2026): fixa 10, remove uma área, redigita 10,
+   * e o pedido sai calado. O servidor recalcula pelas áreas e recusa por
+   * conflito, com a tela ainda mostrando 10.
+   */
+  const mandaDuracao = precisaMandarDuracao({
+    manualNaTela: manualDuration,
+    manualNoServidor: a.manual_duration_minutes ?? null,
+    mudouAreaOuServico: serviceChanged || areasChanged,
+  })
+
   const hasChanges = dateChanged || timeChanged || primeiraChanged || notesChanged || serviceChanged || areasChanged || discountChanged || manualChanged
 
   const toggleArea = (areaId: string) => {
@@ -185,7 +201,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
       const payload: UpdateAppointmentPayload = {}
 
       // `null` explícito é o que SOLTA o override no backend; omitir não mexe.
-      if (manualChanged) payload.manualDurationMinutes = manualDuration
+      if (mandaDuracao) payload.manualDurationMinutes = manualDuration
       if (dateChanged) payload.date = date
       if (timeChanged) payload.time = time
       if (notesChanged) payload.notes = notes
