@@ -12,6 +12,10 @@ import { SkeletonTable } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
 import { Pagination } from '@/components/ui/Pagination'
 import { PatientSearch } from './components/PatientSearch'
+import { Drawer } from '@/components/ui/Drawer'
+import { FiltrosDePacientes } from './components/FiltrosDePacientes'
+import { contaFiltrosAtivos } from './components/contagemDeFiltros'
+import type { NextVisitFilter, LastMessageFilter } from './components/contagemDeFiltros'
 import { PatientsTable } from './components/PatientsTable'
 import { CreatePatientModal } from './components/CreatePatientModal'
 import { EditPatientModal } from './components/EditPatientModal'
@@ -20,9 +24,6 @@ import { DeletePatientConfirmModal } from './components/DeletePatientConfirmModa
 import { BatchDeletePatientsModal } from './components/BatchDeletePatientsModal'
 import { WhatsAppIcon, TrashIcon } from '@/components/ui/Icons'
 import type { PatientWithStats } from '@/types'
-
-type NextVisitFilter = 'all' | 'with' | 'without'
-type LastMessageFilter = 'all' | '7' | '15' | '30' | '60' | 'never'
 
 export function PacientesPage() {
   const [search, setSearch] = useState('')
@@ -38,6 +39,7 @@ export function PacientesPage() {
   const [batchPatients, setBatchPatients] = useState<PatientWithStats[]>([])
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [batchDeleteTargets, setBatchDeleteTargets] = useState<PatientWithStats[]>([])
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'info'; message: string } | null>(null)
   const debouncedSearch = useDebounce(search)
 
@@ -108,8 +110,14 @@ export function PacientesPage() {
   const handleLastMessageFilter = useCallback((v: LastMessageFilter) => { setLastMessageFilter(v); setPage(1); clearSelection() }, [clearSelection])
   const handleLastVisitBefore = useCallback((v: string) => { setLastVisitBefore(v); setPage(1); clearSelection() }, [clearSelection])
 
+  const filtrosAtivos = contaFiltrosAtivos({
+    nextVisit: nextVisitFilter,
+    lastMessage: lastMessageFilter,
+    lastVisitBefore,
+  })
+
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Pacientes</h1>
@@ -120,52 +128,56 @@ export function PacientesPage() {
         <Button onClick={() => setCreateOpen(true)}>+ Cadastrar paciente</Button>
       </div>
 
+      {/* A busca fica sempre a vista; os tres filtros so cabem em linha de
+          `md` para cima. Em celular eles vao para um drawer, e o botao carrega
+          quantos estao ligados - senao a pessoa nao tem como saber que a lista
+          esta filtrada sem abrir. */}
       <div className="flex items-center gap-3">
         <div className="flex-1">
           <PatientSearch value={search} onChange={handleSearch} />
         </div>
-        <select
-          value={nextVisitFilter}
-          onChange={(e) => handleNextVisitFilter(e.target.value as NextVisitFilter)}
-          className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+
+        <button
+          type="button"
+          onClick={() => setFiltrosAbertos(true)}
+          className="md:hidden flex h-11 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 cursor-pointer"
         >
-          <option value="all">Todas as visitas</option>
-          <option value="with">Com próxima visita</option>
-          <option value="without">Sem próxima visita</option>
-        </select>
-        <select
-          value={lastMessageFilter}
-          onChange={(e) => handleLastMessageFilter(e.target.value as LastMessageFilter)}
-          className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
-        >
-          <option value="all">Última mensagem</option>
-          <option value="7">Últimos 7 dias</option>
-          <option value="15">Últimos 15 dias</option>
-          <option value="30">Últimos 30 dias</option>
-          <option value="60">Últimos 60 dias</option>
-          <option value="never">Nunca contatado</option>
-        </select>
-        <div className="relative">
-          <input
-            type="date"
-            value={lastVisitBefore}
-            onChange={(e) => handleLastVisitBefore(e.target.value)}
-            aria-label="Última visita até"
-            title="Última visita até"
-            className="border border-gray-200 rounded-lg px-3 py-2.5 pr-8 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
-          />
-          {lastVisitBefore && (
-            <button
-              type="button"
-              onClick={() => handleLastVisitBefore('')}
-              aria-label="Limpar filtro de última visita"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-sm leading-none"
-            >
-              ×
-            </button>
+          Filtros
+          {filtrosAtivos > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-500 px-1 text-[11px] font-semibold text-white">
+              {filtrosAtivos}
+            </span>
           )}
+        </button>
+
+        <div className="hidden md:block">
+          <FiltrosDePacientes
+            nextVisit={nextVisitFilter}
+            lastMessage={lastMessageFilter}
+            lastVisitBefore={lastVisitBefore}
+            onNextVisit={handleNextVisitFilter}
+            onLastMessage={handleLastMessageFilter}
+            onLastVisitBefore={handleLastVisitBefore}
+          />
         </div>
       </div>
+
+      <Drawer
+        open={filtrosAbertos}
+        onClose={() => setFiltrosAbertos(false)}
+        title="Filtros"
+        side="right"
+      >
+        <FiltrosDePacientes
+          empilhado
+          nextVisit={nextVisitFilter}
+          lastMessage={lastMessageFilter}
+          lastVisitBefore={lastVisitBefore}
+          onNextVisit={handleNextVisitFilter}
+          onLastMessage={handleLastMessageFilter}
+          onLastVisitBefore={handleLastVisitBefore}
+        />
+      </Drawer>
 
       {isLoading ? (
         <SkeletonTable rows={8} />
