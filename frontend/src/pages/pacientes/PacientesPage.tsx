@@ -22,7 +22,7 @@ import { EditPatientModal } from './components/EditPatientModal'
 import { BatchMessageModal } from './components/BatchMessageModal'
 import { DeletePatientConfirmModal } from './components/DeletePatientConfirmModal'
 import { BatchDeletePatientsModal } from './components/BatchDeletePatientsModal'
-import { WhatsAppIcon, TrashIcon } from '@/components/ui/Icons'
+import { AcoesEmLote } from './components/AcoesEmLote'
 import type { PatientWithStats } from '@/types'
 
 export function PacientesPage() {
@@ -117,7 +117,15 @@ export function PacientesPage() {
   })
 
   return (
-    <div className="p-4 md:p-8 space-y-4 md:space-y-6">
+    <div
+      className={[
+        'p-4 md:p-8 space-y-4 md:space-y-6',
+        // A regua de acoes e `fixed` e cobriria a paginacao e as ultimas
+        // linhas. A folga so aparece quando ha selecao, para nao deixar um
+        // vazio permanente no fim da pagina.
+        selectedIds.size > 0 ? 'pb-32 md:pb-24' : '',
+      ].join(' ')}
+    >
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">Pacientes</h1>
@@ -225,31 +233,12 @@ export function PacientesPage() {
         </>
       )}
 
-      {/* Batch action bar */}
-      {selectedIds.size > 0 && (
-        <div className="fixed bottom-0 left-56 right-0 bg-white border-t border-gray-200 shadow-lg px-6 py-3 flex items-center justify-between z-40">
-          <p className="text-sm text-gray-700 font-medium">
-            {selectedIds.size} paciente{selectedIds.size !== 1 ? 's' : ''} selecionado{selectedIds.size !== 1 ? 's' : ''}
-          </p>
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={clearSelection}>
-              Limpar seleção
-            </Button>
-            <Button variant="success" size="sm" onClick={() => { setBatchPatients(selectedPatients); setBatchOpen(true) }}>
-              <WhatsAppIcon className="w-4 h-4" />
-              Enviar WhatsApp
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => { setBatchDeleteTargets(selectedPatients); setBatchDeleteOpen(true) }}
-            >
-              <TrashIcon className="w-4 h-4" />
-              Excluir selecionados
-            </Button>
-          </div>
-        </div>
-      )}
+      <AcoesEmLote
+        quantidade={selectedIds.size}
+        onLimpar={clearSelection}
+        onWhatsApp={() => { setBatchPatients(selectedPatients); setBatchOpen(true) }}
+        onExcluir={() => { setBatchDeleteTargets(selectedPatients); setBatchDeleteOpen(true) }}
+      />
 
       <CreatePatientModal
         open={createOpen}
