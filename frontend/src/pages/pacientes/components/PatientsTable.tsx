@@ -4,6 +4,8 @@ import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon } from '@/co
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
+import { PatientCard } from './PatientCard'
+import { useEhDesktop } from '@/hooks/useMediaQuery'
 import type { PatientWithStats } from '@/types'
 
 interface PatientsTableProps {
@@ -20,7 +22,56 @@ interface PatientsTableProps {
   onToggleAll: () => void
 }
 
+/**
+ * A lista de pacientes.
+ *
+ * **Em celular ela deixa de ser tabela.** Nove colunas em 375px só cabem
+ * dentro de um `overflow-x-auto`, e rolar na horizontal para ler uma linha e
+ * um gesto que ninguem repete - a informacao existe e nao e lida. Abaixo de
+ * `md` cada paciente vira um card empilhado.
+ *
+ * A troca e de componente, e nao de classe CSS: `<table>` e `<ul>` tem
+ * estruturas diferentes demais para o mesmo JSX servir aos dois com `hidden`.
+ * As props sao as mesmas nos dois caminhos, entao quem chama nao sabe a
+ * diferenca.
+ */
 export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDelete, pausedPhones, pauseLoading, selectedIds, allSelected, onToggleSelect, onToggleAll }: PatientsTableProps) {
+  const ehDesktop = useEhDesktop()
+
+  if (!ehDesktop) {
+    return (
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <label className="flex items-center gap-2 border-b border-gray-100 px-3 py-2.5 text-xs text-gray-500 cursor-pointer">
+          <span className="flex h-11 w-6 items-center justify-center">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={onToggleAll}
+              className="accent-brand-500"
+            />
+          </span>
+          Selecionar todos desta página
+        </label>
+        <ul className="divide-y divide-gray-50">
+          {patients.map((p) => (
+            <PatientCard
+              key={p.id}
+              patient={p}
+              selected={selectedIds.has(p.id)}
+              paused={pausedPhones.has(p.phone)}
+              pauseLoading={pauseLoading}
+              onSelect={onSelect}
+              onToggleSelect={onToggleSelect}
+              onWhatsApp={onWhatsApp}
+              onPauseBot={onPauseBot}
+              onDelete={onDelete}
+            />
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
       <table className="w-full text-sm">

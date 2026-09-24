@@ -26,7 +26,7 @@ export function DocumentosPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-4xl p-6" aria-busy="true">
+      <div className="mx-auto max-w-4xl p-4 md:p-6" aria-busy="true">
         <div className="h-8 w-64 animate-pulse rounded bg-gray-100" />
         <div className="mt-6 h-40 animate-pulse rounded-lg bg-gray-100" />
       </div>
@@ -35,7 +35,7 @@ export function DocumentosPage() {
 
   if (isError || !data?.patient || !patientId) {
     return (
-      <div className="mx-auto max-w-4xl p-6">
+      <div className="mx-auto max-w-4xl p-4 md:p-6">
         <p className="text-sm text-gray-600">
           Não foi possível carregar os documentos deste paciente.
         </p>
@@ -58,7 +58,7 @@ export function DocumentosPage() {
   const paciente = data.patient
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
+    <div className="mx-auto max-w-4xl p-4 md:p-6">
       <Link to="/pacientes" className="text-xs text-gray-400 hover:text-gray-600">
         ← Pacientes
       </Link>

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { formatCurrency } from '@/utils/formatCurrency'
+import { useEhDesktop } from '@/hooks/useMediaQuery'
 import type { Appointment } from '@/types'
 
 const DISCOUNT_LABELS: Record<string, string> = {
@@ -19,8 +20,21 @@ interface AppointmentPopoverProps {
   onCancel: (appointment: Appointment) => void
 }
 
+/**
+ * Os detalhes de um agendamento.
+ *
+ * **Em celular ele vira uma folha que sobe de baixo.** O posicionamento do
+ * desktop ancora em `anchorRect.right + 8`, ou seja, pressupõe espaço à
+ * direita do clique. Numa tela de 375px uma caixa de 320px tocada perto da
+ * borda direita não tem para onde abrir, e o recuo `Math.min(left, innerWidth
+ * - 340)` a faria cobrir justamente o agendamento que se quis ver.
+ *
+ * A folha de baixo não depende de onde o toque aconteceu, e é onde o polegar
+ * já está.
+ */
 export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, onCancel }: AppointmentPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
+  const ehDesktop = useEhDesktop()
 
   useEffect(() => {
     if (!appointment) return
@@ -42,7 +56,10 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
     }
   }, [appointment, onClose])
 
-  if (!appointment || !anchorRect) return null
+  // Em celular a folha não se ancora em nada, então `anchorRect` deixa de ser
+  // obrigatório - só o desktop precisa dele para saber onde abrir.
+  if (!appointment) return null
+  if (ehDesktop && !anchorRect) return null
 
   const a = appointment
   const displayName = a.patient_name || a.full_name || 'Sem nome'
@@ -50,17 +67,33 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
   const timeSlot = `${a.start_time.slice(0, 5)}–${a.end_time.slice(0, 5)}`
   const isCancelled = a.status === 'CANCELLED'
 
-  // Position the popover near the anchor
-  const top = Math.min(anchorRect.top, window.innerHeight - 400)
-  const left = anchorRect.right + 8
+  // Position the popover near the anchor (desktop)
+  const posicao = ehDesktop && anchorRect
+    ? {
+        top: `${Math.max(Math.min(anchorRect.top, window.innerHeight - 400), 8)}px`,
+        left: `${Math.min(anchorRect.right + 8, window.innerWidth - 340)}px`,
+      }
+    : undefined
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className={ehDesktop ? 'fixed inset-0 z-50' : 'fixed inset-0 z-50 bg-black/40'}>
       <div
         ref={ref}
-        className="absolute bg-white rounded-xl shadow-xl border border-gray-200 w-80 animate-in fade-in"
-        style={{ top: `${Math.max(top, 8)}px`, left: `${Math.min(left, window.innerWidth - 340)}px` }}
+        className={
+          ehDesktop
+            ? 'absolute bg-white rounded-xl shadow-xl border border-gray-200 w-80 animate-in fade-in'
+            : // Folha de baixo: largura inteira, presa no rodapé, e com teto de
+              // altura para um agendamento com muitas áreas não cobrir a tela.
+              'absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white shadow-xl border-t border-gray-200 pb-[env(safe-area-inset-bottom)]'
+        }
+        style={posicao}
       >
+        {/* A alça: diz "isto se fecha para baixo" sem precisar de texto. */}
+        {!ehDesktop && (
+          <div aria-hidden className="flex justify-center pt-2">
+            <span className="h-1 w-10 rounded-full bg-gray-300" />
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-start justify-between p-4 pb-2">
           <div className="min-w-0">

@@ -1,10 +1,12 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useAppointments } from '@/hooks/useAppointments'
 import { useAuth } from '@/hooks/useAuth'
+import { useEhDesktop } from '@/hooks/useMediaQuery'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { AgendaHeader } from './components/AgendaHeader'
 import { WeekGrid } from './components/WeekGrid'
+import { AgendaDoDia } from './components/AgendaDoDia'
 import { AppointmentPopover } from './components/AppointmentPopover'
 import { CancelAppointmentModal } from './components/CancelAppointmentModal'
 import { CreateAppointmentModal } from './components/CreateAppointmentModal'
@@ -65,10 +67,26 @@ export function AgendaPage() {
   )
   const visibleDates = janela.datas
 
+  /**
+   * Em celular a agenda é sempre de UM dia, e em lista.
+   *
+   * A grade de horário foi medida e reprovada para esta tela: 15 horas a
+   * 112px são 1680px, ou 2,6 telas de rolagem para ver um dia só; e um alvo de
+   * toque de 44px vale 23,6 minutos de agenda, o que jogaria duas sessões
+   * curtas seguidas em colunas separadas. Ver spec 015, seção 2.
+   *
+   * O `diaExpandido` do PR #63 continua sendo o modo de dia cheio do desktop.
+   * Aqui ele vira o estado natural, e o dia mostrado é o primeiro disponível
+   * quando ninguém escolheu nenhum.
+   */
+  const ehDesktop = useEhDesktop()
+  const diaNoCelular = diaExpandido ?? visibleDates[0] ?? todayStr()
+  const diaUnico = ehDesktop ? diaExpandido : diaNoCelular
+
   // Expandido, a tela mostra um dia só - e a navegação passa a andar de dia em
   // dia, porque avançar sete datas de uma vez não faz sentido nesse modo.
-  const indiceDoDiaExpandido = diaExpandido ? allDates.indexOf(diaExpandido) : -1
-  const diasNaTela = diaExpandido ? [diaExpandido] : visibleDates
+  const indiceDoDiaExpandido = diaUnico ? allDates.indexOf(diaUnico) : -1
+  const diasNaTela = diaUnico ? [diaUnico] : visibleDates
 
   // Fetch appointments for the visible date range
   const fetchParams = diasNaTela.length > 0
@@ -80,7 +98,7 @@ export function AgendaPage() {
 
   // Navigation
   const handlePrev = () => {
-    if (diaExpandido) {
+    if (diaUnico) {
       if (indiceDoDiaExpandido > 0) setDiaExpandido(allDates[indiceDoDiaExpandido - 1])
       return
     }
@@ -88,7 +106,7 @@ export function AgendaPage() {
   }
 
   const handleNext = () => {
-    if (diaExpandido) {
+    if (diaUnico) {
       if (indiceDoDiaExpandido >= 0 && indiceDoDiaExpandido < allDates.length - 1) {
         setDiaExpandido(allDates[indiceDoDiaExpandido + 1])
       }
@@ -128,16 +146,16 @@ export function AgendaPage() {
   }
 
   return (
-    <div className="p-6 pb-2 space-y-3">
+    <div className="p-3 md:p-6 pb-2 space-y-3">
       <AgendaHeader
         visibleDates={diasNaTela}
         onPrev={handlePrev}
         onNext={handleNext}
         onToday={handleToday}
         onNewAppointment={handleNewAppointment}
-        hasPrev={diaExpandido ? indiceDoDiaExpandido > 0 : janela.podeVoltar}
+        hasPrev={diaUnico ? indiceDoDiaExpandido > 0 : janela.podeVoltar}
         hasNext={
-          diaExpandido
+          diaUnico
             ? indiceDoDiaExpandido >= 0 && indiceDoDiaExpandido < allDates.length - 1
             : janela.podeAvancar
         }
@@ -151,14 +169,22 @@ export function AgendaPage() {
           onRetry={() => refetch()}
         />
       ) : (
-        <WeekGrid
-          weekDays={diasNaTela}
-          appointments={appointments}
-          onSlotClick={handleSlotClick}
-          onAppointmentClick={handleAppointmentClick}
-          onDayClick={handleDayClick}
-          expandido={diaExpandido !== null}
-        />
+        ehDesktop ? (
+          <WeekGrid
+            weekDays={diasNaTela}
+            appointments={appointments}
+            onSlotClick={handleSlotClick}
+            onAppointmentClick={handleAppointmentClick}
+            onDayClick={handleDayClick}
+            expandido={diaExpandido !== null}
+          />
+        ) : (
+          <AgendaDoDia
+            dia={diaNoCelular}
+            appointments={appointments}
+            onAppointmentClick={handleAppointmentClick}
+          />
+        )
       )}
 
       {/* Appointment detail popover */}
