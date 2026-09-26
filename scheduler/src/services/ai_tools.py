@@ -11,6 +11,7 @@ from src.services.confirmacao_de_areas import (
 )
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
 from src.services.areas_ambiguas import recado_de_recusa as recado_de_ambiguidade
+from src.services.busca_no_faq import busca as busca_no_faq
 from src.services.calendario import hoje_brt
 from src.services.idade import (
     dias_para_a_maioridade,
@@ -685,49 +686,57 @@ class ToolExecutor:
         return {"appointments": result}
 
     def _tool_get_faq_answer(self, args, clinic_id, phone, ctx):
+        """A resposta que a clínica escreveu para esta pergunta.
+
+        A busca era em SQL, em duas tentativas: a frase inteira como `ILIKE`, e
+        um fallback que quebrava em palavras, juntava com OR e ordenava por
+        `display_order`. O segundo ganhava sempre, e ganhava errado: "pode",
+        "fazer" e "sessão" casam com quase todo item, então vencia quem estava
+        mais no topo da lista.
+
+        Em 23/09/2026 isso custou uma conversa. A paciente perguntou se podia
+        fazer a sessão menstruada, o FAQ tinha "Posso fazer menstruada?" com a
+        resposta completa, e a busca devolveu três itens sobre outra coisa -
+        a resposta certa ficava em 6º e o LIMIT 3 a cortava fora.
+
+        Agora a ordenação é por relevância, em memória: o FAQ de uma clínica
+        tem dezenas de itens, não milhares. Ver busca_no_faq.
+        """
         question = args.get("question", "")
 
-        rows = self.db.execute_query(
+        itens = self.db.execute_query(
             """
-            SELECT question_label, answer
+            SELECT question_label, answer, display_order
             FROM scheduler.faq_items
             WHERE clinic_id = %s AND active = true
-              AND (question_label ILIKE %s OR answer ILIKE %s)
             ORDER BY display_order
-            LIMIT 3
             """,
-            (clinic_id, f"%{question}%", f"%{question}%"),
+            (clinic_id,),
         )
-        if rows:
-            return {"answers": [{"question": r["question_label"], "answer": r["answer"]} for r in rows]}
 
-        keywords = [w for w in question.lower().split() if len(w) >= 3]
-        if keywords:
-            conditions = []
-            params = [clinic_id]
-            for kw in keywords[:5]:
-                conditions.append("(question_label ILIKE %s OR answer ILIKE %s)")
-                params.extend([f"%{kw}%", f"%{kw}%"])
+        achados = busca_no_faq(question, itens)
 
-            where_clause = " OR ".join(conditions)
-            rows = self.db.execute_query(
-                f"""
-                SELECT question_label, answer
-                FROM scheduler.faq_items
-                WHERE clinic_id = %s AND active = true AND ({where_clause})
-                ORDER BY display_order
-                LIMIT 3
-                """,
-                tuple(params),
+        if achados:
+            logger.info(
+                f"[FAQ] {phone}: {question[:50]!r} -> "
+                f"{[a['question_label'] for a in achados]}"
             )
-            if rows:
-                return {"answers": [{"question": r["question_label"], "answer": r["answer"]} for r in rows]}
+            return {
+                "answers": [
+                    {"question": a["question_label"], "answer": a["answer"]}
+                    for a in achados
+                ]
+            }
 
-        # A mensagem anterior aqui mandava "use seu conhecimento sobre depilação
-        # a laser para responder" - a própria tool autorizando a invenção que o
+        # Vazio é uma resposta, e é a resposta certa quando a clínica não
+        # escreveu sobre aquilo.
+        #
+        # A mensagem aqui já mandou "use seu conhecimento sobre depilação a
+        # laser para responder" - a própria tool autorizando a invenção que o
         # resto do sistema existe para impedir. Cada clínica tem protocolo
         # próprio: intervalo entre sessões, cuidados e contraindicações não são
         # conhecimento geral, são política da casa.
+        logger.info(f"[FAQ] {phone}: {question[:50]!r} -> nada acima do piso")
         return {
             "answers": [],
             "message": (
