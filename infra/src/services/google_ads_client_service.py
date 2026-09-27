@@ -1136,7 +1136,7 @@ class GoogleAdsClientService:
 
         try:
             config = GoogleAdsConfig().get_google_ads_config()
-            client = GoogleAdsClient.load_from_dict(config, version="v20")
+            client = GoogleAdsClient.load_from_dict(config)
             service = client.get_service("ConversionUploadService")
 
             click_conversions = []
