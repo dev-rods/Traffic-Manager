@@ -643,8 +643,9 @@ def _get_availability_engine(db):
 def _get_appointment_service(db):
     try:
         from src.services.appointment_service import AppointmentService
-        lead_service = LeadService(db)
-        return AppointmentService(db, lead_service=lead_service)
+        # Este caminho ja montava certo; usa a fabrica para haver UM lugar
+        # que sabe do que o servico precisa.
+        return AppointmentService.completo(db)
     except ImportError:
         logger.info("[Webhook] AppointmentService nao disponivel (Phase 8)")
         return None

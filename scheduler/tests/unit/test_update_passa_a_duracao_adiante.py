@@ -30,6 +30,16 @@ APPT = "11111111-1111-1111-1111-111111111111"
 PARES = [{"serviceId": "s1", "areaId": "a1"}]
 
 
+# O handler passou a usar `AppointmentService.completo(db)` (27/09/2026), que
+# monta o servico COM lead_service - sem ele a conversao do gclid se perde.
+# O duble precisa responder pela FABRICA, e nao so pelo construtor.
+def _duble_de_appointment_service(servico):
+    from unittest import mock
+
+    classe = mock.MagicMock()
+    classe.completo.return_value = servico   # o caminho que o handler usa
+    classe.return_value = servico            # o construtor, para quem ainda usa
+    return classe
 def chama(corpo):
     """Roda o handler e devolve o AppointmentService dublado."""
     servico = mock.MagicMock()
@@ -50,7 +60,8 @@ def chama(corpo):
     with mock.patch.object(handler_mod, "require_acesso", return_value=(_ADMIN, None)), \
          mock.patch.object(handler_mod, "parse_body", return_value=corpo), \
          mock.patch.object(handler_mod, "PostgresService", return_value=db), \
-         mock.patch.object(handler_mod, "AppointmentService", return_value=servico):
+         mock.patch.object(handler_mod, "AppointmentService",
+                           _duble_de_appointment_service(servico)):
         resposta = handler_mod.handler(evento, None)
     return servico, resposta
 
