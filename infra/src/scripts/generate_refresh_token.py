@@ -21,6 +21,19 @@ import sys
 from urllib.parse import unquote
 from google_auth_oauthlib.flow import Flow
 
+# O terminal do Windows usa cp1252, e os 22 emojis deste script nao cabem nele.
+# Sem isto o programa morre na PRIMEIRA linha que imprime - antes de abrir o
+# navegador, antes de qualquer coisa - com um UnicodeEncodeError que nao diz
+# nada sobre OAuth. Aconteceu em 27/09/2026, e custou uma ida e volta.
+#
+# `errors="replace"` e o cinto de seguranca: num terminal que nao aceite UTF-8
+# de jeito nenhum, o emoji vira "?" e o script SEGUE. Perder um desenho e
+# aceitavel; perder o fluxo de autenticacao por causa dele nao e.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 _SCOPE = "https://www.googleapis.com/auth/adwords"
 _SERVER = "127.0.0.1"
 _PORT = 8080
