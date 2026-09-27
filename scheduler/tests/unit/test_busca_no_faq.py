@@ -171,5 +171,57 @@ class TestQuantidade(unittest.TestCase):
         self.assertLessEqual(len(r), 3)
 
 
+class TestOsAchadosDaRevisao(unittest.TestCase):
+    """Dois defeitos que sobreviveram à primeira versão desta busca.
+
+    Achados relendo o próprio código em 27/09/2026, antes do deploy. Nenhum
+    dos dois quebrava um teste - o primeiro passava por sorte de ordenação, e
+    o segundo não era testado.
+    """
+
+    def test_quantas_pontua_em_vez_de_ser_ignorada(self):
+        """"quantas/quanto/quando" estavam na lista de palavras vazias.
+
+        Com elas ignoradas, "quantas sessões preciso fazer" sobrava só com
+        "sessão" - que casa com 12 dos 19 itens - e virava um empate triplo
+        decidido por `display_order`. O item certo vencia porque está em 4º na
+        lista, não porque a busca o achou relevante: bastaria a clínica
+        reordenar o FAQ para a resposta mudar.
+        """
+        self.assertIn("quanta", termos("quantas sessoes"))
+        self.assertIn("quando", termos("quando posso voltar"))
+
+    def test_e_a_pergunta_de_quantidade_ganha_sozinha(self):
+        pesos = _peso_dos_termos(FAQ_ESSENCIA)
+        r = busca("quantas sessoes preciso fazer", FAQ_ESSENCIA)
+
+        self.assertEqual(r[0]["question_label"], "Quantas sessões são necessárias?")
+        if len(r) > 1:
+            primeiro = pontua("quantas sessoes preciso fazer", r[0], pesos)
+            segundo = pontua("quantas sessoes preciso fazer", r[1], pesos)
+            self.assertGreater(primeiro, segundo, "empate no topo é decidido por ordem")
+
+    def test_item_muito_mais_fraco_nao_viaja_junto(self):
+        """O 3º colocado da pergunta sobre menstruação era "Quantas sessões são
+        necessárias?", com 15% da pontuação do 1º - passava só porque "sessão"
+        casa.
+
+        Item fraco ao lado da resposta certa é convite para o modelo costurar
+        os dois, e foi assim que a paciente recebeu cuidados pré-sessão quando
+        perguntou outra coisa.
+        """
+        r = busca("Pode fazer a sessão estando menstruada?", FAQ_ESSENCIA)
+
+        self.assertNotIn("Quantas sessões são necessárias?", titulos(r))
+
+    def test_mas_o_complementar_de_verdade_continua(self):
+        """O corte não pode ser tão apertado que devolva sempre um item só:
+        em "posso pegar sol?", o segundo tem 45% e complementa a resposta."""
+        r = busca("posso pegar sol?", FAQ_ESSENCIA)
+
+        self.assertEqual(len(r), 2)
+        self.assertIn("Pode fazer em pele bronzeada/com sol?", titulos(r))
+
+
 if __name__ == "__main__":
     unittest.main()

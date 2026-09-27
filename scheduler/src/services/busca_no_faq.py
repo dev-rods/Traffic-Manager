@@ -45,14 +45,24 @@ from typing import Dict, List, Sequence
 # justamente as palavras que mais se repetem.
 VAZIAS = frozenset("""
 a as o os um uma uns umas de do da dos das em no na nos nas por para pra pelo
-pela com sem sobre ao aos e ou mas que se qual quais quando onde como quanto
-quantos quantas eu voce vc me meu minha meus minhas seu sua tem ter tenho
+pela com sem sobre ao aos e ou mas que se qual quais onde como
+eu voce vc me meu minha meus minhas seu sua tem ter tenho
 posso pode podem poderia consigo consegue fazer faz faco fazendo ser e esta
 estao estou muito mais menos ja nao sim tambem so entao assim isso isto essa
 esse aquilo la ali aqui preciso precisa precisam
 """.split())
 
-# ANTES/DEPOIS/DURANTE ficaram DE FORA da lista de propósito.
+# QUANTO/QUANTOS/QUANTAS/QUANDO também ficaram de fora, e por engano estiveram
+# dentro: são interrogativos que carregam assunto (quantidade, tempo), não
+# ligação. Com eles marcados como vazios, "quantas sessões preciso fazer"
+# sobrava só com "sessão" - que casa com 12 dos 19 itens - e o resultado virava
+# um empate triplo decidido por `display_order`. O teste passava por sorte de
+# ordenação, e teria quebrado no dia em que a clínica reordenasse o FAQ.
+#
+# A régua para entrar aqui: a palavra é gramatical (artigo, preposição,
+# pronome) ou carrega assunto? Se carrega, o IDF já cuida do peso dela sozinho.
+#
+# ANTES/DEPOIS/DURANTE ficaram DE FORA pela mesma razão.
 #
 # Parecem palavras de ligação, mas aqui são o que distingue uma pergunta da
 # outra: "posso pegar sol depois?" e "pode fazer com sol?" são itens diferentes
@@ -70,6 +80,18 @@ PISO = 1.0
 # Quantos itens voltam para o modelo. Mais que isso vira um despejo e convida o
 # bot a costurar pedaços de respostas diferentes.
 QUANTOS = 3
+
+# E, dos que voltam, só os que chegam perto do primeiro.
+#
+# Na pergunta sobre estar menstruada, o terceiro colocado era "Quantas sessões
+# são necessárias?" com 15% da pontuação do primeiro - passava só porque
+# "sessão" casa. Item fraco ao lado da resposta certa é convite para o modelo
+# costurar os dois, e foi assim que a paciente recebeu cuidados pré-sessão
+# quando perguntou outra coisa.
+#
+# 40% mantém o que é de fato relacionado: em "posso pegar sol?", o segundo
+# ("pele bronzeada") tem 45% e complementa a resposta.
+FRACAO_DO_TOPO = 0.4
 
 
 def _sem_acento(texto: str) -> str:
@@ -170,7 +192,12 @@ def busca(pergunta: str, itens: Sequence[Dict], quantos: int = QUANTOS) -> List[
         if p >= PISO:
             marcados.append((p, item))
 
+    if not marcados:
+        return []
+
     # Empate desempata por `display_order`: com a mesma relevância, a ordem que
     # a clínica escolheu é o melhor critério que sobra.
     marcados.sort(key=lambda par: (-par[0], par[1].get("display_order") or 0))
-    return [item for _, item in marcados[:quantos]]
+
+    corte = marcados[0][0] * FRACAO_DO_TOPO
+    return [item for p, item in marcados[:quantos] if p >= corte]
