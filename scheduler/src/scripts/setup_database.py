@@ -920,6 +920,26 @@ SQL_STATEMENTS = [
     # pacientes visivel. Sao ignorados para ADMIN, que enxerga tudo.
     "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS can_see_prices BOOLEAN NOT NULL DEFAULT FALSE",
     "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS can_see_patient_list BOOLEAN NOT NULL DEFAULT TRUE",
+
+    # -- Retratacao de conversao offline ---------------------------------------
+    #
+    # A conversao passa a subir quando a pessoa AGENDA, e nao quando comparece
+    # (decisao do Andre em 27/09/2026): o sinal chega semanas antes e o Google
+    # aprende mais rapido.
+    #
+    # O preco disso e que cancelamento vira conversao errada. Medido na
+    # Essencia: 5 das 12 conversoes estavam CANCELLED - 42%. Sem retratar, o
+    # algoritmo aprenderia a buscar quem cancela.
+    #
+    # `retracted_at` marca o que ja foi desfeito no Google. NULL = nunca
+    # retratado; nao e o mesmo que "nao precisa".
+    "ALTER TABLE scheduler.lead_conversions ADD COLUMN IF NOT EXISTS retracted_at TIMESTAMPTZ",
+
+    # So ha o que retratar quando a conversao CHEGOU a subir. O indice serve a
+    # pergunta que a Lambda faz toda semana: "o que subiu e depois caiu?"
+    """CREATE INDEX IF NOT EXISTS idx_lead_conversions_a_retratar
+       ON scheduler.lead_conversions (clinic_id)
+       WHERE uploaded_at IS NOT NULL AND retracted_at IS NULL""",
 ]
 
 

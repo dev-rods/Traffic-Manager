@@ -1208,3 +1208,122 @@ class GoogleAdsClientService:
         except Exception as e:
             logger.error(f"Erro no upload de conversões offline: {str(e)}")
             return {"success": False, "error": str(e), "uploaded_identifiers": []}
+
+    def retract_offline_conversions(
+        self,
+        customer_id: str,
+        conversion_action_id: str,
+        retractions: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Desfaz conversoes ja enviadas, quando o agendamento e cancelado.
+
+        Desde 27/09/2026 a conversao sobe no momento do AGENDAMENTO, e nao
+        depois da sessao acontecer: o Google aprende semanas antes. O preco e
+        que cancelamento vira conversao errada - e na Essencia isso nao e
+        marginal, sao 42% (5 de 12).
+
+        A RETRACTION e a resposta do proprio Google para isso: ela remove a
+        conversao do historico, e o algoritmo para de perseguir quem cancela.
+
+        Args:
+            customer_id: conta da clinica (10 digitos)
+            conversion_action_id: a mesma acao usada no upload
+            retractions: lista de dicts com
+                - gclid (str)
+                - conversion_date_time (str) - tem de ser EXATAMENTE o carimbo
+                  usado no upload; e assim que o Google acha a conversao
+                - identifier (opcional) para marcar a linha depois
+
+        Returns:
+            {success, retracted_identifiers, failed} - mesmo formato do upload.
+        """
+        from src.services.google_ads_config import GoogleAdsConfig
+
+        clean_customer_id = str(customer_id).replace("-", "")
+        conversion_action = (
+            f"customers/{clean_customer_id}/conversionActions/{conversion_action_id}"
+        )
+
+        try:
+            config = GoogleAdsConfig().get_google_ads_config()
+            client = GoogleAdsClient.load_from_dict(config)
+            service = client.get_service("ConversionAdjustmentUploadService")
+
+            adjustments = []
+            for item in retractions:
+                adjustment = client.get_type("ConversionAdjustment")
+                adjustment.adjustment_type = (
+                    client.enums.ConversionAdjustmentTypeEnum.RETRACTION
+                )
+                adjustment.conversion_action = conversion_action
+                # `adjustment_date_time` e QUANDO desfazemos; o Google exige
+                # que seja depois da conversao original.
+                adjustment.adjustment_date_time = item["adjustment_date_time"]
+                # O par (gclid, conversion_date_time) e o que identifica a
+                # conversao original. Errar o carimbo aqui devolve
+                # CONVERSION_NOT_FOUND, e a linha volta na semana seguinte.
+                adjustment.gclid_date_time_pair.gclid = item["gclid"]
+                adjustment.gclid_date_time_pair.conversion_date_time = (
+                    item["conversion_date_time"]
+                )
+                adjustments.append(adjustment)
+
+            response = service.upload_conversion_adjustments(
+                customer_id=clean_customer_id,
+                conversion_adjustments=adjustments,
+                partial_failure=True,
+            )
+
+            failed_indices = set()
+            if response.partial_failure_error and response.partial_failure_error.code != 0:
+                for detail in response.partial_failure_error.details:
+                    try:
+                        failure = client.get_type("GoogleAdsFailure")
+                        failure = type(failure).deserialize(detail.value)
+                        for error in failure.errors:
+                            for elem in error.location.field_path_elements:
+                                if elem.field_name == "conversion_adjustments":
+                                    failed_indices.add(elem.index)
+                                    logger.error(
+                                        f"Falha na retratacao [idx {elem.index}]: {error.message}"
+                                    )
+                    except Exception as parse_err:
+                        # Mesma postura do upload: nao conseguindo ler o erro
+                        # parcial, o lote inteiro e falho. Marcar como retratado
+                        # o que talvez nao tenha sido deixaria a conversao viva
+                        # no Google para sempre - ninguem tentaria de novo.
+                        logger.error(
+                            f"Erro ao interpretar partial_failure da retratacao; "
+                            f"tratando lote como falho: {parse_err}"
+                        )
+                        return {
+                            "success": False,
+                            "error": f"partial_failure nao interpretavel: {parse_err}",
+                            "retracted_identifiers": [],
+                        }
+
+            retracted = [
+                retractions[i].get("identifier")
+                for i in range(len(retractions))
+                if i not in failed_indices
+            ]
+
+            logger.info(
+                f"Retratacao para {clean_customer_id}: "
+                f"{len(retracted)} aceitas, {len(failed_indices)} falharam"
+            )
+
+            return {
+                "success": True,
+                "retracted_identifiers": [i for i in retracted if i is not None],
+                "failed": len(failed_indices),
+            }
+
+        except GoogleAdsException as ex:
+            messages = [error.message for error in ex.failure.errors]
+            logger.error(f"GoogleAdsException na retratacao: {messages}")
+            return {"success": False, "error": "; ".join(messages),
+                    "retracted_identifiers": []}
+        except Exception as e:
+            logger.error(f"Erro na retratacao de conversoes: {str(e)}")
+            return {"success": False, "error": str(e), "retracted_identifiers": []}
