@@ -75,7 +75,7 @@ def create_google_ads_client() -> GoogleAdsClient:
     config = ads_config.get_google_ads_config()
     
     try:
-        googleads_client = GoogleAdsClient.load_from_dict(config, version="v20")
+        googleads_client = GoogleAdsClient.load_from_dict(config)
         print(f"Google Ads Client criado com sucesso")
         return googleads_client
     except Exception as e:

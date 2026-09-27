@@ -93,5 +93,51 @@ class TestOServicoDeMccCarrega(unittest.TestCase):
                 self.assertTrue(callable(getattr(GoogleAdsMCCService, metodo, None)))
 
 
+def _version_fixa_no_cliente(caminho):
+    """Chamadas que fixam a versao da API por PARAMETRO: load_from_dict(..., version="v20")."""
+    with open(caminho, encoding="utf-8") as f:
+        arvore = ast.parse(f.read(), filename=caminho)
+
+    achados = []
+    for no in ast.walk(arvore):
+        if not isinstance(no, ast.Call):
+            continue
+        for kw in no.keywords:
+            if kw.arg != "version":
+                continue
+            if isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str):
+                v = kw.value.value
+                if len(v) >= 2 and v[0] == "v" and v[1:].isdigit():
+                    achados.append((no.lineno, v))
+    return achados
+
+
+class TestNemPorParametro(unittest.TestCase):
+    """A primeira versao desta correcao tirou os IMPORTS e deixou isto passar.
+
+    `GoogleAdsClient.load_from_dict(config, version="v20")` nao falha ao montar
+    o cliente - falha depois, ao pedir um servico:
+
+        ValueError: Specified service ConversionUploadService" does not exist
+        in Google Ads API v20.
+
+    Era exatamente o caso do upload de conversao offline: o modulo carregava,
+    o cliente montava, e o erro so aparecia na hora de usar. Quatro arquivos
+    tinham isso, inclusive o que eu ja tinha "corrigido".
+    """
+
+    def test_ninguem_fixa_a_versao_por_parametro(self):
+        presos = []
+        for caminho in _todos_os_fontes():
+            for linha, versao in _version_fixa_no_cliente(caminho):
+                rel = os.path.relpath(caminho, RAIZ).replace(os.sep, "/")
+                presos.append("%s:%d  version=%r" % (rel, linha, versao))
+
+        self.assertEqual(presos, [], (
+            "Estas chamadas fixam a versao da API. Omita `version=` e deixe o "
+            "SDK resolver.\n  " + "\n  ".join(presos)
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()
