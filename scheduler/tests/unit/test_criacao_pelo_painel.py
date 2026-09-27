@@ -24,6 +24,16 @@ _ADMIN = Identidade(papel=ADMIN, chave_mestra=True)
 CLINIC = "clinicaessenciaestetica-9668a4"
 
 
+# O handler passou a usar `AppointmentService.completo(db)` (27/09/2026), que
+# monta o servico COM lead_service - sem ele a conversao do gclid se perde.
+# O duble precisa responder pela FABRICA, e nao so pelo construtor.
+def _duble_de_appointment_service(servico):
+    from unittest import mock
+
+    classe = mock.MagicMock()
+    classe.completo.return_value = servico   # o caminho que o handler usa
+    classe.return_value = servico            # o construtor, para quem ainda usa
+    return classe
 def chama_o_handler(corpo):
     """Roda o handler de verdade e devolve o kwargs que chegou ao service."""
     from src.functions.appointment import create as modulo
@@ -38,7 +48,8 @@ def chama_o_handler(corpo):
 
     with mock.patch.object(modulo, "require_acesso", return_value=(_ADMIN, None)), \
          mock.patch.object(modulo, "PostgresService"), \
-         mock.patch.object(modulo, "AppointmentService", return_value=service), \
+         mock.patch.object(modulo, "AppointmentService",
+                           _duble_de_appointment_service(service)), \
          mock.patch.object(modulo, "_serialize_row", side_effect=lambda r: r):
         modulo.handler(evento, None)
 

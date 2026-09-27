@@ -97,7 +97,9 @@ def handler(event, context):
         if new_date and not dentro_da_janela(identidade, new_date):
             return fora_da_janela()
 
-        service = AppointmentService(db)
+        # Ver a nota em appointment/create.py: o construtor cru perde a
+        # conversao do lead.
+        service = AppointmentService.completo(db)
 
         # Cancel is exclusive — cannot combine with other operations
         if new_status == "CANCELLED":

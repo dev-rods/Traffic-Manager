@@ -49,6 +49,28 @@ class AppointmentService:
         self.reminder_service = reminder_service
         self.lead_service = lead_service
 
+    @classmethod
+    def completo(cls, db: PostgresService) -> "AppointmentService":
+        """O serviço com tudo que ele precisa para não perder conversão.
+
+        Existe porque `lead_service=None` é um default silencioso: sem ele, o
+        bloco que marca o lead como agendado e registra a conversão do gclid
+        simplesmente não roda, e ninguém percebe - o agendamento é criado
+        normalmente, só não chega ao Google Ads.
+
+        Foi o que aconteceu em produção até 27/09/2026: o webhook do bot
+        passava `lead_service`, mas o painel, a edição e o agente montavam o
+        serviço sem ele. **57% dos agendamentos vindos de anúncio ficaram
+        invisíveis** para o Google - 16 de 28 em 30 dias, R$ 3.984,50 de
+        receita não reportada.
+
+        Quem cria agendamento usa esta fábrica. O construtor continua aberto
+        para os testes, que precisam injetar dublê.
+        """
+        from src.services.lead_service import LeadService
+
+        return cls(db, lead_service=LeadService(db))
+
     def create_appointment(
         self,
         clinic_id: str,

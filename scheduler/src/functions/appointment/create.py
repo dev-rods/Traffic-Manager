@@ -96,7 +96,10 @@ def handler(event, context):
 
         db = PostgresService()
 
-        service = AppointmentService(db)
+        # `.completo(db)` e nao o construtor: sem o lead_service, a conversao
+        # do gclid nao e registrada e o agendamento fica invisivel para o
+        # Google Ads. Era esse o caso ate 27/09/2026.
+        service = AppointmentService.completo(db)
 
         # Parse serviceAreaPairs from body
         raw_pairs = body.get("serviceAreaPairs")

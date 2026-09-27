@@ -29,7 +29,9 @@ def montar_agente(db, provider, tracker):
         db=db,
         template_service=TemplateService(db),
         availability_engine=AvailabilityEngine(db),
-        appointment_service=AppointmentService(db),
+        # `.completo(db)`: o agente tambem agenda, e sem o lead_service a
+        # conversao do gclid se perde.
+        appointment_service=AppointmentService.completo(db),
         provider=provider,
         message_tracker=tracker,
     )
