@@ -11,8 +11,28 @@ import type { Appointment, AvailabilityRule } from '@/types'
 export const PRIMEIRA_HORA = 7
 export const ULTIMA_HORA = 22
 
-/** Granularidade em que se marca. Vão menor que isto não comporta sessão. */
+/** Granularidade visual da grade do desktop: as linhas de :15, :30 e :45. */
 export const MINUTOS_DO_SLOT = 15
+
+/**
+ * O menor vão que vale mostrar.
+ *
+ * NÃO é `MINUTOS_DO_SLOT`. Confundir os dois foi o defeito: a grade se divide
+ * de 15 em 15 minutos, mas a clínica marca sessão de duração livre, e um piso
+ * de 15 escondia buraco onde cabe atendimento.
+ *
+ * Medido na Essência, sobre os atendimentos reais:
+ *
+ *      5 min ...  13 atendimentos
+ *     10 min ...  34
+ *     12 min ...   2
+ *     15 min ... 454
+ *
+ * Cinco minutos é a menor sessão que a clínica de fato marca, então é o menor
+ * vão que representa horário aproveitável. Abaixo disso não há o que caiba -
+ * seria ruído entre duas linhas.
+ */
+export const MENOR_VAO = 5
 
 export interface Vao {
   /** Minutos desde a meia-noite. */
@@ -75,7 +95,7 @@ export function janelaDoDia(
  */
 export function vaosLivres(
   appointments: Appointment[],
-  { inicio, fim, minimo = MINUTOS_DO_SLOT }: { inicio: number; fim: number; minimo?: number },
+  { inicio, fim, minimo = MENOR_VAO }: { inicio: number; fim: number; minimo?: number },
 ): Vao[] {
   const ocupados = appointments
     .filter((a) => a.status !== 'CANCELLED')
