@@ -1,10 +1,14 @@
 import { shortDayName, dayNumber, shortMonthName, todayStr, timeToMinutes } from '@/utils/dateHelpers'
 import { distribuiEmColunas } from '@/lib/agendaLayout'
+import { PRIMEIRA_HORA, ULTIMA_HORA, MINUTOS_DO_SLOT } from '@/lib/expediente'
 import type { Appointment } from '@/types'
 
-const FIRST_HOUR = 7
-const LAST_HOUR = 22
-const SLOT_MINUTES = 15
+// A janela e a granularidade moram em lib/expediente: a lista do celular
+// desenha os vaos livres sobre exatamente o mesmo intervalo. Duas copias
+// divergiriam em silencio, cada tela certa sozinha e errada junto da outra.
+const FIRST_HOUR = PRIMEIRA_HORA
+const LAST_HOUR = ULTIMA_HORA
+const SLOT_MINUTES = MINUTOS_DO_SLOT
 const HOUR_HEIGHT = 112 // px per hour  (1 min = 1,87px)
 // Altura mínima de uma caixa. Cabe UMA linha de 11px com o padding apertado -
 // nem uma sessão de 5 minutos fica ilegível, e nem por isso a caixa invade

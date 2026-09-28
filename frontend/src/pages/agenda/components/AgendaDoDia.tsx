@@ -1,10 +1,46 @@
 import { timeToMinutes } from '@/utils/dateHelpers'
+import {
+  PRIMEIRA_HORA,
+  ULTIMA_HORA,
+  comoHora,
+  duracaoPorExtenso,
+  vaosLivres,
+  type Vao,
+} from '@/lib/expediente'
 import type { Appointment } from '@/types'
 
 interface AgendaDoDiaProps {
   dia: string
   appointments: Appointment[]
   onAppointmentClick: (appointment: Appointment, rect: DOMRect) => void
+}
+
+/** Uma linha da lista: ou um atendimento, ou o buraco antes dele. */
+type Item =
+  | { tipo: 'atendimento'; appointment: Appointment }
+  | { tipo: 'vao'; vao: Vao }
+
+/**
+ * Intercala os vaos entre os atendimentos, na ordem do relogio.
+ *
+ * Feito aqui e nao no `map` do JSX porque a ordem e a informacao: um vao que
+ * apareca no lugar errado da lista mente sobre quando o horario abre.
+ */
+function montaLinhas(doDia: Appointment[]): Item[] {
+  const vaos = vaosLivres(doDia, { inicio: PRIMEIRA_HORA * 60, fim: ULTIMA_HORA * 60 })
+
+  const linhas: Item[] = [
+    ...doDia.map((a) => ({ tipo: 'atendimento' as const, appointment: a })),
+    ...vaos.map((v) => ({ tipo: 'vao' as const, vao: v })),
+  ]
+
+  return linhas.sort((x, y) => {
+    const inicio = (i: Item) =>
+      i.tipo === 'vao' ? i.vao.inicio : timeToMinutes(i.appointment.start_time)
+    // Empate: o vao vem primeiro. Ele TERMINA onde o atendimento comeca, entao
+    // so pode estar acima - o contrario faria a lista voltar no tempo.
+    return inicio(x) - inicio(y) || (x.tipo === 'vao' ? -1 : 1)
+  })
 }
 
 /**
@@ -23,9 +59,15 @@ interface AgendaDoDiaProps {
  * que 44px, nada se sobrepõe, e só aparece o que existe em vez de quinze horas
  * de grade vazia.
  *
- * O que ela não mostra é **buraco livre**. Quem vai agendar usa o botão de
- * novo agendamento, que pergunta o horário à API de `available-slots` - ela
- * conhece os vãos melhor que o olho.
+ * O que lhe faltava era o **buraco livre**. Na grade ele se vê sozinho, como
+ * espaço em branco; numa lista de atendimentos, some. Descobrir que das 10h às
+ * 14h não há nada exigia subtrair horários de cabeça, linha a linha - e é
+ * justamente o que se quer saber com o celular na mão, no balcão, com a
+ * paciente esperando.
+ *
+ * Os vãos são calculados em `lib/expediente`, sobre a mesma janela que a grade
+ * do desktop desenha. Se cada tela tivesse a sua, as duas estariam certas
+ * sozinhas e erradas juntas.
  */
 export function AgendaDoDia({ dia, appointments, onAppointmentClick }: AgendaDoDiaProps) {
   const doDia = appointments
@@ -42,10 +84,48 @@ export function AgendaDoDia({ dia, appointments, onAppointmentClick }: AgendaDoD
 
   return (
     <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      {doDia.map((a) => (
-        <LinhaDaAgenda key={a.id} appointment={a} onClick={onAppointmentClick} />
-      ))}
+      {montaLinhas(doDia).map((item) =>
+        item.tipo === 'vao' ? (
+          <LinhaLivre key={`livre-${item.vao.inicio}`} vao={item.vao} />
+        ) : (
+          <LinhaDaAgenda
+            key={item.appointment.id}
+            appointment={item.appointment}
+            onClick={onAppointmentClick}
+          />
+        ),
+      )}
     </ul>
+  )
+}
+
+/**
+ * Um buraco na agenda.
+ *
+ * Deliberadamente mais leve que um atendimento: fundo listrado, sem faixa
+ * colorida, texto menor. A lista e sobre o que esta marcado - o vao e o
+ * contorno disso, e competir em peso com as sessoes inverteria a leitura.
+ *
+ * Nao e botao. Tocar aqui para criar agendamento seria o gesto obvio, mas o
+ * horario livre na tela nao e o mesmo que horario agendavel: falta o
+ * profissional, a sala e a duracao do servico, que a API de `available-slots`
+ * conhece e esta conta nao. Um toque que abrisse o formulario ja preenchido
+ * prometeria um horario que o servidor pode recusar.
+ */
+function LinhaLivre({ vao }: { vao: Vao }) {
+  const minutos = vao.fim - vao.inicio
+
+  return (
+    <li className="flex items-center gap-3 bg-[repeating-linear-gradient(135deg,transparent,transparent_6px,rgb(0_0_0/0.02)_6px,rgb(0_0_0/0.02)_12px)] px-3 py-2">
+      <span aria-hidden className="w-1 self-stretch" />
+      <span className="w-12 flex-shrink-0 text-xs font-medium tabular-nums text-gray-400">
+        {comoHora(vao.inicio)}
+      </span>
+      <span className="text-xs text-gray-400">
+        Livre até {comoHora(vao.fim)}
+        <span className="text-gray-300"> · {duracaoPorExtenso(minutos)}</span>
+      </span>
+    </li>
   )
 }
 

@@ -120,3 +120,114 @@ describe('AgendaDoDia', () => {
     expect(onClick.mock.calls[0][0]).toBe(alvo)
   })
 })
+
+/**
+ * Os vãos livres.
+ *
+ * Na grade do desktop o buraco se vê sozinho, como espaço em branco. Numa
+ * lista de atendimentos ele some: descobrir que das 10h às 14h não há nada
+ * exigia subtrair horários de cabeça, linha a linha.
+ */
+describe('AgendaDoDia - espaços livres', () => {
+  function textos() {
+    return Array.from(document.querySelectorAll('li')).map((l) =>
+      l.textContent?.replace(/\s+/g, ' ').trim(),
+    )
+  }
+
+  it('mostra o buraco entre dois atendimentos, no lugar certo da lista', () => {
+    render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[
+          agendamento({
+            start_time: '09:00:00', end_time: '10:00:00', patient_name: 'Manha',
+          }),
+          agendamento({
+            start_time: '14:00:00', end_time: '15:00:00', patient_name: 'Tarde',
+          }),
+        ]}
+        onAppointmentClick={clique}
+      />,
+    )
+
+    const linhas = textos()
+    // o vão precisa cair ENTRE os dois: acima dele a lista voltaria no tempo
+    expect(linhas[1]).toContain('Manha')
+    expect(linhas[2]).toContain('Livre até 14:00')
+    expect(linhas[2]).toContain('4h')
+    expect(linhas[3]).toContain('Tarde')
+  })
+
+  it('diz quando o primeiro horário do dia abre', () => {
+    render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[
+          agendamento({ start_time: '14:00:00', end_time: '15:00:00' }),
+        ]}
+        onAppointmentClick={clique}
+      />,
+    )
+
+    expect(screen.getByText(/Livre até 14:00/)).toBeInTheDocument()
+  })
+
+  it('não mostra vão que não comporta sessão', () => {
+    render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[
+          agendamento({ start_time: '09:00:00', end_time: '10:00:00' }),
+          agendamento({ start_time: '10:10:00', end_time: '11:00:00' }),
+        ]}
+        onAppointmentClick={clique}
+      />,
+    )
+
+    expect(screen.queryByText(/Livre até 10:10/)).not.toBeInTheDocument()
+  })
+
+  it('cancelado abre o horário', () => {
+    render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[
+          agendamento({
+            start_time: '09:00:00', end_time: '10:00:00',
+            status: 'CANCELLED', patient_name: 'Desmarcou',
+          }),
+          agendamento({ start_time: '14:00:00', end_time: '15:00:00' }),
+        ]}
+        onAppointmentClick={clique}
+      />,
+    )
+
+    expect(screen.queryByText('Desmarcou')).not.toBeInTheDocument()
+    // o horário do cancelado é absorvido: um vão das 7h às 14h, e não dois
+    // vãos com a sessão desmarcada partindo a manhã ao meio
+    expect(screen.getByText(/Livre até 14:00/)).toBeInTheDocument()
+    expect(screen.queryByText(/Livre até 09:00/)).not.toBeInTheDocument()
+  })
+
+  it('vão não é clicável', () => {
+    render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[agendamento({ start_time: '14:00:00', end_time: '15:00:00' })]}
+        onAppointmentClick={clique}
+      />,
+    )
+
+    // Só o atendimento é botão. O horário livre na tela não é horário
+    // agendável: falta profissional, sala e duração, que só o servidor sabe.
+    expect(screen.getAllByRole('button')).toHaveLength(1)
+  })
+
+  it('dia sem atendimento continua mostrando o estado vazio', () => {
+    render(<AgendaDoDia dia="2026-09-23" appointments={[]} onAppointmentClick={clique} />)
+
+    expect(screen.getByText('Nenhum atendimento neste dia.')).toBeInTheDocument()
+    expect(screen.queryByText(/Livre até/)).not.toBeInTheDocument()
+  })
+})
