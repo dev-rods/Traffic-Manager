@@ -276,23 +276,5 @@ class TestLeadServiceRecordConversion(unittest.TestCase):
         self.db.execute_write_returning.assert_not_called()
 
 
-class TestLeadServicePendingConversions(unittest.TestCase):
-    """Tests for get_pending_conversions eligibility SQL."""
-
-    def setUp(self):
-        self.db = MagicMock()
-        self.service = LeadService(self.db)
-
-    def test_query_enforces_delay_and_window(self):
-        self.db.execute_query.return_value = []
-        self.service.get_pending_conversions(clinic_id="clinic-1")
-
-        sql = self.db.execute_query.call_args[0][0]
-        self.assertIn("uploaded_at IS NULL", sql)
-        self.assertIn("status = 'CONFIRMED'", sql)
-        self.assertIn("appointment_date < CURRENT_DATE", sql)
-        self.assertIn("INTERVAL '90 days'", sql)
-
-
 if __name__ == "__main__":
     unittest.main()

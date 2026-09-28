@@ -4,9 +4,16 @@ Simulates the end-to-end path (lead -> appointment -> pending conversion -> uplo
 -> accumulated return) with an in-memory fake DB that models the routed queries.
 Deterministic and dependency-free, so it runs as a normal unit test.
 
-The eligibility rules validated here mirror the SQL in get_pending_conversions:
-only CONFIRMED appointments whose date already passed and that fall within the
-gclid 90-day window are returned, and never after being marked uploaded.
+O que se testa aqui e a GRAVACAO: quem vira linha em lead_conversions, com
+que valor, e que isso e idempotente por agendamento.
+
+A ELEGIBILIDADE (o que sobe ao Google, e quando) nao se testa aqui de
+proposito. Ela vive em infra/src/functions/conversions/uploader.py, com testes
+proprios em infra/tests/unit/test_conversao_e_retracao.py. Este arquivo ja teve
+uma copia dela, atraves de LeadService.get_pending_conversions - codigo morto
+que ninguem chamava em producao - e a copia ficou divergente: continuou
+exigindo sessao passada depois que a regra mudou, com os testes verdes
+afirmando a regra derrubada. Uma regra, um dono.
 """
 import os
 import unittest
@@ -110,36 +117,9 @@ class FakeDB:
             )
             return [{"total_cents": total}]
 
-        if "FROM scheduler.lead_conversions lc" in query and "JOIN scheduler.appointments" in query:
-            (clinic_id,) = params
-            today = datetime.now(timezone.utc).date()
-            out = []
-            for c in self.conversions:
-                if c["clinic_id"] != clinic_id or c["uploaded_at"] is not None:
-                    continue
-                appt = self.appointments.get(c["appointment_id"])
-                if not appt or appt["status"] != "CONFIRMED":
-                    continue
-                if not (appt["appointment_date"] < today):
-                    continue
-                if c["conversion_date"] > c["click_date"] + timedelta(days=90):
-                    continue
-                out.append({
-                    "id": c["id"], "gclid": c["gclid"],
-                    "value_cents": c["value_cents"], "conversion_date": c["conversion_date"],
-                })
-            out.sort(key=lambda r: r["conversion_date"])
-            return out
-
         raise AssertionError(f"Unexpected query: {query[:60]}")
 
     def execute_write(self, query, params):
-        if "UPDATE scheduler.lead_conversions SET uploaded_at" in query:
-            (conv_id,) = params
-            for c in self.conversions:
-                if c["id"] == conv_id:
-                    c["uploaded_at"] = datetime.now(timezone.utc)
-            return 1
         raise AssertionError(f"Unexpected write query: {query[:60]}")
 
     def _find_lead(self, clinic_id, phone, first_name):
@@ -176,13 +156,9 @@ class TestLeadConversionFlow(unittest.TestCase):
         )
         self.assertIsNotNone(conv)
 
-        pending = self.service.get_pending_conversions(self.clinic)
-        self.assertEqual(len(pending), 1)
-        self.assertEqual(pending[0]["gclid"], "G1")
-        self.assertEqual(pending[0]["value_cents"], 15000)
-
-        self.service.mark_conversion_uploaded(pending[0]["id"])
-        self.assertEqual(self.service.get_pending_conversions(self.clinic), [])
+        self.assertEqual(len(self.db.conversions), 1)
+        self.assertEqual(self.db.conversions[0]["gclid"], "G1")
+        self.assertEqual(self.db.conversions[0]["value_cents"], 15000)
 
         self.assertEqual(self.service.get_accumulated_return(self.clinic, lead["id"]), 15000)
 
@@ -194,7 +170,7 @@ class TestLeadConversionFlow(unittest.TestCase):
                 clinic_id=self.clinic, phone=self.phone, name="Maria Silva",
                 appointment_id=f"appt-{i}", value_cents=cents, conversion_date=self.yesterday,
             )
-        self.assertEqual(len(self.service.get_pending_conversions(self.clinic)), 3)
+        self.assertEqual(len(self.db.conversions), 3)
         self.assertEqual(self.service.get_accumulated_return(self.clinic, lead["id"]), 45000)
 
     def test_no_conversion_without_gclid_lead(self):
@@ -205,7 +181,7 @@ class TestLeadConversionFlow(unittest.TestCase):
             appointment_id="appt-1", value_cents=15000, conversion_date=self.yesterday,
         )
         self.assertIsNone(conv)
-        self.assertEqual(self.service.get_pending_conversions(self.clinic), [])
+        self.assertEqual(self.db.conversions, [])
 
     def test_idempotent_per_appointment(self):
         self._create_gclid_lead()
@@ -220,38 +196,22 @@ class TestLeadConversionFlow(unittest.TestCase):
         )
         self.assertIsNotNone(first)
         self.assertIsNone(second)
-        self.assertEqual(len(self.service.get_pending_conversions(self.clinic)), 1)
+        self.assertEqual(len(self.db.conversions), 1)
 
-    def test_future_appointment_not_eligible(self):
-        self._create_gclid_lead()
-        tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).date().isoformat()
-        self.db.add_appointment("appt-1", "CONFIRMED", tomorrow)
-        self.service.record_conversion(
-            clinic_id=self.clinic, phone=self.phone, name="Maria Silva",
-            appointment_id="appt-1", value_cents=15000, conversion_date=tomorrow,
-        )
-        self.assertEqual(self.service.get_pending_conversions(self.clinic), [])
+    def test_grava_mesmo_se_o_agendamento_for_cancelado(self):
+        """A gravacao nao olha status, e esta certa em nao olhar.
 
-    def test_cancelled_appointment_not_eligible(self):
+        O agendamento pode ser cancelado DEPOIS - inclusive depois de a
+        conversao ja ter subido, e e por isso que existe a retratacao. Filtrar
+        cancelado aqui so esconderia o caso do uploader, que e quem decide.
+        """
         self._create_gclid_lead()
         self.db.add_appointment("appt-1", "CANCELLED", self.yesterday)
         self.service.record_conversion(
             clinic_id=self.clinic, phone=self.phone, name="Maria Silva",
             appointment_id="appt-1", value_cents=15000, conversion_date=self.yesterday,
         )
-        self.assertEqual(self.service.get_pending_conversions(self.clinic), [])
-
-    def test_outside_90_day_window_not_eligible(self):
-        lead = self._create_gclid_lead()
-        # force click_date far in the past so the appointment is beyond 90 days
-        for l in self.db.leads:
-            l["created_at"] = datetime.now(timezone.utc) - timedelta(days=120)
-        self.db.add_appointment("appt-1", "CONFIRMED", self.yesterday)
-        self.service.record_conversion(
-            clinic_id=self.clinic, phone=self.phone, name="Maria Silva",
-            appointment_id="appt-1", value_cents=15000, conversion_date=self.yesterday,
-        )
-        self.assertEqual(self.service.get_pending_conversions(self.clinic), [])
+        self.assertEqual(len(self.db.conversions), 1)
 
     def test_phone_format_mismatch_still_matches(self):
         # Regression: LP creates the lead with a formatted phone; the appointment
@@ -266,7 +226,7 @@ class TestLeadConversionFlow(unittest.TestCase):
             appointment_id="appt-1", value_cents=15000, conversion_date=self.yesterday,
         )
         self.assertIsNotNone(conv)
-        self.assertEqual(len(self.service.get_pending_conversions(self.clinic)), 1)
+        self.assertEqual(len(self.db.conversions), 1)
 
     def test_upsert_normalizes_phone_no_duplicate(self):
         self.service.upsert_lead(
