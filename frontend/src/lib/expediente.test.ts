@@ -52,10 +52,32 @@ describe('vaosLivres', () => {
     expect(legivel(vaos)).toEqual(['07:00-09:00', '11:00-22:00'])
   })
 
-  it('ignora vão menor que o mínimo', () => {
-    // 10 minutos entre as sessões: não cabe nada, e listar polui a tela
+  it('mostra vão de 10 minutos', () => {
+    // Regressão de 28/09/2026, relatada na agenda de 29/09: entre um
+    // atendimento que terminava 17:20 e outro que começava 17:30, a lista não
+    // mostrava nada. O piso era 15 minutos - a granularidade da GRADE - e a
+    // clínica marca 34 sessões de 10 minutos e 13 de 5.
     const vaos = vaosLivres(
-      [atendimento('09:00', '10:00'), atendimento('10:10', '11:00')],
+      [atendimento('16:45', '17:20'), atendimento('17:30', '17:40')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toContain('17:20-17:30')
+  })
+
+  it('mostra vão de 5 minutos, a menor sessão que a clínica marca', () => {
+    const vaos = vaosLivres(
+      [atendimento('16:10', '16:25'), atendimento('16:30', '16:45')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toContain('16:25-16:30')
+  })
+
+  it('ignora vão menor que o mínimo', () => {
+    // 3 minutos: não existe sessão desse tamanho, e a linha seria ruído
+    const vaos = vaosLivres(
+      [atendimento('09:00', '10:00'), atendimento('10:03', '11:00')],
       DIA,
     )
 
@@ -64,11 +86,11 @@ describe('vaosLivres', () => {
 
   it('aceita vão exatamente do tamanho mínimo', () => {
     const vaos = vaosLivres(
-      [atendimento('09:00', '10:00'), atendimento('10:15', '11:00')],
+      [atendimento('09:00', '10:00'), atendimento('10:05', '11:00')],
       DIA,
     )
 
-    expect(legivel(vaos)).toContain('10:00-10:15')
+    expect(legivel(vaos)).toContain('10:00-10:05')
   })
 
   it('não abre vão fantasma com atendimento dentro de outro', () => {

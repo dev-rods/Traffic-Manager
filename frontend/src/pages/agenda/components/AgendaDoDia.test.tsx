@@ -210,20 +210,41 @@ describe('AgendaDoDia - espaços livres', () => {
     expect(screen.getByText(/Livre até 14:00/)).toBeInTheDocument()
   })
 
-  it('não mostra vão que não comporta sessão', () => {
+  it('mostra vão de 10 minutos entre dois atendimentos', () => {
+    // Regressão relatada em 28/09/2026 sobre a agenda de 29/09: o buraco
+    // entre um atendimento que terminava 17:20 e o seguinte, às 17:30, não
+    // aparecia. O piso era 15 minutos - a granularidade da GRADE - enquanto a
+    // clínica marca 34 sessões de 10 minutos e 13 de 5.
     render(
       <AgendaDoDia
         dia="2026-09-23"
         appointments={[
-          agendamento({ start_time: '09:00:00', end_time: '10:00:00' }),
-          agendamento({ start_time: '10:10:00', end_time: '11:00:00' }),
+          agendamento({ start_time: '16:45:00', end_time: '17:20:00' }),
+          agendamento({ start_time: '17:30:00', end_time: '17:40:00' }),
         ]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
       />,
     )
 
-    expect(screen.queryByText(/Livre até 10:10/)).not.toBeInTheDocument()
+    expect(screen.getByText(/Livre até 17:30/)).toBeInTheDocument()
+  })
+
+  it('não mostra vão que não comporta sessão', () => {
+    // 3 minutos: não existe sessão desse tamanho na clínica
+    render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[
+          agendamento({ start_time: '09:00:00', end_time: '10:00:00' }),
+          agendamento({ start_time: '10:03:00', end_time: '11:00:00' }),
+        ]}
+        rules={EXPEDIENTE}
+        onAppointmentClick={clique}
+      />,
+    )
+
+    expect(screen.queryByText(/Livre até 10:03/)).not.toBeInTheDocument()
   })
 
   it('cancelado abre o horário', () => {
