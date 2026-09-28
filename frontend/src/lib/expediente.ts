@@ -1,16 +1,12 @@
 import { timeToMinutes } from '@/utils/dateHelpers'
-import type { Appointment } from '@/types'
+import type { Appointment, AvailabilityRule } from '@/types'
 
 /**
- * A janela de agenda que as duas telas desenham.
+ * A janela que a GRADE desenha - o eixo vertical do desktop, fixo.
  *
- * Moram aqui, e não em cada tela, porque a grade do desktop e a lista do
- * celular precisam concordar: se uma mostrasse vão livre às 21h e a outra
- * terminasse às 19h, as duas estariam certas sozinhas e erradas juntas.
- *
- * Não é o horário de funcionamento da clínica - esse vive em
- * `availability_rules`, no banco. É a janela que a agenda desenha, a mesma
- * desde que a grade existe.
+ * Mora aqui, e não em cada tela, porque a grade e a lista do celular precisam
+ * concordar. Não confundir com o horário de funcionamento: para dizer até que
+ * horas a clínica atende, use `janelaDoDia`.
  */
 export const PRIMEIRA_HORA = 7
 export const ULTIMA_HORA = 22
@@ -22,6 +18,40 @@ export interface Vao {
   /** Minutos desde a meia-noite. */
   inicio: number
   fim: number
+}
+
+/**
+ * O horário em que a clínica realmente atende naquele dia.
+ *
+ * Sai das MESMAS regras que fazem o dia aparecer na agenda. A `AgendaPage`
+ * monta a lista de dias a partir das regras com `rule_date` preenchido; usar
+ * outra fonte aqui poderia mostrar um dia cuja janela viesse de outro lugar.
+ *
+ * Só regras de data específica, de propósito. É também o que o servidor faz:
+ * em `availability_engine`, `fixed_rules` substituem as recorrentes quando
+ * existem para a data. Como a agenda só exibe dias que têm regra fixa, seguir
+ * apenas elas reproduz a prioridade do servidor por construção, sem copiar a
+ * resolução de `day_of_week` - que tem a sutileza de 0=domingo e já aparece
+ * duplicada duas vezes no backend.
+ *
+ * Várias regras no mesmo dia são vários profissionais. A janela é a união:
+ * a agenda mostra todos, então ela abre com o primeiro e fecha com o último.
+ *
+ * Sem regra para o dia, devolve `null` - e quem chama decide. Não inventa um
+ * horário: dizer "livre até 22:00" numa clínica que fecha às 19h é pior do que
+ * não dizer nada.
+ */
+export function janelaDoDia(
+  rules: AvailabilityRule[],
+  dia: string,
+): { inicio: number; fim: number } | null {
+  const doDia = rules.filter((r) => r.active && r.rule_date === dia)
+  if (doDia.length === 0) return null
+
+  const inicio = Math.min(...doDia.map((r) => timeToMinutes(r.start_time)))
+  const fim = Math.max(...doDia.map((r) => timeToMinutes(r.end_time)))
+
+  return fim > inicio ? { inicio, fim } : null
 }
 
 /**
@@ -56,8 +86,12 @@ export function vaosLivres(
   let cursor = inicio
 
   for (const o of ocupados) {
-    if (o.inicio - cursor >= minimo) {
-      vaos.push({ inicio: cursor, fim: o.inicio })
+    // O vão termina no atendimento OU no fechamento, o que vier primeiro. Um
+    // encaixe às 19h30 numa clínica que fecha às 19h faria o vão anterior ir
+    // até 19h30 - oferecendo meia hora depois de a clínica ter fechado.
+    const fimDoVao = Math.min(o.inicio, fim)
+    if (fimDoVao - cursor >= minimo) {
+      vaos.push({ inicio: cursor, fim: fimDoVao })
     }
     cursor = Math.max(cursor, o.fim)
   }

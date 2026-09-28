@@ -182,6 +182,7 @@ export function AgendaPage() {
           <AgendaDoDia
             dia={diaNoCelular}
             appointments={appointments}
+            rules={rulesData?.data ?? []}
             onAppointmentClick={handleAppointmentClick}
           />
         )

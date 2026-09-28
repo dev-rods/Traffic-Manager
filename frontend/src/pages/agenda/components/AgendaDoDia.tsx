@@ -1,17 +1,22 @@
 import { timeToMinutes } from '@/utils/dateHelpers'
 import {
-  PRIMEIRA_HORA,
-  ULTIMA_HORA,
   comoHora,
   duracaoPorExtenso,
+  janelaDoDia,
   vaosLivres,
   type Vao,
 } from '@/lib/expediente'
-import type { Appointment } from '@/types'
+import type { Appointment, AvailabilityRule } from '@/types'
 
 interface AgendaDoDiaProps {
   dia: string
   appointments: Appointment[]
+  /**
+   * As regras de horário da clínica. Sem elas os vãos não aparecem - e é o
+   * comportamento certo: inventar um fechamento seria oferecer horário que a
+   * clínica não atende.
+   */
+  rules: AvailabilityRule[]
   onAppointmentClick: (appointment: Appointment, rect: DOMRect) => void
 }
 
@@ -26,8 +31,11 @@ type Item =
  * Feito aqui e nao no `map` do JSX porque a ordem e a informacao: um vao que
  * apareca no lugar errado da lista mente sobre quando o horario abre.
  */
-function montaLinhas(doDia: Appointment[]): Item[] {
-  const vaos = vaosLivres(doDia, { inicio: PRIMEIRA_HORA * 60, fim: ULTIMA_HORA * 60 })
+function montaLinhas(
+  doDia: Appointment[],
+  janela: { inicio: number; fim: number } | null,
+): Item[] {
+  const vaos = janela ? vaosLivres(doDia, janela) : []
 
   const linhas: Item[] = [
     ...doDia.map((a) => ({ tipo: 'atendimento' as const, appointment: a })),
@@ -65,11 +73,13 @@ function montaLinhas(doDia: Appointment[]): Item[] {
  * justamente o que se quer saber com o celular na mão, no balcão, com a
  * paciente esperando.
  *
- * Os vãos são calculados em `lib/expediente`, sobre a mesma janela que a grade
- * do desktop desenha. Se cada tela tivesse a sua, as duas estariam certas
- * sozinhas e erradas juntas.
+ * Os vãos saem do horário REAL da clínica naquele dia - as mesmas regras de
+ * `availability_rules` que fazem o dia aparecer na agenda. Sem regra para o
+ * dia, nenhum vão é mostrado: dizer "livre até 22:00" numa clínica que fecha
+ * às 19h é pior do que não dizer nada.
  */
-export function AgendaDoDia({ dia, appointments, onAppointmentClick }: AgendaDoDiaProps) {
+export function AgendaDoDia({ dia, appointments, rules, onAppointmentClick }: AgendaDoDiaProps) {
+  const janela = janelaDoDia(rules, dia)
   const doDia = appointments
     .filter((a) => a.appointment_date === dia && a.status !== 'CANCELLED')
     .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time))
@@ -84,7 +94,7 @@ export function AgendaDoDia({ dia, appointments, onAppointmentClick }: AgendaDoD
 
   return (
     <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-      {montaLinhas(doDia).map((item) =>
+      {montaLinhas(doDia, janela).map((item) =>
         item.tipo === 'vao' ? (
           <LinhaLivre key={`livre-${item.vao.inicio}`} vao={item.vao} />
         ) : (

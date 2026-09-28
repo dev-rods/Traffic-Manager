@@ -6,8 +6,14 @@
  * justamente o que se quer saber ao olhar a agenda no balcão.
  */
 import { describe, expect, it } from 'vitest'
-import { comoHora, duracaoPorExtenso, vaosLivres, type Vao } from './expediente'
-import type { Appointment } from '@/types'
+import {
+  comoHora,
+  duracaoPorExtenso,
+  janelaDoDia,
+  vaosLivres,
+  type Vao,
+} from './expediente'
+import type { Appointment, AvailabilityRule } from '@/types'
 
 const DIA = { inicio: 7 * 60, fim: 22 * 60 }
 
@@ -108,6 +114,26 @@ describe('vaosLivres', () => {
     expect(legivel(vaos)).toEqual(['07:00-21:00'])
   })
 
+  it('o vão para no fechamento, não no atendimento fora dele', () => {
+    // Encaixe às 19h30 numa clínica que fecha às 19h. Sem o corte, o vão
+    // anterior iria até 19h30 e ofereceria meia hora de clínica fechada.
+    const vaos = vaosLivres([atendimento('19:30', '20:00')], {
+      inicio: 8 * 60,
+      fim: 19 * 60,
+    })
+
+    expect(legivel(vaos)).toEqual(['08:00-19:00'])
+  })
+
+  it('atendimento que comeca no fechamento nao gera vao extra depois', () => {
+    const vaos = vaosLivres([atendimento('19:00', '20:00')], {
+      inicio: 8 * 60,
+      fim: 19 * 60,
+    })
+
+    expect(legivel(vaos)).toEqual(['08:00-19:00'])
+  })
+
   it('dia inteiro livre é um vão só', () => {
     expect(legivel(vaosLivres([], DIA))).toEqual(['07:00-22:00'])
   })
@@ -146,5 +172,74 @@ describe('duracaoPorExtenso', () => {
     [240, '4h'],
   ])('%i min vira %s', (minutos, esperado) => {
     expect(duracaoPorExtenso(minutos)).toBe(esperado)
+  })
+})
+
+/**
+ * A janela de funcionamento do dia.
+ *
+ * Antes, a lista desenhava os vãos sobre 7h-22h, a janela fixa da grade. Numa
+ * clínica que fecha às 19h isso oferecia três horas que não existem.
+ */
+describe('janelaDoDia', () => {
+  function regra(over: Partial<AvailabilityRule> = {}): AvailabilityRule {
+    return {
+      id: Math.random().toString(),
+      clinic_id: 'c1',
+      day_of_week: null,
+      rule_date: '2026-09-23',
+      start_time: '08:00:00',
+      end_time: '19:00:00',
+      professional_id: null,
+      active: true,
+      ...over,
+    }
+  }
+
+  it('usa o horário da regra daquele dia', () => {
+    expect(janelaDoDia([regra()], '2026-09-23')).toEqual({
+      inicio: 8 * 60,
+      fim: 19 * 60,
+    })
+  })
+
+  it('une os horários quando há vários profissionais', () => {
+    // A agenda mostra todos: abre com o primeiro, fecha com o último.
+    const janela = janelaDoDia(
+      [
+        regra({ start_time: '08:00:00', end_time: '14:00:00' }),
+        regra({ start_time: '12:00:00', end_time: '20:00:00' }),
+      ],
+      '2026-09-23',
+    )
+
+    expect(janela).toEqual({ inicio: 8 * 60, fim: 20 * 60 })
+  })
+
+  it('ignora regra de outro dia', () => {
+    expect(janelaDoDia([regra({ rule_date: '2026-09-24' })], '2026-09-23')).toBeNull()
+  })
+
+  it('ignora regra inativa', () => {
+    expect(janelaDoDia([regra({ active: false })], '2026-09-23')).toBeNull()
+  })
+
+  it('ignora regra recorrente', () => {
+    // day_of_week tem a sutileza de 0=domingo e já vive resolvido no servidor.
+    // A agenda só exibe dias com regra fixa, então seguir só elas reproduz a
+    // prioridade do backend sem copiar a resolução.
+    expect(
+      janelaDoDia([regra({ rule_date: null, day_of_week: 3 })], '2026-09-23'),
+    ).toBeNull()
+  })
+
+  it('sem regra nenhuma, devolve null em vez de inventar horário', () => {
+    expect(janelaDoDia([], '2026-09-23')).toBeNull()
+  })
+
+  it('recusa janela invertida ou vazia', () => {
+    expect(
+      janelaDoDia([regra({ start_time: '19:00:00', end_time: '19:00:00' })], '2026-09-23'),
+    ).toBeNull()
   })
 })
