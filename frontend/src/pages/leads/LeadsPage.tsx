@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { formatPhone } from '@/utils/formatPhone'
 import type { Lead } from '@/types'
+import type { ConversionsSummary } from '@/services/leads.service'
 
 type FilterStatus = 'all' | 'booked' | 'not_booked'
 
@@ -25,12 +26,15 @@ export function LeadsPage() {
   })
 
   const leads = data?.leads ?? []
-  const totalLeads = data?.total ?? 0
-  const bookedCount = leads.filter((l) => l.booked).length
-  const notBookedCount = leads.filter((l) => !l.booked).length
-  // Divide pelo mesmo conjunto que gerou bookedCount. Usar data.total aqui daria
-  // percentual errado em silêncio assim que houvesse mais leads que o limit.
-  const conversionRate = leads.length > 0 ? Math.round((bookedCount / leads.length) * 100) : 0
+  // Os totais vêm contados do banco. Eram calculados aqui sobre a página
+  // carregada, enquanto "Total de leads" vinha do servidor: a taxa saía de uma
+  // divisão entre numerador da página e denominador do conjunto, e era
+  // exatamente o número usado para julgar a campanha.
+  const totalLeads = data?.totals.total ?? 0
+  const bookedCount = data?.totals.convertidos ?? 0
+  const notBookedCount = data?.totals.nao_convertidos ?? 0
+  const conversionRate = totalLeads > 0 ? Math.round((bookedCount / totalLeads) * 100) : 0
+  const conversoes = data?.conversions ?? null
 
   if (isLoading) return <div className="p-6"><SkeletonTable rows={8} /></div>
   if (isError) {
@@ -60,6 +64,8 @@ export function LeadsPage() {
         <KpiCard label="Não convertidos" value={notBookedCount} />
         <KpiCard label="Taxa de conversão" value={`${conversionRate}%`} />
       </div>
+
+      {conversoes && <EnvioParaOGoogle resumo={conversoes} />}
 
       {/* Filter */}
       <div className="flex gap-1">
@@ -99,6 +105,7 @@ export function LeadsPage() {
                 <th className="px-3 py-3">Atendimento</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Conversa inicial</th>
+                <th className="px-3 py-3">Google</th>
                 <th className="px-3 py-3">Valor 1o agend.</th>
                 <th className="px-3 py-3">Data</th>
               </tr>
@@ -129,10 +136,13 @@ export function LeadsPage() {
                       {lead.booked ? 'Convertido' : 'Pendente'}
                     </Badge>
                   </td>
+                  <td className="px-3 py-3">
+                    <EnvioBadge lead={lead} />
+                  </td>
                   <td className="px-3 py-3 text-gray-700 whitespace-nowrap">
                     {lead.first_appointment_value
                       ? `R$ ${lead.first_appointment_value.toFixed(2).replace('.', ',')}`
-                      : '—'}
+                      : '-'}
                   </td>
                   <td className="px-3 py-3 text-gray-600 whitespace-nowrap">
                     {new Date(lead.created_at).toLocaleDateString('pt-BR')}
@@ -267,6 +277,117 @@ function AcoesDeInicio({ lead }: { lead: Lead }) {
       </Button>
     </div>
   )
+}
+
+/** Centavos em reais, sem casas quando são redondos: R$ 5.446 e não R$ 5.446,00. */
+function emReais(cents: number) {
+  return (cents / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+  })
+}
+
+/**
+ * O que o Google Ads recebeu, e o que ainda não.
+ *
+ * Existe porque "Convertido" na tabela acima responde outra pergunta - se a
+ * pessoa agendou. Se o Google soube disso é uma segunda camada, e o vão entre
+ * as duas ficou invisível por semanas: 24 leads convertidos, zero enviados.
+ *
+ * Não é um card: são cards demais nesta tela, e aninhar mais um dentro da
+ * mesma faixa dos KPIs roubaria hierarquia do que importa. Uma régua fina e
+ * tipografia bastam para separar.
+ */
+function EnvioParaOGoogle({ resumo }: { resumo: ConversionsSummary }) {
+  const nadaSubiu = resumo.enviadas === 0 && resumo.aguardando > 0
+
+  return (
+    <section
+      aria-label="Envio de conversões ao Google Ads"
+      className="border-t border-gray-100 pt-4"
+    >
+      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+          Google Ads
+        </h2>
+
+        <Numero
+          label="Enviadas"
+          valor={resumo.enviadas}
+          detalhe={resumo.enviadas > 0 ? emReais(resumo.enviadas_cents) : undefined}
+        />
+        <Numero
+          label="Aguardando envio"
+          valor={resumo.aguardando}
+          detalhe={resumo.aguardando > 0 ? emReais(resumo.aguardando_cents) : undefined}
+          destaque={nadaSubiu}
+        />
+        {resumo.retratadas > 0 && (
+          <Numero label="Retratadas" valor={resumo.retratadas} />
+        )}
+
+        <p className="text-xs text-gray-400 ml-auto">
+          {resumo.ultimo_envio
+            ? `Último envio em ${new Date(resumo.ultimo_envio).toLocaleDateString('pt-BR')}`
+            : 'Nenhum envio ainda'}
+        </p>
+      </div>
+
+      {nadaSubiu && (
+        <p className="mt-2 text-xs text-amber-700">
+          {resumo.aguardando} agendamento{resumo.aguardando > 1 ? 's' : ''} de anúncio
+          {resumo.aguardando > 1 ? ' estão' : ' está'} registrado
+          {resumo.aguardando > 1 ? 's' : ''} aqui e o Google ainda não recebeu.
+          O envio roda toda segunda.
+        </p>
+      )}
+    </section>
+  )
+}
+
+function Numero({
+  label,
+  valor,
+  detalhe,
+  destaque = false,
+}: {
+  label: string
+  valor: number
+  detalhe?: string
+  destaque?: boolean
+}) {
+  return (
+    <div>
+      <p className="text-xs text-gray-400">{label}</p>
+      <p className="flex items-baseline gap-2">
+        <span
+          className={[
+            'text-xl font-semibold tabular-nums',
+            destaque ? 'text-amber-700' : 'text-gray-900',
+          ].join(' ')}
+        >
+          {valor}
+        </span>
+        {detalhe && <span className="text-xs text-gray-500 tabular-nums">{detalhe}</span>}
+      </p>
+    </div>
+  )
+}
+
+/** Rótulos da coluna "Google". Ausência não vira badge: não há o que enviar. */
+const ENVIO_AO_GOOGLE = {
+  ENVIADO: { label: 'Enviado', variant: 'success' as const },
+  AGUARDANDO: { label: 'A enviar', variant: 'warning' as const },
+  RETRATADO: { label: 'Retratado', variant: 'neutral' as const },
+}
+
+function EnvioBadge({ lead }: { lead: Lead }) {
+  if (!lead.conversion_status) {
+    return <span className="text-gray-300">-</span>
+  }
+  const { label, variant } = ENVIO_AO_GOOGLE[lead.conversion_status]
+  return <Badge variant={variant}>{label}</Badge>
 }
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {

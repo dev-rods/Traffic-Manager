@@ -45,6 +45,22 @@ def _serialize_row(row):
     return result
 
 
+def _data_ou_nada(valor):
+    """Devolve a data em ISO, ou None. Recusa qualquer outra coisa.
+
+    O MAX() de uma tabela vazia e NULL, e o campo pode simplesmente nao existir
+    ainda. Um valor de outro tipo chegaria ate o json.dumps e derrubaria a
+    listagem inteira com 500 - por causa de um numero decorativo no topo da
+    tela. Aqui ele vira excecao, que o chamador trata mostrando os leads sem os
+    contadores.
+    """
+    if valor is None:
+        return None
+    if isinstance(valor, (datetime, date)):
+        return valor.isoformat()
+    raise TypeError(f"ultimo_envio deveria ser data, veio {type(valor).__name__}")
+
+
 def handler(event, context):
     try:
         api_key, error_response = require_api_key(event)
@@ -103,11 +119,52 @@ def handler(event, context):
             # painel mostra os leads como mostrava antes.
             logger.error(f"Falha ao enriquecer status da conversa: {e}")
 
+        # Totais e conversao nao podem derrubar a listagem: sem eles o painel
+        # mostra os leads como mostrava antes, com os contadores zerados.
+        totais = {"total": len(leads), "convertidos": 0, "nao_convertidos": 0}
+        conversoes = None
+        try:
+            # As chaves sao nomeadas uma a uma, e nao copiadas do retorno, para
+            # que um retorno em formato inesperado caia no except em vez de
+            # virar um dict vazio que estoura la embaixo no json.dumps - que e
+            # justamente o 500 que este fallback existe para evitar.
+            contagem = lead_service.contar_leads(
+                clinic_id=clinic_id,
+                start_date=start_date,
+                end_date=end_date,
+                exclude_sources=exclude_sources,
+            )
+            totais = {
+                "total": int(contagem["total"]),
+                "convertidos": int(contagem["convertidos"]),
+                "nao_convertidos": int(contagem["nao_convertidos"]),
+            }
+            resumo = lead_service.resumo_de_conversoes(clinic_id)
+            conversoes = {
+                "aguardando": int(resumo["aguardando"]),
+                "aguardando_cents": int(resumo["aguardando_cents"]),
+                "enviadas": int(resumo["enviadas"]),
+                "enviadas_cents": int(resumo["enviadas_cents"]),
+                "retratadas": int(resumo["retratadas"]),
+                "canceladas": int(resumo["canceladas"]),
+                "ultimo_envio": _data_ou_nada(resumo["ultimo_envio"]),
+            }
+            estados = lead_service.conversoes_por_lead(
+                clinic_id, [l.get("id") for l in leads])
+            for l in leads:
+                l["conversion_status"] = estados.get(str(l.get("id")))
+        except Exception as e:
+            logger.error(f"Falha ao montar totais/conversoes dos leads: {e}")
+
         return http_response(200, {
             "status": "SUCCESS",
             "clinicId": clinic_id,
             "leads": [_serialize_row(r) for r in leads],
-            "total": len(leads),
+            # `total` e o conjunto INTEIRO, nao a pagina. Era len(leads), e o
+            # painel mostrava "50 leads" numa clinica com 77.
+            "total": totais["total"],
+            "totals": totais,
+            "conversions": _serialize_row(conversoes) if conversoes else None,
         })
 
     except Exception as e:
