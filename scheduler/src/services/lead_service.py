@@ -322,36 +322,16 @@ class LeadService:
             (conversion_date, appointment_id),
         )
 
-    def get_pending_conversions(self, clinic_id: str) -> List[Dict[str, Any]]:
-        """Return conversions ready to upload to Google Ads for a clinic.
-
-        Eligibility (delay against cancellations + gclid 90-day window):
-          - not yet uploaded
-          - appointment still CONFIRMED (not CANCELLED)
-          - appointment date already passed (session occurred; no COMPLETED status exists)
-          - within 90 days of the click (lead.created_at proxy)
-        """
-        return self.db.execute_query(
-            """
-            SELECT lc.id, lc.gclid, lc.value_cents, lc.conversion_date
-            FROM scheduler.lead_conversions lc
-            JOIN scheduler.appointments a ON a.id = lc.appointment_id
-            WHERE lc.clinic_id = %s
-              AND lc.uploaded_at IS NULL
-              AND a.status = 'CONFIRMED'
-              AND a.appointment_date < CURRENT_DATE
-              AND lc.conversion_date <= lc.click_date + INTERVAL '90 days'
-            ORDER BY lc.conversion_date ASC
-            """,
-            (clinic_id,),
-        )
-
-    def mark_conversion_uploaded(self, conversion_id: str) -> None:
-        """Mark a conversion as successfully uploaded to Google Ads."""
-        self.db.execute_write(
-            "UPDATE scheduler.lead_conversions SET uploaded_at = NOW() WHERE id = %s::uuid",
-            (conversion_id,),
-        )
+    # get_pending_conversions / mark_conversion_uploaded viviam aqui e foram
+    # removidos em 27/09/2026. Eram codigo morto - nada em producao os chamava -
+    # que carregava uma SEGUNDA copia da regra de elegibilidade. A copia ficou
+    # divergente: seguia exigindo `appointment_date < CURRENT_DATE` depois que o
+    # uploader passou a contar a conversao no agendamento, e os testes dela
+    # ficaram verdes afirmando a regra derrubada.
+    #
+    # A regra tem um dono: infra/src/functions/conversions/uploader.py, que e
+    # quem de fato fala com o Google. Testes em
+    # infra/tests/unit/test_conversao_e_retracao.py.
 
     def get_accumulated_return(self, clinic_id: str, lead_id: str) -> int:
         """Total value (cents) of non-cancelled appointments for a lead (recurring return)."""
