@@ -129,12 +129,14 @@ describe('envio ao Google', () => {
     expect(screen.getByText('Total de leads')).toBeInTheDocument()
   })
 
-  it('só mostra retratadas quando existem', () => {
+  it('só mostra o valor zerado quando existe', () => {
     monta({
       totals: { total: 77, convertidos: 24, nao_convertidos: 53 },
       conversions: { ...SEM_CONVERSAO, enviadas: 20, retratadas: 3 },
     })
 
-    expect(screen.getByText('Retratadas')).toBeInTheDocument()
+    // "Valor zerado", nao "Retratadas": o Google nao retrata, so troca o
+    // valor - a conversao segue contando. Ver LeadsPage.tsx.
+    expect(screen.getByText('Valor zerado')).toBeInTheDocument()
   })
 })

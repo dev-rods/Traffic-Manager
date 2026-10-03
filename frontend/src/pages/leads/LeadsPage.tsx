@@ -323,8 +323,13 @@ function EnvioParaOGoogle({ resumo }: { resumo: ConversionsSummary }) {
           detalhe={resumo.aguardando > 0 ? emReais(resumo.aguardando_cents) : undefined}
           destaque={nadaSubiu}
         />
+        {/* Nao e "Retratadas": a Data Manager API do Google nao retrata.
+            Ela so substitui o VALOR, e a conversao continua contando. Dizer
+            "retratada" a clinica afirmaria que foi desfeita - o que e falso,
+            e levaria a ler o relatorio como se o cancelamento tivesse sido
+            neutralizado. Ver infra/src/services/data_manager_service.py. */}
         {resumo.retratadas > 0 && (
-          <Numero label="Retratadas" valor={resumo.retratadas} />
+          <Numero label="Valor zerado" valor={resumo.retratadas} />
         )}
 
         <p className="text-xs text-gray-400 ml-auto">
@@ -379,7 +384,8 @@ function Numero({
 const ENVIO_AO_GOOGLE = {
   ENVIADO: { label: 'Enviado', variant: 'success' as const },
   AGUARDANDO: { label: 'A enviar', variant: 'warning' as const },
-  RETRATADO: { label: 'Retratado', variant: 'neutral' as const },
+  // chave vem do backend; o rotulo diz o que de fato acontece (ver acima)
+  RETRATADO: { label: 'Zerado', variant: 'neutral' as const },
 }
 
 function EnvioBadge({ lead }: { lead: Lead }) {
