@@ -295,6 +295,7 @@ def handler(event, context):
         # Envia em lotes de até 2000 (limite do Google) para não estourar o request
         # inteiro num backlog grande — cada lote é marcado assim que confirmado.
         clinic_uploaded = 0
+        clinic_validated = 0
         clinic_failed = 0
         errors = []
         for start in range(0, len(conversions), UPLOAD_CHUNK_SIZE):
@@ -309,6 +310,11 @@ def handler(event, context):
             uploaded_ids = result.get("uploaded_identifiers", [])
             _mark_uploaded(db, uploaded_ids)
             clinic_uploaded += len(uploaded_ids)
+            # Em ensaio nada sobe, entao `uploaded` fica 0 e o resumo diria
+            # "0 enviadas, 0 falhas" - que se le como se nada tivesse
+            # acontecido. `validated` e o que separa um ensaio verde de uma
+            # clinica sem conversao pendente.
+            clinic_validated += result.get("validated", 0)
             clinic_failed += result.get("failed", 0) if result.get("success") else len(chunk)
             if result.get("error"):
                 errors.append(result["error"])
@@ -319,6 +325,7 @@ def handler(event, context):
             "clinicId": clinic_id,
             "pending": len(pending),
             "uploaded": clinic_uploaded,
+            "validated": clinic_validated,
             "failed": clinic_failed,
             "errors": errors or None,
             "retraction": retratacao,

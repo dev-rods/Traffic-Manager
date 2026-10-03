@@ -312,6 +312,29 @@ class TestTransporteDataManager(unittest.TestCase):
         self.assertEqual(destino["operatingAccount"]["accountId"], "4601912200")
         self.assertEqual(destino["loginAccount"]["accountId"], "1234567890")
 
+    def test_manda_event_source(self):
+        """A referência REST diz que é opcional; o destino do Google Ads exige.
+
+        O primeiro ensaio em produção (03/10/2026) voltou
+        `events.events[0].event_source: Required field is missing`. Sem este
+        teste, alguém "limpando campo redundante" reintroduz a falha.
+        """
+        modulo, servico = self._servico()
+        resposta = mock.Mock(status_code=200, content=b"{}")
+        resposta.json.return_value = {}
+
+        with mock.patch.object(modulo.requests, "post", return_value=resposta) as post:
+            servico.ingest_offline_conversions("4601912200", "7699541177",
+                                               self._conversoes(1))
+
+        self.assertEqual(post.call_args.kwargs["json"]["events"][0]["eventSource"],
+                         "MESSAGE")
+
+    def test_o_erro_do_google_nao_e_truncado_cedo(self):
+        """`fieldViolations` traz uma entrada por campo. Cortar em 800 escondeu
+        quantas violações existiam no primeiro ensaio."""
+        self.assertIn("resposta.text[:4000]", fonte(DATA_MANAGER))
+
     def test_lista_vazia_nao_chama_a_rede(self):
         modulo, servico = self._servico()
 

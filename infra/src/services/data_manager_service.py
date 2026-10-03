@@ -43,6 +43,16 @@ logger = logging.getLogger()
 ENDPOINT = "https://datamanager.googleapis.com/v1/events:ingest"
 ESCOPO = "https://www.googleapis.com/auth/datamanager"
 
+# A referencia REST marca `eventSource` como opcional, mas o destino do Google
+# Ads o EXIGE: o primeiro ensaio em producao (03/10/2026) voltou
+# `events.events[0].event_source: Required field is missing`. Quando a doc e a
+# API discordam, a API ganha.
+#
+# MESSAGE e o valor honesto para este fluxo: o clique foi web, mas a conversao -
+# o agendamento - acontece numa conversa de WhatsApp, nao num navegador. WEB
+# descreveria a origem do clique, nao o evento que estamos enviando.
+EVENT_SOURCE = "MESSAGE"
+
 # Limite da API. Coincide com o lote que o uploader ja usava.
 MAX_EVENTOS_POR_REQUISICAO = 2000
 
@@ -137,6 +147,7 @@ class DataManagerService:
             "adIdentifiers": {"gclid": conv["gclid"]},
             "eventTimestamp": conv["conversion_date_time"],
             "transactionId": str(conv["identifier"]),
+            "eventSource": EVENT_SOURCE,
             "currency": "BRL",
             "conversionValue": float(
                 conv["conversion_value"] if valor is None else valor
@@ -180,7 +191,13 @@ class DataManagerService:
             # sem permissao, conversion action de outro tipo). Perde-la aqui
             # transforma um diagnostico de um minuto numa tarde de adivinhacao
             # - foi o que o `501` opaco nos custou hoje.
-            detalhe = resposta.text[:800]
+            #
+            # O limite era 800 e cortava a resposta no meio: o erro de
+            # INVALID_ARGUMENT traz um `fieldViolations` por campo, e o primeiro
+            # ensaio mostrou so a primeira violacao antes de ser truncado -
+            # escondendo quantas outras existiam. Ficou grande o suficiente para
+            # caber a lista inteira.
+            detalhe = resposta.text[:4000]
             logger.error("Data Manager recusou (HTTP %s): %s",
                          resposta.status_code, detalhe)
             return {"success": False,
