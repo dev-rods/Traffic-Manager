@@ -48,10 +48,16 @@ ESCOPO = "https://www.googleapis.com/auth/datamanager"
 # `events.events[0].event_source: Required field is missing`. Quando a doc e a
 # API discordam, a API ganha.
 #
-# MESSAGE e o valor honesto para este fluxo: o clique foi web, mas a conversao -
-# o agendamento - acontece numa conversa de WhatsApp, nao num navegador. WEB
-# descreveria a origem do clique, nao o evento que estamos enviando.
-EVENT_SOURCE = "MESSAGE"
+# IN_STORE: este evento e uma COMPRA, e a compra acontece na clinica. O clique
+# foi web e o agendamento foi por WhatsApp, mas nenhum dos dois e o evento que
+# estamos enviando - WEB descreveria a origem do clique e MESSAGE o canal do
+# agendamento.
+#
+# Era MESSAGE enquanto o evento era "agendamento qualificado". Mudou junto com a
+# semantica, em 03/10/2026, quando o Andre decidiu que esta action e PURCHASE
+# pura. Quando o evento de WhatsApp qualificado existir, ele sim usa MESSAGE -
+# sao duas actions distintas, nao a mesma com configuracao diferente.
+EVENT_SOURCE = "IN_STORE"
 
 # Limite da API. Coincide com o lote que o uploader ja usava.
 MAX_EVENTOS_POR_REQUISICAO = 2000

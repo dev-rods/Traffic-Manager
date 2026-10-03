@@ -1,25 +1,31 @@
-# -*- coding: utf-8 -*-
-"""A conversão sobe no agendamento, e o cancelado tem o valor zerado.
+"""Esta conversion action e uma COMPRA: so sobe sessao que ja aconteceu.
 
-Duas decisões empilhadas, em datas diferentes:
+A regra mudou tres vezes, e cada volta tem um motivo diferente. Sem isso
+registrado, a proxima pessoa desfaz por achar que e descuido.
 
-**27/09/2026 (André).** Antes, o uploader tinha `a.appointment_date <
-CURRENT_DATE`: só subia depois da sessão acontecer, como proteção contra
-cancelamento. O custo era alto demais - a conversão comercial acontece quando a
-pessoa AGENDA, e segurar o sinal até a sessão atrasava o aprendizado do Google
-em semanas. Medido na Essência: 3 conversões elegíveis contra 7 com a regra
-nova. O cancelamento passaria a ser tratado por RETRACTION, depois.
+**Ate 27/09/2026.** Havia `a.appointment_date < CURRENT_DATE`: so subia depois
+da sessao, como protecao contra cancelamento.
 
-**03/10/2026 (imposto pelo Google).** A RETRACTION deixou de existir. O Google
-fechou o `ConversionUploadService.UploadClickConversions` e o
-`ConversionAdjustmentUploadService` para integrações novas, e a Data Manager
-API, que é o caminho obrigatório, só permite *restatement* de valor.
+**27/09/2026 (Andre).** O guard saiu, para a conversao contar no AGENDAMENTO: o
+sinal chegava antes (mediana medida depois: 13 dias) e a RETRACTION seria a
+contrapartida do cancelamento.
 
-Ou seja: o valor do cancelado vai a zero, mas a CONTAGEM permanece. Como a
-campanha da Essência é MAXIMIZE_CONVERSIONS com tCPA - otimiza por contagem,
-não por valor -, a proteção que justificou a decisão de 27/09 **não existe
-mais**. Com 42% de cancelamento (5 de 12), isso é material. Os testes abaixo
-travam esse fato para que ele não se perca.
+**03/10/2026 (Google + Andre).** O Google fechou a RETRACTION - a Data Manager
+API so permite *restatement* de valor, nunca negar a conversao. A contrapartida
+que sustentava o desenho anterior deixou de existir.
+
+Diante disso o Andre decidiu o contrario: esta action passa a ser PURCHASE
+pura - confirmou E compareceu -, e o guard voltou. O evento de "WhatsApp
+qualificado", que conta no agendamento e INCLUI quem cancelou, sera uma action
+SEPARADA. Dois eventos honestos em vez de um hibrido afirmando as duas coisas.
+
+**O limite que os testes travam:** o guard NAO prova comparecimento. O scheduler
+nao registra presenca (so CONFIRMED e CANCELLED; 604 dos 618 CONFIRMED ficam
+assim para sempre, e o prontuario cobre 4% das sessoes passadas), entao um
+no-show entra como compra. E o melhor proxy disponivel, nao a regra final.
+
+Taxa de cancelamento medida em 03/10/2026: 33% (10 de 30). O 42% que circulava
+vinha de 5 de 12.
 """
 import ast
 import os
@@ -37,24 +43,31 @@ def fonte(caminho):
         return f.read()
 
 
-class TestSessaoFuturaSobe(unittest.TestCase):
-    def test_o_filtro_de_sessao_passada_saiu(self):
-        """Era ele que segurava a conversão até a sessão acontecer.
+class TestSoSobeCompraRealizada(unittest.TestCase):
+    def test_o_guard_da_sessao_passada_esta_de_volta(self):
+        """Sem ele, "compra" seria afirmada no agendamento - antes de existir.
 
-        Procura `AND a.appointment_date`, e não a expressão solta: o docstring
-        da função menciona o filtro para explicar por que ele saiu, e uma busca
-        crua no arquivo inteiro acha a explicação e reprova o código correto.
+        Este teste ja existiu invertido, travando a ausência do guard entre
+        27/09 e 03/10/2026. A inversão é deliberada, não descuido: ver o
+        docstring do módulo antes de mexer.
+        """
+        self.assertIn("AND a.appointment_date < CURRENT_DATE", fonte(UPLOADER))
+
+    def test_o_limite_do_guard_esta_escrito(self):
+        """O guard não prova comparecimento, e confundir as duas coisas é o
+        erro fácil: alguém lê "sessão passou" e entende "a pessoa veio".
+
+        Enquanto não houver registro de presença, o aviso tem de estar no
+        código - não só no PR que ninguém relê.
         """
         texto = fonte(UPLOADER)
 
-        self.assertNotIn("AND a.appointment_date < CURRENT_DATE", texto)
-        # e o docstring CONTINUA podendo falar dele
-        self.assertIn("appointment_date", texto,
-                      "a explicação da mudança não deveria sumir")
+        self.assertIn("NAO prova presenca", texto)
+        self.assertIn("no-show", texto)
 
     def test_o_carimbo_enviado_nunca_e_futuro(self):
-        """O Google recusa conversão com data no futuro. Sessão marcada para
-        daqui a duas semanas sobe com o carimbo de agora."""
+        """Redundante com o guard, mantido como cinto de segurança: o Google
+        recusa carimbo no futuro, e esta regra já mudou três vezes."""
         self.assertIn("LEAST(lc.conversion_date, NOW())", fonte(UPLOADER))
 
     def test_a_janela_de_90_dias_continua(self):
@@ -328,7 +341,7 @@ class TestTransporteDataManager(unittest.TestCase):
                                                self._conversoes(1))
 
         self.assertEqual(post.call_args.kwargs["json"]["events"][0]["eventSource"],
-                         "MESSAGE")
+                         "IN_STORE")
 
     def test_o_erro_do_google_nao_e_truncado_cedo(self):
         """`fieldViolations` traz uma entrada por campo. Cortar em 800 escondeu

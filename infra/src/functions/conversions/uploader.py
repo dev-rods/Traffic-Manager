@@ -1,21 +1,35 @@
 """
-Lambda semanal: leva agendamentos reais ao Google Ads, e desfaz os cancelados.
+Lambda semanal: leva COMPRAS ao Google Ads, e zera o valor das canceladas.
+
+Este evento e uma COMPRA (`PURCHASE`, valor = `final_price_cents`), por decisao
+do Andre em 03/10/2026. O evento de "WhatsApp qualificado" - que conta no
+agendamento e INCLUI quem cancelou - sera uma conversion action separada, com
+categoria propria. Dois eventos honestos em vez de um hibrido afirmando as duas
+coisas.
 
 Roda toda segunda, 7h BRT. Para cada clinica mapeada a uma conta do Google Ads,
 faz duas coisas:
 
-1. SOBE como ClickConversion todo agendamento CONFIRMED ligado a um lead com
-   gclid, dentro da janela de 90 dias do clique e ainda nao enviado. A sessao
-   NAO precisa ter acontecido: a conversao comercial e o agendamento, e segurar
-   o sinal ate a sessao atrasava o aprendizado do Google em semanas.
+1. SOBE todo agendamento CONFIRMED cuja SESSAO JA PASSOU, ligado a um lead com
+   gclid, dentro da janela de 90 dias do clique e ainda nao enviado.
+
+   Atencao ao limite: sessao passada sem cancelamento NAO e presenca
+   comprovada. O scheduler nao registra comparecimento, entao um no-show entra
+   aqui como compra. E o melhor proxy disponivel, nao a regra final - ver
+   `_get_pending_conversions`.
 
 2. ZERA O VALOR do que subiu e depois foi cancelado. Era para ser RETRATAR,
    mas a Data Manager API nao tem retratacao (ver `data_manager_service.py`):
-   o valor vai a zero, a CONTAGEM permanece. Como a campanha otimiza por
-   contagem, isto corrige relatorio e ROAS mas NAO remove o sinal ruim do
-   Smart Bidding. Na Essencia isso nao e marginal: 42% dos agendamentos
-   vindos de anuncio sao cancelados. Decisao pendente do Andre: voltar a so
-   subir depois da sessao acontecer e a unica correcao real.
+   o valor vai a zero, a CONTAGEM permanece.
+
+   Com o guard do item 1 isso virou caso de BORDA, e nao a regra: o
+   cancelamento que chega antes da sessao nunca sobe. Sobra o que e cancelado
+   NO DIA ou DEPOIS - metade dos cancelamentos medidos na Essencia. Para esses
+   zerar o valor e tudo o que existe.
+
+   Taxa de cancelamento medida em 03/10/2026: 33% (10 de 30 conversoes). O
+   numero 42% que circulava vinha de 5 de 12, e 3 dos 10 cancelados sao
+   artefato do backfill - cancelados antes de a linha existir.
 
 Recorrente por desenho: cada agendamento e uma conversao propria, entao o
 retorno acumulado de uma paciente que volta flui para o Google ao longo do
@@ -77,25 +91,44 @@ def _get_mapped_clinics(db: PostgresService):
 
 
 def _get_pending_conversions(db: PostgresService, clinic_id: str):
-    """Conversoes prontas para subir: agendamento feito, dentro da janela de 90d.
+    """Conversoes prontas para subir: sessao JA PASSOU e nao foi cancelada.
 
-    A regra mudou em 27/09/2026, por decisao do Andre. Antes havia um
-    `a.appointment_date < CURRENT_DATE`: so subia depois da sessao acontecer,
-    como protecao contra cancelamento.
+    ## Historia da regra, porque ela ja mudou duas vezes
 
-    O custo era alto demais. A conversao comercial acontece quando a pessoa
-    AGENDA, nao quando comparece, e segurar o sinal ate a sessao atrasava o
-    aprendizado do Google em semanas - quem clicou hoje e marcou para daqui a
-    um mes so ensinava o algoritmo um mes depois. Medido na Essencia: 3
-    conversoes elegiveis contra 7 com a regra nova.
+    Ate 27/09/2026 havia `a.appointment_date < CURRENT_DATE`. Ele saiu naquele
+    dia para que a conversao contasse no AGENDAMENTO: o sinal chegava semanas
+    antes (mediana medida depois: 13 dias) e a `RETRACTION` seria a
+    contrapartida para o cancelamento.
 
-    O cancelamento passa a ser tratado onde deve: por RETRACTION, depois. Ver
-    `retractions.py`.
+    Em 03/10/2026 o guard VOLTOU, por decisao do Andre, e por dois motivos
+    que se somaram:
 
-    `conversion_date` continua sendo a data da SESSAO, nao a do agendamento -
-    e o que o `record_conversion` grava. Para o Google isso e so o carimbo do
-    evento; o que importa e que seja passado e dentro dos 90 dias do clique,
-    e o filtro abaixo garante os dois.
+    1. O Google fechou a RETRACTION (ver `data_manager_service.py`). A
+       contrapartida que sustentava o desenho de 27/09 deixou de existir: hoje
+       so da para zerar o VALOR do cancelado, nao remover a conversao.
+    2. A decisao de desenho passou a ser que este evento e uma COMPRA
+       (`PURCHASE`, com `final_price_cents`), nao um agendamento. Enviar compra
+       no momento do agendamento afirma algo que ainda nao aconteceu.
+
+    ## O que este filtro NAO garante
+
+    Ele nao prova comparecimento, e e importante nao confundir as duas coisas.
+    `CONFIRMED` com data passada significa "ninguem cancelou" - nao "a pessoa
+    veio". O scheduler nao tem status de presenca (so CONFIRMED e CANCELLED, e
+    604 dos 618 CONFIRMED ficam assim para sempre), e o prontuario cobre 4% das
+    sessoes passadas. Um no-show e indistinguivel de uma sessao realizada.
+
+    Pior: metade dos cancelamentos medidos chega NO DIA ou DEPOIS da sessao,
+    entao parte do que este filtro libera ainda vira cancelamento.
+
+    Isto e portanto o melhor proxy disponivel, e nao a regra final. A regra
+    final depende de registrar presenca - feature em aberto.
+
+    `conversion_date` e a data da SESSAO, nao a do agendamento - e o que o
+    `record_conversion` grava. Com o guard de volta ela e sempre passada, o que
+    torna o `LEAST(..., NOW())` abaixo redundante; ele fica como cinto de
+    seguranca, porque o Google recusa carimbo no futuro e a regra ja mudou duas
+    vezes.
     """
     return db.execute_query(
         """
@@ -108,8 +141,9 @@ def _get_pending_conversions(db: PostgresService, clinic_id: str):
         WHERE lc.clinic_id = %s
           AND lc.uploaded_at IS NULL
           AND a.status = 'CONFIRMED'
-          -- O Google recusa conversao com carimbo no futuro. Sessao marcada
-          -- para daqui a duas semanas sobe com a data do AGENDAMENTO.
+          -- O guard que voltou em 03/10/2026: compra so e afirmada depois de a
+          -- sessao acontecer. NAO prova presenca - ver o docstring.
+          AND a.appointment_date < CURRENT_DATE
           AND LEAST(lc.conversion_date, NOW()) > lc.click_date
           AND lc.conversion_date <= lc.click_date + INTERVAL '90 days'
         ORDER BY lc.conversion_date ASC
