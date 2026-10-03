@@ -1,5 +1,6 @@
 # Dockerfile para AWS Lambda com Python 3.9
-# Python 3.9 é necessário para google-ads==27.0.0 (requer >=3.9)
+# google-ads 31.x aceita >=3.9, mas o google-api-core já avisa que 3.9 não
+# recebe mais atualizações. Subir a base para 3.11+ é dívida conhecida.
 FROM public.ecr.aws/lambda/python:3.9
 
 # Copiar requirements e instalar dependências
