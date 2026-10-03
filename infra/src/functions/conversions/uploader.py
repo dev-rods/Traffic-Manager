@@ -9,9 +9,13 @@ faz duas coisas:
    NAO precisa ter acontecido: a conversao comercial e o agendamento, e segurar
    o sinal ate a sessao atrasava o aprendizado do Google em semanas.
 
-2. RETRATA o que subiu e depois foi cancelado. E a contrapartida do item 1 -
-   sem ela, o algoritmo aprenderia a perseguir quem cancela. Na Essencia isso
-   nao e marginal: 42% dos agendamentos vindos de anuncio sao cancelados.
+2. ZERA O VALOR do que subiu e depois foi cancelado. Era para ser RETRATAR,
+   mas a Data Manager API nao tem retratacao (ver `data_manager_service.py`):
+   o valor vai a zero, a CONTAGEM permanece. Como a campanha otimiza por
+   contagem, isto corrige relatorio e ROAS mas NAO remove o sinal ruim do
+   Smart Bidding. Na Essencia isso nao e marginal: 42% dos agendamentos
+   vindos de anuncio sao cancelados. Decisao pendente do Andre: voltar a so
+   subir depois da sessao acontecer e a unica correcao real.
 
 Recorrente por desenho: cada agendamento e uma conversao propria, entao o
 retorno acumulado de uma paciente que volta flui para o Google ao longo do
@@ -27,28 +31,36 @@ from zoneinfo import ZoneInfo
 import boto3
 
 from src.services.postgres_service import PostgresService
-from src.services.google_ads_client_service import GoogleAdsClientService
+from src.services.data_manager_service import (
+    DataManagerService,
+    MAX_EVENTOS_POR_REQUISICAO,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 dynamodb = boto3.resource("dynamodb")
 
-# Google Ads aceita no máximo 2000 operações por UploadClickConversions
-UPLOAD_CHUNK_SIZE = 2000
+# Limite da Data Manager API. Vem de la para nao divergir em silencio.
+UPLOAD_CHUNK_SIZE = MAX_EVENTOS_POR_REQUISICAO
 _SP_TZ = ZoneInfo("America/Sao_Paulo")
 
 
 def _format_conversion_dt(conv_dt: datetime) -> str:
-    """Formata para "YYYY-MM-DD HH:MM:SS+/-HH:MM" no fuso da clínica (BRT).
+    """Formata em ISO 8601 no fuso da clinica (BRT): "...THH:MM:SS-03:00".
 
-    conversion_date é TIMESTAMPTZ; o psycopg2 devolve tz-aware (UTC no Supabase).
+    conversion_date e TIMESTAMPTZ; o psycopg2 devolve tz-aware (UTC no Supabase).
     Converte para America/Sao_Paulo e usa o offset real, em vez de carimbar
-    -03:00 sobre a hora UTC (o que deslocaria toda conversão).
+    -03:00 sobre a hora UTC (o que deslocaria toda conversao).
+
+    O separador e "T", e nao espaco. O Google Ads API antigo aceitava
+    "YYYY-MM-DD HH:MM:SS-03:00"; a Data Manager pede ISO 8601 estrito. Trocar
+    de API sem trocar o separador faria todo evento ser recusado, e a mensagem
+    de erro nao aponta para o formato.
     """
     if conv_dt.tzinfo is None:
         conv_dt = conv_dt.replace(tzinfo=timezone.utc)
-    s = conv_dt.astimezone(_SP_TZ).strftime("%Y-%m-%d %H:%M:%S%z")  # ...-0300
+    s = conv_dt.astimezone(_SP_TZ).strftime("%Y-%m-%dT%H:%M:%S%z")  # ...-0300
     return s[:-2] + ":" + s[-2:]  # insere o ':' no offset -> -03:00
 
 
@@ -171,20 +183,27 @@ def _mark_retracted(db: PostgresService, conversion_ids):
     )
 
 
-def _retract_for_clinic(db, ads_service, clinic, trace_id):
-    """Desfaz no Google o que foi cancelado depois de subir."""
+def _zera_valor_dos_cancelados(db, dm, clinic, trace_id, validate_only=False):
+    """Zera no Google o valor do que foi cancelado depois de subir.
+
+    Era RETRACTION ate 03/10/2026. A Data Manager API nao tem retratacao, so
+    restatement de valor - entao a contagem da conversao permanece e o Smart
+    Bidding segue vendo o evento. Ver `restate_cancelled_to_zero`.
+    """
     clinic_id = clinic["clinic_id"]
     pendentes = _get_pending_retractions(db, clinic_id)
     if not pendentes:
         return {"pending": 0, "retracted": 0, "failed": 0, "errors": None}
 
-    agora = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S+00:00")
     itens = [
         {
+            # O transactionId tem de ser O MESMO usado no upload, senao a Data
+            # Manager cria uma conversao nova em vez de ajustar a original -
+            # dobrando o estrago em vez de corrigi-lo. `lc.id` nas duas pontas.
             "identifier": str(row["id"]),
             "gclid": row["gclid"],
             "conversion_date_time": _format_conversion_dt(row["conversion_date"]),
-            "adjustment_date_time": agora,
+            "conversion_value": 0.0,
         }
         for row in pendentes
     ]
@@ -194,10 +213,12 @@ def _retract_for_clinic(db, ads_service, clinic, trace_id):
     erros = []
     for start in range(0, len(itens), UPLOAD_CHUNK_SIZE):
         chunk = itens[start:start + UPLOAD_CHUNK_SIZE]
-        resultado = ads_service.retract_offline_conversions(
+        resultado = dm.restate_cancelled_to_zero(
             customer_id=clinic["google_ads_customer_id"],
             conversion_action_id=clinic["offline_conversion_action_id"],
-            retractions=chunk,
+            conversions=chunk,
+            login_customer_id=os.environ.get("MCC_CUSTOMER_ID"),
+            validate_only=validate_only,
         )
         ids = resultado.get("retracted_identifiers", [])
         _mark_retracted(db, ids)
@@ -207,8 +228,8 @@ def _retract_for_clinic(db, ads_service, clinic, trace_id):
             erros.append(resultado["error"])
 
     logger.info(
-        f"[traceId: {trace_id}] Retratacao {clinic_id}: "
-        f"{retratadas} desfeitas, {falhas} falharam"
+        f"[traceId: {trace_id}] Valor zerado em {clinic_id}: "
+        f"{retratadas} canceladas zeradas, {falhas} falharam"
     )
     return {
         "pending": len(pendentes),
@@ -219,10 +240,20 @@ def _retract_for_clinic(db, ads_service, clinic, trace_id):
 
 def handler(event, context):
     trace_id = str(uuid.uuid4())
-    logger.info(f"[traceId: {trace_id}] Iniciando upload de conversões offline")
+
+    # `validateOnly` no payload faz um ensaio: a Data Manager valida tudo e nao
+    # grava nada. Nao existia no caminho antigo, e e o que permite testar em
+    # producao sem queimar conversao - exatamente o que faltou em 03/10/2026,
+    # quando o unico jeito de saber era enviar de verdade.
+    validate_only = bool((event or {}).get("validateOnly"))
+
+    logger.info(
+        f"[traceId: {trace_id}] Iniciando upload de conversões offline"
+        + (" (validateOnly: nada sera gravado)" if validate_only else "")
+    )
 
     db = PostgresService()
-    ads_service = GoogleAdsClientService()
+    dm = DataManagerService()
 
     summary = {"clinics": 0, "uploaded": 0, "failed": 0,
                "retracted": 0, "retract_failed": 0, "details": []}
@@ -238,7 +269,8 @@ def handler(event, context):
         # A retratacao roda ANTES e independente do upload: uma clinica sem
         # nada novo para subir pode ter muito o que desfazer, e o `continue`
         # abaixo pularia a clinica inteira.
-        retratacao = _retract_for_clinic(db, ads_service, clinic, trace_id)
+        retratacao = _zera_valor_dos_cancelados(
+            db, dm, clinic, trace_id, validate_only)
         summary["retracted"] += retratacao["retracted"]
         summary["retract_failed"] += retratacao["failed"]
 
@@ -267,10 +299,12 @@ def handler(event, context):
         errors = []
         for start in range(0, len(conversions), UPLOAD_CHUNK_SIZE):
             chunk = conversions[start:start + UPLOAD_CHUNK_SIZE]
-            result = ads_service.upload_offline_conversions(
+            result = dm.ingest_offline_conversions(
                 customer_id=customer_id,
                 conversion_action_id=conversion_action_id,
                 conversions=chunk,
+                login_customer_id=os.environ.get("MCC_CUSTOMER_ID"),
+                validate_only=validate_only,
             )
             uploaded_ids = result.get("uploaded_identifiers", [])
             _mark_uploaded(db, uploaded_ids)
