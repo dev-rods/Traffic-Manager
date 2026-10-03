@@ -29,10 +29,17 @@ from google_auth_oauthlib.flow import Flow
 # `errors="replace"` e o cinto de seguranca: num terminal que nao aceite UTF-8
 # de jeito nenhum, o emoji vira "?" e o script SEGUE. Perder um desenho e
 # aceitavel; perder o fluxo de autenticacao por causa dele nao e.
+# `line_buffering=True` resolve um segundo modo de falha, do mesmo tipo:
+# quando a saida nao e um terminal (rodando por um harness, um pipe, um
+# `>arquivo`), o Python guarda tudo em buffer - e este script IMPRIME a URL de
+# autorizacao e logo depois BLOQUEIA em sock.accept(), esperando o navegador.
+# O buffer so seria descarregado no fim, que nunca chega: a URL fica presa, a
+# pessoa nao tem o que autorizar, e o processo espera para sempre segurando a
+# porta 8080. Aconteceu em 03/10/2026; a saida tinha 0 byte.
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
 _SCOPE = "https://www.googleapis.com/auth/adwords"
 _SERVER = "127.0.0.1"
