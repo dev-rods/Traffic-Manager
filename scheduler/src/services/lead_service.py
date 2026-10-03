@@ -159,6 +159,76 @@ class LeadService:
         )
         return rows[0] if rows else None
 
+    def _filtros(
+        self,
+        clinic_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        booked: Optional[bool] = None,
+        exclude_sources: Optional[List[str]] = None,
+    ):
+        """Monta o WHERE da listagem de leads. Devolve (where, params).
+
+        Existe para que `list_leads` e `contar_leads` filtrem pelo MESMO
+        critério. Eram duas montagens iguais escritas a mão, e a página passou
+        a mostrar "77 leads, 12 convertidos" porque o total vinha de um
+        conjunto e a contagem de outro.
+        """
+        conditions = ["clinic_id = %s"]
+        params = [clinic_id]
+
+        if start_date:
+            conditions.append("created_at >= %s")
+            params.append(start_date)
+        if end_date:
+            conditions.append("created_at <= %s")
+            params.append(end_date)
+        if booked is not None:
+            conditions.append("booked = %s")
+            params.append(booked)
+        if exclude_sources:
+            marcadores = ", ".join(["%s"] * len(exclude_sources))
+            # COALESCE: source NULL não casa com NOT IN e o lead sumiria calado.
+            conditions.append(f"COALESCE(source, '') NOT IN ({marcadores})")
+            params.extend(exclude_sources)
+
+        return " AND ".join(conditions), params
+
+    def contar_leads(
+        self,
+        clinic_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        exclude_sources: Optional[List[str]] = None,
+    ) -> Dict[str, int]:
+        """Totais do conjunto INTEIRO, não da página.
+
+        O handler devolvia `len(leads)` como total, então "Total de leads"
+        mostrava o tamanho da página - 50, numa clínica com 77. E a taxa de
+        conversão saía de uma divisão entre um numerador da página e um
+        denominador do servidor.
+
+        Sem o filtro `booked`: os três números descrevem o mesmo conjunto, e
+        quem está com a aba "Convertidos" aberta continua vendo o total real.
+        """
+        where, params = self._filtros(
+            clinic_id, start_date, end_date, None, exclude_sources)
+        linha = self.db.execute_query(
+            f"""
+            SELECT COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE booked) AS convertidos
+            FROM scheduler.leads WHERE {where}
+            """,
+            tuple(params),
+        )[0]
+        total = int(linha["total"])
+        convertidos = int(linha["convertidos"])
+        return {
+            "total": total,
+            "convertidos": convertidos,
+            "nao_convertidos": total - convertidos,
+        }
+
     def list_leads(
         self,
         clinic_id: str,
@@ -180,25 +250,8 @@ class LeadService:
         de qualquer filtro em JS - filtrar depois esconderia leads do site assim
         que a clínica passasse do limite da página.
         """
-        conditions = ["clinic_id = %s"]
-        params = [clinic_id]
-
-        if start_date:
-            conditions.append("created_at >= %s")
-            params.append(start_date)
-        if end_date:
-            conditions.append("created_at <= %s")
-            params.append(end_date)
-        if booked is not None:
-            conditions.append("booked = %s")
-            params.append(booked)
-        if exclude_sources:
-            marcadores = ", ".join(["%s"] * len(exclude_sources))
-            # COALESCE: source NULL não casa com NOT IN e o lead sumiria calado.
-            conditions.append(f"COALESCE(source, '') NOT IN ({marcadores})")
-            params.extend(exclude_sources)
-
-        where = " AND ".join(conditions)
+        where, params = self._filtros(
+            clinic_id, start_date, end_date, booked, exclude_sources)
         params.extend([limit, offset])
 
         # id tiebreaker keeps OFFSET pages from overlapping/skipping when created_at ties
@@ -305,6 +358,89 @@ class LeadService:
                 f"appointment={appointment_id} value_cents={value_cents} gclid={lead_row['gclid']}"
             )
         return result
+
+    def resumo_de_conversoes(self, clinic_id: str) -> Dict[str, Any]:
+        """O que o Google já recebeu desta clínica, e o que ainda não.
+
+        Relata FATO, não previsão: quantas conversões existem, quantas têm
+        `uploaded_at`, quantas foram retratadas. Não tenta antecipar quais o
+        uploader vai considerar elegíveis - essa regra tem um dono só
+        (infra/src/functions/conversions/uploader.py) e uma terceira cópia dela
+        aqui seria a mesma armadilha que já custou uma suíte verde mentindo.
+
+        Consequência aceita: "aguardando envio" pode incluir alguma conversão
+        que o uploader descarte pela janela de 90 dias do clique. Preferível a
+        um número que parece exato e diverge em silêncio quando a regra mudar.
+        """
+        linha = self.db.execute_query(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE a.status = 'CONFIRMED'
+                                   AND lc.uploaded_at IS NULL)  AS aguardando,
+                COALESCE(SUM(lc.value_cents) FILTER (
+                    WHERE a.status = 'CONFIRMED'
+                      AND lc.uploaded_at IS NULL), 0)           AS aguardando_cents,
+                COUNT(*) FILTER (WHERE lc.uploaded_at IS NOT NULL
+                                   AND lc.retracted_at IS NULL) AS enviadas,
+                COALESCE(SUM(lc.value_cents) FILTER (
+                    WHERE lc.uploaded_at IS NOT NULL
+                      AND lc.retracted_at IS NULL), 0)          AS enviadas_cents,
+                COUNT(*) FILTER (WHERE lc.retracted_at IS NOT NULL) AS retratadas,
+                COUNT(*) FILTER (WHERE a.status = 'CANCELLED')  AS canceladas,
+                MAX(lc.uploaded_at)                             AS ultimo_envio
+            FROM scheduler.lead_conversions lc
+            JOIN scheduler.appointments a ON a.id = lc.appointment_id
+            WHERE lc.clinic_id = %s
+            """,
+            (clinic_id,),
+        )[0]
+        return {
+            "aguardando": int(linha["aguardando"]),
+            "aguardando_cents": int(linha["aguardando_cents"]),
+            "enviadas": int(linha["enviadas"]),
+            "enviadas_cents": int(linha["enviadas_cents"]),
+            "retratadas": int(linha["retratadas"]),
+            "canceladas": int(linha["canceladas"]),
+            "ultimo_envio": linha["ultimo_envio"],
+        }
+
+    def conversoes_por_lead(self, clinic_id: str, lead_ids: List[str]) -> Dict[str, str]:
+        """Estado da conversão de cada lead, para a coluna da tabela.
+
+        Um lead recorrente tem várias conversões. O estado mostrado é o do
+        conjunto, na ordem em que importa a quem olha a tela: se alguma já
+        subiu, o Google sabe deste lead (ENVIADO); senão, se há alguma à
+        espera, AGUARDANDO; se todas foram retratadas, RETRATADO.
+
+        Lead sem gclid não aparece no resultado - a coluna fica vazia, que é a
+        informação correta: não há o que enviar.
+        """
+        if not lead_ids:
+            return {}
+        linhas = self.db.execute_query(
+            """
+            SELECT lc.lead_id,
+                   COUNT(*) FILTER (WHERE lc.uploaded_at IS NOT NULL
+                                      AND lc.retracted_at IS NULL) AS enviadas,
+                   COUNT(*) FILTER (WHERE a.status = 'CONFIRMED'
+                                      AND lc.uploaded_at IS NULL)  AS aguardando,
+                   COUNT(*) FILTER (WHERE lc.retracted_at IS NOT NULL) AS retratadas
+            FROM scheduler.lead_conversions lc
+            JOIN scheduler.appointments a ON a.id = lc.appointment_id
+            WHERE lc.clinic_id = %s AND lc.lead_id = ANY(%s::uuid[])
+            GROUP BY lc.lead_id
+            """,
+            (clinic_id, [str(i) for i in lead_ids]),
+        )
+        estados = {}
+        for l in linhas:
+            if l["enviadas"]:
+                estados[str(l["lead_id"])] = "ENVIADO"
+            elif l["aguardando"]:
+                estados[str(l["lead_id"])] = "AGUARDANDO"
+            elif l["retratadas"]:
+                estados[str(l["lead_id"])] = "RETRATADO"
+        return estados
 
     def update_conversion_date(self, appointment_id: str, conversion_date: str) -> None:
         """Refresh a pending conversion's date after a reschedule (clamped to click).

@@ -1,10 +1,39 @@
 import { api } from './api'
 import type { Lead } from '@/types'
 
+/** Totais do conjunto inteiro, contados no banco - não da página carregada. */
+export interface LeadTotals {
+  total: number
+  convertidos: number
+  nao_convertidos: number
+}
+
+/**
+ * O que o Google Ads já recebeu desta clínica.
+ *
+ * Relata fato, não previsão: `aguardando` conta conversões registradas e ainda
+ * não enviadas, sem tentar antecipar quais o uploader vai considerar elegíveis
+ * (essa regra vive no uploader, e só lá).
+ */
+export interface ConversionsSummary {
+  aguardando: number
+  aguardando_cents: number
+  enviadas: number
+  enviadas_cents: number
+  retratadas: number
+  canceladas: number
+  /** ISO, ou null quando nada subiu ainda. */
+  ultimo_envio: string | null
+}
+
 interface LeadsResponse {
   status: string
   leads: Lead[]
+  /** Conjunto inteiro. Já foi `len(leads)`, e a tela mostrava o tamanho da página. */
   total: number
+  totals: LeadTotals
+  /** null quando o resumo falhou: a listagem continua, os contadores somem. */
+  conversions: ConversionsSummary | null
 }
 
 export interface LeadListParams {

@@ -476,6 +476,17 @@ export interface Lead {
   contact_started_source: 'RESPONDEU' | 'BOT' | 'HUMANO' | 'WHATSAPP' | null
   /** Texto pronto explicando a origem, para o title do botao. */
   contact_started_message: string | null
+  /**
+   * O Google Ads ja soube deste lead?
+   *
+   * Distinto de `booked`, e a distincao e o ponto: `booked` diz que a pessoa
+   * agendou; isto diz se a conversao chegou ao Google. Foram semanas com 24
+   * leads convertidos e zero enviados, sem nada na tela que revelasse o vao.
+   *
+   * NULL quando nao ha o que enviar (lead sem gclid) - ausencia e a informacao
+   * correta, nao um estado a mais.
+   */
+  conversion_status: 'ENVIADO' | 'AGUARDANDO' | 'RETRATADO' | null
   created_at: string
   updated_at: string
 }
