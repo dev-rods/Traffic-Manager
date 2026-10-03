@@ -18,7 +18,10 @@ ConversionUploader:
       Resource: "arn:aws:logs:*:*:*"
   events:
     - schedule:
-        rate: cron(0 10 ? * MON *)  # 7h BRT (10h UTC), toda segunda-feira
+        rate: cron(0 10 L * ? *)  # 7h BRT (10h UTC), ULTIMO DIA de cada mes
+        # `L` no dia-do-mes exige `?` no dia-da-semana: o EventBridge nao
+        # aceita os dois especificados. Era cron(0 10 L * ? *) (semanal)
+        # ate 03/10/2026.
         enabled: true
         input:
           source: "scheduled_conversion_upload"

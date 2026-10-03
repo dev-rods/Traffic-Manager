@@ -29,6 +29,7 @@ vinha de 5 de 12.
 """
 import ast
 import os
+import re
 import unittest
 from unittest import mock
 
@@ -383,3 +384,52 @@ class TestOsArquivosCompilam(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAPeriodicidadeNaoDivergiu(unittest.TestCase):
+    """O cron e afirmado em 7 lugares. Divergir nao levanta erro em lugar nenhum.
+
+    Em 03/10/2026 a periodicidade mudou de semanal para o ultimo dia do mes, e
+    um dos lugares era texto que a clinica LE no painel ("O envio roda toda
+    segunda"). Um desses esquecido mente para o usuario, em silencio.
+
+    Este teste cobre o par mais perigoso: o cron de fato (interface.yml) contra
+    o docstring do modulo que o descreve. Os outros cinco estao listados no
+    proprio docstring do uploader.
+    """
+
+    INTERFACE = os.path.join(
+        os.path.dirname(__file__), "..", "..", "sls", "functions",
+        "conversions", "interface.yml")
+
+    def _cron(self):
+        texto = fonte(os.path.normpath(self.INTERFACE))
+        m = re.search(r"rate:\s*(cron\([^)]*\))", texto)
+        self.assertIsNotNone(m, "nao achei o cron no interface.yml")
+        return m.group(1)
+
+    def test_o_cron_e_mensal_no_ultimo_dia(self):
+        """`L` no campo dia-do-mes. Se alguem voltar para `? * MON *`, o
+        docstring e o texto do painel passam a mentir."""
+        cron = self._cron()
+
+        self.assertIn(" L ", cron, "o cron deixou de ser no ultimo dia do mes: %s" % cron)
+
+    def test_o_docstring_concorda_com_o_cron(self):
+        cron = self._cron()
+        doc = fonte(UPLOADER)[:2000]
+
+        if " L " in cron:
+            self.assertIn("ULTIMO DIA", doc,
+                           "o cron e mensal mas o docstring nao diz isso")
+            self.assertNotIn("Roda toda segunda", doc)
+        else:
+            self.assertNotIn("ULTIMO DIA", doc,
+                             "o docstring diz mensal mas o cron nao e")
+
+    def test_o_docstring_lista_onde_mais_a_periodicidade_aparece(self):
+        """Sem a lista, quem muda o cron nao tem como saber o que mais mudar."""
+        doc = fonte(UPLOADER)[:2000]
+
+        self.assertIn("LeadsPage.tsx", doc)
+        self.assertIn("interface.yml", doc)

@@ -1,5 +1,5 @@
 """
-Lambda semanal: leva COMPRAS ao Google Ads, e zera o valor das canceladas.
+Lambda mensal: leva COMPRAS ao Google Ads, e zera o valor das canceladas.
 
 Este evento e uma COMPRA (`PURCHASE`, valor = `final_price_cents`), por decisao
 do Andre em 03/10/2026. O evento de "WhatsApp qualificado" - que conta no
@@ -7,8 +7,18 @@ agendamento e INCLUI quem cancelou - sera uma conversion action separada, com
 categoria propria. Dois eventos honestos em vez de um hibrido afirmando as duas
 coisas.
 
-Roda toda segunda, 7h BRT. Para cada clinica mapeada a uma conta do Google Ads,
-faz duas coisas:
+Roda no ULTIMO DIA de cada mes, 7h BRT (era semanal, as segundas, ate
+03/10/2026). Para cada clinica mapeada a uma conta do Google Ads, faz duas
+coisas:
+
+A periodicidade e afirmada em mais lugares que este, e divergir e silencioso.
+Ao mudar o cron, mude tambem:
+
+  - infra/sls/functions/conversions/interface.yml  (a FONTE: o cron de fato)
+  - frontend/src/pages/leads/LeadsPage.tsx         (texto que a clinica le)
+  - scheduler/src/scripts/liga_conversao_offline.py
+  - scheduler/src/scripts/backfill_conversoes_perdidas.py
+  - scheduler/tests/integration/lead-gclid-offline-conversions.md
 
 1. SOBE todo agendamento CONFIRMED cuja SESSAO JA PASSOU, ligado a um lead com
    gclid, dentro da janela de 90 dias do clique e ainda nao enviado.
