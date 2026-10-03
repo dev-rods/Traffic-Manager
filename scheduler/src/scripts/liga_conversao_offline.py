@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Aponta uma clinica para a conversao offline dela no Google Ads.
 
-Sem `clinics.offline_conversion_action_id` preenchido, o uploader semanal nao
+Sem `clinics.offline_conversion_action_id` preenchido, o uploader mensal nao
 tem para onde mandar nada: a query de clinicas elegiveis exige a coluna, e o
 resumo sai com `clinics: 0`. Silencioso - nenhum erro, nenhuma conversao.
 

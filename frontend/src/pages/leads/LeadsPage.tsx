@@ -344,7 +344,7 @@ function EnvioParaOGoogle({ resumo }: { resumo: ConversionsSummary }) {
           {resumo.aguardando} agendamento{resumo.aguardando > 1 ? 's' : ''} de anúncio
           {resumo.aguardando > 1 ? ' estão' : ' está'} registrado
           {resumo.aguardando > 1 ? 's' : ''} aqui e o Google ainda não recebeu.
-          O envio roda toda segunda.
+          O envio roda no último dia de cada mês.
         </p>
       )}
     </section>

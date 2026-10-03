@@ -104,7 +104,7 @@ def main():
 
     if APLICAR:
         print("\n%d conversao(oes) gravada(s), R$ %.2f." % (gravadas, valor / 100.0))
-        print("Sobem no proximo ciclo do uploader (segunda, 7h BRT).")
+        print("Sobem no proximo ciclo do uploader (ultimo dia do mes, 7h BRT).")
     else:
         print("\n(simulacao - use --aplicar)")
 
