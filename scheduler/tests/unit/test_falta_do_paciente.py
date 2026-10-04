@@ -49,7 +49,7 @@ class TestMarcarFalta(unittest.TestCase):
         sql = db.execute_write_returning.call_args.args[0]
         self.assertIn("status = 'NO_SHOW'", sql)
 
-    def test_os_tres_filtros_estao_no_WHERE(self):
+    def test_o_filtro_de_status_esta_no_WHERE(self):
         """Consultar primeiro e escrever depois deixa janela entre as duas: a
         recepção marca falta no mesmo instante em que a paciente cancela pelo
         bot, e o segundo UPDATE sobrescreve o primeiro sem ninguém notar.
@@ -63,11 +63,23 @@ class TestMarcarFalta(unittest.TestCase):
         sql = " ".join(db.execute_write_returning.call_args.args[0].split())
         self.assertIn("WHERE id = %s::uuid", sql)
         self.assertIn("status = 'CONFIRMED'", sql)
-        # Data de SÃO PAULO, não do servidor: o banco roda em UTC, que está à
-        # frente do Brasil. Entre 21h e meia-noite BRT o `CURRENT_DATE` já é
-        # amanhã, e a sessão de hoje poderia receber falta antes de terminar.
-        self.assertIn("appointment_date < (NOW() AT TIME ZONE", sql)
-        self.assertNotIn("appointment_date < CURRENT_DATE", sql)
+
+    def test_NAO_ha_guard_de_data(self):
+        """Decisão do André em 04/10/2026, revertendo a primeira versão.
+
+        Exigir que a sessão tivesse passado obrigava a recepção a CANCELAR
+        para liberar o horário no mesmo dia - perdendo exatamente a
+        informação que este status existe para capturar. Avisar no dia é
+        falta: o horário já não dá para preencher.
+
+        Quem decide se foi falta ou cancelamento é quem está no balcão.
+        """
+        servico, db = _servico({"id": "abc"})
+
+        servico.marca_no_show("abc")
+
+        sql = " ".join(db.execute_write_returning.call_args.args[0].split())
+        self.assertNotIn("appointment_date", sql)
 
     def test_incrementa_a_version(self):
         """A tabela usa lock otimista; pular o incremento faria uma edição
@@ -87,9 +99,8 @@ class TestMarcarFalta(unittest.TestCase):
         with self.assertRaises(NotFoundError):
             servico.marca_no_show("abc")
 
-    def test_a_mensagem_de_erro_distingue_os_casos(self):
-        """São ações diferentes de quem lê: sessão futura é "espere", status
-        errado é "já está resolvido"."""
+    def test_a_mensagem_de_erro_diz_o_que_falhou(self):
+        """Sem o motivo, a recepção não tem o que fazer diferente."""
         from src.services.appointment_service import NotFoundError
 
         servico, _ = _servico(None)
@@ -97,9 +108,7 @@ class TestMarcarFalta(unittest.TestCase):
         with self.assertRaises(NotFoundError) as ctx:
             servico.marca_no_show("abc")
 
-        msg = str(ctx.exception)
-        self.assertIn("CONFIRMED", msg)
-        self.assertIn("ainda nao aconteceu", msg)
+        self.assertIn("CONFIRMED", str(ctx.exception))
 
 
 class TestDesmarcarFalta(unittest.TestCase):
@@ -177,8 +186,10 @@ class TestFaltaNaoMexeNaMarcaDeEstreia(unittest.TestCase):
         self.assertIn("passa_a_marca_adiante", self._chamadas("cancel_appointment"))
 
     def test_nenhum_dos_dois_toca_lembrete(self):
-        """Só se marca falta de sessão que já passou - o lembrete dela já
-        disparou, e cancelá-lo seria trabalho sem efeito."""
+        """Marcar falta não é cancelar: o lembrete é sobre a sessão existir na
+        agenda, e a falta registra que o horário foi perdido - não que a sessão
+        deixou de estar marcada. Cancelar o lembrete aqui mudaria o que a
+        paciente recebe por causa de uma anotação administrativa."""
         for nome in ("marca_no_show", "desmarca_no_show"):
             with self.subTest(nome):
                 self.assertNotIn("cancel_reminder", self._chamadas(nome))

@@ -868,7 +868,25 @@ class AppointmentService:
         significava so "ninguem cancelou", e um no-show subia ao Google como
         venda. Ver infra/src/functions/conversions/uploader.py.
 
-        ## Os tres filtros estao no WHERE, de proposito
+        ## Nao ha guard de data, por decisao do Andre em 04/10/2026
+
+        A primeira versao exigia `appointment_date < hoje`, pensando na
+        correcao da conversao. Estava errado: avisar no DIA e falta, nao
+        cancelamento - o horario ja nao da para preencher. Com o guard, a
+        recepcionista que precisasse liberar o horario de hoje as 10h30 teria
+        de CANCELAR, perdendo exatamente a informacao que este status existe
+        para capturar.
+
+        Quem decide se foi falta ou cancelamento e quem esta no balcao, com
+        contexto que o codigo nao tem: a razao da cliente, a chance de
+        reocupar. Encodar uma politica ("menos de 24h e falta") seria inventar
+        regra que ninguem pediu.
+
+        O que a distingue de CANCELLED, entao, nao e o momento: e a contagem.
+        As duas liberam o horario (as queries de conflito e de horarios livres
+        usam `= 'CONFIRMED'`), mas NO_SHOW registra que o horario foi perdido.
+
+        ## O filtro de status esta no WHERE, de proposito
 
         Consultar primeiro e escrever depois deixa janela entre as duas: a
         recepcao marca falta no mesmo instante em que a paciente cancela pelo
@@ -896,26 +914,16 @@ class AppointmentService:
             """
             UPDATE scheduler.appointments
             SET status = 'NO_SHOW', updated_at = NOW(), version = version + 1
-            WHERE id = %s::uuid
-              AND status = 'CONFIRMED'
-              -- Data de SAO PAULO, nao `CURRENT_DATE`: o banco roda em UTC, que
-              -- esta a frente do Brasil, e entre 21h e meia-noite BRT o
-              -- `CURRENT_DATE` ja e amanha. A mesma expressao vive na regra de
-              -- elegibilidade do uploader, por coincidencia de fato e nao de
-              -- decisao: aqui ela e pre-condicao para registrar ausencia, la e
-              -- o que escolhe o que sobe ao Google.
-              AND appointment_date < (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+            WHERE id = %s::uuid AND status = 'CONFIRMED'
             RETURNING *
             """,
             (appointment_id,),
         )
 
         if not result:
-            # A mensagem distingue os casos porque sao acoes diferentes de quem
-            # le: sessao futura e "espere", status errado e "ja esta resolvido".
             raise NotFoundError(
                 f"Agendamento {appointment_id} nao pode receber falta: ou nao "
-                f"existe, ou nao esta CONFIRMED, ou a sessao ainda nao aconteceu"
+                f"existe, ou nao esta CONFIRMED"
             )
 
         logger.info(f"[AppointmentService] Falta marcada: id={appointment_id}")

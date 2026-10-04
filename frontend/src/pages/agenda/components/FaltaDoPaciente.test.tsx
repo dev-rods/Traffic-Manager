@@ -67,21 +67,29 @@ describe('a ação de marcar falta', () => {
     expect(screen.getByText('Marcar falta')).toBeInTheDocument()
   })
 
-  it('NÃO aparece em sessão futura', () => {
-    // Não há falta a marcar no que ainda vai acontecer, e oferecer o botão ali
-    // faria a atendente descobrir pelo erro do servidor que não se aplicava.
-    montaPopover({ appointment_date: AMANHA })
-
-    expect(screen.queryByText('Marcar falta')).not.toBeInTheDocument()
-  })
-
-  it('NÃO aparece na sessão de hoje', () => {
-    // O backend usa `appointment_date < CURRENT_DATE`: o dia de hoje ainda está
-    // acontecendo. A tela tem de concordar com o servidor, senão o botão existe
-    // e o pedido volta com erro.
+  it('aparece também na sessão de HOJE', () => {
+    // Este teste já existiu invertido. Decisão do André em 04/10/2026: avisar
+    // no dia é falta, não cancelamento - o horário já não dá para preencher.
+    //
+    // Com o guard antigo, a recepcionista que precisasse liberar o horário de
+    // hoje às 10h30 teria de CANCELAR, perdendo exatamente a informação que o
+    // status existe para capturar.
     montaPopover({ appointment_date: iso(HOJE) })
 
-    expect(screen.queryByText('Marcar falta')).not.toBeInTheDocument()
+    expect(screen.getByText('Marcar falta')).toBeInTheDocument()
+  })
+
+  it('aparece até em sessão futura', () => {
+    // Nenhum guard de data: quem decide se foi falta ou cancelamento é quem
+    // está no balcão, com contexto que a tela não tem - a razão da cliente, a
+    // chance de reocupar. Encodar uma política aqui seria inventar regra.
+    //
+    // O preço aceito: um clique errado numa sessão distante registra falta do
+    // que não aconteceu. O desfazer está no toast e na própria linha de
+    // "N faltas ocultas · mostrar".
+    montaPopover({ appointment_date: AMANHA })
+
+    expect(screen.getByText('Marcar falta')).toBeInTheDocument()
   })
 
   it('chama onMarcarFalta sem passar por modal', () => {

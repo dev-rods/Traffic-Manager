@@ -14,7 +14,6 @@ pior do que nenhuma suíte.
 
 Este teste falha se a elegibilidade voltar a ser decidida dentro do scheduler.
 """
-import ast
 import os
 import unittest
 
@@ -32,14 +31,14 @@ MARCAS = (
     "INTERVAL '90 days'",                # a janela do clique
 )
 
-# A ÚNICA exceção, e ela é nomeada: `marca_no_show` usa o mesmo predicado de
-# "a sessão já aconteceu" como PRÉ-CONDIÇÃO para registrar ausência - não para
-# decidir o que sobe ao Google. Os dois nem precisam concordar: o uploader
-# exclui NO_SHOW pelo `status = CONFIRMED`, antes de olhar data.
+# Em 04/10/2026 este guard chegou a ganhar uma exceção para `marca_no_show`,
+# que usava o mesmo predicado de "a sessão já aconteceu". Ela foi REMOVIDA no
+# mesmo dia, porque o guard de data saiu daquela função: avisar no dia é falta,
+# não cancelamento, e exigir que a sessão tivesse passado obrigava a recepção a
+# cancelar para liberar o horário - perdendo a informação.
 #
-# A exceção é por FUNÇÃO, não por arquivo: `appointment_service.py` inteiro
-# liberado deixaria uma cópia da elegibilidade entrar ali sem alarme.
-EXCECAO = "marca_no_show"
+# Fica registrado porque é o desfecho melhor: nenhuma exceção, nenhuma brecha
+# por onde uma cópia da elegibilidade entre sem alarme.
 
 # `uploaded_at IS NULL` ficou DE FORA de propósito, mesmo sendo parte da query
 # de elegibilidade. Ela aparece legitimamente em `update_conversion_date`, que
@@ -65,27 +64,6 @@ def _sem_comentarios(texto):
     )
 
 
-def _sem_a_excecao(texto):
-    """Remove o corpo de `marca_no_show`, pelo AST e não por regex.
-
-    Pelo AST porque o limite da função é o que importa: cortar por texto (do
-    `def` até a próxima linha em branco, digamos) erraria assim que alguém
-    formatasse diferente, e o erro seria silencioso nos dois sentidos -
-    liberando demais, ou acusando o inocente.
-    """
-    try:
-        arvore = ast.parse(texto)
-    except SyntaxError:
-        return texto
-
-    linhas = texto.split("\n")
-    for no in ast.walk(arvore):
-        if isinstance(no, ast.FunctionDef) and no.name == EXCECAO:
-            for i in range(no.lineno - 1, min(no.end_lineno, len(linhas))):
-                linhas[i] = ""
-    return "\n".join(linhas)
-
-
 class TestUmDonoSo(unittest.TestCase):
     def test_o_scheduler_nao_decide_elegibilidade(self):
         achados = []
@@ -93,7 +71,7 @@ class TestUmDonoSo(unittest.TestCase):
             if os.path.basename(caminho) == "setup_database.py":
                 continue  # o DDL cria o índice; não decide nada
             with open(caminho, encoding="utf-8") as f:
-                texto = _sem_a_excecao(_sem_comentarios(f.read()))
+                texto = _sem_comentarios(f.read())
             for marca in MARCAS:
                 if marca in texto:
                     achados.append("%s: %s" % (os.path.relpath(caminho, SRC), marca))
