@@ -30,3 +30,13 @@ infra/src/scripts/tokens/
 .env
 .env.*
 !.env.example
+
+# Config do Claude Code: `settings.json` e do time e vai versionado;
+# `settings.local.json` e da maquina de cada um - caminho absoluto de
+# executavel, shell do SO, versao do python pelo launcher.
+#
+# Ficava versionado por acidente: o ignore GLOBAL do andre ja cobria o padrao,
+# mas regra de ignore nao desfaz o tracking de arquivo que ja entrou. Por isso
+# ele carregava um `del` com caminho de outra maquina e tres mensagens de
+# commit antigas viradas regra de permissao. Aqui a regra vale para todo mundo.
+.claude/settings.local.json
