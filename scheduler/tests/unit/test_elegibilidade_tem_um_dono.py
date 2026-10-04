@@ -15,7 +15,6 @@ pior do que nenhuma suíte.
 Este teste falha se a elegibilidade voltar a ser decidida dentro do scheduler.
 """
 import os
-import re
 import unittest
 
 SRC = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "src"))
@@ -23,9 +22,23 @@ SRC = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "src"
 # Marcas da decisão de elegibilidade. Não são strings quaisquer: cada uma é um
 # pedaço da query que escolhe o que vai para o Google.
 MARCAS = (
-    "appointment_date < CURRENT_DATE",   # a sessão já aconteceu
+    # A sessão já aconteceu. A expressão mudou em 04/10/2026, de `CURRENT_DATE`
+    # para a data de São Paulo: o banco roda em UTC, que está à frente do
+    # Brasil, e entre 21h e meia-noite BRT o `CURRENT_DATE` já era o dia
+    # seguinte - a sessão de hoje passava por realizada. O marcador acompanha a
+    # regra de verdade, porque marcador defasado deixa de guardar.
+    "appointment_date < (NOW() AT TIME ZONE 'America/Sao_Paulo')::date",
     "INTERVAL '90 days'",                # a janela do clique
 )
+
+# Em 04/10/2026 este guard chegou a ganhar uma exceção para `marca_no_show`,
+# que usava o mesmo predicado de "a sessão já aconteceu". Ela foi REMOVIDA no
+# mesmo dia, porque o guard de data saiu daquela função: avisar no dia é falta,
+# não cancelamento, e exigir que a sessão tivesse passado obrigava a recepção a
+# cancelar para liberar o horário - perdendo a informação.
+#
+# Fica registrado porque é o desfecho melhor: nenhuma exceção, nenhuma brecha
+# por onde uma cópia da elegibilidade entre sem alarme.
 
 # `uploaded_at IS NULL` ficou DE FORA de propósito, mesmo sendo parte da query
 # de elegibilidade. Ela aparece legitimamente em `update_conversion_date`, que

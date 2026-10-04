@@ -18,6 +18,8 @@ interface AppointmentPopoverProps {
   onClose: () => void
   onEdit: (appointment: Appointment) => void
   onCancel: (appointment: Appointment) => void
+  onMarcarFalta: (appointment: Appointment) => void
+  onDesmarcarFalta: (appointment: Appointment) => void
 }
 
 /**
@@ -32,7 +34,9 @@ interface AppointmentPopoverProps {
  * A folha de baixo não depende de onde o toque aconteceu, e é onde o polegar
  * já está.
  */
-export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, onCancel }: AppointmentPopoverProps) {
+export function AppointmentPopover({
+  appointment, anchorRect, onClose, onEdit, onCancel, onMarcarFalta, onDesmarcarFalta,
+}: AppointmentPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
   const ehDesktop = useEhDesktop()
 
@@ -66,6 +70,8 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
   const duracao = a.duration_minutes ?? null
   const timeSlot = `${a.start_time.slice(0, 5)}–${a.end_time.slice(0, 5)}`
   const isCancelled = a.status === 'CANCELLED'
+  const faltou = a.status === 'NO_SHOW'
+
 
   // Position the popover near the anchor (desktop)
   const posicao = ehDesktop && anchorRect
@@ -204,7 +210,7 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
 
         {/* Actions */}
         <div className="border-t border-gray-100 p-2 space-y-0.5">
-          {!isCancelled && (
+          {!isCancelled && !faltou && (
             <>
               <button
                 onClick={() => { onEdit(a); onClose() }}
@@ -225,6 +231,25 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
                   Registrar sessão
                 </Link>
               )}
+              {/* Sem guard de data, por decisão do André em 04/10/2026:
+                  avisar no DIA é falta, não cancelamento - o horário já não dá
+                  para preencher. Exigir que a sessão tivesse passado obrigaria
+                  a recepção a cancelar para liberar o horário, perdendo
+                  exatamente a informação que o status existe para capturar.
+
+                  Quem decide se foi falta ou cancelamento é quem está no
+                  balcão, com contexto que a tela não tem.
+
+                  Sem modal, ao contrário de cancelar: cancelar é irreversível
+                  ("Essa acao nao pode ser desfeita") e a confirmação se paga;
+                  falta tem "Desfazer" no próprio toast. Cerimônia que não
+                  compra nada treina a clicar sem ler. */}
+              <button
+                onClick={() => { onMarcarFalta(a); onClose() }}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Marcar falta
+              </button>
               <button
                 onClick={() => { onCancel(a); onClose() }}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
@@ -232,6 +257,17 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
                 Cancelar agendamento
               </button>
             </>
+          )}
+
+          {/* O caminho de volta. Sem ele, marcar errado seria permanente - e é
+              justamente por ele existir que marcar não pede confirmação. */}
+          {faltou && (
+            <button
+              onClick={() => { onDesmarcarFalta(a); onClose() }}
+              className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              Desmarcar falta
+            </button>
           )}
         </div>
       </div>

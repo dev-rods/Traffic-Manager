@@ -36,4 +36,19 @@ export const appointmentsService = {
       .put(`/appointments/${appointmentId}`, { status: 'CANCELLED' })
       .then((r) => r.data)
   },
+
+  /** A pessoa nao compareceu. O backend recusa se a sessao ainda nao passou. */
+  marcarFalta(appointmentId: string) {
+    return api
+      .put(`/appointments/${appointmentId}`, { status: 'NO_SHOW' })
+      .then((r) => r.data)
+  },
+
+  /** Desfaz a falta. `CONFIRMED` sobre NO_SHOW e o desmarcar; sobre CANCELLED
+   *  o backend devolve 409, porque o horario pode ter sido reocupado. */
+  desmarcarFalta(appointmentId: string) {
+    return api
+      .put(`/appointments/${appointmentId}`, { status: 'CONFIRMED' })
+      .then((r) => r.data)
+  },
 }

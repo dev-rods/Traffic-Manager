@@ -62,3 +62,30 @@ export function useCancelAppointment() {
     },
   })
 }
+
+// As MESMAS tres chaves do cancelamento. A falta nao libera horario, entao
+// `slotKeys` nao muda por causa dela - mas invalidar de menos e o defeito que
+// nao aparece em teste e aparece na tela da atendente, e o custo e um refetch.
+function invalidaAgenda(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+  queryClient.invalidateQueries({ queryKey: slotKeys.all })
+  queryClient.invalidateQueries({ queryKey: dashboardKeys.all })
+}
+
+export function useMarcarFalta() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (appointmentId: string) => appointmentsService.marcarFalta(appointmentId),
+    onSuccess: () => invalidaAgenda(queryClient),
+  })
+}
+
+export function useDesmarcarFalta() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (appointmentId: string) => appointmentsService.desmarcarFalta(appointmentId),
+    onSuccess: () => invalidaAgenda(queryClient),
+  })
+}

@@ -124,9 +124,15 @@ def _get_pending_conversions(db: PostgresService, clinic_id: str):
 
     Ele nao prova comparecimento, e e importante nao confundir as duas coisas.
     `CONFIRMED` com data passada significa "ninguem cancelou" - nao "a pessoa
-    veio". O scheduler nao tem status de presenca (so CONFIRMED e CANCELLED, e
-    604 dos 618 CONFIRMED ficam assim para sempre), e o prontuario cobre 4% das
-    sessoes passadas. Um no-show e indistinguivel de uma sessao realizada.
+    veio".
+
+    Desde 04/10/2026 existe o status NO_SHOW, e falta marcada sai daqui pelo
+    `= CONFIRMED` do filtro. Mas isso **nao fecha** o problema: depende de
+    alguem marcar. Enquanto a cobertura de NO_SHOW nao se provar, um no-show
+    nao marcado continua entrando como compra, e o prontuario - a outra fonte
+    possivel - cobre 4% das sessoes passadas.
+
+    Medir antes de confiar: contar NO_SHOW em 60 dias. Ver PRD 016.
 
     Pior: metade dos cancelamentos medidos chega NO DIA ou DEPOIS da sessao,
     entao parte do que este filtro libera ainda vira cancelamento.
@@ -153,7 +159,13 @@ def _get_pending_conversions(db: PostgresService, clinic_id: str):
           AND a.status = 'CONFIRMED'
           -- O guard que voltou em 03/10/2026: compra so e afirmada depois de a
           -- sessao acontecer. NAO prova presenca - ver o docstring.
-          AND a.appointment_date < CURRENT_DATE
+          --
+          -- A data e a de SAO PAULO, nao `CURRENT_DATE`. O banco roda em UTC
+          -- (conferido em prod), e UTC esta A FRENTE do Brasil: entre 21h e
+          -- meia-noite BRT o `CURRENT_DATE` ja e o dia seguinte, e a sessao de
+          -- HOJE passaria por realizada. Numa invocacao manual nessa faixa, a
+          -- compra seria afirmada ao Google antes de o dia terminar.
+          AND a.appointment_date < (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
           AND LEAST(lc.conversion_date, NOW()) > lc.click_date
           AND lc.conversion_date <= lc.click_date + INTERVAL '90 days'
         ORDER BY lc.conversion_date ASC
@@ -190,7 +202,7 @@ def _record_execution(trace_id: str, summary: dict):
 
 
 def _get_pending_retractions(db: PostgresService, clinic_id: str):
-    """Conversoes que subiram ao Google e depois foram canceladas.
+    """Conversoes que subiram ao Google e depois cairam: canceladas ou falta.
 
     `uploaded_at IS NOT NULL` e a condicao que importa: so ha o que desfazer
     se chegou a existir. Cancelamento antes do upload nunca vira conversao -
@@ -210,7 +222,10 @@ def _get_pending_retractions(db: PostgresService, clinic_id: str):
         WHERE lc.clinic_id = %s
           AND lc.uploaded_at IS NOT NULL
           AND lc.retracted_at IS NULL
-          AND a.status = 'CANCELLED'
+          -- NO_SHOW entrou em 04/10/2026: falta descoberta DEPOIS do upload
+          -- precisa do mesmo tratamento que cancelamento, porque a compra que
+          -- afirmamos ao Google nao aconteceu nos dois casos.
+          AND a.status IN ('CANCELLED', 'NO_SHOW')
         ORDER BY lc.uploaded_at ASC
         """,
         (clinic_id,),

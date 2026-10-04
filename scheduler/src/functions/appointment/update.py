@@ -24,6 +24,17 @@ from src.services.duracao_manual import DuracaoInvalida
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# O status era escrito CRU: `updates.append("status = %s")`. Sem lista, um typo
+# como "NOSHOW" ou "no_show" era gravado em silencio e tirava o agendamento das
+# DUAS queries do uploader de conversao - nao elegivel (`= CONFIRMED`) e sem
+# valor zerado (`= CANCELLED`). A conversao ficava orfa: viva no Google e
+# invisivel aqui.
+#
+# A CHECK no banco (appointments_status_check) e a outra metade. Esta lista erra
+# antes, com mensagem que diz o que vale; a do banco e a rede de seguranca para
+# quem escrever por fora deste handler.
+STATUS_VALIDOS = ("CONFIRMED", "CANCELLED", "NO_SHOW")
+
 
 def _serialize_row(row):
     result = {}
@@ -69,6 +80,14 @@ def handler(event, context):
 
         db = PostgresService()
         new_status = body.get("status")
+
+        # Antes de qualquer escrita: status desconhecido nao chega ao banco.
+        if new_status is not None and new_status not in STATUS_VALIDOS:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "status invalido: %r. Aceitos: %s" % (
+                    new_status, ", ".join(STATUS_VALIDOS)),
+            })
         notes = body.get("notes")
         new_date = body.get("date")
         new_time = body.get("time")
@@ -109,6 +128,44 @@ def handler(event, context):
                 "message": "Agendamento cancelado com sucesso",
                 "appointment": _serialize_row(result),
             }))
+
+        # Falta tambem e exclusiva, e pelo mesmo motivo do cancelamento: o
+        # guard de "sessao ja passou" vive no WHERE do UPDATE, e combinar com
+        # um reschedule no mesmo pedido mudaria a data que o guard confere.
+        if new_status == "NO_SHOW":
+            result = service.marca_no_show(appointment_id)
+            return http_response(200, para_o_staff(identidade, {
+                "status": "SUCCESS",
+                "message": "Falta marcada",
+                "appointment": _serialize_row(result),
+            }))
+
+        # `CONFIRMED` sobre um agendamento que esta em falta e o DESMARCAR, e
+        # precisa do guard de `desmarca_no_show`. Sem ler o status atual, isto
+        # cairia no UPDATE generico la embaixo e viraria um jeito obliquo de
+        # descancelar: `status = CONFIRMED` passaria por cima de CANCELLED,
+        # cujo horario pode ja ter sido ocupado por outra pessoa.
+        if new_status == "CONFIRMED":
+            atual = db.execute_query(
+                "SELECT status FROM scheduler.appointments WHERE id = %s::uuid",
+                (appointment_id,),
+            )
+            if not atual:
+                return http_response(404, {"status": "ERROR",
+                                           "message": "Agendamento nao encontrado"})
+            if atual[0]["status"] == "NO_SHOW":
+                result = service.desmarca_no_show(appointment_id)
+                return http_response(200, para_o_staff(identidade, {
+                    "status": "SUCCESS",
+                    "message": "Falta desmarcada",
+                    "appointment": _serialize_row(result),
+                }))
+            if atual[0]["status"] == "CANCELLED":
+                return http_response(409, {
+                    "status": "ERROR",
+                    "message": "Agendamento cancelado nao volta por aqui - o "
+                               "horario pode ter sido ocupado. Crie um novo.",
+                })
 
         # Process all non-cancel changes sequentially
         changed = False

@@ -133,6 +133,9 @@ SQL_STATEMENTS = [
         appointment_date DATE NOT NULL,
         start_time TIME NOT NULL,
         end_time TIME NOT NULL,
+        -- CONFIRMED | CANCELLED | NO_SHOW. A CHECK vem por migration,
+        -- porque esta tabela ja existe em producao e o IF NOT EXISTS
+        -- daqui nao reexecuta - ver appointments_status_check.
         status VARCHAR(20) DEFAULT 'CONFIRMED',
         notes TEXT,
         full_name VARCHAR(255),
@@ -940,6 +943,35 @@ SQL_STATEMENTS = [
     """CREATE INDEX IF NOT EXISTS idx_lead_conversions_a_retratar
        ON scheduler.lead_conversions (clinic_id)
        WHERE uploaded_at IS NOT NULL AND retracted_at IS NULL""",
+
+    # -- Falta do paciente (NO_SHOW) ------------------------------------------
+    #
+    # A conversao offline e uma COMPRA, e compra precisa que a pessoa tenha
+    # COMPARECIDO. Ate aqui o sistema nao registrava isso: so havia CONFIRMED e
+    # CANCELLED, e 604 dos 618 CONFIRMED tinham data passada e ficavam assim
+    # para sempre - um no-show era indistinguivel de uma sessao realizada.
+    #
+    # A coluna NAO tinha constraint nenhuma (conferido em prod: so as chaves
+    # estrangeira e primaria). Ou seja o banco ja aceitava qualquer string, e o
+    # handler escrevia o status cru. Um typo como "NOSHOW" era gravado em
+    # silencio e tirava o agendamento das DUAS queries do uploader: nao elegivel
+    # (`= CONFIRMED`) e sem valor zerado (`= CANCELLED`). A conversao ficava
+    # orfa - viva no Google e invisivel aqui.
+    #
+    # `status IS NULL OR` segue o padrao de `patients_skin_type_check`: a coluna
+    # e nullable, e uma CHECK que proibisse NULL reprovaria linha que o default
+    # nunca preencheu.
+    "ALTER TABLE scheduler.appointments "
+    "DROP CONSTRAINT IF EXISTS appointments_status_check",
+
+    """DO $$ BEGIN
+       IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                      WHERE conname = 'appointments_status_check') THEN
+         ALTER TABLE scheduler.appointments
+           ADD CONSTRAINT appointments_status_check
+           CHECK (status IS NULL OR status IN ('CONFIRMED', 'CANCELLED', 'NO_SHOW'));
+       END IF;
+       END $$""",
 ]
 
 
