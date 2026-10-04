@@ -48,16 +48,11 @@ ESCOPO = "https://www.googleapis.com/auth/datamanager"
 # `events.events[0].event_source: Required field is missing`. Quando a doc e a
 # API discordam, a API ganha.
 #
-# IN_STORE: este evento e uma COMPRA, e a compra acontece na clinica. O clique
-# foi web e o agendamento foi por WhatsApp, mas nenhum dos dois e o evento que
-# estamos enviando - WEB descreveria a origem do clique e MESSAGE o canal do
-# agendamento.
-#
-# Era MESSAGE enquanto o evento era "agendamento qualificado". Mudou junto com a
-# semantica, em 03/10/2026, quando o Andre decidiu que esta action e PURCHASE
-# pura. Quando o evento de WhatsApp qualificado existir, ele sim usa MESSAGE -
-# sao duas actions distintas, nao a mesma com configuracao diferente.
-EVENT_SOURCE = "IN_STORE"
+# Duas actions, dois sources. A compra acontece na clinica; o agendamento,
+# numa conversa de WhatsApp. WEB descreveria a origem do CLIQUE, que nao e o
+# evento que estamos enviando em nenhum dos dois casos.
+EVENT_SOURCE_COMPRA = "IN_STORE"
+EVENT_SOURCE_AGENDAMENTO = "MESSAGE"
 
 # Limite da API. Coincide com o lote que o uploader ja usava.
 MAX_EVENTOS_POR_REQUISICAO = 2000
@@ -136,7 +131,8 @@ class DataManagerService:
     # ------------------------------------------------------------------- evento
 
     @staticmethod
-    def _evento(conv: Dict, valor: Optional[float] = None) -> Dict:
+    def _evento(conv: Dict, event_source: str,
+                valor: Optional[float] = None) -> Dict:
         """Converte uma linha de `lead_conversions` num Event da API.
 
         `transactionId` e o pulo do gato e a diferenca mais importante em
@@ -148,12 +144,17 @@ class DataManagerService:
 
         Ou seja, sem mandar `transactionId` no upload, NENHUM ajuste posterior
         e possivel. E por isso que ele e obrigatorio aqui e nao opcional.
+
+        `event_source` NAO tem default, de proposito. Um default faria o evento
+        de agendamento herdar `IN_STORE` em silencio se alguem esquecesse de
+        passar, e o erro apareceria como atribuicao estranha no Google semanas
+        depois - nao como falha.
         """
         evento = {
             "adIdentifiers": {"gclid": conv["gclid"]},
             "eventTimestamp": conv["conversion_date_time"],
             "transactionId": str(conv["identifier"]),
-            "eventSource": EVENT_SOURCE,
+            "eventSource": event_source,
             "currency": "BRL",
             "conversionValue": float(
                 conv["conversion_value"] if valor is None else valor
@@ -242,7 +243,7 @@ class DataManagerService:
             return {"success": True, "uploaded_identifiers": [], "failed": 0}
 
         destino = self._destino(customer_id, conversion_action_id, login_customer_id)
-        eventos = [self._evento(c) for c in conversions]
+        eventos = [self._evento(c, EVENT_SOURCE_COMPRA) for c in conversions]
 
         resultado = self._ingest(destino, eventos, validate_only)
 
@@ -296,7 +297,8 @@ class DataManagerService:
             return {"success": True, "retracted_identifiers": [], "failed": 0}
 
         destino = self._destino(customer_id, conversion_action_id, login_customer_id)
-        eventos = [self._evento(c, valor=0.0) for c in conversions]
+        eventos = [self._evento(c, EVENT_SOURCE_COMPRA, valor=0.0)
+                   for c in conversions]
 
         resultado = self._ingest(destino, eventos, validate_only)
 
@@ -315,3 +317,54 @@ class DataManagerService:
         logger.info("Data Manager zerou o valor de %d conversoes canceladas "
                     "(requestId %s)", len(identifiers), resultado.get("requestId"))
         return {"success": True, "retracted_identifiers": identifiers, "failed": 0}
+
+    def ingest_bookings(
+        self, customer_id: str, conversion_action_id: str,
+        conversions: List[Dict], login_customer_id: Optional[str] = None,
+        validate_only: bool = False,
+    ) -> Dict:
+        """Sobe AGENDAMENTOS - todos, inclusive cancelado e falta.
+
+        E a segunda conversion action (PRD 017), e existe para guiar o lance: a
+        campanha otimiza com um sinal so, uma tag de formulario na LP, e
+        formulario e intencao enquanto agendar e compromisso com data e preco.
+
+        ## Por que nao e `ingest_offline_conversions` com um parametro
+
+        Os dois eventos tem REGRAS distintas, e e disso que o nome precisa
+        avisar. Um `tipo=` convidaria a unificar as regras depois - e unificar
+        e exatamente o erro: a compra filtra `CONFIRMED` e sessao passada,
+        este nao filtra nada alem da janela de 90 dias.
+
+        ## Por que nao ha retratacao aqui
+
+        Nao e esquecimento. Num evento de agendamento, quem marcou e desmarcou
+        AGENDOU de verdade - o lead era qualificado, a pessoa escolheu data e
+        servico. Cancelar depois nao desfaz o fato.
+
+        E a propriedade que torna este evento mais simples que o de compra, e
+        que dissolve o problema de 03/10/2026: a Data Manager API nao oferece
+        retratacao, e aqui ela nao faz falta.
+        """
+        if not conversions:
+            return {"success": True, "uploaded_identifiers": [], "failed": 0}
+
+        destino = self._destino(customer_id, conversion_action_id, login_customer_id)
+        eventos = [self._evento(c, EVENT_SOURCE_AGENDAMENTO) for c in conversions]
+
+        resultado = self._ingest(destino, eventos, validate_only)
+
+        if not resultado["success"]:
+            return {"success": False, "error": resultado["error"],
+                    "uploaded_identifiers": [], "failed": len(conversions)}
+
+        if validate_only:
+            logger.info("Data Manager validou %d agendamentos (validateOnly, "
+                        "nada gravado)", len(eventos))
+            return {"success": True, "uploaded_identifiers": [], "failed": 0,
+                    "validated": len(eventos)}
+
+        identifiers = [str(c["identifier"]) for c in conversions]
+        logger.info("Data Manager aceitou %d agendamentos (requestId %s)",
+                    len(identifiers), resultado.get("requestId"))
+        return {"success": True, "uploaded_identifiers": identifiers, "failed": 0}

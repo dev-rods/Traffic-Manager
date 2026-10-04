@@ -31,6 +31,15 @@ SQL_STATEMENTS = [
         google_spreadsheet_id VARCHAR(255),  -- DEPRECATED: will be dropped by migration
         google_sheet_name VARCHAR(100) DEFAULT 'Agenda',  -- DEPRECATED: will be dropped by migration
         owner_email VARCHAR(255),
+        -- Google Ads. As tres entraram por migration e nunca estiveram aqui;
+        -- numa base nova as migrations as acrescentariam de todo jeito, entao
+        -- listar nao muda comportamento - muda o que o arquivo diz existir.
+        google_ads_customer_id VARCHAR(20),
+        -- A action de COMPRA: so confirmado, sessao passada. Ver PRD 016.
+        offline_conversion_action_id VARCHAR(30),
+        -- A action de AGENDAMENTO: todo agendamento, inclusive cancelado e
+        -- falta. Um evento otimiza, o outro mede. Ver PRD 017.
+        booking_conversion_action_id VARCHAR(30),
         welcome_intro_message TEXT,
         display_name VARCHAR(255),
         use_agent BOOLEAN DEFAULT FALSE,
@@ -522,7 +531,10 @@ SQL_STATEMENTS = [
         value_cents INTEGER NOT NULL,
         conversion_date TIMESTAMPTZ NOT NULL,
         click_date TIMESTAMPTZ NOT NULL,
+        -- `uploaded_at` e do evento de COMPRA, por acidente historico:
+        -- ele nasceu quando havia um evento so. Ver PRD 017.
         uploaded_at TIMESTAMPTZ,
+        booking_uploaded_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE(appointment_id)
     )
@@ -972,6 +984,32 @@ SQL_STATEMENTS = [
            CHECK (status IS NULL OR status IN ('CONFIRMED', 'CANCELLED', 'NO_SHOW'));
        END IF;
        END $$""",
+
+    # -- Segunda conversion action: "Agendou pelo WhatsApp" (PRD 017) ---------
+    #
+    # Um evento otimiza, o outro mede. A action de COMPRA conta so quem
+    # confirmou e cuja sessao passou; esta conta TODO agendamento vindo de
+    # anuncio - confirmado, cancelado ou falta -, porque quem marcou e desmarcou
+    # agendou de verdade: o lead era qualificado.
+    #
+    # Por que duas colunas e nao uma tabela `clinic_conversion_actions`: ha dois
+    # eventos, e o segundo acabou de ser decidido. Tabela normalizada e o que
+    # fazer SE aparecer um terceiro.
+    #
+    # Divida nomeada: `uploaded_at` sem qualificador passa a significar "compra
+    # enviada", por acidente historico. Renomear exige mexer no uploader e no
+    # `resumo_de_conversoes` do PR #74 ao mesmo tempo, em producao.
+    "ALTER TABLE scheduler.clinics "
+    "ADD COLUMN IF NOT EXISTS booking_conversion_action_id VARCHAR(30)",
+
+    "ALTER TABLE scheduler.lead_conversions "
+    "ADD COLUMN IF NOT EXISTS booking_uploaded_at TIMESTAMPTZ",
+
+    # Espelha o idx_lead_conversions_a_retratar e serve a pergunta que a Lambda
+    # faz todo mes: "que agendamento ainda nao subiu?"
+    """CREATE INDEX IF NOT EXISTS idx_lead_conversions_agendamento_a_subir
+       ON scheduler.lead_conversions (clinic_id)
+       WHERE booking_uploaded_at IS NULL""",
 ]
 
 

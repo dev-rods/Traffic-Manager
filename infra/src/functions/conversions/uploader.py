@@ -67,6 +67,12 @@ dynamodb = boto3.resource("dynamodb")
 
 # Limite da Data Manager API. Vem de la para nao divergir em silencio.
 UPLOAD_CHUNK_SIZE = MAX_EVENTOS_POR_REQUISICAO
+
+# O retorno de um passo que nao tinha o que fazer. Dict proprio por chamada
+# (`.copy()`), porque devolver o MESMO dict para os tres passos deixaria um
+# mutar o resultado do outro.
+_NADA_A_FAZER = {"pending": 0, "uploaded": 0, "validated": 0, "failed": 0,
+                 "errors": None}
 _SP_TZ = ZoneInfo("America/Sao_Paulo")
 
 
@@ -89,13 +95,23 @@ def _format_conversion_dt(conv_dt: datetime) -> str:
 
 
 def _get_mapped_clinics(db: PostgresService):
-    """Clinics that have a Google Ads account and an offline conversion action configured."""
+    """Clinicas com conta do Google Ads e ao menos UMA conversion action.
+
+    "Ao menos uma" e a mudanca do PRD 017. Exigir as duas faria uma clinica com
+    so o evento de agendamento ligado nao aparecer aqui, e o uploader sairia com
+    `clinics: 0` em silencio - que e exatamente o defeito de 28/09/2026.
+
+    Cada passo do handler confere a action DELE antes de rodar.
+    """
     return db.execute_query(
         """
-        SELECT clinic_id, google_ads_customer_id, offline_conversion_action_id
+        SELECT clinic_id, google_ads_customer_id,
+               offline_conversion_action_id,
+               booking_conversion_action_id
         FROM scheduler.clinics
         WHERE google_ads_customer_id IS NOT NULL
-          AND offline_conversion_action_id IS NOT NULL
+          AND (offline_conversion_action_id IS NOT NULL
+               OR booking_conversion_action_id IS NOT NULL)
         """
     )
 
@@ -171,6 +187,63 @@ def _get_pending_conversions(db: PostgresService, clinic_id: str):
         ORDER BY lc.conversion_date ASC
         """,
         (clinic_id,),
+    )
+
+
+def _get_pending_bookings(db: PostgresService, clinic_id: str):
+    """Agendamentos ainda nao enviados ao evento de AGENDAMENTO.
+
+    A diferenca central em relacao a `_get_pending_conversions`: aqui NAO HA
+    filtro de status. Cancelado e falta sobem igual, porque quem marcou e
+    desmarcou agendou de verdade - o lead era qualificado, escolheu data e
+    servico. Cancelar depois nao desfaz o fato.
+
+    Nao unifique esta query com a da compra. Elas se parecem e decidem coisas
+    opostas: a compra afirma que a sessao aconteceu, esta afirma que a pessoa
+    marcou.
+
+    ## O carimbo e `LEAST(created_at, conversion_date)`
+
+    O momento deste evento e quando a pessoa MARCOU, nao a data da sessao - e
+    isso da mais folga na janela de 90 dias do clique (pior caso medido: 41
+    dias, contra 69 da compra).
+
+    Mas as 16 linhas do backfill de 28/09/2026 tem `created_at` da data em que o
+    backfill rodou, nao do agendamento real: para elas o carimbo sairia semanas
+    depois do fato. O `LEAST` resolve - num fluxo normal a sessao nunca e
+    anterior ao agendamento, entao ele pega o agendamento quando ele e real e a
+    sessao quando o `created_at` e artefato.
+    """
+    return db.execute_query(
+        """
+        SELECT lc.id, lc.gclid, lc.value_cents,
+               LEAST(lc.created_at, lc.conversion_date) AS conversion_date
+        FROM scheduler.lead_conversions lc
+        WHERE lc.clinic_id = %s
+          AND lc.booking_uploaded_at IS NULL
+          -- O Google recusa conversao anterior ao clique.
+          AND LEAST(lc.created_at, lc.conversion_date) > lc.click_date
+          AND LEAST(lc.created_at, lc.conversion_date)
+              <= lc.click_date + INTERVAL '90 days'
+        ORDER BY lc.created_at ASC
+        """,
+        (clinic_id,),
+    )
+
+
+def _mark_booking_uploaded(db: PostgresService, conversion_ids):
+    """Marca so a coluna DESTE evento.
+
+    `uploaded_at` e do evento de compra, por acidente historico - ele nasceu
+    quando havia um evento so. Marcar o errado faria uma conversao parecer
+    enviada sem ter sido, e ninguem tentaria de novo.
+    """
+    if not conversion_ids:
+        return
+    db.execute_write(
+        "UPDATE scheduler.lead_conversions SET booking_uploaded_at = NOW() "
+        "WHERE id = ANY(%s::uuid[])",
+        (list(conversion_ids),),
     )
 
 
@@ -297,6 +370,112 @@ def _zera_valor_dos_cancelados(db, dm, clinic, trace_id, validate_only=False):
         "errors": erros or None,
     }
 
+def _sobe_um_evento(db, clinic, trace_id, validate_only, *, rotulo,
+                    pendentes, enviar, marcar):
+    """O corpo comum dos dois uploads: lote, marcacao e contagem.
+
+    Compartilhado porque e mecanica identica - o que difere entre compra e
+    agendamento sao a QUERY e o DESTINO, e os dois entram por parametro.
+
+    O que NAO se compartilha e a regra: `pendentes` e `enviar` vem de fora
+    justamente para as duas regras continuarem separadas. Unifica-las seria o
+    erro, porque decidem coisas opostas - a compra afirma que a sessao
+    aconteceu, o agendamento afirma que a pessoa marcou.
+    """
+    clinic_id = clinic["clinic_id"]
+    linhas = pendentes(db, clinic_id)
+    if not linhas:
+        return _NADA_A_FAZER.copy()
+
+    itens = [
+        {
+            "identifier": str(row["id"]),
+            "gclid": row["gclid"],
+            "conversion_date_time": _format_conversion_dt(row["conversion_date"]),
+            "conversion_value": (row["value_cents"] or 0) / 100.0,
+        }
+        for row in linhas
+    ]
+
+    # Lotes de ate 2000 (limite do Google) para nao estourar o request inteiro
+    # num backlog grande - cada lote e marcado assim que confirmado.
+    enviadas = validadas = falhas = 0
+    erros = []
+    for start in range(0, len(itens), UPLOAD_CHUNK_SIZE):
+        chunk = itens[start:start + UPLOAD_CHUNK_SIZE]
+        result = enviar(chunk)
+        ids = result.get("uploaded_identifiers", [])
+        marcar(db, ids)
+        enviadas += len(ids)
+        # Em ensaio nada sobe, entao `uploaded` fica 0 e o resumo diria
+        # "0 enviadas, 0 falhas" - que se le como se nada tivesse acontecido.
+        # `validated` e o que separa um ensaio verde de uma clinica sem nada
+        # pendente.
+        validadas += result.get("validated", 0)
+        falhas += result.get("failed", 0) if result.get("success") else len(chunk)
+        if result.get("error"):
+            erros.append(result["error"])
+
+    logger.info(
+        f"[traceId: {trace_id}] {rotulo} {clinic_id}: "
+        f"{enviadas}/{len(linhas)} enviadas"
+    )
+    return {"pending": len(linhas), "uploaded": enviadas, "validated": validadas,
+            "failed": falhas, "errors": erros or None}
+
+
+def _sobe_compras(db, dm, clinic, trace_id, validate_only=False):
+    """Evento de COMPRA: so confirmado, sessao passada. Ver PRD 016."""
+    action = clinic.get("offline_conversion_action_id")
+    if not action:
+        # A clinica pode ter so o evento de agendamento ligado. Sem este guard
+        # o destino iria com `None` e o Google recusaria o lote inteiro.
+        return _NADA_A_FAZER.copy()
+
+    return _sobe_um_evento(
+        db, clinic, trace_id, validate_only,
+        rotulo="Compras de",
+        pendentes=_get_pending_conversions,
+        marcar=_mark_uploaded,
+        enviar=lambda chunk: dm.ingest_offline_conversions(
+            customer_id=clinic["google_ads_customer_id"],
+            conversion_action_id=action,
+            conversions=chunk,
+            login_customer_id=os.environ.get("MCC_CUSTOMER_ID"),
+            validate_only=validate_only,
+        ),
+    )
+
+
+def _sobe_agendamentos(db, dm, clinic, trace_id, validate_only=False):
+    """Evento de AGENDAMENTO: todos, inclusive cancelado e falta. Ver PRD 017.
+
+    Nao ha retratacao nem zeramento aqui, e nao e esquecimento: quem marcou e
+    desmarcou agendou de verdade - o lead era qualificado, escolheu data e
+    servico. Cancelar depois nao desfaz o fato.
+    """
+    action = clinic.get("booking_conversion_action_id")
+    if not action:
+        # A action nova e opcional por desenho: ela e criada no painel do
+        # Google e ligada por script. Enquanto nao existir, este passo e no-op
+        # e o evento de compra segue funcionando.
+        return _NADA_A_FAZER.copy()
+
+    return _sobe_um_evento(
+        db, clinic, trace_id, validate_only,
+        rotulo="Agendamentos de",
+        pendentes=_get_pending_bookings,
+        marcar=_mark_booking_uploaded,
+        enviar=lambda chunk: dm.ingest_bookings(
+            customer_id=clinic["google_ads_customer_id"],
+            conversion_action_id=action,
+            conversions=chunk,
+            login_customer_id=os.environ.get("MCC_CUSTOMER_ID"),
+            validate_only=validate_only,
+        ),
+    )
+
+
 def handler(event, context):
     trace_id = str(uuid.uuid4())
 
@@ -315,6 +494,7 @@ def handler(event, context):
     dm = DataManagerService()
 
     summary = {"clinics": 0, "uploaded": 0, "failed": 0,
+               "bookings_uploaded": 0, "bookings_failed": 0,
                "retracted": 0, "retract_failed": 0, "details": []}
 
     clinics = _get_mapped_clinics(db)
@@ -322,76 +502,38 @@ def handler(event, context):
 
     for clinic in clinics:
         clinic_id = clinic["clinic_id"]
-        customer_id = clinic["google_ads_customer_id"]
-        conversion_action_id = clinic["offline_conversion_action_id"]
 
-        # A retratacao roda ANTES e independente do upload: uma clinica sem
-        # nada novo para subir pode ter muito o que desfazer, e o `continue`
-        # abaixo pularia a clinica inteira.
+        # Os tres passos sao INDEPENDENTES e rodam sempre: uma clinica sem
+        # nada novo para subir pode ter muito o que corrigir, e vice-versa.
+        #
+        # Nao ha `continue` neste loop, de proposito. Havia um, quando so
+        # existia o evento de compra, e ele pularia os passos seguintes -
+        # era o defeito que o PRD 017 teria introduzido.
         retratacao = _zera_valor_dos_cancelados(
             db, dm, clinic, trace_id, validate_only)
         summary["retracted"] += retratacao["retracted"]
         summary["retract_failed"] += retratacao["failed"]
 
-        pending = _get_pending_conversions(db, clinic_id)
-        if not pending:
-            if retratacao["retracted"] or retratacao["failed"]:
-                summary["details"].append({
-                    "clinicId": clinic_id, "pending": 0, "uploaded": 0,
-                    "failed": 0, "errors": None, "retraction": retratacao,
-                })
-            continue
+        compras = _sobe_compras(db, dm, clinic, trace_id, validate_only)
+        summary["uploaded"] += compras["uploaded"]
+        summary["failed"] += compras["failed"]
 
-        conversions = []
-        for row in pending:
-            conversions.append({
-                "identifier": str(row["id"]),
-                "gclid": row["gclid"],
-                "conversion_date_time": _format_conversion_dt(row["conversion_date"]),
-                "conversion_value": (row["value_cents"] or 0) / 100.0,
+        agendamentos = _sobe_agendamentos(db, dm, clinic, trace_id, validate_only)
+        summary["bookings_uploaded"] += agendamentos["uploaded"]
+        summary["bookings_failed"] += agendamentos["failed"]
+
+        # Um detalhe por clinica, com os TRES passos. Antes havia um `continue`
+        # quando nao havia compra pendente, e ele pularia o passo do
+        # agendamento - o defeito que o PRD 017 teria introduzido se o loop
+        # continuasse com atalhos.
+        if (compras["pending"] or agendamentos["pending"]
+                or retratacao["retracted"] or retratacao["failed"]):
+            summary["details"].append({
+                "clinicId": clinic_id,
+                "compra": compras,
+                "agendamento": agendamentos,
+                "retraction": retratacao,
             })
-
-        # Envia em lotes de até 2000 (limite do Google) para não estourar o request
-        # inteiro num backlog grande — cada lote é marcado assim que confirmado.
-        clinic_uploaded = 0
-        clinic_validated = 0
-        clinic_failed = 0
-        errors = []
-        for start in range(0, len(conversions), UPLOAD_CHUNK_SIZE):
-            chunk = conversions[start:start + UPLOAD_CHUNK_SIZE]
-            result = dm.ingest_offline_conversions(
-                customer_id=customer_id,
-                conversion_action_id=conversion_action_id,
-                conversions=chunk,
-                login_customer_id=os.environ.get("MCC_CUSTOMER_ID"),
-                validate_only=validate_only,
-            )
-            uploaded_ids = result.get("uploaded_identifiers", [])
-            _mark_uploaded(db, uploaded_ids)
-            clinic_uploaded += len(uploaded_ids)
-            # Em ensaio nada sobe, entao `uploaded` fica 0 e o resumo diria
-            # "0 enviadas, 0 falhas" - que se le como se nada tivesse
-            # acontecido. `validated` e o que separa um ensaio verde de uma
-            # clinica sem conversao pendente.
-            clinic_validated += result.get("validated", 0)
-            clinic_failed += result.get("failed", 0) if result.get("success") else len(chunk)
-            if result.get("error"):
-                errors.append(result["error"])
-
-        summary["uploaded"] += clinic_uploaded
-        summary["failed"] += clinic_failed
-        summary["details"].append({
-            "clinicId": clinic_id,
-            "pending": len(pending),
-            "uploaded": clinic_uploaded,
-            "validated": clinic_validated,
-            "failed": clinic_failed,
-            "errors": errors or None,
-            "retraction": retratacao,
-        })
-        logger.info(
-            f"[traceId: {trace_id}] Clínica {clinic_id}: {clinic_uploaded}/{len(pending)} enviadas"
-        )
 
     _record_execution(trace_id, summary)
     logger.info(f"[traceId: {trace_id}] Concluído: {json.dumps(summary)}")
