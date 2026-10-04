@@ -109,7 +109,37 @@ distintas, e um parâmetro `tipo=` convidaria a unificar as regras depois.
 
 ### 2.4 `scheduler/src/scripts/liga_conversao_offline.py`
 
-Passa a aceitar qual action ligar, e a listar as duas no modo sem argumentos.
+Passa a aceitar `--agendamento`, e a listar as duas no modo sem argumentos.
+
+Recusa apontar as **duas** colunas para o mesmo ID: o Google trataria o segundo
+envio como ajuste do primeiro (mesmo `transactionId`) e a contagem sairia
+errada, em silêncio.
+
+### 2.5 A faixa do painel mostra os DOIS eventos (risco 5.3, resolvido)
+
+O `resumo_de_conversoes` lia só `uploaded_at`. Medido com os dados de hoje, a
+faixa declararia **15 de 45 eventos enviados — 33%** —, e os 10 cancelados não
+apareceriam em nenhum dos dois números.
+
+**Nunca somados.** Um número agregado esconderia um dos dois parar, e foi
+exatamente isso que deixou a `Lead - Whatsapp` morta e invisível por 6 meses: a
+`Lead jardins` duplicada mantinha o total parecendo saudável. Esta faixa existe
+para detectar silêncio — agregar derrotaria o propósito dela.
+
+| Arquivo | Mudança |
+|---|---|
+| `scheduler/src/services/lead_service.py` | 4 contadores novos no mesmo `SELECT` (uma passada no banco) |
+| `scheduler/src/functions/lead/list.py` | chaves nomeadas uma a uma, como o PR #74 endureceu |
+| `frontend/src/services/leads.service.ts` | `ConversionsSummary` ganha os 4 campos |
+| `frontend/src/pages/leads/LeadsPage.tsx` | `LinhaDoEvento` extraída, usada duas vezes |
+
+Duas decisões dentro disso:
+
+- **A data de último envio é POR EVENTO.** É ela que denuncia um dos dois
+  parando: a do que morreu fica velha enquanto a do outro avança. Uma data só
+  esconderia isso.
+- **A linha do agendamento não mostra "Valor zerado".** Esse evento não
+  retrata, e oferecer o número sugeriria uma correção que não existe para ele.
 
 ---
 
@@ -127,6 +157,9 @@ Passa a aceitar qual action ligar, e a listar as duas no modo sem argumentos.
 | clínica com só uma action configurada aparece | `infra/tests/unit` | o `WHERE` não exige as duas |
 | o carimbo do agendamento usa `LEAST(created_at, conversion_date)` | `infra/tests/unit` | as linhas de backfill não carimbam semanas depois |
 | migrations idempotentes, `CREATE TABLE` em sincronia | `scheduler/tests/unit` | convenção do projeto |
+| os dois eventos contados separados | `scheduler/tests/unit` | a query lê as duas colunas, e nenhum campo soma 45 |
+| a faixa mostra duas linhas | `frontend` | não somadas, cada uma com a sua data |
+| a linha do agendamento não tem "Valor zerado" | `frontend` | esse evento não retrata |
 
 Comportamento (rede mockada) para `ingest_bookings`, espelhando o que já existe
 para a compra: sucesso devolve identifiers, erro HTTP devolve lista vazia,
@@ -137,9 +170,8 @@ para a compra: sucesso devolve identifiers, erro HTTP devolve lista vazia,
 ## 4. Fora do escopo
 
 - Criar a action no Google Ads e promover a biddable — painel, não código.
-- A faixa do painel (risco 5.3 do PRD): `resumo_de_conversoes` conta
-  `uploaded_at` e passaria a mostrar retrato parcial. **Decisão pendente do
-  André**, registrada; não se resolve aqui.
+- ~~A faixa do painel (risco 5.3)~~ — **entrou no escopo** por decisão do
+  André em 04/10/2026. Ver seção 2.5.
 - Renomear `uploaded_at` → `purchase_uploaded_at`. Exigiria mexer no uploader e
   no painel ao mesmo tempo, em produção.
 - Backfill do evento novo: as 30 linhas existentes têm `booking_uploaded_at`

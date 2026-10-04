@@ -146,6 +146,10 @@ def handler(event, context):
                 "enviadas": int(resumo["enviadas"]),
                 "enviadas_cents": int(resumo["enviadas_cents"]),
                 "retratadas": int(resumo["retratadas"]),
+                "ag_enviadas": int(resumo["ag_enviadas"]),
+                "ag_aguardando": int(resumo["ag_aguardando"]),
+                "ag_enviadas_cents": int(resumo["ag_enviadas_cents"]),
+                "ag_ultimo_envio": _data_ou_nada(resumo["ag_ultimo_envio"]),
                 "canceladas": int(resumo["canceladas"]),
                 "ultimo_envio": _data_ou_nada(resumo["ultimo_envio"]),
             }
