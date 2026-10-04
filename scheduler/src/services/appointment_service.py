@@ -856,6 +856,100 @@ class AppointmentService:
         logger.info(f"[AppointmentService] Agendamento cancelado: id={appointment_id}")
         return result
 
+    def marca_no_show(self, appointment_id: str) -> Dict[str, Any]:
+        """A pessoa nao compareceu. Marca a falta, sem liberar o horario.
+
+        Falta e diferente de cancelamento: quem cancela com antecedencia libera
+        a agenda, quem nao aparece queima o horario. Ate 04/10/2026 os dois
+        viravam CANCELLED, e a diferenca se perdia.
+
+        Existe para a conversao offline ser honesta: ela e uma COMPRA, e compra
+        exige comparecimento. Sem este status, `CONFIRMED` com data passada
+        significava so "ninguem cancelou", e um no-show subia ao Google como
+        venda. Ver infra/src/functions/conversions/uploader.py.
+
+        ## Os tres filtros estao no WHERE, de proposito
+
+        Consultar primeiro e escrever depois deixa janela entre as duas: a
+        recepcao marca falta no mesmo instante em que a paciente cancela pelo
+        bot, e o segundo UPDATE sobrescreve o primeiro sem ninguem notar. No
+        WHERE, o banco decide, e quem perdeu recebe NotFoundError.
+
+        ## O que esta funcao NAO faz, e por que
+
+        Nao chama `passa_a_marca_adiante`, ao contrario de `cancel_appointment`.
+        Aquela funcao move `is_first_visit` para a proxima sessao confirmada e
+        **nao tem inverso**. Como marcar falta e reversivel (ver
+        `desmarca_no_show`), espelha-la tornaria o desmarcar lossy - a marca de
+        estreia nao voltaria.
+
+        O preco disso esta registrado: quem falta na estreia mantem a marca na
+        linha da falta, e a sessao em que de fato pisa na clinica aparece como
+        veterana. E o mesmo defeito que a decisao de 09/09/2026 resolveu para
+        cancelamento, e fica como pendencia propria - inventar um inverso aqui
+        trocaria um defeito de exibicao estreito por risco de corromper a marca.
+
+        Nao toca lembrete: so se marca falta de sessao que ja passou, e o
+        lembrete dela ja disparou.
+        """
+        result = self.db.execute_write_returning(
+            """
+            UPDATE scheduler.appointments
+            SET status = 'NO_SHOW', updated_at = NOW(), version = version + 1
+            WHERE id = %s::uuid
+              AND status = 'CONFIRMED'
+              -- Data de SAO PAULO, nao `CURRENT_DATE`: o banco roda em UTC, que
+              -- esta a frente do Brasil, e entre 21h e meia-noite BRT o
+              -- `CURRENT_DATE` ja e amanha. A mesma expressao vive na regra de
+              -- elegibilidade do uploader, por coincidencia de fato e nao de
+              -- decisao: aqui ela e pre-condicao para registrar ausencia, la e
+              -- o que escolhe o que sobe ao Google.
+              AND appointment_date < (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+            RETURNING *
+            """,
+            (appointment_id,),
+        )
+
+        if not result:
+            # A mensagem distingue os casos porque sao acoes diferentes de quem
+            # le: sessao futura e "espere", status errado e "ja esta resolvido".
+            raise NotFoundError(
+                f"Agendamento {appointment_id} nao pode receber falta: ou nao "
+                f"existe, ou nao esta CONFIRMED, ou a sessao ainda nao aconteceu"
+            )
+
+        logger.info(f"[AppointmentService] Falta marcada: id={appointment_id}")
+        return result
+
+    def desmarca_no_show(self, appointment_id: str) -> Dict[str, Any]:
+        """Desfaz a falta. Marcar errado tem de ter volta.
+
+        E o que permite `marca_no_show` ser acao direta no painel, sem modal de
+        confirmacao: cerimonia se paga quando a acao e irreversivel, e esta nao
+        e.
+
+        `status = 'NO_SHOW'` no WHERE impede ressuscitar cancelado: sem ele,
+        desmarcar falta viraria um jeito obliquo de descancelar - e cancelamento
+        ja liberou o horario, que pode ter sido ocupado por outra pessoa.
+        """
+        result = self.db.execute_write_returning(
+            """
+            UPDATE scheduler.appointments
+            SET status = 'CONFIRMED', updated_at = NOW(), version = version + 1
+            WHERE id = %s::uuid AND status = 'NO_SHOW'
+            RETURNING *
+            """,
+            (appointment_id,),
+        )
+
+        if not result:
+            raise NotFoundError(
+                f"Agendamento {appointment_id} nao esta marcado como falta"
+            )
+
+        logger.info(f"[AppointmentService] Falta desmarcada: id={appointment_id}")
+        return result
+
     def get_active_appointment_by_phone(
         self, clinic_id: str, phone: str
     ) -> Optional[Dict[str, Any]]:

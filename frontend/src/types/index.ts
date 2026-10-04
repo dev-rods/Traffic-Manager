@@ -155,7 +155,10 @@ export interface DiscountBreakdown {
 }
 
 // ── Appointment ───────────────────────────────────────────────
-export type AppointmentStatus = 'CONFIRMED' | 'CANCELLED'
+// NO_SHOW entrou em 04/10/2026. Falta e diferente de cancelamento: quem cancela
+// com antecedencia libera a agenda, quem nao aparece queima o horario. A
+// conversao offline depende da distincao - ela afirma uma COMPRA ao Google Ads.
+export type AppointmentStatus = 'CONFIRMED' | 'CANCELLED' | 'NO_SHOW'
 
 export interface Appointment {
   id: string

@@ -100,6 +100,7 @@ function AppointmentBlock({
   const displayName = a.patient_name || a.full_name || 'Sem nome'
   const isPartnership = a.discount_reason === 'partnership'
   const isPrimeira = a.is_first_visit
+  const faltou = a.status === 'NO_SHOW'
 
   return (
     <button
@@ -131,7 +132,17 @@ function AppointmentBlock({
           : isPrimeira
             ? 'bg-fuchsia-50 border-l-fuchsia-500 text-fuchsia-900'
             : 'bg-brand-50 border-l-brand-500 text-brand-900',
-      ].join(' ')}
+        // Falta: esmaecida e riscada, NAO uma cor nova. O sistema de cores
+        // ja esta no limite (ambar=parceria, fucsia=estreia, azul=normal,
+        // vermelho=cancelar), e um sexto tom cobraria do usuario decorar
+        // mais um. Riscado le-se "nao aconteceu" sem depender de cor, que
+        // e a mesma exigencia que o marcador "1a" atende na estreia.
+        //
+        // Esmaecer e nao esconder: a sessao ocupou o horario de fato, e e
+        // pelo card que se alcanca o "Desmarcar falta". Filtrar a falta
+        // como se filtra o cancelado deixaria o desfazer inalcancavel.
+        faltou && 'opacity-60 saturate-50',
+      ].filter(Boolean).join(' ')}
     >
       {/* Horário e nome, e mais nada.
           
@@ -147,7 +158,15 @@ function AppointmentBlock({
         {' '}
         {/* Cor sozinha nao basta: quem tem daltonismo, ou olha a agenda no
             celular sob sol, precisa distinguir tambem. */}
-        {isPrimeira && !isPartnership && (
+        {faltou && (
+          <span
+            title="A paciente nao compareceu"
+            className="inline-block px-1 rounded bg-gray-200 text-gray-600 text-[10px] font-bold align-middle mr-0.5"
+          >
+            FALTOU
+          </span>
+        )}
+        {isPrimeira && !isPartnership && !faltou && (
           <span
             title="Primeira vez na clínica"
             className="inline-block px-1 rounded bg-fuchsia-200/70 text-[10px] font-bold align-middle mr-0.5"
@@ -155,7 +174,7 @@ function AppointmentBlock({
             1ª
           </span>
         )}
-        {displayName}
+        <span className={faltou ? 'line-through' : undefined}>{displayName}</span>
         {/* Com um dia só na tela a caixa fica larga demais para horário e nome,
             e a área sobrava em branco. Na MESMA linha, e não numa segunda:
             a altura continua sendo a duração, e uma sessão de 10 minutos tem

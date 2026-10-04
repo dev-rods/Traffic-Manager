@@ -148,13 +148,19 @@ function LinhaDaAgenda({
 }) {
   const nome = a.patient_name || a.full_name || 'Sem nome'
   const daParceria = a.discount_reason === 'partnership'
+  const faltou = a.status === 'NO_SHOW'
 
   return (
     <li>
       <button
         type="button"
         onClick={(e) => onClick(a, e.currentTarget.getBoundingClientRect())}
-        className="flex w-full items-start gap-3 px-3 py-3 text-left transition-colors active:bg-gray-50"
+        className={[
+          'flex w-full items-start gap-3 px-3 py-3 text-left transition-colors active:bg-gray-50',
+          // O mesmo tratamento da grade do desktop, pela mesma razao: a cor
+          // ja carrega parceria e estreia, e riscado le-se sem depender dela.
+          faltou && 'opacity-60 saturate-50',
+        ].filter(Boolean).join(' ')}
       >
         {/* A faixa colorida carrega o mesmo significado da borda esquerda na
             grade do desktop - parceria vence estreia, pela mesma razão de lá:
@@ -178,7 +184,14 @@ function LinhaDaAgenda({
 
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            <span className="font-medium text-gray-900">{nome}</span>
+            <span className={faltou ? 'font-medium text-gray-900 line-through' : 'font-medium text-gray-900'}>
+              {nome}
+            </span>
+            {faltou && (
+              <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
+                FALTOU
+              </span>
+            )}
             {daParceria && (
               <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                 PARCERIA

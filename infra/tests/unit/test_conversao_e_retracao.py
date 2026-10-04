@@ -52,7 +52,21 @@ class TestSoSobeCompraRealizada(unittest.TestCase):
         27/09 e 03/10/2026. A inversão é deliberada, não descuido: ver o
         docstring do módulo antes de mexer.
         """
-        self.assertIn("AND a.appointment_date < CURRENT_DATE", fonte(UPLOADER))
+        texto = fonte(UPLOADER)
+
+        # A cláusula inteira, não dois pedaços soltos: o docstring do módulo
+        # cita `a.appointment_date < CURRENT_DATE` de propósito, para contar que
+        # o guard saiu em 27/09 e voltou em 03/10. Um `assertNotIn` na forma
+        # antiga casaria com essa explicação e reprovaria o código correto -
+        # erro que já cometi duas vezes nesta suíte.
+        #
+        # Data da clínica, não do servidor: o banco roda em UTC, e entre 21h e
+        # meia-noite BRT o `CURRENT_DATE` já é amanhã - a sessão de hoje
+        # passaria por realizada numa invocação manual nessa faixa.
+        self.assertIn(
+            "AND a.appointment_date < (NOW() AT TIME ZONE 'America/Sao_Paulo')::date",
+            texto,
+        )
 
     def test_o_limite_do_guard_esta_escrito(self):
         """O guard não prova comparecimento, e confundir as duas coisas é o
@@ -166,7 +180,43 @@ class TestValorZeradoDoCancelado(unittest.TestCase):
 
         self.assertIn("lc.uploaded_at IS NOT NULL", texto)
         self.assertIn("lc.retracted_at IS NULL", texto)
-        self.assertIn("a.status = 'CANCELLED'", texto)
+
+    def test_zerar_cobre_cancelado_E_falta(self):
+        """A compra que afirmamos ao Google não aconteceu nos dois casos.
+
+        Era só `CANCELLED` até 04/10/2026. Deixar `NO_SHOW` de fora faria a
+        falta descoberta depois do upload ficar com o valor cheio no Google -
+        e ninguém tentaria de novo, porque `retracted_at` seguiria nulo sem
+        nada acontecer.
+        """
+        texto = fonte(UPLOADER)
+
+        self.assertIn("a.status IN ('CANCELLED', 'NO_SHOW')", texto)
+        self.assertNotIn("a.status = 'CANCELLED'", texto,
+                         "a forma antiga deixaria a falta de fora")
+
+    def test_falta_nao_e_elegivel_para_subir(self):
+        """O filtro de elegibilidade é `= CONFIRMED`, exato - então NO_SHOW sai
+        sozinho, sem precisar de cláusula própria.
+
+        Trocar por `IN` ou `!=` aqui deixaria a falta subir como compra, que é
+        exatamente o que o status existe para impedir.
+        """
+        texto = fonte(UPLOADER)
+
+        self.assertIn("a.status = 'CONFIRMED'", texto)
+        self.assertNotIn("a.status != ", texto)
+
+    def test_o_aviso_diz_que_depende_de_alguem_marcar(self):
+        """NO_SHOW existir não fecha o problema: depende de adoção.
+
+        Sem isso escrito, a existência do status viraria prova de presença na
+        cabeça de quem lê - e promover a conversão a biddable seria prematuro.
+        """
+        texto = fonte(UPLOADER)
+
+        self.assertIn("depende de", texto)
+        self.assertIn("NO_SHOW", texto)
 
     def test_roda_mesmo_sem_nada_a_subir(self):
         """Uma clínica sem conversão nova pode ter muito o que corrigir.

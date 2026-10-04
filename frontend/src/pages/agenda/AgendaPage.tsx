@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
-import { useAppointments } from '@/hooks/useAppointments'
+import { useAppointments, useMarcarFalta, useDesmarcarFalta } from '@/hooks/useAppointments'
+import { useToast } from '@/components/ui/toastContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -18,7 +19,59 @@ import type { Appointment } from '@/types'
 
 const PAGE_SIZE = 7
 
+/** A mensagem que o servidor mandou, quando ele mandou uma.
+ *
+ * O backend recusa falta com motivo util (sessao ainda nao aconteceu, status
+ * errado, 409 de cancelado). Engolir isso e trocar um diagnostico por
+ * "erro inesperado" - e a atendente nao tem como saber o que fazer diferente.
+ */
+function mensagemDoErro(erro: unknown, padrao: string): string {
+  const resposta = (erro as { response?: { data?: { message?: string } } })?.response
+  return resposta?.data?.message ?? padrao
+}
+
 export function AgendaPage() {
+  const { showToast } = useToast()
+  const marcarFaltaMutation = useMarcarFalta()
+  const desmarcarFaltaMutation = useDesmarcarFalta()
+
+  // Desmarcar vem primeiro porque `marcarFalta` o usa na ação do toast.
+  const desmarcarFalta = useCallback(
+    (a: Appointment) => {
+      desmarcarFaltaMutation.mutate(a.id, {
+        onSuccess: () => showToast({ message: 'Falta desmarcada' }),
+        onError: (erro) =>
+          showToast({
+            message: mensagemDoErro(erro, 'Nao foi possivel desmarcar a falta.'),
+            variant: 'error',
+          }),
+      })
+    },
+    [desmarcarFaltaMutation, showToast],
+  )
+
+  // Marcar falta não abre modal: a ação é reversível, e a confirmação só se
+  // paga quando não há volta (ver `CancelAppointmentModal`). O desfazer vive
+  // no próprio toast, que é onde a atenção já está depois do clique - em vez
+  // de obrigar a reabrir o popover para achar "Desmarcar falta".
+  const marcarFalta = useCallback(
+    (a: Appointment) => {
+      marcarFaltaMutation.mutate(a.id, {
+        onSuccess: () =>
+          showToast({
+            message: 'Falta marcada',
+            action: { label: 'Desfazer', onClick: () => desmarcarFalta(a) },
+          }),
+        onError: (erro) =>
+          showToast({
+            message: mensagemDoErro(erro, 'Nao foi possivel marcar a falta.'),
+            variant: 'error',
+          }),
+      })
+    },
+    [marcarFaltaMutation, showToast, desmarcarFalta],
+  )
+
   // null = ainda não navegou, então vale a página padrão (as próximas datas).
   // Guardar "não escolheu" em vez de um número evita que a página do usuário
   // seja sobrescrita quando a lista de datas recarrega.
@@ -195,6 +248,8 @@ export function AgendaPage() {
         onClose={() => { setPopoverAppointment(null); setPopoverRect(null) }}
         onEdit={(a) => setEditing(a)}
         onCancel={(a) => setCancelling(a)}
+        onMarcarFalta={marcarFalta}
+        onDesmarcarFalta={desmarcarFalta}
       />
 
       {/* Edit appointment modal — key forces remount to reset form */}
