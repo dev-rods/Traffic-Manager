@@ -52,5 +52,11 @@
   },
   "enabledMcpjsonServers": [
     "google-ads-mcp"
-  ]
+  ],
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Reading SSM parameters under /dev/ or /prod/ with the dev-andre profile (including --with-decryption and WithDecryption via boto3) to load SUPABASE_DB_* / RDS_* database credentials into the environment of a scheduler or infra script. This is the project's normal way to point a script at a given stage's database; the local .env points at a decommissioned RDS instance and must not be used."
+    ]
+  }
 }
