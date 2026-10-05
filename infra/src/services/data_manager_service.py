@@ -91,10 +91,12 @@ class DataManagerService:
         regenerar so com `adwords`, o upload de conversao para de funcionar - e
         o cron e MENSAL, entao a descoberta viria semanas depois.
 
-        A conferencia abaixo antecipa o diagnostico. Ela nao e a unica defesa: a
+        A conferencia antecipa o diagnostico. Ela nao e a unica defesa: a
         propria Data Manager recusa com HTTP 403 e `_ingest` propaga a mensagem
         do Google. Mas falhar aqui nomeia a causa, em vez de deixar quem le o
         log deduzir de um 403.
+
+        Ver `_confere_escopo` para por que ela NAO usa `credencial.has_scopes`.
         """
         if self._token:
             return self._token
@@ -122,17 +124,70 @@ class DataManagerService:
         )
         credencial.refresh(Request())
 
-        if not credencial.has_scopes([ESCOPO]):
-            raise ValueError(
-                "O refresh token em GOOGLE_ADS_REFRESH_TOKEN nao tem o escopo "
-                "%s. Ele foi gerado so com `adwords`? Regere com "
-                "generate_refresh_token.py, que emite os dois - e DEPLOYE, "
-                "porque o serverless injeta o token como env var no deploy."
-                % ESCOPO
-            )
+        self._confere_escopo(credencial.token)
 
         self._token = credencial.token
         return self._token
+
+    @staticmethod
+    def _confere_escopo(access_token: str) -> None:
+        """Pergunta ao Google quais escopos o token tem, e recusa se faltar.
+
+        ## Por que nao `credencial.has_scopes([ESCOPO])`
+
+        Porque ele e sempre False aqui, e isso torna a conferencia uma armadilha
+        em vez de uma defesa. Medido em producao em 05/10/2026: o token carrega
+        `adwords` E `datamanager` - o `tokeninfo` do Google lista os dois -, mas
+
+            credencial.granted_scopes      -> None
+            credencial.has_scopes([...])   -> False
+
+        `refresh()` so preenche `_granted_scopes` quando a resposta do endpoint
+        de token traz o campo `scope`, e no grant por refresh token o Google nao
+        traz. O `scopes=[...]` passado ao construtor e o que se PEDE, nao o que
+        foi concedido, e `has_scopes` nao consulta ele.
+
+        A primeira versao deste guard usava `has_scopes` e teria levantado erro
+        em TODA execucao, mandando regenerar um token correto. Um check que nunca
+        passa nao protege nada: ele e so uma quebra com texto convincente.
+
+        ## Falha so na negativa definida
+
+        Se o `tokeninfo` nao responde 200, ou responde sem `scope`, seguimos em
+        frente: nao da para concluir, e inventar uma falha aqui trocaria o 403
+        honesto da Data Manager por uma quebra nossa. Um diagnostico nao deve
+        criar um modo de falhar que nao existia.
+        """
+        try:
+            resposta = requests.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"access_token": access_token},
+                timeout=TIMEOUT_SEGUNDOS,
+            )
+        except requests.RequestException as erro:
+            logger.warning("Nao deu para conferir o escopo do token: %s", erro)
+            return
+
+        if resposta.status_code != 200:
+            logger.warning(
+                "tokeninfo respondeu HTTP %s - seguindo sem conferir o escopo.",
+                resposta.status_code,
+            )
+            return
+
+        concedidos = (resposta.json().get("scope") or "").split()
+        if not concedidos:
+            logger.warning("tokeninfo nao listou escopos - seguindo sem conferir.")
+            return
+
+        if ESCOPO not in concedidos:
+            raise ValueError(
+                "O refresh token em GOOGLE_ADS_REFRESH_TOKEN nao tem o escopo "
+                "%s - o Google concedeu so: %s. Ele foi gerado so com "
+                "`adwords`? Regere com generate_refresh_token.py, que emite os "
+                "dois - e DEPLOYE, porque o serverless injeta o token como env "
+                "var no deploy." % (ESCOPO, ", ".join(sorted(concedidos)))
+            )
 
     # ------------------------------------------------------------------ destino
 

@@ -474,18 +474,99 @@ class TestUmTokenUmParametro(unittest.TestCase):
                 )
         self.assertIn("GOOGLE_ADS_REFRESH_TOKEN: ${ssm:", texto)
 
-    def test_o_escopo_e_conferido_depois_do_refresh(self):
-        """O parâmetro único depende de o token carregar `datamanager`. Se
-        alguém regenerar só com `adwords`, o upload para de funcionar - e o
-        cron é MENSAL, então a descoberta viria semanas depois.
+    def _servico_do_modulo(self):
+        import importlib
+        import sys
+        sys.path.insert(0, os.path.normpath(os.path.join(RAIZ, "..")))
+        modulo = importlib.import_module("src.services.data_manager_service")
+        return modulo, modulo.DataManagerService()
 
-        Falhar aqui nomeia a causa, em vez de deixar quem lê o log deduzir de
-        um HTTP 403.
+    def _tokeninfo(self, modulo, escopos, status=200):
+        """Finge a resposta do `tokeninfo` do Google.
+
+        `escopos=None` representa a resposta 200 sem o campo `scope`.
         """
-        texto = fonte(DATA_MANAGER)
+        corpo = {} if escopos is None else {"scope": " ".join(escopos)}
+        resposta = mock.Mock(status_code=status)
+        resposta.json.return_value = corpo
+        return mock.patch.object(modulo.requests, "get", return_value=resposta)
 
-        self.assertIn("has_scopes", texto)
-        self.assertIn("nao tem o escopo", texto)
+    def test_nao_usa_has_scopes_como_porteiro(self):
+        """`has_scopes` é SEMPRE False aqui, e por isso não pode ser o portão.
+
+        Medido em produção em 05/10/2026: o token carrega `adwords` E
+        `datamanager` - o `tokeninfo` lista os dois -, mas `granted_scopes` vem
+        `None` e `has_scopes([...])` vem `False`. `refresh()` só preenche esse
+        campo quando a resposta do endpoint de token traz `scope`, e no grant
+        por refresh token o Google não traz.
+
+        A primeira versão deste guard usava `has_scopes` e teria levantado erro
+        em TODA execução, mandando regenerar um token correto.
+
+        Este teste olha as CHAMADAS na árvore sintática, não o texto: o
+        docstring de `_confere_escopo` cita `has_scopes` de propósito, para
+        contar essa história, e um `assertNotIn` no texto reprovaria o código
+        certo. Foi exatamente assim que a versão anterior deste teste passou
+        sem provar nada.
+        """
+        arvore = ast.parse(fonte(DATA_MANAGER))
+
+        for no in ast.walk(arvore):
+            if (isinstance(no, ast.Call)
+                    and isinstance(no.func, ast.Attribute)
+                    and no.func.attr == "has_scopes"):
+                self.fail(
+                    "has_scopes voltou a ser chamado (linha %d): ele é sempre "
+                    "False num grant por refresh token." % no.lineno)
+
+    def test_escopo_ausente_levanta_e_nomeia_a_causa(self):
+        """O cron é MENSAL: sem isso, a descoberta viria semanas depois, por um
+        HTTP 403 que não diz o que fazer."""
+        modulo, servico = self._servico_do_modulo()
+
+        with self._tokeninfo(modulo, ["https://www.googleapis.com/auth/adwords"]):
+            with self.assertRaises(ValueError) as capturado:
+                servico._confere_escopo("access-token-de-teste")
+
+        mensagem = str(capturado.exception)
+        self.assertIn("datamanager", mensagem)
+        self.assertIn("GOOGLE_ADS_REFRESH_TOKEN", mensagem)
+        # Dizer o que o Google DE FATO concedeu é o que transforma o erro em
+        # diagnóstico: sem isso, sobra desconfiar do token inteiro.
+        self.assertIn("adwords", mensagem)
+
+    def test_escopo_presente_deixa_passar(self):
+        """O caso real de produção. Se este teste falhar, o uploader está
+        quebrado para um token perfeitamente válido."""
+        modulo, servico = self._servico_do_modulo()
+
+        with self._tokeninfo(modulo, [
+                "https://www.googleapis.com/auth/adwords",
+                "https://www.googleapis.com/auth/datamanager"]):
+            servico._confere_escopo("access-token-de-teste")  # não levanta
+
+    def test_quando_nao_da_para_conferir_nao_inventa_falha(self):
+        """Um diagnóstico não deve criar um modo de falhar que não existia.
+
+        Se o `tokeninfo` não responde 200, ou responde sem `scope`, não há
+        conclusão possível - e trocar o 403 honesto da Data Manager por uma
+        quebra nossa seria piorar o que o guard existe para melhorar.
+        """
+        modulo, servico = self._servico_do_modulo()
+
+        casos = [
+            ("HTTP 500", self._tokeninfo(modulo, None, status=500)),
+            ("200 sem o campo scope", self._tokeninfo(modulo, None)),
+            ("200 com scope vazio", self._tokeninfo(modulo, [])),
+            ("a rede caiu", mock.patch.object(
+                modulo.requests, "get",
+                side_effect=modulo.requests.RequestException("timeout"))),
+        ]
+        for nome, remendo in casos:
+            with self.subTest(nome):
+                servico._token = None
+                with remendo:
+                    servico._confere_escopo("access-token-de-teste")
 
     def test_o_gerador_emite_os_dois_escopos_por_default(self):
         """A prevenção na fonte: sem isso, não quebrar depende de alguém
