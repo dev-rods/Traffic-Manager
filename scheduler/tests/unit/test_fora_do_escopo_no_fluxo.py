@@ -19,7 +19,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from dublagem_agente import (
     CLINIC,
-    PHONE,
     AnthropicFalso,
     ToolExecutorFalso,
     mensagem,

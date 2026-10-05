@@ -30,7 +30,7 @@ contorna.
 import logging
 import re
 import unicodedata
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
