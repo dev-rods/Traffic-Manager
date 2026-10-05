@@ -71,35 +71,66 @@ class DataManagerService:
     def _bearer(self) -> str:
         """Troca o refresh token por um access token com escopo datamanager.
 
-        O refresh token NAO e o mesmo do Google Ads. O escopo `datamanager` e
-        distinto de `adwords`, e um token emitido para um nao vale para o
-        outro - o consentimento tem de ser dado de novo. Por isso a variavel
-        separada, e nao a reutilizacao de `GOOGLE_ADS_REFRESH_TOKEN`: reusar
-        falharia em runtime com `invalid_scope`, bem longe daqui.
+        ## Um token, um parametro
+
+        Houve `DATA_MANAGER_REFRESH_TOKEN` separado, criado em 03/10/2026 sob a
+        premissa de que o escopo `datamanager` exigia token proprio. A premissa
+        estava errada: um unico consentimento cobre os dois escopos, e e o que
+        `generate_refresh_token.py` emite por default desde 05/10.
+
+        Dois parametros nao eram so redundancia - eram risco. Em 04/10 o
+        `GOOGLE_ADS_REFRESH_TOKEN` apareceu REVOGADO: gerar o token novo com
+        escopo acrescentado invalidou o grant anterior, e isso quebrou TODAS as
+        Lambdas que falam com o Google Ads enquanto o uploader de conversao
+        seguia funcionando, porque usava o outro parametro. Dois lugares para a
+        mesma credencial significam um deles envelhecer sem ninguem notar.
+
+        ## O escopo e conferido, e por que isso importa
+
+        O parametro unico depende de o token carregar `datamanager`. Se alguem
+        regenerar so com `adwords`, o upload de conversao para de funcionar - e
+        o cron e MENSAL, entao a descoberta viria semanas depois.
+
+        A conferencia abaixo antecipa o diagnostico. Ela nao e a unica defesa: a
+        propria Data Manager recusa com HTTP 403 e `_ingest` propaga a mensagem
+        do Google. Mas falhar aqui nomeia a causa, em vez de deixar quem le o
+        log deduzir de um 403.
         """
         if self._token:
             return self._token
 
         faltando = [
             nome for nome in
-            ("OAUTH2_CLIENT_ID", "OAUTH2_CLIENT_SECRET", "DATA_MANAGER_REFRESH_TOKEN")
+            ("OAUTH2_CLIENT_ID", "OAUTH2_CLIENT_SECRET", "GOOGLE_ADS_REFRESH_TOKEN")
             if not os.environ.get(nome)
         ]
         if faltando:
             raise ValueError(
-                "Credencial da Data Manager ausente: %s. O refresh token precisa "
-                "ter sido emitido para o escopo %s." % (", ".join(faltando), ESCOPO)
+                "Credencial do Google ausente: %s. O refresh token precisa ter "
+                "sido emitido com o escopo %s - veja "
+                "infra/src/scripts/generate_refresh_token.py."
+                % (", ".join(faltando), ESCOPO)
             )
 
         credencial = Credentials(
             token=None,
-            refresh_token=os.environ["DATA_MANAGER_REFRESH_TOKEN"],
+            refresh_token=os.environ["GOOGLE_ADS_REFRESH_TOKEN"],
             client_id=os.environ["OAUTH2_CLIENT_ID"],
             client_secret=os.environ["OAUTH2_CLIENT_SECRET"],
             token_uri="https://oauth2.googleapis.com/token",
             scopes=[ESCOPO],
         )
         credencial.refresh(Request())
+
+        if not credencial.has_scopes([ESCOPO]):
+            raise ValueError(
+                "O refresh token em GOOGLE_ADS_REFRESH_TOKEN nao tem o escopo "
+                "%s. Ele foi gerado so com `adwords`? Regere com "
+                "generate_refresh_token.py, que emite os dois - e DEPLOYE, "
+                "porque o serverless injeta o token como env var no deploy."
+                % ESCOPO
+            )
+
         self._token = credencial.token
         return self._token
 

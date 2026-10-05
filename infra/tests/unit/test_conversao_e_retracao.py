@@ -426,13 +426,89 @@ class TestTransporteDataManager(unittest.TestCase):
 
         with mock.patch.dict(os.environ, {"OAUTH2_CLIENT_ID": "",
                                           "OAUTH2_CLIENT_SECRET": "",
-                                          "DATA_MANAGER_REFRESH_TOKEN": ""},
+                                          "GOOGLE_ADS_REFRESH_TOKEN": ""},
                              clear=False):
             with self.assertRaises(ValueError) as ctx:
                 servico._bearer()
 
-        self.assertIn("DATA_MANAGER_REFRESH_TOKEN", str(ctx.exception))
+        self.assertIn("GOOGLE_ADS_REFRESH_TOKEN", str(ctx.exception))
         self.assertIn("datamanager", str(ctx.exception))
+
+
+class TestUmTokenUmParametro(unittest.TestCase):
+    """Houve dois parâmetros de refresh token, e isso não era só redundância.
+
+    Em 04/10/2026 o `GOOGLE_ADS_REFRESH_TOKEN` apareceu **revogado**: gerar o
+    `DATA_MANAGER_REFRESH_TOKEN` com escopo acrescentado invalidou o grant
+    anterior. As Lambdas de campanha e keywords quebraram enquanto o uploader
+    de conversão seguia funcionando - porque usava o parâmetro vizinho.
+
+    Dois lugares para a mesma credencial significam um deles envelhecer sem
+    ninguém notar.
+    """
+
+    def test_o_servico_le_o_parametro_unico(self):
+        texto = fonte(DATA_MANAGER)
+
+        self.assertIn('os.environ["GOOGLE_ADS_REFRESH_TOKEN"]', texto)
+        # A menção ao nome antigo só pode sobrar em comentário/docstring, que é
+        # onde o histórico da decisão vive.
+        for linha in texto.splitlines():
+            if "DATA_MANAGER_REFRESH_TOKEN" in linha:
+                self.assertTrue(
+                    linha.lstrip().startswith("#") or "`" in linha,
+                    "referência em CÓDIGO ao parâmetro que deixou de existir: %r"
+                    % linha.strip(),
+                )
+
+    def test_o_serverless_declara_so_um(self):
+        caminho = os.path.join(
+            os.path.dirname(__file__), "..", "..", "serverless.yml")
+        texto = fonte(os.path.normpath(caminho))
+
+        for linha in texto.splitlines():
+            if "DATA_MANAGER_REFRESH_TOKEN" in linha:
+                self.assertTrue(
+                    linha.lstrip().startswith("#"),
+                    "o parâmetro antigo voltou ao serverless.yml: %r" % linha.strip(),
+                )
+        self.assertIn("GOOGLE_ADS_REFRESH_TOKEN: ${ssm:", texto)
+
+    def test_o_escopo_e_conferido_depois_do_refresh(self):
+        """O parâmetro único depende de o token carregar `datamanager`. Se
+        alguém regenerar só com `adwords`, o upload para de funcionar - e o
+        cron é MENSAL, então a descoberta viria semanas depois.
+
+        Falhar aqui nomeia a causa, em vez de deixar quem lê o log deduzir de
+        um HTTP 403.
+        """
+        texto = fonte(DATA_MANAGER)
+
+        self.assertIn("has_scopes", texto)
+        self.assertIn("nao tem o escopo", texto)
+
+    def test_o_gerador_emite_os_dois_escopos_por_default(self):
+        """A prevenção na fonte: sem isso, não quebrar depende de alguém
+        lembrar de passar `--additional_scopes`."""
+        caminho = os.path.join(
+            os.path.dirname(__file__), "..", "..", "src", "scripts",
+            "generate_refresh_token.py")
+        texto = fonte(os.path.normpath(caminho))
+
+        self.assertIn("_SCOPES = [", texto)
+        self.assertIn("auth/adwords", texto)
+        self.assertIn("auth/datamanager", texto)
+        self.assertIn("configured_scopes = list(_SCOPES)", texto)
+
+    def test_o_gerador_avisa_que_revoga_o_anterior(self):
+        """Foi o que ninguém sabia em 03/10 e custou produção em 04/10."""
+        caminho = os.path.join(
+            os.path.dirname(__file__), "..", "..", "src", "scripts",
+            "generate_refresh_token.py")
+        texto = fonte(os.path.normpath(caminho))
+
+        self.assertIn("REVOGA o anterior", texto)
+        self.assertIn("DEPLOYE", texto)
 
 
 class TestOsArquivosCompilam(unittest.TestCase):

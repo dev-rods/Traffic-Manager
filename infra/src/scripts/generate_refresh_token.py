@@ -41,7 +41,23 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
-_SCOPE = "https://www.googleapis.com/auth/adwords"
+# Os DOIS escopos por default, desde 05/10/2026.
+#
+# `adwords` serve a Google Ads API (campanhas, keywords, conversion actions).
+# `datamanager` serve a Data Manager API, que e por onde a conversao offline
+# sobe desde que o Google fechou o ConversionUploadService.
+#
+# Juntos de proposito: um consentimento cobre os dois, e o projeto guarda UM
+# token num parametro so do SSM. Gerar so com `adwords` quebraria o upload de
+# conversao - e o cron e mensal, entao a descoberta viria semanas depois.
+#
+# Atencao: gerar token novo REVOGA o anterior. Depois de gerar, copie para o
+# SSM e DEPLOYE - o serverless resolve o `${ssm:...}` no deploy e injeta como
+# env var, entao corrigir o SSM nao alcanca as Lambdas em execucao.
+_SCOPES = [
+    "https://www.googleapis.com/auth/adwords",
+    "https://www.googleapis.com/auth/datamanager",
+]
 _SERVER = "127.0.0.1"
 _PORT = 8080
 _REDIRECT_URI = f"http://{_SERVER}:{_PORT}"
@@ -267,7 +283,7 @@ REQUISITOS:
     
     try:
         # Configurar scopes
-        configured_scopes = [_SCOPE]
+        configured_scopes = list(_SCOPES)
         
         if args.additional_scopes:
             configured_scopes.extend(args.additional_scopes)
