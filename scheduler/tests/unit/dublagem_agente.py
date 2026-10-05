@@ -117,6 +117,10 @@ def monta_agente(anthropic=None, tool_executor=None, resultado_da_tool=None,
     agente._load_session = lambda c, p: dict(agente.sessao_salva)
     agente._is_attendant_active = lambda s: False
     agente._build_system_prompt = lambda c, p, sessao=None: "PROMPT BASE"
+    # A guarda de [fora_do_escopo] roda antes do modelo e lê os termos extras da
+    # clínica. Sem banco aqui, a clínica é vazia - a lista do código continua
+    # valendo, que é o que os testes exercitam.
+    agente._config_fora_do_escopo = lambda c: {}
     agente._save_session = lambda c, p, s: agente.sessao_salva.update(s)
 
     if registro_de_ordem is not None:

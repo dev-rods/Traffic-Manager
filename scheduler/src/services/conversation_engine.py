@@ -20,7 +20,14 @@ from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
 
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
-from src.services.bot_policy import TTL_DO_ATENDIMENTO, entrega_por_instabilidade
+from src.services.bot_policy import (
+    MOTIVO_FORA_DO_ESCOPO,
+    TTL_DO_ATENDIMENTO,
+    entrega_a_humano,
+    entrega_por_instabilidade,
+)
+from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
+from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
 from src.services.areas_ambiguas import perguntas as perguntas_de_ambiguidade
@@ -443,6 +450,30 @@ class ConversationEngine:
                     session.pop("_previous_state_before_attendant", None)
                     self._save_session(clinic_id, phone, session)
                     current_state = ConversationState.WELCOME
+
+        # 1.6 Procedimento que o bot não atende.
+        #
+        # A MESMA regra do [conversation_agent], no caminho legado. Aplicar só
+        # num dos dois é como a divergência começa: a clínica que ainda não
+        # migrou para o agente responderia sobre botox, e ninguém veria.
+        try:
+            citado = procedimento_fora_do_escopo(
+                incoming.content, self._get_clinic(clinic_id)
+            )
+        except Exception as e:
+            # Sem os termos da clínica, a lista do código ainda barra o que
+            # nomeia. Derrubar a mensagem aqui seria pior.
+            logger.warning(f"[ForaDoEscopo] não li a clínica {clinic_id}: {e}")
+            citado = procedimento_fora_do_escopo(incoming.content)
+        if citado:
+            logger.info(
+                f"[ForaDoEscopo] {phone}: citou {citado} -> especialista"
+            )
+            entrega_a_humano(session, MOTIVO_FORA_DO_ESCOPO)
+            self._save_session(clinic_id, phone, session)
+            return [OutgoingMessage(
+                message_type="text", content=TEXTO_FORA_DO_ESCOPO
+            )]
 
         # 2. Identify input
         user_input = self._identify_input(incoming, session)
