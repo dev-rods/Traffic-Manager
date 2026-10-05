@@ -218,19 +218,29 @@ class TestValorZeradoDoCancelado(unittest.TestCase):
         self.assertIn("depende de", texto)
         self.assertIn("NO_SHOW", texto)
 
-    def test_roda_mesmo_sem_nada_a_subir(self):
-        """Uma clínica sem conversão nova pode ter muito o que corrigir.
+    def test_nenhum_passo_pode_ser_pulado(self):
+        """O loop de clínicas não tem `continue`, e isso é o desenho.
 
-        O `if not pending: continue` pulava a clínica inteira - isso precisa
-        vir ANTES dele.
+        Este teste já checou outra coisa: que o zeramento vinha ANTES do
+        `if not pending: continue`, porque aquele atalho pulava a clínica
+        inteira quando não havia compra nova.
+
+        O PRD 017 trocou a garantia por uma mais forte. Com três passos
+        independentes - zerar, subir compras, subir agendamentos -, qualquer
+        `continue` no meio pula um deles em silêncio. Então a propriedade a
+        travar deixou de ser a ordem e passou a ser a ausência do atalho.
         """
-        texto = fonte(UPLOADER)
+        arvore = ast.parse(fonte(UPLOADER))
 
-        pos = texto.index("_zera_valor_dos_cancelados(")
-        pos_continue = texto.index("if not pending:")
-
-        self.assertLess(pos, pos_continue,
-                        "zerar o cancelado tem de rodar antes do continue")
+        for no in ast.walk(arvore):
+            if isinstance(no, ast.FunctionDef) and no.name == "handler":
+                for interno in ast.walk(no):
+                    self.assertNotIsInstance(
+                        interno, ast.Continue,
+                        "um `continue` no handler pula um dos tres passos",
+                    )
+                return
+        self.fail("handler nao encontrado")
 
 
 class TestMigrationCriaAColuna(unittest.TestCase):

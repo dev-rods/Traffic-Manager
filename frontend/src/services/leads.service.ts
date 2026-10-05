@@ -16,6 +16,7 @@ export interface LeadTotals {
  * (essa regra vive no uploader, e só lá).
  */
 export interface ConversionsSummary {
+  // --- Evento de COMPRA (`uploaded_at`). So confirmado, sessao passada.
   aguardando: number
   aguardando_cents: number
   enviadas: number
@@ -24,6 +25,19 @@ export interface ConversionsSummary {
   canceladas: number
   /** ISO, ou null quando nada subiu ainda. */
   ultimo_envio: string | null
+
+  // --- Evento de AGENDAMENTO (`booking_uploaded_at`). Todos, inclusive
+  // cancelado e falta - quem marcou agendou de verdade.
+  //
+  // Separado do de compra de proposito. Um numero so, somando os dois,
+  // esconderia um deles parar - e foi exatamente isso que deixou a
+  // `Lead - Whatsapp` morta e invisivel por 6 meses.
+  //
+  // Nao tem `retratadas`: este evento nao retrata.
+  ag_enviadas: number
+  ag_aguardando: number
+  ag_enviadas_cents: number
+  ag_ultimo_envio: string | null
 }
 
 interface LeadsResponse {

@@ -90,6 +90,9 @@ class TestResumoDeConversoes(unittest.TestCase):
             "aguardando": 21, "aguardando_cents": 544600,
             "enviadas": 0, "enviadas_cents": 0,
             "retratadas": 0, "canceladas": 8, "ultimo_envio": None,
+            # Evento de agendamento (PRD 017): contado SEPARADO do de compra.
+            "ag_enviadas": 0, "ag_aguardando": 0, "ag_enviadas_cents": 0,
+            "ag_ultimo_envio": None,
         }]
 
         r = self.service.resumo_de_conversoes("clinica-1")
@@ -111,6 +114,8 @@ class TestResumoDeConversoes(unittest.TestCase):
             "aguardando": 0, "aguardando_cents": 0, "enviadas": 0,
             "enviadas_cents": 0, "retratadas": 0, "canceladas": 0,
             "ultimo_envio": None,
+            "ag_enviadas": 0, "ag_aguardando": 0, "ag_enviadas_cents": 0,
+            "ag_ultimo_envio": None,
         }]
 
         self.service.resumo_de_conversoes("clinica-1")
@@ -178,7 +183,9 @@ class TestHandlerDegradaSemDerrubar(unittest.TestCase):
         self.servico.resumo_de_conversoes.return_value = {
             "aguardando": 21, "aguardando_cents": 544600, "enviadas": 0,
             "enviadas_cents": 0, "retratadas": 0, "canceladas": 8,
-            "ultimo_envio": datetime(2026, 9, 28, 16, 25, tzinfo=timezone.utc)}
+            "ultimo_envio": datetime(2026, 9, 28, 16, 25, tzinfo=timezone.utc),
+            "ag_enviadas": 0, "ag_aguardando": 0, "ag_enviadas_cents": 0,
+            "ag_ultimo_envio": None,}
         self.servico.conversoes_por_lead.return_value = {}
 
         corpo = self._corpo()
@@ -214,7 +221,9 @@ class TestHandlerDegradaSemDerrubar(unittest.TestCase):
         self.servico.resumo_de_conversoes.return_value = {
             "aguardando": 0, "aguardando_cents": 0, "enviadas": 0,
             "enviadas_cents": 0, "retratadas": 0, "canceladas": 0,
-            "ultimo_envio": None}
+            "ultimo_envio": None,
+            "ag_enviadas": 0, "ag_aguardando": 0, "ag_enviadas_cents": 0,
+            "ag_ultimo_envio": None,}
         self.servico.conversoes_por_lead.return_value = {}
 
         self.assertIsNone(self._corpo()["conversions"]["ultimo_envio"])
@@ -222,3 +231,91 @@ class TestHandlerDegradaSemDerrubar(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOsDoisEventosSaoContadosSeparados(unittest.TestCase):
+    """Risco 5.3 do PRD 017, e a razão dele.
+
+    A faixa lia só `uploaded_at`, do evento de compra. Com o evento de
+    agendamento no ar, ela declararia 15 de 45 enviados - 33% - e os 10
+    cancelados não apareceriam em nenhum dos dois números.
+
+    Somar os dois seria pior que mostrar um só: foi um total agregado que
+    deixou a `Lead - Whatsapp` morta e **invisível por 6 meses**, porque a
+    `Lead jardins` duplicada mantinha o número parecendo saudável. Esta função
+    existe para detectar silêncio - agregar derrotaria o propósito dela.
+    """
+
+    def _resumo(self, **over):
+        linha = {
+            "aguardando": 5, "aguardando_cents": 86300,
+            "enviadas": 15, "enviadas_cents": 423450,
+            "retratadas": 0, "canceladas": 10,
+            "ultimo_envio": None,
+            "ag_enviadas": 30, "ag_aguardando": 0,
+            "ag_enviadas_cents": 759700, "ag_ultimo_envio": None,
+        }
+        linha.update(over)
+        db = mock.MagicMock()
+        db.execute_query.return_value = [linha]
+        from src.services.lead_service import LeadService
+        return LeadService(db=db).resumo_de_conversoes("clinica-1")
+
+    def test_devolve_os_dois_conjuntos(self):
+        r = self._resumo()
+
+        self.assertEqual(r["enviadas"], 15)
+        self.assertEqual(r["ag_enviadas"], 30)
+
+    def test_nao_soma_os_dois(self):
+        """45 em qualquer campo seria a agregação que esconde um deles parar."""
+        r = self._resumo()
+
+        self.assertNotIn(45, r.values())
+
+    def test_cada_evento_tem_a_propria_data(self):
+        """É a data que denuncia um dos dois parar: a do que morreu fica velha
+        enquanto a do outro avança."""
+        de = datetime(2026, 10, 3, 20, 36, tzinfo=timezone.utc)
+        para = datetime(2026, 10, 31, 10, 0, tzinfo=timezone.utc)
+
+        r = self._resumo(ultimo_envio=de, ag_ultimo_envio=para)
+
+        self.assertEqual(r["ultimo_envio"], de)
+        self.assertEqual(r["ag_ultimo_envio"], para)
+
+    def test_a_query_le_as_duas_colunas(self):
+        """`uploaded_at` é da compra; `booking_uploaded_at`, do agendamento.
+        Ler só uma era o risco 5.3."""
+        db = mock.MagicMock()
+        db.execute_query.return_value = [{
+            "aguardando": 0, "aguardando_cents": 0, "enviadas": 0,
+            "enviadas_cents": 0, "retratadas": 0, "canceladas": 0,
+            "ultimo_envio": None, "ag_enviadas": 0, "ag_aguardando": 0,
+            "ag_enviadas_cents": 0, "ag_ultimo_envio": None,
+        }]
+        from src.services.lead_service import LeadService
+        LeadService(db=db).resumo_de_conversoes("clinica-1")
+
+        sql = db.execute_query.call_args.args[0]
+        self.assertIn("lc.uploaded_at", sql)
+        self.assertIn("lc.booking_uploaded_at", sql)
+
+    def test_o_agendamento_nao_filtra_status(self):
+        """Cancelado e falta contam igual: quem marcou agendou de verdade.
+        Um `a.status` no par do agendamento seria a regra errada."""
+        db = mock.MagicMock()
+        db.execute_query.return_value = [{
+            "aguardando": 0, "aguardando_cents": 0, "enviadas": 0,
+            "enviadas_cents": 0, "retratadas": 0, "canceladas": 0,
+            "ultimo_envio": None, "ag_enviadas": 0, "ag_aguardando": 0,
+            "ag_enviadas_cents": 0, "ag_ultimo_envio": None,
+        }]
+        from src.services.lead_service import LeadService
+        LeadService(db=db).resumo_de_conversoes("clinica-1")
+
+        sql = " ".join(db.execute_query.call_args.args[0].split())
+        # O trecho do agendamento nao pode carregar filtro de status.
+        i = sql.index("booking_uploaded_at")
+        trecho = sql[i:i + 400]
+        self.assertNotIn("a.status", trecho)

@@ -371,6 +371,21 @@ class LeadService:
         Consequência aceita: "aguardando envio" pode incluir alguma conversão
         que o uploader descarte pela janela de 90 dias do clique. Preferível a
         um número que parece exato e diverge em silêncio quando a regra mudar.
+
+        ## São DOIS eventos, e eles são contados SEPARADOS
+
+        Desde o PRD 017 há duas conversion actions: compra (`uploaded_at`) e
+        agendamento (`booking_uploaded_at`). Um número só, somando os dois,
+        esconderia um deles parar - e foi exatamente isso que deixou a
+        `Lead - Whatsapp` morta e invisível por 6 meses, porque a `Lead jardins`
+        duplicada mantinha o total parecendo saudável.
+
+        Esta função existe para detectar silêncio. Agregar derrotaria o
+        próprio propósito dela.
+
+        O evento de agendamento **não tem retratação** nem filtro de status:
+        cancelado e falta sobem igual, porque quem marcou agendou de verdade.
+        Por isso o par dele não tem `retratadas` nem olha `a.status`.
         """
         linha = self.db.execute_query(
             """
@@ -387,7 +402,17 @@ class LeadService:
                       AND lc.retracted_at IS NULL), 0)          AS enviadas_cents,
                 COUNT(*) FILTER (WHERE lc.retracted_at IS NOT NULL) AS retratadas,
                 COUNT(*) FILTER (WHERE a.status = 'CANCELLED')  AS canceladas,
-                MAX(lc.uploaded_at)                             AS ultimo_envio
+                MAX(lc.uploaded_at)                             AS ultimo_envio,
+
+                -- O evento de AGENDAMENTO. Sem filtro de status de proposito:
+                -- cancelado e falta sobem igual.
+                COUNT(*) FILTER (WHERE lc.booking_uploaded_at IS NOT NULL)
+                                                                AS ag_enviadas,
+                COUNT(*) FILTER (WHERE lc.booking_uploaded_at IS NULL)
+                                                                AS ag_aguardando,
+                COALESCE(SUM(lc.value_cents) FILTER (
+                    WHERE lc.booking_uploaded_at IS NOT NULL), 0) AS ag_enviadas_cents,
+                MAX(lc.booking_uploaded_at)                     AS ag_ultimo_envio
             FROM scheduler.lead_conversions lc
             JOIN scheduler.appointments a ON a.id = lc.appointment_id
             WHERE lc.clinic_id = %s
@@ -402,6 +427,10 @@ class LeadService:
             "retratadas": int(linha["retratadas"]),
             "canceladas": int(linha["canceladas"]),
             "ultimo_envio": linha["ultimo_envio"],
+            "ag_enviadas": int(linha["ag_enviadas"]),
+            "ag_aguardando": int(linha["ag_aguardando"]),
+            "ag_enviadas_cents": int(linha["ag_enviadas_cents"]),
+            "ag_ultimo_envio": linha["ag_ultimo_envio"],
         }
 
     def conversoes_por_lead(self, clinic_id: str, lead_ids: List[str]) -> Dict[str, str]:

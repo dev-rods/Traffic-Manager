@@ -299,54 +299,124 @@ function emReais(cents: number) {
  * mesma faixa dos KPIs roubaria hierarquia do que importa. Uma régua fina e
  * tipografia bastam para separar.
  */
-function EnvioParaOGoogle({ resumo }: { resumo: ConversionsSummary }) {
-  const nadaSubiu = resumo.enviadas === 0 && resumo.aguardando > 0
+interface LinhaDoEventoProps {
+  titulo: string
+  /** O que a conversão afirma ao Google. Vira o `title` do rótulo. */
+  explicacao: string
+  enviadas: number
+  enviadasCents: number
+  aguardando: number
+  aguardandoCents?: number
+  ultimoEnvio: string | null
+  /** Só o evento de compra tem. O de agendamento não retrata. */
+  valorZerado?: number
+}
 
+/**
+ * Uma linha da faixa: um evento de conversão.
+ *
+ * Extraída porque são dois eventos com a mesma forma, e porque a próxima
+ * conversion action — se houver — não deve exigir uma terceira cópia disso.
+ */
+function LinhaDoEvento({
+  titulo, explicacao, enviadas, enviadasCents, aguardando, aguardandoCents,
+  ultimoEnvio, valorZerado,
+}: LinhaDoEventoProps) {
+  const nadaSubiu = enviadas === 0 && aguardando > 0
+
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2">
+      <h3
+        title={explicacao}
+        className="w-28 flex-shrink-0 text-xs font-semibold text-gray-500"
+      >
+        {titulo}
+      </h3>
+
+      <Numero
+        label="Enviadas"
+        valor={enviadas}
+        detalhe={enviadas > 0 ? emReais(enviadasCents) : undefined}
+      />
+      <Numero
+        label="Aguardando envio"
+        valor={aguardando}
+        detalhe={
+          aguardando > 0 && aguardandoCents !== undefined
+            ? emReais(aguardandoCents)
+            : undefined
+        }
+        destaque={nadaSubiu}
+      />
+      {/* Nao e "Retratadas": a Data Manager API do Google nao retrata.
+          Ela so substitui o VALOR, e a conversao continua contando. Dizer
+          "retratada" a clinica afirmaria que foi desfeita - o que e falso,
+          e levaria a ler o relatorio como se o cancelamento tivesse sido
+          neutralizado. Ver infra/src/services/data_manager_service.py. */}
+      {valorZerado !== undefined && valorZerado > 0 && (
+        <Numero label="Valor zerado" valor={valorZerado} />
+      )}
+
+      {/* A data é POR EVENTO, e é ela que denuncia um dos dois parar: a do
+          que morreu fica velha enquanto a do outro avança. Uma data só, para
+          a faixa inteira, esconderia isso. */}
+      <p className="ml-auto text-xs text-gray-400">
+        {ultimoEnvio
+          ? `Último envio em ${new Date(ultimoEnvio).toLocaleDateString('pt-BR')}`
+          : 'Nenhum envio ainda'}
+      </p>
+
+      {nadaSubiu && (
+        <p className="w-full text-xs text-amber-700">
+          {aguardando} {aguardando > 1 ? 'estão registrados' : 'está registrado'}
+          {' '}aqui e o Google ainda não recebeu. O envio roda no último dia de
+          cada mês.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Os DOIS eventos, em linhas separadas.
+ *
+ * Nunca somados. Um número agregado esconderia um dos dois parar, e foi
+ * exatamente isso que deixou a `Lead - Whatsapp` morta e invisível por **6
+ * meses**: a `Lead jardins` duplicada mantinha o total parecendo saudável.
+ *
+ * Esta faixa existe para detectar silêncio — foram semanas com 24 leads
+ * convertidos e zero conversões enviadas, sem nada na interface dizendo isso.
+ * Agregar derrotaria o próprio propósito dela.
+ */
+function EnvioParaOGoogle({ resumo }: { resumo: ConversionsSummary }) {
   return (
     <section
       aria-label="Envio de conversões ao Google Ads"
-      className="border-t border-gray-100 pt-4"
+      className="space-y-3 border-t border-gray-100 pt-4"
     >
-      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-gray-400">
-          Google Ads
-        </h2>
+      <h2 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+        Google Ads
+      </h2>
 
-        <Numero
-          label="Enviadas"
-          valor={resumo.enviadas}
-          detalhe={resumo.enviadas > 0 ? emReais(resumo.enviadas_cents) : undefined}
-        />
-        <Numero
-          label="Aguardando envio"
-          valor={resumo.aguardando}
-          detalhe={resumo.aguardando > 0 ? emReais(resumo.aguardando_cents) : undefined}
-          destaque={nadaSubiu}
-        />
-        {/* Nao e "Retratadas": a Data Manager API do Google nao retrata.
-            Ela so substitui o VALOR, e a conversao continua contando. Dizer
-            "retratada" a clinica afirmaria que foi desfeita - o que e falso,
-            e levaria a ler o relatorio como se o cancelamento tivesse sido
-            neutralizado. Ver infra/src/services/data_manager_service.py. */}
-        {resumo.retratadas > 0 && (
-          <Numero label="Valor zerado" valor={resumo.retratadas} />
-        )}
+      <LinhaDoEvento
+        titulo="Compras"
+        explicacao="Agendamento confirmado cuja sessão já aconteceu"
+        enviadas={resumo.enviadas}
+        enviadasCents={resumo.enviadas_cents}
+        aguardando={resumo.aguardando}
+        aguardandoCents={resumo.aguardando_cents}
+        ultimoEnvio={resumo.ultimo_envio}
+        valorZerado={resumo.retratadas}
+      />
 
-        <p className="text-xs text-gray-400 ml-auto">
-          {resumo.ultimo_envio
-            ? `Último envio em ${new Date(resumo.ultimo_envio).toLocaleDateString('pt-BR')}`
-            : 'Nenhum envio ainda'}
-        </p>
-      </div>
-
-      {nadaSubiu && (
-        <p className="mt-2 text-xs text-amber-700">
-          {resumo.aguardando} agendamento{resumo.aguardando > 1 ? 's' : ''} de anúncio
-          {resumo.aguardando > 1 ? ' estão' : ' está'} registrado
-          {resumo.aguardando > 1 ? 's' : ''} aqui e o Google ainda não recebeu.
-          O envio roda no último dia de cada mês.
-        </p>
-      )}
+      <LinhaDoEvento
+        titulo="Agendamentos"
+        explicacao="Todo agendamento vindo de anúncio, inclusive cancelado e falta"
+        enviadas={resumo.ag_enviadas}
+        enviadasCents={resumo.ag_enviadas_cents}
+        aguardando={resumo.ag_aguardando}
+        ultimoEnvio={resumo.ag_ultimo_envio}
+      />
     </section>
   )
 }

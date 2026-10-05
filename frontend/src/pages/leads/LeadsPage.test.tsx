@@ -28,6 +28,7 @@ vi.mock('@/hooks/useLeads', () => ({
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ clinicId: 'clinica-1' }) }))
 
 const SEM_CONVERSAO: ConversionsSummary = {
+  // Evento de compra
   aguardando: 0,
   aguardando_cents: 0,
   enviadas: 0,
@@ -35,6 +36,11 @@ const SEM_CONVERSAO: ConversionsSummary = {
   retratadas: 0,
   canceladas: 0,
   ultimo_envio: null,
+  // Evento de agendamento (PRD 017). Contado SEPARADO, nunca somado.
+  ag_enviadas: 0,
+  ag_aguardando: 0,
+  ag_enviadas_cents: 0,
+  ag_ultimo_envio: null,
 }
 
 function monta({
@@ -89,8 +95,12 @@ describe('envio ao Google', () => {
       conversions: { ...SEM_CONVERSAO, aguardando: 21, aguardando_cents: 544600 },
     })
 
-    expect(screen.getByText(/o Google ainda não recebeu/i)).toBeInTheDocument()
-    expect(screen.getByText('Nenhum envio ainda')).toBeInTheDocument()
+    // Desde o PRD 017 a faixa tem DUAS linhas. Aqui só a de COMPRAS avisa:
+    // ela tem 21 pendentes. A de agendamentos tem zero, e sem pendência não
+    // há silêncio a denunciar - avisar ali seria ruído.
+    expect(screen.getAllByText(/o Google ainda não recebeu/i)).toHaveLength(1)
+    // Mas a DATA aparece nas duas, e vazia nas duas: nenhum dos dois subiu.
+    expect(screen.getAllByText('Nenhum envio ainda')).toHaveLength(2)
     expect(screen.getByText(/R\$\s?5\.446/)).toBeInTheDocument()
   })
 
@@ -105,6 +115,8 @@ describe('envio ao Google', () => {
       },
     })
 
+    // Nenhuma das duas avisa: a de compras subiu, e a de agendamentos não tem
+    // pendência nenhuma neste cenário.
     expect(screen.queryByText(/o Google ainda não recebeu/i)).not.toBeInTheDocument()
     expect(screen.getByText(/Último envio em/)).toBeInTheDocument()
   })
@@ -138,5 +150,83 @@ describe('envio ao Google', () => {
     // "Valor zerado", nao "Retratadas": o Google nao retrata, so troca o
     // valor - a conversao segue contando. Ver LeadsPage.tsx.
     expect(screen.getByText('Valor zerado')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Os dois eventos de conversão aparecem SEPARADOS (risco 5.3 do PRD 017).
+ *
+ * A faixa lia só `uploaded_at`, do evento de compra. Com o evento de
+ * agendamento, ela declararia 15 de 45 enviados - 33% - e os 10 cancelados não
+ * apareceriam em nenhum dos dois números.
+ *
+ * Somar os dois seria pior que mostrar um: foi um total agregado que deixou a
+ * `Lead - Whatsapp` morta e invisível por 6 meses, porque a `Lead jardins`
+ * duplicada mantinha o número parecendo saudável. Esta faixa existe para
+ * detectar silêncio - agregar derrotaria o propósito dela.
+ */
+describe('a faixa com os dois eventos', () => {
+  const TOTAIS: LeadTotals = { total: 83, convertidos: 24, nao_convertidos: 59 }
+
+  it('mostra uma linha para cada evento', () => {
+    monta({ totals: TOTAIS, conversions: { ...SEM_CONVERSAO, enviadas: 15, ag_enviadas: 30 } })
+
+    expect(screen.getByText('Compras')).toBeInTheDocument()
+    expect(screen.getByText('Agendamentos')).toBeInTheDocument()
+  })
+
+  it('não soma os dois num número só', () => {
+    // 15 compras + 30 agendamentos. "45" em qualquer lugar seria a agregação
+    // que esconde um dos dois parar.
+    monta({
+      totals: TOTAIS,
+      conversions: { ...SEM_CONVERSAO, enviadas: 15, ag_enviadas: 30 },
+    })
+
+    expect(screen.getByText('15')).toBeInTheDocument()
+    expect(screen.getByText('30')).toBeInTheDocument()
+    expect(screen.queryByText('45')).not.toBeInTheDocument()
+  })
+
+  it('cada linha tem a SUA data de último envio', () => {
+    // É a data que denuncia um dos dois parar: a do que morreu fica velha
+    // enquanto a do outro avança. Uma data só esconderia isso.
+    monta({
+      totals: TOTAIS,
+      conversions: {
+        ...SEM_CONVERSAO,
+        enviadas: 15, ultimo_envio: '2026-10-03T20:36:00Z',
+        ag_enviadas: 30, ag_ultimo_envio: '2026-10-31T10:00:00Z',
+      },
+    })
+
+    expect(screen.getByText(/03\/10\/2026/)).toBeInTheDocument()
+    expect(screen.getByText(/31\/10\/2026/)).toBeInTheDocument()
+  })
+
+  it('avisa na linha do evento que não subiu, e só nela', () => {
+    monta({
+      totals: TOTAIS,
+      conversions: {
+        ...SEM_CONVERSAO,
+        enviadas: 15, ultimo_envio: '2026-10-03T20:36:00Z',
+        ag_enviadas: 0, ag_aguardando: 30,
+      },
+    })
+
+    // Um aviso, não dois: a compra subiu, o agendamento não.
+    expect(screen.getAllByText(/o Google ainda não recebeu/)).toHaveLength(1)
+    expect(screen.getByText('Nenhum envio ainda')).toBeInTheDocument()
+  })
+
+  it('o agendamento NÃO mostra "valor zerado"', () => {
+    // Este evento não retrata: quem marcou e desmarcou agendou de verdade.
+    // Oferecer o número sugeriria uma correção que não existe para ele.
+    monta({
+      totals: TOTAIS,
+      conversions: { ...SEM_CONVERSAO, enviadas: 15, retratadas: 3, ag_enviadas: 30 },
+    })
+
+    expect(screen.getAllByText('Valor zerado')).toHaveLength(1)
   })
 })
