@@ -150,11 +150,28 @@ class TestOPrazoTemUmaFonteSo(unittest.TestCase):
 
     def test_quem_usa_importa_de_la(self):
         from src.functions.webhook import handler as webhook
-        from src.services import conversation_agent
         from src.services.bot_policy import TTL_DO_ATENDIMENTO
 
         self.assertEqual(webhook.ATTENDANT_TTL_SECONDS, TTL_DO_ATENDIMENTO)
-        self.assertEqual(conversation_agent.ATTENDANT_TTL_SECONDS, TTL_DO_ATENDIMENTO)
+
+    def test_o_agente_nao_calcula_mais_o_prazo(self):
+        """O conversation_agent perdeu o alias de propósito, e isso é o avanço.
+
+        Ele importava TTL_DO_ATENDIMENTO porque escrevia `attendant_active_until`
+        à mão, em cinco blocos copiados. Agora quem escreve é
+        `bot_policy.entrega_a_humano`, e o agente não tem como divergir do prazo
+        porque não conhece mais o prazo.
+
+        O teste é o contrário do que era: o alias VOLTAR significa que alguém
+        montou o handoff à mão outra vez.
+        """
+        from src.services import conversation_agent
+
+        self.assertFalse(
+            hasattr(conversation_agent, "ATTENDANT_TTL_SECONDS"),
+            "o agente voltou a conhecer o prazo; o handoff deve sair de "
+            "bot_policy.entrega_a_humano",
+        )
 
 
 

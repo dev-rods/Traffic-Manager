@@ -382,6 +382,26 @@ export interface ActiveConversation {
   bot_paused: boolean
   pause_reason: PauseReason
   attendant_active_until: number | null
+  /** Nome da paciente, quando ela esta cadastrada. Vazio para quem nao esta. */
+  name?: string
+  /**
+   * Epoch em segundos de quando o bot entregou a conversa.
+   *
+   * A fila ordena por ISTO, nao por `updated_at`: updated_at muda a cada
+   * mensagem que a paciente manda enquanto ninguem responde, e usa-lo
+   * empurraria a conversa mais negligenciada para o fim da lista.
+   */
+  handoff_requested_at: number | null
+  /** Motivo em vocabulario fechado (bot_policy.MOTIVOS_LEGIVEIS). */
+  handoff_reason: string | null
+  /**
+   * O motivo em portugues, pronto para a tela.
+   *
+   * Vem do servidor de proposito: a traducao mora em `bot_policy`, e repeti-la
+   * aqui criaria a mesma regra em dois lugares - divergencia que ninguem ve,
+   * porque um rotulo errado ainda parece um rotulo.
+   */
+  handoff_reason_label: string
   updated_at: string
 }
 

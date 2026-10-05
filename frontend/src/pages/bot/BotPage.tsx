@@ -2,13 +2,11 @@ import { useState } from 'react'
 import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
 import { useActiveConversations, useRecentConversations, useBotMetrics, usePauseBot, useResumeBot, ESPERA_RESPOSTA_RETOMADA_MS } from '@/hooks/useBot'
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton'
-import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import { Switch } from '@/components/ui/Switch'
 import { Card } from '@/components/ui/Card'
 import { ConversationList } from './components/ConversationList'
+import { FilaDeAtendimento } from './components/FilaDeAtendimento'
 import { ConversationThread } from './components/ConversationThread'
-import { formatPhone } from '@/utils/formatPhone'
 
 type MetricsPeriod = 'today' | 'week' | 'month'
 
@@ -17,7 +15,12 @@ export function BotPage() {
   const updateClinic = useUpdateClinic()
   const [period, setPeriod] = useState<MetricsPeriod>('today')
   const { data: metrics, isLoading: metricsLoading } = useBotMetrics(period)
-  const { data: activeData, isLoading: activeLoading } = useActiveConversations()
+  const {
+    data: activeData,
+    isLoading: activeLoading,
+    isError: activeError,
+    refetch: recarregarFila,
+  } = useActiveConversations()
   const { data: recentData, isLoading: recentLoading } = useRecentConversations()
   const pauseBot = usePauseBot()
   const resumeBot = useResumeBot()
@@ -29,7 +32,6 @@ export function BotPage() {
   // de conversa enquanto a resposta é escrita.
   const [answeringPhone, setAnsweringPhone] = useState<string | null>(null)
 
-  const pausedConversations = (activeData?.conversations ?? []).filter((c) => c.bot_paused)
   // A conversa selecionada carrega o motivo da pausa; sem ela o botão não sabe
   // se deve dizer "Retomar" (alguém pausou) ou "Ativar" (nunca foi elegível).
   const selectedConversation = (activeData?.conversations ?? []).find((c) => c.phone === selectedPhone)
@@ -95,34 +97,23 @@ export function BotPage() {
         ) : null}
       </section>
 
-      {/* Paused Conversations */}
-      {pausedConversations.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-gray-800 mb-3">
-            Conversas pausadas
-            <Badge variant="warning" className="ml-2">{pausedConversations.length}</Badge>
-          </h2>
-          <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
-            {pausedConversations.map((conv) => (
-              <div key={conv.phone} className="flex items-center justify-between px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{formatPhone(conv.phone)}</p>
-                  <p className="text-xs text-gray-400">
-                    {conv.state === 'HUMAN_HANDOFF' ? 'Handoff solicitado' : 'Atendente ativo'}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => resumeBot.mutate(conv.phone)}
-                  loading={resumeBot.isPending}
-                >
-                  Retomar bot
-                </Button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {/*
+        A fila de quem precisa de uma pessoa.
+        Fica ACIMA das conversas recentes de propósito: é a única parte desta
+        tela que representa trabalho pendente, e trabalho pendente não espera o
+        scroll. A lista anterior ficava escondida quando vazia; esta não, porque
+        a recepção precisa saber que olhou e não havia ninguém - ausência de
+        seção não é a mesma informação que "ninguém esperando".
+      */}
+      <FilaDeAtendimento
+        conversations={activeData?.conversations ?? []}
+        isLoading={activeLoading}
+        isError={activeError}
+        onRetry={() => void recarregarFila()}
+        onSelect={(phone, nome) => { setSelectedPhone(phone); setSelectedName(nome) }}
+        onResume={(phone) => resumeBot.mutate(phone)}
+        resumeLoading={resumeBot.isPending}
+      />
 
       {/* Conversations */}
       <section>

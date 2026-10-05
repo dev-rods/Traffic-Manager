@@ -47,6 +47,9 @@ SQL_STATEMENTS = [
         bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL',
         debounce_seconds INTEGER NOT NULL DEFAULT 68,
         bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}',
+        -- Procedimentos que o bot NAO atende, alem da lista do codigo.
+        -- Ver fora_do_escopo.
+        bot_procedimentos_fora_do_escopo TEXT[] NOT NULL DEFAULT '{}',
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -605,6 +608,16 @@ SQL_STATEMENTS = [
     # Separado de ALLOWED_PHONES do SSM de propósito: aquela governa também lembretes
     # de consulta e disparos do painel, e restringi-la deixaria pacientes sem lembrete.
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}'",
+
+    # Procedimentos que o bot NAO atende nesta clinica, ACRESCENTADOS a lista do
+    # codigo. Texto simples, nao regex: quem preenche e a recepcao.
+    #
+    # Vazio e o normal. A Essencia vende preenchimento, toxina botulinica e
+    # bioestimulador, e os tres ja estao em [fora_do_escopo.PROCEDIMENTOS] -
+    # esta coluna existe para o procedimento novo que entra no cardapio antes de
+    # a gente saber dele, e que a clinica consegue barrar sozinha.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
+    "bot_procedimentos_fora_do_escopo TEXT[] NOT NULL DEFAULT '{}'",
 
     # Dados de cadastro coletados na confirmação do agendamento.
     # Sem estas colunas o bot pediria CPF e data de nascimento e descartaria a

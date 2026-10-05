@@ -15,12 +15,13 @@ from src.services.consumo import registra_total as registra_consumo_total
 from src.services.consumo import soma as soma_consumo
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
 from src.services.bot_policy import (
-    CAMPO_DE_PAUSA,
-    PAUSA_HANDOFF,
     entrega_por_instabilidade,
     esta_pausado,
 )
 from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
+from src.services.fora_do_escopo import INSTRUCAO_DO_PROMPT as INSTRUCAO_FORA_DO_ESCOPO
+from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
+from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services.calendario import bloco_de_contexto
@@ -41,7 +42,15 @@ MAX_AGENT_ITERATIONS = 5
 MAX_HISTORY_PAIRS = 20
 # O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
 # e regra duplicada diverge em silencio quando alguem muda so um deles.
-from src.services.bot_policy import TTL_DO_ATENDIMENTO as ATTENDANT_TTL_SECONDS
+from src.services.bot_policy import (
+    MOTIVO_AFIRMOU_MENOR,
+    MOTIVO_AGENDA_SEM_RESPALDO,
+    MOTIVO_AREAS_EM_LACO,
+    MOTIVO_FORA_DO_ESCOPO,
+    MOTIVO_INSISTIU_CADASTRO,
+    MOTIVO_PEDIDO,
+    entrega_a_humano,
+)
 
 # Quantos resultados de tool a sessão carrega adiante para respaldar repetição
 # de fato já consultado. Alto o bastante para uma negociação de data (a pessoa
@@ -258,6 +267,25 @@ class ConversationAgent:
             user_content = incoming.button_text or incoming.button_id
         history.append({"role": "user", "content": user_content})
 
+        # ── Procedimento que o bot não atende ───────────────────────────
+        # Antes do agente de propósito: a pergunta sobre botox nem chega ao
+        # modelo, então não há como ele compor resposta a partir de um item de
+        # FAQ de laser que casou "sessão" ou "preço". Ver fora_do_escopo.
+        if not gatilho:
+            citado = procedimento_fora_do_escopo(
+                user_content, self._config_fora_do_escopo(clinic_id)
+            )
+            if citado:
+                logger.info(
+                    f"[ForaDoEscopo] {phone}: citou {citado} -> especialista, "
+                    f"sem passar pelo modelo"
+                )
+                session["agent_history"] = self._truncate_history(history)
+                session["mode"] = "agent"
+                entrega_a_humano(session, MOTIVO_FORA_DO_ESCOPO)
+                self._save_session(clinic_id, phone, session)
+                return self._build_outgoing(TEXTO_FORA_DO_ESCOPO, None)
+
         # 5. Agent loop
         # ── Pré-carga determinística ────────────────────────────────────
         # O agente decide sozinho quando consultar, e em 02/09/2026 decidiu que
@@ -343,6 +371,9 @@ class ConversationAgent:
         tools = get_tool_definitions(format="anthropic")
         pending_buttons = None
         handoff_requested = False
+        # O MOTIVO que a tool recebeu. Era descartado, e a conversa chegava à
+        # fila do painel sem dizer o que a pessoa queria. Ver bot_policy.
+        motivo_do_handoff = MOTIVO_PEDIDO
         text_parts = []
         # Perguntou sobre agenda? Então a primeira jogada é consultar, não
         # escrever. Deixar a escolha com o modelo fez o bot listar nove horários
@@ -480,6 +511,7 @@ class ConversationAgent:
 
                     if tool_use["name"] == "request_human_handoff" and result.get("handoff_requested"):
                         handoff_requested = True
+                        motivo_do_handoff = result.get("reason") or MOTIVO_PEDIDO
 
                     # Trava que recusa o mesmo duas vezes não está protegendo,
                     # está presa: a resposta da paciente não destrava, e
@@ -538,10 +570,7 @@ class ConversationAgent:
 
         # 6. Handle handoff
         if handoff_requested:
-            session["state"] = "HUMAN_HANDOFF"
-            session["human_handoff_requested_at"] = int(time.time())
-            session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
-            session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+            entrega_a_humano(session, motivo_do_handoff)
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
@@ -570,10 +599,7 @@ class ConversationAgent:
             )
             pending_buttons = None
             handoff_requested = True
-            session["state"] = "HUMAN_HANDOFF"
-            session["human_handoff_requested_at"] = int(time.time())
-            session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
-            session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+            entrega_a_humano(session, MOTIVO_AREAS_EM_LACO)
 
         # Ultima rede do pedido de cadastro. So chega aqui quem ja levou um PARE
         # explicito e insistiu. Rarissimo por construcao - o roteiro nem esta
@@ -592,10 +618,7 @@ class ConversationAgent:
                 )
                 pending_buttons = None
                 handoff_requested = True
-                session["state"] = "HUMAN_HANDOFF"
-                session["human_handoff_requested_at"] = int(time.time())
-                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
-                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+                entrega_a_humano(session, MOTIVO_INSISTIU_CADASTRO)
 
         # A restrição do menor de idade é afirmação sobre a pessoa, não sobre a
         # agenda - fatos_sem_origem não a enxerga. Sem esta trava, "você precisa
@@ -614,10 +637,7 @@ class ConversationAgent:
                 )
                 pending_buttons = None
                 handoff_requested = True
-                session["state"] = "HUMAN_HANDOFF"
-                session["human_handoff_requested_at"] = int(time.time())
-                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
-                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+                entrega_a_humano(session, MOTIVO_AFIRMOU_MENOR)
         except Exception as e:
             logger.error(f"[MenorDeIdade] Falha ao conferir a resposta de {phone}: {e}")
 
@@ -656,11 +676,8 @@ class ConversationAgent:
                     )
                 pending_buttons = None
                 handoff_requested = True
-                session["state"] = "HUMAN_HANDOFF"
-                session["human_handoff_requested_at"] = int(time.time())
-                session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
                 # A pausa nao vence: so o "Retomar bot" no painel a remove.
-                session[CAMPO_DE_PAUSA] = PAUSA_HANDOFF
+                entrega_a_humano(session, MOTIVO_AGENDA_SEM_RESPALDO)
             elif sem_origem:
                 logger.warning(
                     f"[Proveniencia] {phone} afirmou sem respaldo: {sorted(sem_origem)} "
@@ -739,6 +756,30 @@ class ConversationAgent:
         return outgoing
 
     # ── System prompt ──
+
+    def _config_fora_do_escopo(self, clinic_id):
+        """Só a coluna dos termos extras, não a clínica inteira.
+
+        Consulta própria porque a guarda roda ANTES do prompt ser montado - é
+        justamente o ponto: a mensagem não chega ao modelo. Uma linha por
+        mensagem recebida, contra o risco de responder preço de laser a quem
+        perguntou de injetável.
+
+        Falha vira dict vazio: sem os termos da clínica a lista do código ainda
+        barra o que ela nomeia, e isso é melhor do que derrubar a conversa.
+        """
+        try:
+            linhas = self.db.execute_query(
+                "SELECT bot_procedimentos_fora_do_escopo FROM scheduler.clinics "
+                "WHERE clinic_id = %s AND active = TRUE",
+                (clinic_id,),
+            )
+            return linhas[0] if linhas else {}
+        except Exception as e:
+            logger.warning(
+                f"[ForaDoEscopo] não li os termos de {clinic_id}: {e}"
+            )
+            return {}
 
     def _build_system_prompt(self, clinic_id, phone, session=None):
         """Build the system prompt with clinic context.
@@ -837,6 +878,12 @@ class ConversationAgent:
             "4. Isso vale mesmo para o que parece óbvio - intervalo entre sessões, número\n"
             "   de sessões, cuidados, contraindicações. Cada clínica tem o seu protocolo.\n"
         )
+
+        # Segunda rede do fora_do_escopo. A lista determinística barra o que ela
+        # nomeia; isto cobre o procedimento que a clínica vende e ninguém
+        # cadastrou - e vem DEPOIS do bloco de dúvidas de propósito, porque
+        # precisa vencer o "toda dúvida começa com get_faq_answer".
+        system_prompt += INSTRUCAO_FORA_DO_ESCOPO
 
         # Regra de datas: fica aqui, no prefixo cacheado, porque é estática. O
         # que muda por mensagem é o bloco CALENDÁRIO, que entra no turno da

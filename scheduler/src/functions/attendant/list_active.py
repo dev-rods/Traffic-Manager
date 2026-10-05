@@ -6,7 +6,12 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 from src.utils.http import http_response, require_api_key, extract_path_param
-from src.services.bot_policy import esta_pausado, should_bot_reply
+from src.services.bot_policy import (
+    CAMPO_DO_MOTIVO,
+    esta_pausado,
+    motivo_do_handoff_legivel,
+    should_bot_reply,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -102,6 +107,16 @@ def handler(event, context):
                     else None
                 ),
                 "attendant_active_until": attendant_until,
+                # Desde quando espera. A fila do painel ordena por isto: quem
+                # espera há mais tempo é quem a recepção precisa ver primeiro,
+                # e `updated_at` não serve - ele muda a cada mensagem que a
+                # paciente manda enquanto ninguém responde, e empurraria a
+                # conversa mais negligenciada para o fim da lista.
+                "handoff_requested_at": handoff_at,
+                # POR QUE espera. Sem isto a fila é uma lista de telefones, e
+                # descobrir o que cada uma quer custa abrir a thread inteira.
+                "handoff_reason": session.get(CAMPO_DO_MOTIVO) or None,
+                "handoff_reason_label": motivo_do_handoff_legivel(session),
                 "updated_at": updated_at,
             })
 

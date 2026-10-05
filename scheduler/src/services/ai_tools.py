@@ -11,6 +11,12 @@ from src.services.confirmacao_de_areas import (
 )
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
 from src.services.areas_ambiguas import recado_de_recusa as recado_de_ambiguidade
+from src.services.bot_policy import (
+    MOTIVOS_DO_MODELO,
+    MOTIVOS_LEGIVEIS,
+    MOTIVO_PEDIDO,
+    MOTIVO_SEM_RESPOSTA,
+)
 from src.services.busca_no_faq import busca as busca_no_faq
 from src.services.calendario import hoje_brt
 from src.services.idade import (
@@ -341,9 +347,21 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
+                    # Vocabulário FECHADO: o valor vira rótulo na fila do
+                    # painel, e texto livre faria a fila falar uma língua
+                    # diferente a cada conversa. Fora da lista cai no genérico.
+                    # A régua está em bot_policy.MOTIVOS_LEGIVEIS.
                     "reason": {
                         "type": "string",
-                        "description": "Reason for handoff (e.g., 'patient_request', 'incompreensão', 'complex_issue')",
+                        "enum": list(MOTIVOS_DO_MODELO),
+                        "description": (
+                            "Por que a conversa vai para uma pessoa. "
+                            "procedimento_fora_do_escopo: perguntou sobre procedimento "
+                            "que não é depilação a laser. faq_sem_resposta: dúvida que "
+                            "o FAQ não cobre. pedido_da_paciente: ela pediu para falar "
+                            "com alguém. incompreensao: você não entendeu depois de "
+                            "tentar esclarecer."
+                        ),
                     },
                 },
                 "required": ["reason"],
@@ -742,7 +760,8 @@ class ToolExecutor:
             "message": (
                 "Nenhuma resposta encontrada no FAQ desta clínica. Você NÃO SABE a "
                 "resposta. Não use conhecimento geral. Diga que vai confirmar com uma "
-                "especialista e chame request_human_handoff."
+                "especialista e chame request_human_handoff com "
+                f'reason="{MOTIVO_SEM_RESPOSTA}".'
             ),
         }
 
@@ -962,7 +981,25 @@ class ToolExecutor:
         return {"success": True, "appointment_id": appointment_id}
 
     def _tool_request_human_handoff(self, args, clinic_id, phone, ctx):
-        reason = args.get("reason", "patient_request")
+        """Entrega a conversa, dizendo POR QUÊ.
+
+        O `reason` ia e voltava sem ninguém gravar, e a conversa chegava à fila
+        do painel como um telefone sem contexto - a atendente lia a thread
+        inteira para descobrir o que a pessoa queria. Agora o agente o persiste
+        na sessão (ver bot_policy.entrega_a_humano), e o painel o mostra.
+
+        Motivo fora do vocabulário vira o genérico: o modelo escreve o que
+        quiser aí, e valor livre virando rótulo de tela faria a fila falar uma
+        língua diferente a cada conversa.
+        """
+        reason = str(args.get("reason") or "").strip()
+        if reason not in MOTIVOS_LEGIVEIS:
+            if reason:
+                logger.info(
+                    f"[Handoff] {phone}: motivo {reason!r} fora do vocabulário, "
+                    f"registrando como {MOTIVO_PEDIDO}"
+                )
+            reason = MOTIVO_PEDIDO
         return {"success": True, "handoff_requested": True, "reason": reason}
 
     def _tool_present_options(self, args, clinic_id, phone, ctx):
