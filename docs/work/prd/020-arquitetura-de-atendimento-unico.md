@@ -719,7 +719,7 @@ alguém ligar TTL depois, `human_until` e `cooldown_until` desaparecem com o ite
 
 ## Status (preencher após conclusão)
 
-- [x] Pendente
-- [ ] Spec gerada
+- [ ] Pendente
+- [x] Spec gerada: `docs/work/spec/020-arquitetura-de-atendimento-unico.md` (05/10/2026)
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
