@@ -9,7 +9,6 @@ import unittest
 
 from src.services.campanha import (
     DURACAO_PADRAO_DIAS,
-    MAX_DATAS,
     MODO_REAGENDAMENTO,
     abre,
     datas_da_campanha,
@@ -33,9 +32,11 @@ class TestAbre(unittest.TestCase):
     def test_guarda_as_datas(self):
         self.assertEqual(abre(DATAS, agora=AGORA)["datas"], DATAS)
 
-    def test_corta_no_maximo_de_datas(self):
-        c = abre(DATAS + ["2026-10-28", "2026-11-04"], agora=AGORA)
-        self.assertEqual(len(c["datas"]), MAX_DATAS)
+    def test_nao_corta_as_datas(self):
+        """Havia um teto de 3; saiu em 06/10/2026. O bot oferece todas as que
+        a atendente marcou na tela."""
+        muitas = DATAS + ["2026-10-28", "2026-11-04", "2026-11-11"]
+        self.assertEqual(abre(muitas, agora=AGORA)["datas"], muitas)
 
     def test_prazo_parametrizavel(self):
         self.assertEqual(abre(DATAS, dias=14, agora=AGORA)["expira_em"],

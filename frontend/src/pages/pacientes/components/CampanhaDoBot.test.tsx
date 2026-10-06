@@ -27,19 +27,27 @@ describe('CampanhaDoBot', () => {
     expect(screen.getByRole('button', { name: '28/10' })).toBeInTheDocument()
   })
 
-  it('trava a seleção em 3 datas', async () => {
+  it('aceita quantas datas forem clicadas', async () => {
+    // Havia um teto de 3 (09/09/2026); saiu em 06/10/2026 a pedido do André.
+    const user = userEvent.setup()
     render(<Wrapper />)
-    // As 3 primeiras já vêm marcadas; a quarta não pode entrar.
-    expect(screen.getByRole('button', { name: '28/10' })).toBeDisabled()
+
+    const quarta = screen.getByRole('button', { name: '28/10' })
+    expect(quarta).toBeEnabled()
+    await user.click(quarta)
+
+    for (const nome of ['07/10', '14/10', '21/10', '28/10']) {
+      expect(screen.getByRole('button', { name: nome })).toHaveAttribute('aria-pressed', 'true')
+    }
   })
 
-  it('libera a quarta quando uma sai', async () => {
+  it('desmarca ao clicar de novo', async () => {
     const user = userEvent.setup()
     render(<Wrapper />)
 
     await user.click(screen.getByRole('button', { name: '07/10' }))
 
-    expect(screen.getByRole('button', { name: '28/10' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '07/10' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('avisa quando não sobra nenhuma data', async () => {

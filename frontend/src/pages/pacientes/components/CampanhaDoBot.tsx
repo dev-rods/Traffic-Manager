@@ -1,5 +1,3 @@
-const MAX_DATAS = 3
-
 interface CampanhaDoBotProps {
   datasDisponiveis: string[]
   selecionadas: string[]
@@ -28,7 +26,7 @@ export function CampanhaDoBot({
   const alterna = (data: string) => {
     if (selecionadas.includes(data)) {
       onSelecionar(selecionadas.filter((d) => d !== data))
-    } else if (selecionadas.length < MAX_DATAS) {
+    } else {
       onSelecionar([...selecionadas, data].sort())
     }
   }
@@ -63,25 +61,22 @@ export function CampanhaDoBot({
       {ativa && (
         <div>
           <span className="text-xs font-medium text-gray-500 block mb-1.5">
-            Datas que o bot vai oferecer (até {MAX_DATAS})
+            Datas que o bot vai oferecer
           </span>
           <div className="flex flex-wrap gap-1.5">
             {datasDisponiveis.map((d) => {
               const marcada = selecionadas.includes(d)
-              const cheio = !marcada && selecionadas.length >= MAX_DATAS
               return (
                 <button
                   key={d}
                   type="button"
-                  disabled={cheio}
+                  aria-pressed={marcada}
                   onClick={() => alterna(d)}
                   className={[
                     'px-2.5 py-1 rounded-md text-sm border transition-colors',
                     marcada
                       ? 'bg-emerald-50 border-emerald-400 text-emerald-800 font-medium'
-                      : cheio
-                        ? 'border-gray-200 text-gray-300 cursor-not-allowed'
-                        : 'border-gray-200 text-gray-600 hover:border-gray-300',
+                      : 'border-gray-200 text-gray-600 hover:border-gray-300',
                   ].join(' ')}
                 >
                   {rotulo(d)}

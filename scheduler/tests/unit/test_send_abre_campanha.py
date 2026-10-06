@@ -13,7 +13,7 @@ import json
 import unittest
 from unittest import mock
 
-from src.services.campanha import MAX_DATAS, MODO_REAGENDAMENTO
+from src.services.campanha import MODO_REAGENDAMENTO
 
 CLINIC = "clinicaessenciaestetica-9668a4"
 FONE = "5511970522647"
@@ -126,13 +126,14 @@ class TestValidacao(unittest.TestCase):
                 self.assertEqual(resposta["statusCode"], 400)
                 abertura.assert_not_called()
 
-    def test_datas_demais_e_400(self):
-        muitas = DATAS + ["2026-10-28"]
+    def test_muitas_datas_sao_aceitas(self):
+        """O teto de 3 saiu em 06/10/2026: quantas a atendente marcar."""
+        muitas = DATAS + ["2026-10-28", "2026-11-04", "2026-11-11", "2026-11-18"]
         resposta, abertura = dispara({**BASE, "campanha": {"datas": muitas}})
 
-        self.assertEqual(resposta["statusCode"], 400)
-        self.assertGreater(len(muitas), MAX_DATAS)
-        abertura.assert_not_called()
+        self.assertEqual(resposta["statusCode"], 200, resposta)
+        abertura.assert_called_once()
+        self.assertEqual(abertura.call_args[0][3]["datas"], muitas)
 
     def test_validacao_acontece_antes_do_envio(self):
         """400 por campanha inválida não pode ter mandado mensagem antes."""
