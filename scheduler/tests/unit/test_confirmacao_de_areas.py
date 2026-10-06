@@ -194,5 +194,64 @@ class TestFracaoEDita(unittest.TestCase):
         self.assertNotIn("a-perna-completa", liberadas)
 
 
+class TestOsOutrosDoisLacosDoDia(unittest.TestCase):
+    """06/10/2026: três conversas de campanha caíram para a atendente por nome
+    de cadastro inalcançável. Contra o catálogo REAL, porque as tolerâncias
+    dependem de quem é vizinho de quem."""
+
+    def setUp(self):
+        from tests.unit.catalogo_real import AREAS
+        self.catalogo = AREAS
+
+    def test_virilha_completa_e_peri_anal(self):
+        turnos = conversa(
+            ("user", "Oiii girls!\nDia 22 vocês tem que horas?"),
+            ("user", "Queria fazer a mesma coisa que antes. \nBuço + virilha completa e peri anal"),
+        )
+        liberadas = areas_conversadas(turnos, self.catalogo)
+        self.assertIn("Virilha Completa + ânus", liberadas)
+        self.assertIn("Buço", liberadas)
+
+    def test_costas_ombro_peitoral_e_abdomen(self):
+        turnos = conversa(
+            ("user", "As de sempre, costas, ombro, peitoral e abdômen"),
+            ("assistant", "Só para confirmar: as áreas seriam *costas, ombros, peitoral* e *abdômen* (sem linha alba), certo?"),
+            ("user", "sim"),
+        )
+        liberadas = areas_conversadas(turnos, self.catalogo)
+        for area in ("Costas total + ombros", "Peitoral", "Abdômen"):
+            self.assertIn(area, liberadas)
+
+    def test_plural_onde_o_plural_distingue_e_exato(self):
+        """'Perna Completa' (uma) e 'Pernas Completas' (as duas) são áreas
+        diferentes: 'perna completa' libera uma só."""
+        liberadas = areas_conversadas(conversa(("user", "quero perna completa")), self.catalogo)
+        self.assertIn("Perna Completa", liberadas)
+        self.assertNotIn("Pernas Completas", liberadas)
+        liberadas = areas_conversadas(conversa(("user", "as pernas completas")), self.catalogo)
+        self.assertIn("Pernas Completas", liberadas)
+        self.assertNotIn("Perna Completa", liberadas)
+
+    def test_qualificador_fica_obrigatorio_quando_ha_vizinha(self):
+        """'virilha' sozinha não escolhe entre Completa, Simples e Cavada."""
+        liberadas = areas_conversadas(conversa(("user", "quero fazer virilha")), self.catalogo)
+        for area in ("Virilha Completa", "Virilha Simples", "Virilha Cavada", "Virilha Completa + ânus"):
+            self.assertNotIn(area, liberadas)
+
+    def test_costas_sem_total_libera_porque_nao_ha_outra_costas(self):
+        liberadas = areas_conversadas(conversa(("user", "costas e ombros")), self.catalogo)
+        self.assertIn("Costas total + ombros", liberadas)
+
+    def test_anus_sozinho_nao_vira_virilha(self):
+        liberadas = areas_conversadas(conversa(("user", "perianal")), self.catalogo)
+        self.assertIn("Perianal/ânus", liberadas)
+        self.assertNotIn("Virilha Completa + ânus", liberadas)
+
+    def test_sem_catalogo_continua_exato(self):
+        """Quem chama só com o nome não ganha tolerância nenhuma."""
+        from src.services.confirmacao_de_areas import _aparece, _normaliza
+        self.assertFalse(_aparece("Costas total + ombros", _normaliza("costas e ombros")))
+        self.assertFalse(_aparece("Ombros", _normaliza("ombro")))
+
 if __name__ == "__main__":
     unittest.main()
