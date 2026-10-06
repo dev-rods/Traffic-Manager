@@ -158,7 +158,45 @@ class AvailabilityEngine:
             return []
 
     def get_available_slots_multi(self, clinic_id: str, target_date: str, total_duration: int) -> List[str]:
-        """Calculate available slots using a direct duration value (sum of selected services)."""
+        """Calculate available slots using a direct duration value (sum of selected services).
+
+        A lista anda de `duracao + buffer` em `duracao + buffer` a partir do
+        inicio de cada janela livre. E uma GRADE, nao a lista de todo horario
+        que cabe: numa janela 16:25-18:25 com sessao de 35 min ela devolve
+        16:25, 17:00 e 17:35, e 17:45 nao aparece embora caiba. Quem pergunta
+        por um horario exato usa `cabe_no_horario`. Ver PR do dia 06/10/2026
+        (Olivia, dia 21/10 as 17:45).
+        """
+        try:
+            free_windows, buffer_minutes = self.janelas_livres(clinic_id, target_date)
+            slot_minutes = self._generate_slots_in_windows(free_windows, total_duration, buffer_minutes)
+            return [_minutes_to_time_str(s) for s in slot_minutes]
+        except Exception as e:
+            logger.error(f"[AvailabilityEngine] Erro ao calcular slots multi: {e}")
+            return []
+
+    def cabe_no_horario(self, clinic_id: str, target_date: str, total_duration: int, hora: str) -> bool:
+        """A sessao de `total_duration` minutos cabe comecando exatamente em `hora`?
+
+        Confere contra as janelas livres, nao contra a grade: a grade e um
+        conjunto de sugestoes, e a pergunta "tem 17:45?" tem resposta
+        independente de 17:45 estar entre as sugestoes. Falha fechada: erro
+        ou hora ilegivel e "nao cabe".
+        """
+        try:
+            inicio = _time_to_minutes(hora)
+            free_windows, _ = self.janelas_livres(clinic_id, target_date)
+            return any(
+                w_inicio <= inicio and inicio + total_duration <= w_fim
+                for w_inicio, w_fim in free_windows
+            )
+        except Exception as e:
+            logger.error(f"[AvailabilityEngine] Erro ao conferir {hora} em {target_date}: {e}")
+            return False
+
+    def janelas_livres(self, clinic_id: str, target_date: str):
+        """(janelas livres em minutos, buffer) do dia: regras menos excecoes
+        menos agendamentos confirmados. Lista vazia quando o dia esta fechado."""
         try:
             # 1. Fetch clinic buffer
             buffer_minutes = self._get_buffer_minutes(clinic_id)
@@ -177,7 +215,7 @@ class AvailabilityEngine:
                 (clinic_id, day_of_week, target_date),
             )
             if not rules:
-                return []
+                return [], buffer_minutes
 
             # Fixed-date rules take priority over recurring day_of_week rules
             fixed_rules = [r for r in rules if r.get("rule_date")]
@@ -195,7 +233,7 @@ class AvailabilityEngine:
 
             for exc in exceptions:
                 if exc["exception_type"] == "BLOCKED":
-                    return []
+                    return [], buffer_minutes
                 elif exc["exception_type"] == "SPECIAL_HOURS":
                     rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
 
@@ -208,15 +246,12 @@ class AvailabilityEngine:
                 (clinic_id, target_date),
             )
 
-            # 6. Calculate free windows and generate slots in gaps
-            free_windows = self._calculate_free_windows(rules, appointments, buffer_minutes)
-            slot_minutes = self._generate_slots_in_windows(free_windows, total_duration, buffer_minutes)
-
-            return [_minutes_to_time_str(s) for s in slot_minutes]
+            # 6. Calculate free windows
+            return self._calculate_free_windows(rules, appointments, buffer_minutes), buffer_minutes
 
         except Exception as e:
-            logger.error(f"[AvailabilityEngine] Erro ao calcular slots multi: {e}")
-            return []
+            logger.error(f"[AvailabilityEngine] Erro ao calcular janelas livres: {e}")
+            return [], 0
 
     def get_available_days_multi(self, clinic_id: str, total_duration: int, max_dates: Optional[int] = None) -> List[str]:
         """Find available days using a direct duration value (sum of selected services)."""

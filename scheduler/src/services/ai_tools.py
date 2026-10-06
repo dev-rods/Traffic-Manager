@@ -43,6 +43,19 @@ _PT_MONTH = [
 ]
 
 
+def _normaliza_hora(valor) -> Optional[str]:
+    """'17:45', '17h45', '17:45h', '17h' -> 'HH:MM'. Lixo -> None."""
+    if not valor:
+        return None
+    m = re.match(r"^\s*(\d{1,2})\s*[:hH]\s*(\d{2})?\s*[hH]?\s*$", str(valor))
+    if not m:
+        return None
+    h, mm = int(m.group(1)), int(m.group(2) or 0)
+    if not (0 <= h <= 23 and 0 <= mm <= 59):
+        return None
+    return f"{h:02d}:{mm:02d}"
+
+
 def _format_pt_br_date_label(iso_date: str) -> str:
     """Format an ISO date (YYYY-MM-DD) as 'Terça, 12 de maio' (PT-BR)."""
     try:
@@ -118,13 +131,29 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_time_slots",
-            "description": "Get available time slots for a specific date and the selected areas. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
+            "description": (
+                "Get available time slots for a specific date and the selected areas. "
+                "Only call AFTER the patient has chosen a date from check_availability. "
+                "Returns `available_slots` (HH:MM strings, a GRID of suggestions - not "
+                "every time that fits) and `date_label` (PT-BR formatted date - use for "
+                "display). If the patient asked for a SPECIFIC time, pass it as "
+                "`horario_pedido`: the result then says whether that exact time fits "
+                "(`horario_pedido_disponivel`). Never tell the patient a time is "
+                "unavailable only because it is not in the grid."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "date": {
                         "type": "string",
                         "description": "Date in YYYY-MM-DD format",
+                    },
+                    "horario_pedido": {
+                        "type": "string",
+                        "description": (
+                            "The exact time the patient asked for, HH:MM, when they asked "
+                            "for one (e.g. '17:45'). Omit when they did not."
+                        ),
                     },
                     "service_area_pairs": {
                         "type": "array",
@@ -682,11 +711,29 @@ class ToolExecutor:
             return {"error": "Availability engine not available"}
         total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
         slots = self.availability_engine.get_available_slots_multi(clinic_id, target_date, total_duration)
-        return {
+        resultado = {
             "date": target_date,
             "date_label": _format_pt_br_date_label(target_date),
             "available_slots": slots,
         }
+
+        # A grade sugere; ela nao responde "tem 17:45?". Em 06/10/2026 a
+        # Olivia pediu 17:45 no dia 21/10, a janela 16:25-18:25 estava livre,
+        # a grade de 35 em 35 devolveu 16:25, 17:00 e 17:35, e o bot disse que
+        # 17:45 nao existia. Cabia. Quem pergunta por hora exata recebe a
+        # resposta exata, e a hora entra na lista para a proveniencia a
+        # respaldar.
+        pedido = _normaliza_hora(args.get("horario_pedido"))
+        if pedido:
+            cabe = self.availability_engine.cabe_no_horario(
+                clinic_id, target_date, total_duration, pedido
+            )
+            resultado["horario_pedido"] = pedido
+            resultado["horario_pedido_disponivel"] = cabe
+            if cabe and pedido not in slots:
+                resultado["available_slots"] = sorted(set(slots) | {pedido})
+            logger.info(f"[Slots] {phone}: pediu {pedido} em {target_date} -> {'cabe' if cabe else 'nao cabe'}")
+        return resultado
 
     def _tool_sem_consulta_necessaria(self, args, clinic_id, phone, ctx):
         """A saída para quando a mensagem realmente não pede dado nenhum.
