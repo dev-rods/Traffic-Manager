@@ -297,18 +297,24 @@ quando `start > end`. Inclusiva no início, exclusiva no fim, como `is_open`:
 `outbound/processor`; passa por `fuso(clinic)`. Hoje uma clínica fora de
 Brasília já teria o horário comercial errado.
 
-### 3.7 `services/reminder_service.py` e `functions/reminder/processor.py` (fase 2)
+### 3.7 `services/reminder_service.py` e `functions/reminder/processor.py` (feito antes da fase 2)
 
-- `schedule_reminder` recebe `clinic` e monta `dt` com `fuso(clinic)`, depois
-  `.astimezone(timezone.utc)` antes de formatar. Teste: sessão 07:15 em
-  `America/Sao_Paulo` grava `sendAt` `10:15Z`.
-- Processador, antes de enviar: carrega a sessão real; `pode_iniciar(clinic,
-  session, phone, transacional=True)` falso -> **adia** (`sendAt =
-  fim_do_silencio`), não falha. Confere o agendamento em `appointments`:
-  `status != 'CONFIRMED'` -> `mark_failed("agendamento_cancelado")`.
-  `cancel_reminder` já existe e cobre o caminho normal; esta é a rede.
-- `mark_adiado(reminder_id, pk, sk, novo_send_at)` em `ReminderService`: o
-  `sk` carrega o `sendAt`, então é delete + put, como `outbound_queue.adia`.
+**O lembrete nunca foi ligado** (ver PRD §3.5, correção de 06/10/2026). O
+código latente foi corrigido em PR próprio, antes da fase 2:
+
+- `schedule_reminder(appointment, clinic)` monta a sessão com `fuso(clinic)` e
+  grava `sendAt` em UTC. `AppointmentService._fuso_da_clinica` lê o `timezone`.
+- `business_hours.em_silencio` / `fim_do_silencio` / `fuso` já existem, com a
+  janela padrão `SILENCIO_PADRAO` e leitura de `clinics.janela_de_silencio`
+  quando a coluna existir (fase 2 a cria).
+- Processador: sessão não `CONFIRMED` -> `mark_failed("agendamento_nao_confirmado")`;
+  janela de silêncio -> `ReminderService.adia(pk, sk, novo_send_at, motivo)`,
+  que só move o atributo `sendAt` (o índice lê o atributo; o `sk` não é
+  consultado por ninguém).
+
+O que **fica** para a fase 2 neste arquivo: trocar a conferência de janela por
+`pode_iniciar(clinic, session, phone, transacional=True)`, que acrescenta
+`bot_paused` e política. Ligar o lembrete não é desta Spec.
 
 ### 3.8 `functions/outbound/processor.py` e `functions/send/handler.py` (fase 2)
 

@@ -258,10 +258,16 @@ passa a consultar `pode_iniciar`. São **cinco**, e o quarto não chama
 
 O lembrete é **transacional**, não conversa: vai mesmo em `COOLDOWN` e em
 `HUMAN_ACTIVE`, porque a sessão existe e a pessoa precisa saber. Mas respeita a
-janela de silêncio e não vai para agendamento cancelado. E tem um bug próprio a
-fechar na mesma fatia: `schedule_reminder` calcula a hora local sem fuso e grava
-com sufixo `Z`; o processador compara com `utcnow`. Sessão às 07:15 gera
-lembrete às 07:15 UTC - **04:15 em Brasília**.
+janela de silêncio e não vai para agendamento cancelado.
+
+**Correção (06/10/2026): o lembrete nunca foi ligado.** A tabela
+`scheduled-reminders` de prod está vazia, `AppointmentService.completo()` não
+passa `reminder_service`, e nenhuma clínica tem o template `REMINDER_24H`. O
+código tinha três defeitos latentes - `sendAt` em hora local gravado como UTC
+(sessão às 07:15 sairia às 04:15), nenhuma conferência de sessão cancelada e
+nenhuma janela de silêncio - e os três foram corrigidos sem ligar o lembrete
+(PR "fix(lembrete)"). **Ligar é decisão de produto**, com template aprovado
+pela clínica e PRD curto próprio; não entra na fase 2.
 
 #### Janela de silêncio: só para quem inicia
 
@@ -675,8 +681,9 @@ alguém ligar TTL depois, `human_until` e `cooldown_until` desaparecem com o ite
 - [ ] Janela de silêncio vale só para `pode_iniciar`: mensagem recebida às
       03:00 é respondida; item da fila elegível às 22:58 e processado às 23:01
       espera as 05:00 - testes nos limites 22:58:59, 22:59:00, 04:59:59, 05:00:00
-- [ ] Lembrete da sessão de 07:15 sai no dia anterior às 07:15 em Brasília, não
-      às 04:15
+- [x] Lembrete da sessão de 07:15 sai no dia anterior às 07:15 em Brasília, não
+      às 04:15 (código latente corrigido em 06/10/2026; o lembrete segue
+      desligado)
 - [ ] Os cinco caminhos proativos da tabela de §3.5 consultam `pode_iniciar`,
       inclusive o lembrete e as duas retomadas
 - [ ] Retomada por vencimento: responde quando a última fala é pergunta do

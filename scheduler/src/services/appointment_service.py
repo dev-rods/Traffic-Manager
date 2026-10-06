@@ -71,6 +71,19 @@ class AppointmentService:
 
         return cls(db, lead_service=LeadService(db))
 
+    def _fuso_da_clinica(self, clinic_id):
+        """So o `timezone`, para o lembrete sair na hora certa. Falha vira
+        vazio, que o lembrete trata como America/Sao_Paulo."""
+        try:
+            linhas = self.db.execute_query(
+                "SELECT timezone FROM scheduler.clinics WHERE clinic_id = %s",
+                (clinic_id,),
+            )
+            return linhas[0] if linhas else {}
+        except Exception as e:
+            logger.warning(f"[AppointmentService] Nao li o fuso de {clinic_id}: {e}")
+            return {}
+
     def create_appointment(
         self,
         clinic_id: str,
@@ -331,7 +344,7 @@ class AppointmentService:
         # 8. Schedule reminder (if available)
         if self.reminder_service:
             try:
-                self.reminder_service.schedule_reminder(result)
+                self.reminder_service.schedule_reminder(result, self._fuso_da_clinica(clinic_id))
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao agendar lembrete: {e}")
 
@@ -485,7 +498,10 @@ class AppointmentService:
 
         if self.reminder_service:
             try:
-                self.reminder_service.schedule_reminder(updated_appointment)
+                self.reminder_service.schedule_reminder(
+                    updated_appointment,
+                    self._fuso_da_clinica(updated_appointment.get("clinic_id")),
+                )
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao agendar novo lembrete: {e}")
 
