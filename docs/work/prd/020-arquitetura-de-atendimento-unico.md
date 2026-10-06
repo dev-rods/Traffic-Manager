@@ -426,6 +426,30 @@ procedimento fora de escopo: decide sem o modelo e devolve texto fixo. A
 diferença é que o nível 2 deixa o LLM **escolher** a policy, e não redigir a
 resposta.
 
+**As policies já existem: são os itens de `scheduler.faq_items`.** Conferido em
+produção (05/10/2026): a Essência tem 19 itens ativos, e eles cobrem a lista do
+nível 2 - `CONTRAINDICATIONS` (gestante, Roacutan, fotossensibilizante,
+anticoagulante), `PREPARATION`, `SUN_EXPOSURE`, `TANNED_SKIN`, `MENSTRUATION`,
+`SILICONE_IMPLANT`, `AFTER_WAX`, `RAZOR_BETWEEN_SESSIONS`. Não há texto novo a
+escrever para a fase 5 começar.
+
+O que muda é **como** o texto chega à pessoa. Hoje `get_faq_answer` devolve o
+item ao modelo e o modelo **redige** a resposta a partir dele - pode resumir,
+completar ou suavizar. No nível 2 o item é entregue **literal**, como
+`orientacoes_pos_sessao` já faz com o aviso pré-sessão:
+
+1. `faq_items` ganha a coluna `nivel` (`1` redigível, `2` literal). Os oito
+   itens acima nascem `2`.
+2. O LLM escolhe o item por tool com `enum` fechado dos `question_key`
+   ativos, não por texto livre.
+3. A resposta final é o `answer` do item, byte a byte, e a conferência é
+   determinística: texto diferente do item escolhido é bloqueado e vai a
+   handoff, como a proveniência faz com data.
+4. Zero itens casando, ou mais de um, é handoff com `faq_sem_resposta` - não
+   é o modelo que desempata.
+
+A clínica continua dona do texto, pelo painel, sem deploy.
+
 O nível 3 tem de ser determinístico por padrão - uma lista de termos, como
 `fora_do_escopo.PROCEDIMENTOS` - porque depender do modelo para classificar
 risco é depender dele para decidir quando não confiar nele.
@@ -583,8 +607,21 @@ nunca automatizadas - o oposto de "o humano é a exceção". O argumento contra:
 bot pode entrar numa conversa que uma pessoa conduz.
 
 O **cooldown é o que torna isso aceitável**: o bot não inicia, só responde a quem
-escreveu. Mas a decisão é do André, e ela reverte uma decisão anterior dele
-(06/09/2026) - por isso está nomeada aqui em vez de embutida.
+escreveu. A decisão reverte uma anterior do André (06/09/2026) - por isso está
+nomeada aqui em vez de embutida.
+
+**Decidido (André, 05/10/2026): passam a vencer.** `CONTATO_MANUAL` e
+`CHAT_ANTERIOR` entram na máquina como `HUMAN_ACTIVE` com `human_until` contado
+a partir da última mensagem da clínica, e seguem o mesmo caminho de todo
+atendimento humano: vencem, passam pela avaliação de §3.7 e caem em `COOLDOWN`.
+Para as 2912 conversas anteriores a nós, onde não há mensagem da clínica
+registrada por nós, `human_until` parte da data da última mensagem que o
+espelho do WhatsApp conhece - e a retomada de §3.7 não dispara para elas,
+porque a guarda de idade máxima (72h) já falhou. O bot só volta a falar se a
+pessoa escrever.
+
+`PAUSAS_PERMANENTES` em `bot_policy.py` deixa de existir na fase 3, junto com o
+docstring de `esta_pausado` que argumenta o contrário.
 
 ### 9.2 `bot_enabled` permanente continua sendo um problema
 
@@ -613,8 +650,10 @@ alguém ligar TTL depois, `human_until` e `cooldown_until` desaparecem com o ite
 
 - **A fase 2 mexe no caminho de toda mensagem.** `should_bot_reply` é chamado em
   6 lugares; virar duas funções exige revisar os seis.
-- **Nível 2 precisa das policies escritas antes do código.** O conteúdo é
-  clínico, não técnico, e é a clínica que aprova. Sem isso a fase 5 não começa.
+- **Nível 2 depende do FAQ estar completo por clínica.** O texto é da clínica
+  e já existe na Essência (§4.3); nas outras três clínicas tem de ser conferido
+  antes de ligar o nível 2 para elas. Item marcado `nivel = 2` com `answer`
+  vazio é handoff, nunca geração.
 - **Tarefa humana precisa de dono na UI.** A fila do #88 mostra conversas, não
   tarefas. `HUMAN_PENDING` sem alguém olhando é conversa esquecida com cara de
   resolvida.
@@ -651,12 +690,16 @@ alguém ligar TTL depois, `human_until` e `cooldown_until` desaparecem com o ite
       tentativas
 - [ ] Intenção de nível 3 vai a handoff **independentemente da confiança** -
       teste com confiança alta
-- [ ] Nível 2 responde com texto de policy, sem geração livre
+- [ ] Nível 2 responde com o `answer` do item `nivel = 2` byte a byte; texto
+      diferente é bloqueado e vai a handoff - teste com "posso fazer grávida?"
+      contra o item `CONTRAINDICATIONS` da Essência
 - [ ] Estado comercial é derivado, e `ACTIVE_CUSTOMER` não entra no fluxo de
       primeira venda
 - [ ] As três dimensões são campos distintos, e nenhuma função lê duas delas para
       decidir uma coisa
-- [ ] Decisão de 9.1 registrada (pausas permanentes passam a vencer, ou não)
+- [ ] Pausas `CONTATO_MANUAL` e `CHAT_ANTERIOR` vencem pelo TTL (decisão 9.1),
+      `PAUSAS_PERMANENTES` removido, e nenhuma das 2912 conversas anteriores
+      recebe retomada automática
 - [ ] `conversation_engine` apagado, ou com data marcada para apagar
 
 ---
