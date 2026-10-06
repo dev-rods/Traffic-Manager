@@ -60,10 +60,15 @@ PADROES = {
 # calculate_duration dependem das áreas que a pessoa escolheu, que só existem na
 # conversa - pré-carregá-las com argumento vazio devolveria o piso de 15 minutos
 # como se fosse a duração real, que é mentira com cara de dado consultado.
+#
+# `identificar_paciente` vai NA FRENTE nas intencoes de agendamento: a pre-carga
+# e por ordem, e a identidade tem de chegar antes da agenda para o modelo ler
+# as duas juntas. Sem ela o contrato de book_appointment pedia cadastro a quem
+# ja o tinha (PRD 020 §7).
 TOOLS_POR_INTENCAO = {
-    AGENDAMENTO_PROPRIO: ["lookup_appointments"],
+    AGENDAMENTO_PROPRIO: ["identificar_paciente", "lookup_appointments"],
     PRECO: ["list_services", "list_areas"],
-    DISPONIBILIDADE: ["list_areas"],
+    DISPONIBILIDADE: ["identificar_paciente", "list_areas"],
     DURACAO: ["list_areas"],
 }
 

@@ -93,6 +93,12 @@ class TestToolsObrigatorias(unittest.TestCase):
     def test_agendamento_exige_lookup(self):
         self.assertIn("lookup_appointments", tools_obrigatorias({AGENDAMENTO_PROPRIO}))
 
+    def test_agendamento_identifica_a_pessoa_antes_da_agenda(self):
+        """A pre-carga e por ordem: a identidade tem de chegar antes."""
+        for intencao in (AGENDAMENTO_PROPRIO, DISPONIBILIDADE):
+            with self.subTest(intencao=intencao):
+                self.assertEqual(tools_obrigatorias({intencao})[0], "identificar_paciente")
+
     def test_preco_exige_catalogo(self):
         tools = tools_obrigatorias({PRECO})
         self.assertTrue({"list_services", "list_areas"} & set(tools))
@@ -121,7 +127,8 @@ class TestToolsObrigatorias(unittest.TestCase):
         minutos como se fosse a duração real, que é mentira com cara de dado
         consultado.
         """
-        sem_argumento = {"lookup_appointments", "list_services", "list_areas"}
+        sem_argumento = {"identificar_paciente", "lookup_appointments",
+                         "list_services", "list_areas"}
 
         for nome in (AGENDAMENTO_PROPRIO, PRECO, DISPONIBILIDADE, DURACAO):
             for tool in tools_obrigatorias({nome}):
