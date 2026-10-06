@@ -14,6 +14,7 @@ da listagem custa um batch_get por página e não pode divergir.
 import logging
 import time
 
+from src.services import atendimento
 from src.services.elegibilidade_do_bot import (
     motivo_legivel,
     origem_do_contato,
@@ -46,18 +47,14 @@ def status_de_uma_sessao(sessao, agora=None):
     agora = agora or int(time.time())
     estado = str(sessao.get("state") or "")
 
-    # `attendant_active_until` é a marca que o webhook grava quando a atendente
-    # responde pelo celular. Vence sozinha em 24h, então o passado não pode
-    # deixar a conversa marcada como humana para sempre.
-    ate = sessao.get("attendant_active_until")
-    try:
-        atendente_ativo = int(ate or 0) > agora
-    except (TypeError, ValueError):
-        atendente_ativo = False
-
-    if atendente_ativo or estado in ESTADOS_DE_ATENDENTE:
+    # A fonte e o estado de atendimento derivado (PRD 020 §3.2). Os rotulos
+    # antigos de `state` continuam valendo para sessao gravada antes do TTL
+    # existir: um HUMAN_HANDOFF sem prazo nenhum ainda e alguem esperando.
+    if atendimento.esta_com_pessoa(sessao, agora):
+        return AGUARDA_HUMANO if atendimento.aguarda_especialista(sessao, agora) else HUMANO
+    if estado in ESTADOS_DE_ATENDENTE and not sessao.get("attendant_active_until"):
         return HUMANO
-    if estado in ESTADOS_DE_ESPERA:
+    if estado in ESTADOS_DE_ESPERA and not sessao.get("attendant_active_until"):
         return AGUARDA_HUMANO
     return BOT
 

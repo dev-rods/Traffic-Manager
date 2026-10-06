@@ -7,19 +7,11 @@ import boto3
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_query_param
 from src.services.conversation_engine import ConversationState
-from src.services.bot_policy import (
-    CAMPO_DE_PAUSA,
-    PAUSA_ATENDENTE,
-    esta_pausado,
-    should_bot_reply,
-)
+from src.services import atendimento
+from src.services.session_store import grava_atendimento
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-# O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
-# e regra duplicada diverge em silencio quando alguem muda so um deles.
-from src.services.bot_policy import TTL_DO_ATENDIMENTO as ATTENDANT_TTL_SECONDS
 
 # Payload da auto-invocação assíncrona. Não vem do API Gateway.
 TAREFA_RETOMADA = "responder_retomada"
@@ -56,24 +48,6 @@ def _load_session(table, clinic_id, phone):
     except Exception as e:
         logger.error(f"[Attendant] Error loading session: {e}")
         return {}
-
-
-def _save_session(table, clinic_id, phone, item):
-    try:
-        session = item.get("session", {})
-        now = int(time.time())
-        table.put_item(
-            Item={
-                "pk": f"CLINIC#{clinic_id}",
-                "sk": f"PHONE#{phone}",
-                "session": session,
-                "clinicId": clinic_id,
-                "phone": phone,
-                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
-            }
-        )
-    except Exception as e:
-        logger.error(f"[Attendant] Error saving session: {e}")
 
 
 def handler(event, context):
@@ -123,13 +97,11 @@ def _handle_activate(event):
     item = _load_session(table, clinic_id, phone)
     session = item.get("session", {})
 
-    session["_previous_state_before_attendant"] = session.get("state", "")
-    session["state"] = ConversationState.HUMAN_ATTENDANT_ACTIVE.value
-    session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
-    session[CAMPO_DE_PAUSA] = PAUSA_ATENDENTE
-    item["session"] = session
-
-    _save_session(table, clinic_id, phone, item)
+    # "Pausar bot" e uma pessoa assumindo: mesma transicao de quando ela
+    # responde pelo celular. Vence em 24h contadas da ultima mensagem DA
+    # CLINICA (PRD 020 §3.4).
+    atendimento.entrega_a_humano(session, por=atendimento.POR_ATENDENTE)
+    grava_atendimento(table, clinic_id, phone, session)
     logger.info(f"[Attendant] Bot pausado para {phone} na clinica {clinic_id}")
 
     return http_response(200, {
@@ -154,21 +126,18 @@ def _handle_deactivate(event, context):
     item = _load_session(table, clinic_id, phone)
     session = item.get("session", {})
 
+    # "Retomar bot" limpa tudo, de qualquer estado, sem cooldown: quem clicou
+    # decidiu que o bot pode falar (PRD 020 §3.3, "qualquer -> BOT_ACTIVE").
+    atendimento.retoma_pelo_painel(session)
     session["state"] = ConversationState.WELCOME.value
-    session.pop("attendant_active_until", None)
-    # Este e o UNICO lugar que tira a pausa. Ela nao vence por tempo: quem
-    # devolve a conversa ao bot e uma pessoa clicando "Retomar bot".
-    session.pop(CAMPO_DE_PAUSA, None)
-    session.pop("human_handoff_requested_at", None)
-    session.pop("_previous_state_before_attendant", None)
     # Marca a conversa como elegível. Sem isso, retomar o bot não teria efeito nas
     # clínicas com política LEADS_ONLY: limpar o modo atendente libera a conversa,
     # mas o bot só responde quem está marcado. Retomar tem que valer em qualquer
     # política, senão o botão do painel mente para quem clica.
     session["bot_enabled"] = True
-    item["session"] = session
 
-    _save_session(table, clinic_id, phone, item)
+    grava_atendimento(table, clinic_id, phone, session,
+                      extras={"state": session["state"], "bot_enabled": True})
     logger.info(f"[Attendant] Bot retomado para {phone} na clinica {clinic_id}")
 
     respondendo = _agendar_retomada(clinic_id, phone, context)
@@ -234,28 +203,26 @@ def _handle_status(event):
     session = item.get("session", {})
 
     state = session.get("state", "")
-    atendente_ativo = state in (
-        ConversationState.HUMAN_ATTENDANT_ACTIVE.value,
-        ConversationState.HUMAN_HANDOFF.value,
-    )
-
-    ttl = session.get("attendant_active_until", 0)
     now = int(time.time())
+    ttl = session.get("attendant_active_until", 0)
 
-    # A pausa nao vence mais por tempo: quem manda e `esta_pausado`. Antes o
-    # prazo vencido zerava o motivo, e o painel oferecia "Ativar bot" numa
-    # conversa que so precisava de "Retomar bot" - rotulo errado para a mesma
-    # acao, e a atendente sem entender por que o bot estava calado.
-    atendente_ativo = atendente_ativo or esta_pausado(session)
+    # Fonte unica: o estado de atendimento derivado. Um HUMAN_HANDOFF antigo
+    # sem prazo ainda conta como pessoa esperando.
+    atendente_ativo = atendimento.esta_com_pessoa(session, now) or (
+        state in (ConversationState.HUMAN_ATTENDANT_ACTIVE.value,
+                  ConversationState.HUMAN_HANDOFF.value)
+        and not ttl
+    )
 
     # A política da clínica também decide. Sem consultá-la, o painel mostrava
     # "Pausar bot" numa conversa que o bot já não atendia — o botão prometia uma
     # ação sem efeito. Esta é a mesma decisão que o webhook toma.
     clinic = _get_clinic(clinic_id)
-    responde = should_bot_reply(clinic, session, phone) and not clinic.get("bot_paused", False)
+    responde = atendimento.pode_responder(clinic, session, phone, now)
 
     return http_response(200, {
         "status": "OK",
+        "handler": atendimento.estado(session, now),
         "bot_paused": not responde,
         "pause_reason": (
             "attendant" if atendente_ativo

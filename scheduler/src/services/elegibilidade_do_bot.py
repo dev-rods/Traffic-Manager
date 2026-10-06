@@ -16,7 +16,7 @@ automático corre o risco de escrever para quem já está sendo atendido.
 Quem sabe é a atendente. Por isso a decisão voltou para ela, com dois botões, e
 o "Já iniciada" existe justamente para registrar o que a API não enxerga.
 """
-from src.services.bot_policy import should_bot_reply
+from src.services import atendimento
 
 # Motivos, na ordem em que são conferidos. O painel mostra o texto ao lado do
 # botão desabilitado: "indisponível" sem explicação vira chamado de suporte.
@@ -74,9 +74,10 @@ def por_que_nao_pode(lead, clinic):
     #
     # `bot_enabled=True` porque a origem landing-page ja foi conferida acima, e
     # e exatamente o que a politica LEADS_ONLY exige da conversa.
-    if clinic.get("bot_paused") or not should_bot_reply(
-        clinic, {"bot_enabled": True}, lead["phone"]
-    ):
+    # `pode_responder`, nao `pode_iniciar`: o botao enfileira para a proxima
+    # abertura, entao a janela de silencio de agora nao e motivo para
+    # desabilita-lo. A fila reconfere na hora de enviar.
+    if not atendimento.pode_responder(clinic, {"bot_enabled": True}, lead["phone"]):
         return "POLITICA"
 
     return None

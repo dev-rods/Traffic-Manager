@@ -1171,16 +1171,11 @@ class ConversationAgent:
             return {}
 
     def _is_attendant_active(self, session):
-        """Check if human attendant mode is active (TTL-based)."""
-        active_until = session.get("attendant_active_until")
-        if active_until and int(active_until) > int(time.time()):
-            return True
-        state = session.get("state")
-        if state == "HUMAN_ATTENDANT_ACTIVE":
-            # TTL expired — clear state
-            session.pop("attendant_active_until", None)
-            session["state"] = ""
-        return False
+        """A conversa esta com uma pessoa? Delega a `atendimento`: a porta de
+        verdade fica em quem chama o agente, e este check sai na fase 3 do
+        PRD 020. Ate la, nao pode divergir dela."""
+        from src.services import atendimento
+        return atendimento.esta_com_pessoa(session)
 
     @staticmethod
     def _convert_decimals(obj):

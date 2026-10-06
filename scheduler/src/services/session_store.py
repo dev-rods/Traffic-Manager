@@ -99,6 +99,111 @@ def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
         return False
 
 
+def carrega_sessao(clinic_id: str, phone: str, table=None) -> dict:
+    """A sessao como esta, ou vazia. Nunca levanta."""
+    import os
+
+    import boto3
+
+    try:
+        table = table or boto3.resource("dynamodb").Table(
+            os.environ["CONVERSATION_SESSIONS_TABLE"]
+        )
+        item = table.get_item(
+            Key={"pk": f"CLINIC#{clinic_id}", "sk": f"PHONE#{phone}"}
+        ).get("Item") or {}
+        return dict(item.get("session") or {})
+    except Exception as e:
+        logger.error(f"[SessionStore] Falha ao ler sessao de {phone}: {e}")
+        return {}
+
+
+# Os campos antigos que `atendimento` projeta. Gravados junto com o bloco, e
+# so por aqui: o painel os le ate a fase 3.
+_PROJECAO_LEGADA = (
+    "state", "attendant_active_until", "bot_pausado_por", "handoff_reason",
+    "human_handoff_requested_at",
+)
+
+
+def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
+                      extras: Optional[dict] = None) -> bool:
+    """Grava SO o bloco `atendimento` (e sua projecao), condicionado a versao.
+
+    Duas Lambdas escrevem a mesma sessao - o webhook assincrono e, na fase 3,
+    o cron de vencimento. Um put da sessao inteira faria COOLDOWN sobrescrever
+    HUMAN_ACTIVE em silencio. Aqui a escrita exige que a versao no banco seja
+    a anterior a transicao (`versao - 1`); conflito e relido uma vez e a
+    transicao e reaplicada pelo chamador... que hoje nao existe: em conflito
+    o log diz, e a proxima mensagem reavalia do zero.
+
+    `extras`: outros campos de primeiro nivel da sessao que a mesma acao
+    muda (ex.: "Retomar bot" tambem grava bot_enabled). Devolve True se gravou.
+    """
+    from src.services.atendimento import CAMPO
+
+    bloco = session.get(CAMPO) or {}
+    versao = int(bloco.get("versao") or 0)
+    pk, sk = f"CLINIC#{clinic_id}", f"PHONE#{phone}"
+
+    nomes = {"#s": "session", "#a": CAMPO}
+    valores = {":a": bloco, ":v": versao - 1,
+               ":u": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    sets = ["#s.#a = :a", "updatedAt = :u", "clinicId = :c", "phone = :p"]
+    valores[":c"], valores[":p"] = clinic_id, phone
+    removes = []
+    i = 0
+    for campo in _PROJECAO_LEGADA + tuple((extras or {}).keys()):
+        i += 1
+        nomes[f"#f{i}"] = campo
+        if campo in (extras or {}):
+            valores[f":f{i}"] = extras[campo]
+            sets.append(f"#s.#f{i} = :f{i}")
+        elif campo in session:
+            valores[f":f{i}"] = session[campo]
+            sets.append(f"#s.#f{i} = :f{i}")
+        else:
+            removes.append(f"#s.#f{i}")
+
+    expressao = "SET " + ", ".join(sets)
+    if removes:
+        expressao += " REMOVE " + ", ".join(removes)
+
+    # Sem `session` no item (sessao nova) o caminho aninhado falha: cria o
+    # item inteiro. A condicao de versao so vale quando ja ha bloco.
+    try:
+        item = table.get_item(Key={"pk": pk, "sk": sk}).get("Item") or {}
+        if not item.get("session"):
+            table.put_item(Item={
+                "pk": pk, "sk": sk, "session": session, "clinicId": clinic_id,
+                "phone": phone, "updatedAt": valores[":u"],
+            })
+            return True
+
+        condicao = (
+            "attribute_not_exists(#s.#a) OR attribute_not_exists(#s.#a.versao) "
+            "OR #s.#a.versao = :v"
+        )
+        table.update_item(
+            Key={"pk": pk, "sk": sk},
+            UpdateExpression=expressao,
+            ConditionExpression=condicao,
+            ExpressionAttributeNames=nomes,
+            ExpressionAttributeValues=valores,
+        )
+        return True
+    except Exception as e:
+        nome = type(e).__name__
+        if "ConditionalCheckFailed" in nome or "ConditionalCheckFailed" in str(e):
+            logger.error(
+                f"[SessionStore] Conflito de versao ao gravar atendimento de {phone} "
+                f"(esperava {versao - 1}); transicao descartada"
+            )
+        else:
+            logger.error(f"[SessionStore] Falha ao gravar atendimento de {phone}: {e}")
+        return False
+
+
 def vincula_lid(table, clinic_id: str, chat_lid: str, phone: str) -> None:
     """Guarda a quem pertence um LID do WhatsApp.
 

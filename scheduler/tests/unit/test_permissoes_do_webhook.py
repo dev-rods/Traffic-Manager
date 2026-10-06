@@ -37,6 +37,14 @@ FUNCOES = {
             RAIZ / "src" / "services" / "session_store.py",
         ],
     ),
+    # Pausar e retomar gravam o bloco de atendimento por UpdateItem condicional.
+    "AttendantControl": (
+        RAIZ / "sls" / "functions" / "attendant" / "interface.yml",
+        [
+            RAIZ / "src" / "functions" / "attendant" / "handler.py",
+            RAIZ / "src" / "services" / "session_store.py",
+        ],
+    ),
     "ListLeads": (
         RAIZ / "sls" / "functions" / "lead" / "interface.yml",
         [

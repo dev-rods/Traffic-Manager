@@ -4,11 +4,9 @@ Função pura, sem I/O: recebe a clínica, a sessão e o telefone, devolve sim o
 Fica fora do handler porque é a regra que muda a cada fase do rollout, e precisa
 ser testável sem subir webhook.
 """
-import time
 from typing import Dict, Optional
 
-from src.services.campanha import esta_viva as campanha_viva
-from src.utils.phone import normalize_phone
+from src.services import atendimento
 
 POLICY_ALL = "ALL"
 POLICY_PILOT = "PILOT"
@@ -26,16 +24,20 @@ PAUSA_INSTABILIDADE = "INSTABILIDADE"    # o sistema falhou; ninguém decidiu na
 CAMPO_DE_PAUSA = "bot_pausado_por"
 
 # Quanto tempo uma conversa entregue a uma pessoa fica com ela. Decisão do
-# André em 06/09/2026.
-TTL_DO_ATENDIMENTO = 24 * 60 * 60
+# André em 06/09/2026. A fonte e `atendimento.TTL_HUMANO`; isto e o nome antigo.
+TTL_DO_ATENDIMENTO = atendimento.TTL_HUMANO
 
-# As que NAO vencem por tempo. Elas nao descrevem um atendimento em curso, e sim
-# de quem e a conversa - e isso nao muda no dia seguinte.
+# As que NAO vencem por tempo (ainda). Decisao 9.1 do PRD 020: passam a
+# vencer na fase 3, quando houver a data da ultima mensagem; a regra mora em
+# `atendimento.migra_do_legado`. O nome fica so para quem ainda o importa.
 PAUSAS_PERMANENTES = frozenset({PAUSA_CONTATO_MANUAL, PAUSA_CHAT_ANTERIOR})
 
 
 def esta_pausado(session: Optional[Dict]) -> bool:
     """A conversa foi entregue a uma pessoa e o bot não fala.
+
+    NOME ANTIGO de `atendimento.esta_com_pessoa`. Nenhum chamador novo;
+    sai na fase 3 do PRD 020.
 
     Duas naturezas de pausa, e elas vencem diferente porque dizem coisas
     diferentes:
@@ -52,54 +54,20 @@ def esta_pausado(session: Optional[Dict]) -> bool:
 
     Em ambos os casos o "Retomar bot" no painel libera na hora.
     """
-    session = session or {}
-    motivo = session.get(CAMPO_DE_PAUSA)
-
-    if motivo in PAUSAS_PERMANENTES:
-        return True
-
-    ativo_ate = session.get("attendant_active_until")
-    return bool(ativo_ate and int(ativo_ate) > int(time.time()))
+    return atendimento.esta_com_pessoa(session)
 
 
 def should_bot_reply(clinic: Optional[Dict], session: Optional[Dict], phone: str) -> bool:
     """O bot deve responder automaticamente esta conversa?
 
-    Conversa pausada sempre suspende o bot, em qualquer política: se alguém da
-    clínica assumiu, o bot não fala por cima.
+    NOME ANTIGO de `atendimento.pode_responder`, que e a pergunta REATIVA.
+    Quem vai falar primeiro (fila, campanha, retomada, lembrete) usa
+    `atendimento.pode_iniciar`. Nenhum chamador novo; sai na fase 3.
 
-    Política ausente ou nula equivale a ALL, que é o comportamento histórico —
-    uma clínica lida antes da migration não pode ficar sem bot.
+    Desde a fase 2 inclui `clinic.bot_paused`, que os chamadores conferiam
+    por fora - a regra inteira num lugar so.
     """
-    session = session or {}
-    clinic = clinic or {}
-
-    if esta_pausado(session):
-        return False
-
-    policy = clinic.get("bot_autoreply_policy") or POLICY_ALL
-
-    if policy == POLICY_ALL:
-        return True
-
-    if policy == POLICY_PILOT:
-        piloto = {normalize_phone(p) for p in (clinic.get("bot_pilot_phones") or [])}
-        return normalize_phone(phone) in piloto
-
-    if policy == POLICY_LEADS_ONLY:
-        # Dois caminhos independentes para a mesma politica, e nenhum sabe do
-        # outro:
-        #   `bot_enabled` - lead da landing page que escreveu para nos.
-        #   campanha viva - paciente cadastrada para quem NOS escrevemos.
-        #
-        # O segundo VENCE, e e por isso que ele nao virou outro `bot_enabled`:
-        # a tabela de sessoes esta sem TTL, entao marca permanente aqui deixaria
-        # um rastro mensal de gente que o bot atende para sempre. Ver campanha.py.
-        return bool(session.get("bot_enabled")) or campanha_viva(session)
-
-    # OFF e qualquer valor inesperado falham fechado: só chegariam aqui por
-    # escrita manual fora do CHECK da coluna.
-    return False
+    return atendimento.pode_responder(clinic, session, phone)
 
 
 # O MOTIVO da entrega, em vocabulário fechado. `bot_pausado_por` diz QUEM calou
@@ -173,15 +141,7 @@ def entrega_a_humano(
     lista de telefones sem motivo obriga a abrir cada conversa para descobrir o
     que ela quer.
     """
-    session = session if session is not None else {}
-    agora = int(agora if agora is not None else time.time())
-
-    session["state"] = "HUMAN_HANDOFF"
-    session["human_handoff_requested_at"] = agora
-    session["attendant_active_until"] = agora + TTL_DO_ATENDIMENTO
-    session[CAMPO_DE_PAUSA] = pausa
-    session[CAMPO_DO_MOTIVO] = motivo
-    return session
+    return atendimento.entrega_a_humano(session, por=pausa, motivo=motivo, agora=agora)
 
 
 def entrega_por_instabilidade(session: Optional[Dict], agora: Optional[int] = None) -> Dict:

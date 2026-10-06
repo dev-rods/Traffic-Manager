@@ -1,8 +1,10 @@
 import uuid
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from src.services.business_hours import em_silencio, fim_do_silencio
+from src.services import atendimento
+from src.services.business_hours import fim_do_silencio
+from src.services.session_store import carrega_sessao
 
 from src.services.db.postgres import PostgresService
 from src.services.reminder_service import ReminderService
@@ -76,17 +78,22 @@ def handler(event, context):
                 failed += 1
                 continue
 
-            # Janela de silencio: adia para a abertura, nao falha. Ver
-            # business_hours.SILENCIO_PADRAO e PRD 020 §3.5.
+            # Pergunta proativa, TRANSACIONAL: vai mesmo em cooldown (a sessao
+            # existe e a pessoa precisa saber), mas nao com pessoa na
+            # conversa, nem com o bot da clinica pausado, nem na janela de
+            # silencio. Adia, nao falha: FAILED e terminal. Ver PRD 020 §3.5.
             agora = datetime.now(timezone.utc)
-            if em_silencio(clinic, agora):
-                novo = fim_do_silencio(clinic, agora).astimezone(timezone.utc)
-                novo_iso = novo.strftime("%Y-%m-%dT%H:%M:%SZ")
+            sessao = carrega_sessao(clinic_id, phone)
+            if not atendimento.pode_iniciar(clinic, sessao, phone,
+                                            int(agora.timestamp()), transacional=True):
+                novo = max(fim_do_silencio(clinic, agora), agora + timedelta(hours=1))
+                novo_iso = novo.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                 logger.info(
-                    f"[traceId: {trace_id}] Janela de silencio, lembrete {reminder_id} "
+                    f"[traceId: {trace_id}] Porta fechada para {phone} "
+                    f"(handler={atendimento.estado(sessao)}), lembrete {reminder_id} "
                     f"adiado para {novo_iso}"
                 )
-                reminder_service.adia(pk, sk, novo_iso, "janela_de_silencio")
+                reminder_service.adia(pk, sk, novo_iso, "porta_fechada")
                 skipped += 1
                 continue
 

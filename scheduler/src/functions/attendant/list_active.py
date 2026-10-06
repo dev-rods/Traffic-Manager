@@ -6,12 +6,8 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 from src.utils.http import http_response, require_api_key, extract_path_param
-from src.services.bot_policy import (
-    CAMPO_DO_MOTIVO,
-    esta_pausado,
-    motivo_do_handoff_legivel,
-    should_bot_reply,
-)
+from src.services import atendimento
+from src.services.bot_policy import CAMPO_DO_MOTIVO, motivo_do_handoff_legivel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -81,22 +77,22 @@ def handler(event, context):
             handoff_at = session.get("human_handoff_requested_at")
             updated_at = item.get("updatedAt", "")
 
-            # Atendente humano assumiu: o bot está pausado por ação de alguém.
-            # `esta_pausado` cobre a pausa persistente, que nao vence por
-            # tempo. O estado da conversa sozinho nao bastava: "Ja iniciada" no
-            # painel pausa sem mudar o state.
-            atendente_ativo = esta_pausado(session)
+            # A conversa esta com uma pessoa (atendente, handoff, pausa no
+            # painel)? Fonte unica: o estado de atendimento derivado.
+            atendente_ativo = atendimento.esta_com_pessoa(session, now)
             if not atendente_ativo and state in ("HUMAN_ATTENDANT_ACTIVE", "HUMAN_HANDOFF"):
                 if handoff_at and now < (handoff_at + 86400):
                     atendente_ativo = True
 
             # Mesma decisão que o webhook toma ao receber mensagem: é a única
             # forma de o painel não mentir sobre o que vai acontecer.
-            responde = should_bot_reply(clinic, session, phone) and not clinic.get("bot_paused", False)
+            responde = atendimento.pode_responder(clinic, session, phone, now)
 
             conversations.append({
                 "phone": phone,
                 "state": state,
+                # Quem atende agora: BOT_ACTIVE, HUMAN_ACTIVE, COOLDOWN...
+                "handler": atendimento.estado(session, now),
                 "bot_paused": not responde,
                 # Distingue "alguém pausou" de "a política não cobre esta conversa":
                 # o primeiro se resolve retomando, o segundo é o padrão da clínica.
