@@ -56,7 +56,8 @@ class TestPreCarga(unittest.TestCase):
 
         agente.process_message(CLINIC, mensagem("quando é minha sessão?"))
 
-        self.assertEqual(executor.chamadas, ["lookup_appointments"])
+        # A identidade vem ANTES da agenda: o modelo le as duas juntas.
+        self.assertEqual(executor.chamadas, ["identificar_paciente", "lookup_appointments"])
 
     def test_resultado_chega_ao_modelo_como_fonte_unica(self):
         anthropic = AnthropicFalso()

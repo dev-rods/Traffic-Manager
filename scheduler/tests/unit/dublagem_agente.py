@@ -99,7 +99,7 @@ class TemplateFalso:
 
 
 def monta_agente(anthropic=None, tool_executor=None, resultado_da_tool=None,
-                 registro_de_ordem=None):
+                 registro_de_ordem=None, paciente=None):
     """Um ConversationAgent pronto para `process_message`.
 
     `__init__` abre DynamoDB e o cliente HTTP de verdade, então o objeto é
@@ -116,6 +116,9 @@ def monta_agente(anthropic=None, tool_executor=None, resultado_da_tool=None,
     # turno. Foi o que escondeu a janela curta de respaldo.
     agente._load_session = lambda c, p: dict(agente.sessao_salva)
     agente._is_attendant_active = lambda s: False
+    # Quem esta falando. Sem banco aqui: lead desconhecida por padrao, ou o
+    # dict que o teste passar (ver identificacao_de_paciente).
+    agente._identifica_paciente = lambda c, p: dict(paciente or {})
     agente._build_system_prompt = lambda c, p, sessao=None: "PROMPT BASE"
     # A guarda de [fora_do_escopo] roda antes do modelo e lê os termos extras da
     # clínica. Sem banco aqui, a clínica é vazia - a lista do código continua

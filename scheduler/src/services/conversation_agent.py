@@ -24,6 +24,8 @@ from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
 from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
+from src.services.identificacao_de_paciente import identificar as identificar_paciente
+from src.services.identificacao_de_paciente import sem_passo_de_cadastro
 from src.services.calendario import bloco_de_contexto
 from src.services.menor_de_idade import TEXTO as AVISO_DE_MENOR
 from src.services.menor_de_idade import afirmacao_sem_respaldo as afirmacao_de_menor_sem_respaldo
@@ -228,8 +230,18 @@ class ConversationAgent:
             logger.info(f"[ConversationAgent] Attendant active for {phone}, skipping")
             return []
 
+        # 2b. Quem e a pessoa. Uma consulta por mensagem, antes de tudo: o
+        # prompt, as tools e a trava de cadastro leem daqui. Ver
+        # identificacao_de_paciente.
+        paciente = self._identifica_paciente(clinic_id, phone)
+        cadastrada = bool(paciente.get("cadastro_completo"))
+
         # 3. Build system prompt
         system_prompt = self._build_system_prompt(clinic_id, phone, session)
+        if cadastrada:
+            # RETIRADO, nao contradito: o roteiro com texto pronto vence
+            # qualquer "nao peca" colado no fim. Ver prompt_da_campanha.
+            system_prompt = sem_passo_de_cadastro(system_prompt, paciente.get("nome", ""))
 
         # 4. Load conversation history and append user message
         # Sanitize loaded history: sessions saved by older code versions may
@@ -300,6 +312,7 @@ class ConversationAgent:
                 try:
                     resultado = self.tool_executor.execute(
                         nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone,
+                                 "paciente": paciente,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     dados_consultados.append((nome_tool, resultado))
@@ -454,12 +467,13 @@ class ConversationAgent:
                     # visivel deste fluxo. Retirar o roteiro do prompt reduz a
                     # chance; esta trava e o que garante.
                     cadastro = (
-                        pede_cadastro(texto_provisorio) if em_campanha else []
+                        pede_cadastro(texto_provisorio)
+                        if (em_campanha or cadastrada) else []
                     )
                     if cadastro and not ja_refez_cadastro and not efeito_cometido:
                         ja_refez_cadastro = True
                         logger.warning(
-                            f"[Campanha] {phone} pediu cadastro ({cadastro}) a paciente "
+                            f"[Cadastro] {phone} pediu cadastro ({cadastro}) a paciente "
                             f"ja cadastrada; refazendo"
                         )
                         history.append({"role": "assistant", "content": content_blocks})
@@ -501,6 +515,7 @@ class ConversationAgent:
                         tool_use["name"],
                         tool_use["input"],
                         context={"clinic_id": clinic_id, "phone": phone,
+                                 "paciente": paciente,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     respaldo_das_tools.append(result)
@@ -605,11 +620,11 @@ class ConversationAgent:
         # explicito e insistiu. Rarissimo por construcao - o roteiro nem esta
         # mais no prompt - mas pedir CPF a uma paciente cadastrada e o erro que
         # nao pode sair daqui de jeito nenhum.
-        if em_campanha:
+        if em_campanha or cadastrada:
             insistiu = pede_cadastro(final_text)
             if insistiu:
                 logger.error(
-                    f"[Campanha] BLOQUEADO {phone}: insistiu em pedir cadastro "
+                    f"[Cadastro] BLOQUEADO {phone}: insistiu em pedir cadastro "
                     f"{insistiu} depois do PARE | resposta={final_text[:200]!r}"
                 )
                 final_text = (
@@ -1146,6 +1161,14 @@ class ConversationAgent:
             )
         except Exception as e:
             logger.error(f"[ConversationAgent] Error saving session for {phone}: {e}")
+
+    def _identifica_paciente(self, clinic_id, phone):
+        """Nunca levanta: sem identificacao o fluxo e o de lead, que pergunta."""
+        try:
+            return identificar_paciente(self.db, clinic_id, phone) or {}
+        except Exception as e:
+            logger.error(f"[Identificacao] {phone}: {e}")
+            return {}
 
     def _is_attendant_active(self, session):
         """Check if human attendant mode is active (TTL-based)."""

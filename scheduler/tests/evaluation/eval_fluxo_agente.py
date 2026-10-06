@@ -100,6 +100,9 @@ FIXTURES = {
         "original_price_cents": 18500, "discounted_price_cents": 16650,
         "original_price_display": "R$ 185.00", "price_display": "R$ 166.50",
     },
+    # O corpus e de leads: ninguem cadastrado. Paciente cadastrada tem eval
+    # proprio no PRD 020 (caso da Yasmin), fora deste corpus.
+    "identificar_paciente": {"encontrado": False},
     "lookup_appointments": {"appointments": []},
     "get_faq_answer": {"answers": [
         {"question": "Dói?", "answer": "O Soprano Ice tem ponteira de safira com "
@@ -280,6 +283,7 @@ def monta_agente(anthropic, tools, prompt):
     agente._load_session = lambda c, p: agente.sessao
     agente._save_session = lambda c, p, s: agente.sessao.update(s)
     agente._is_attendant_active = lambda s: False
+    agente._identifica_paciente = lambda c, p: FIXTURES["identificar_paciente"]
     # Sem MessageEvents: o corpus JA e a conversa, reconstruir duplicaria turnos.
     agente.rebuild_history_from_events = lambda c, p: []
 

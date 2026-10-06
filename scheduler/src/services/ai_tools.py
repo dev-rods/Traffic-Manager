@@ -31,6 +31,7 @@ from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita
 from src.services.duration_rules import calcula_duracao
+from src.services.identificacao_de_paciente import identificar as identificar_paciente
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,23 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            # A identidade e o que o modelo NAO tinha: 16 tools e nenhuma dizia
+            # quem esta falando. Pre-carregada nas intencoes de agendamento
+            # (roteador), entao chega antes de ele escrever.
+            "name": "identificar_paciente",
+            "description": (
+                "Who this person is, from the clinic's records: whether they are "
+                "a registered patient, their name, whether the registration is "
+                "complete (cadastro_completo), how many sessions they have done "
+                "and their next booked appointment. If cadastro_completo is true, "
+                "never ask for name, birth date, CPF or email."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "lookup_appointments",
             "description": "Look up active appointments for the current patient by phone number.",
             "parameters": {
@@ -236,7 +254,15 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "book_appointment",
-            "description": "Book an appointment. Requires all data to be collected: service areas, date, time, and the patient registration data (full name, birth date, CPF, email). Always call check_availability and get_time_slots before booking. Always call calculate_discount before booking to get the correct pricing.",
+            "description": (
+                "Book an appointment. Requires service areas, date and time. "
+                "Registration data (full name, birth date, CPF, email) is only "
+                "collected from people who are NOT yet registered: if "
+                "identificar_paciente returned cadastro_completo=true, do not ask "
+                "for any of it and do not pass it - the clinic already has it. "
+                "Always call check_availability and get_time_slots before booking. "
+                "Always call calculate_discount before booking to get the correct pricing."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -262,7 +288,10 @@ TOOL_DEFINITIONS = [
                     },
                     "full_name": {
                         "type": "string",
-                        "description": "Patient's full name",
+                        "description": (
+                            "Patient's full name. Omit when identificar_paciente "
+                            "found the patient: the name on file is used."
+                        ),
                     },
                     "birth_date": {
                         "type": "string",
@@ -293,7 +322,7 @@ TOOL_DEFINITIONS = [
                         "description": "Final price in cents after discount",
                     },
                 },
-                "required": ["service_area_pairs", "date", "time", "full_name"],
+                "required": ["service_area_pairs", "date", "time"],
             },
         },
     },
@@ -687,6 +716,14 @@ class ToolExecutor:
             "area_count": len(pares),
         }
 
+    def _tool_identificar_paciente(self, args, clinic_id, phone, ctx):
+        """Quem e a pessoa. Le do contexto quando o agente ja identificou nesta
+        mensagem - e uma consulta por mensagem, nao uma por chamada."""
+        paciente = (ctx or {}).get("paciente")
+        if paciente is None:
+            paciente = identificar_paciente(self.db, clinic_id, phone)
+        return paciente
+
     def _tool_lookup_appointments(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
@@ -896,9 +933,26 @@ class ToolExecutor:
         date = args.get("date")
         time_str = args.get("time")
         full_name = args.get("full_name")
+        # Sem nome na chamada, vale o do cadastro. E o conserto estrutural do
+        # pedido de CPF a paciente cadastrada: o contrato deixou de exigir o
+        # nome, e quem o tem no banco nao precisa dita-lo de novo.
+        if not full_name:
+            paciente = (ctx or {}).get("paciente")
+            if paciente is None:
+                paciente = identificar_paciente(self.db, clinic_id, phone)
+            if paciente.get("encontrado"):
+                full_name = paciente.get("nome") or None
 
-        if not all([service_area_pairs, date, time_str, full_name]):
-            return {"error": "Missing required fields: service_area_pairs, date, time, full_name"}
+        if not all([service_area_pairs, date, time_str]):
+            return {"error": "Missing required fields: service_area_pairs, date, time"}
+        if not full_name:
+            return {
+                "error": "full_name_obrigatorio",
+                "o_que_fazer": (
+                    "Esta pessoa nao tem cadastro. Pergunte o nome completo dela "
+                    "e chame book_appointment de novo com full_name."
+                ),
+            }
 
         total_duration = calcula_duracao(self.db, clinic_id, service_area_pairs)
 
