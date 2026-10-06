@@ -49,6 +49,18 @@ Duas lições, e a segunda é a que dói:
 E o defeito era invisível: nada quebrou, nada logou ERROR, a trava funcionou
 exatamente como escrita. O que faltava era conferi-la contra o catálogo REAL -
 que é o que [tests/unit/test_catalogo_real_e_alcancavel] passou a fazer.
+
+06/10/2026 - a mesma classe de defeito, agora na fração
+-------------------------------------------------------
+A área chama-se "1/2 Perna". A paciente disse "meia perna" - e o próprio bot
+tinha perguntado "perna completa ou meia perna?". A trava exigia as palavras
+"1", "2" e "perna"; "meia" não é "1" nem "2". Recusou duas vezes, o laço de
+recusa entregou a conversa a uma pessoa, e a atendente fechou à mão.
+
+O teste de alcançabilidade não pegou porque a frase dele para "1/2 Perna" era
+"1/2 perna" - circular: ninguém escreve fração no WhatsApp. Agora "1/2" no
+cadastro aceita "meia", "meio" e "metade", e "½" digitado vira "1/2". Ver
+`_alternativas` e `_normaliza`.
 """
 import re
 import unicodedata
@@ -57,8 +69,11 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 def _normaliza(texto: str) -> str:
     """Sem acento, sem caixa, sem pontuação - 'Buço' e 'buco' são a mesma área."""
+    # "½" sumiria na limpeza (não é letra nem dígito) e "½ perna" viraria só
+    # "perna". Vira a fração escrita, que é como o cadastro a grafa.
+    texto = (texto or "").replace("\u00bd", " 1/2 ")
     sem_acento = "".join(
-        c for c in unicodedata.normalize("NFD", texto or "")
+        c for c in unicodedata.normalize("NFD", texto)
         if unicodedata.category(c) != "Mn"
     )
     return re.sub(r"[^a-z0-9]+", " ", sem_acento.lower()).strip()
@@ -97,18 +112,36 @@ def _tokens(trecho: str) -> List[Tuple[str, bool]]:
     return saida
 
 
+# Como a fração do cadastro é dita. "1/2 Perna" é "meia perna"; "1/2 Braço" é
+# "meio braço"; e há quem diga "metade da perna". A paciente nunca digita "1/2".
+_FRACAO = [("1", False), ("2", False)]
+_FRACAO_FALADA = ("meia", "meio", "metade")
+
+
 def _alternativas(nome: str) -> List[List[Tuple[str, bool]]]:
     """Os jeitos de nomear a área. 'Perianal/ânus' aceita qualquer um dos dois.
 
     A barra separa sinônimos no cadastro ('Mento/Queixo'), mas também escreve
     fração ('1/2 Braço'). Por isso só separa quando os dois lados são palavra.
+
+    Fração vira palavra: '1/2 Perna' aceita '1/2 perna', 'meia perna', 'meio
+    perna' e 'metade da perna'. Desde 06/10/2026, quando 'meia perna' foi
+    recusada duas vezes e a conversa caiu para uma pessoa.
     """
     partes = re.split(
         r"(?<=[^\W\d_])\s*/\s*(?=[^\W\d_])|\s+ou\s+",
         _sem_glosa(nome),
         flags=re.UNICODE,
     )
-    return [t for t in (_tokens(p) for p in partes) if t]
+    saida = []
+    for tokens in (_tokens(p) for p in partes):
+        if not tokens:
+            continue
+        saida.append(tokens)
+        if tokens[:2] == _FRACAO:
+            resto = tokens[2:]
+            saida.extend([(palavra, False)] + resto for palavra in _FRACAO_FALADA)
+    return saida
 
 
 def _aparece(nome: str, texto: str) -> bool:

@@ -136,5 +136,63 @@ class TestRecado(unittest.TestCase):
         self.assertIn("histórico", recado_de_recusa(["Buço"])["o_que_fazer"])
 
 
+class TestFracaoEDita(unittest.TestCase):
+    """06/10/2026: "meia perna" recusada duas vezes porque a área é "1/2 Perna".
+
+    A trava exigia as palavras "1", "2" e "perna". O próprio bot tinha
+    perguntado "perna completa ou meia perna?" - e recusou a resposta.
+    """
+
+    FRACOES = [
+        {"id": "a-meia-perna", "name": "1/2 Perna"},
+        {"id": "a-meio-braco", "name": "1/2 Braço"},
+        {"id": "a-perna-completa", "name": "Perna Completa"},
+        {"id": "a-axilas", "name": "Axilas"},
+    ]
+
+    def test_a_conversa_real(self):
+        turnos = conversa(
+            ("user", "Olá bom dia, gostaria de agendar no dia 28\nDessa vez quero fazer "
+                     "mais duas áreas além das axilas, sendo buço e perna\nVc pode me passar os valores ?"),
+            ("assistant", "Legal! Só confirmando uma coisa sobre a perna: você quer a "
+                          "*perna completa* ou só *meia perna*? 😊"),
+            ("user", "Meia perna"),
+            ("assistant", "Então, fechando: *axilas*, *buço* e *meia perna*. Confirma essas áreas? 😊"),
+            ("user", "Sim, podemos sim"),
+        )
+        liberadas = areas_conversadas(turnos, self.FRACOES)
+        self.assertIn("a-meia-perna", liberadas)
+        self.assertIn("a-axilas", liberadas)
+
+    def test_as_tres_formas_faladas(self):
+        for frase in ("meia perna", "meio perna", "metade da perna", "quero a perna, meia só"):
+            with self.subTest(frase=frase):
+                self.assertIn("a-meia-perna",
+                              areas_conversadas(conversa(("user", frase)), self.FRACOES))
+
+    def test_o_simbolo_de_meio(self):
+        self.assertIn("a-meia-perna",
+                      areas_conversadas(conversa(("user", "½ perna")), self.FRACOES))
+
+    def test_a_fracao_digitada_continua_valendo(self):
+        self.assertIn("a-meio-braco",
+                      areas_conversadas(conversa(("user", "1/2 braço")), self.FRACOES))
+
+    def test_meia_perna_nao_libera_perna_completa(self):
+        liberadas = areas_conversadas(conversa(("user", "meia perna")), self.FRACOES)
+        self.assertNotIn("a-perna-completa", liberadas)
+
+    def test_perna_completa_nao_libera_meia_perna(self):
+        """'completa' não é 'meia': a área vizinha continua fechada."""
+        liberadas = areas_conversadas(conversa(("user", "perna completa")), self.FRACOES)
+        self.assertNotIn("a-meia-perna", liberadas)
+
+    def test_so_perna_nao_libera_nenhuma(self):
+        """Foi exatamente o que o bot fez certo: perguntou qual."""
+        liberadas = areas_conversadas(conversa(("user", "quero fazer a perna")), self.FRACOES)
+        self.assertNotIn("a-meia-perna", liberadas)
+        self.assertNotIn("a-perna-completa", liberadas)
+
+
 if __name__ == "__main__":
     unittest.main()
