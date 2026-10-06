@@ -105,12 +105,37 @@ Auditoria dos cinco pontos que escrevem pausa (`PAUSA_ATENDENTE`,
 | | Onde | Diagnóstico | Casos em prod |
 |---|---|---|---|
 | **A** | caixa do disparo desmarcada | não escreve pausa nenhuma | **10** (campanha de 30/09) |
-| **B** | `PAUSA_CONTATO_MANUAL`, `webhook/handler.py:314` | está **dentro** do `if not session.get("bot_enabled")`, então só pode ser aplicada na primeiríssima mensagem. `marcar_contatado.py` grava `first_contact_channel='HUMANO'` no Postgres e **não toca a sessão** | 0 de 9 - latente |
-| **C** | `PAUSA_CHAT_ANTERIOR`, `webhook/handler.py:332` | guardada por `if primeira_vez and ...`, com `primeira_vez = not session`. Um disparo anterior cria a sessão e desarma a proteção | **8** de 2912 |
+| **B** | `PAUSA_CONTATO_MANUAL`, `webhook/handler.py:314` | está **dentro** do `if not session.get("bot_enabled")`, então só pode ser aplicada na primeiríssima mensagem. `marcar_contatado.py` grava `first_contact_channel='HUMANO'` no Postgres e **não toca a sessão** | **1** de 9 |
+| **C** | `PAUSA_CHAT_ANTERIOR`, `webhook/handler.py:332` | guardada por `if primeira_vez and ...`, com `primeira_vez = not session`. Um disparo anterior cria a sessão e desarma a proteção | **60** de 2912 |
 
 `PAUSA_ATENDENTE`, `PAUSA_HANDOFF` e `PAUSA_INSTABILIDADE` estão corretos:
 escrevem a pausa direto, e `esta_pausado` é o primeiro teste de
 `should_bot_reply`.
+
+### 2.5.1 A instância C é 100%, e os 52 com `ATENDENTE` são o retrato do dano
+
+Das 2912 conversas que existiam antes de nós, **60** têm sessão com
+`bot_enabled=True`, e **todas as 60** estão sem a pausa `CHAT_ANTERIOR`. Não é
+uma fração - é a proteção inteira ausente para quem tem sessão.
+
+A distribuição é o que torna o problema concreto:
+
+```
+bot_pausado_por = ATENDENTE   52     <- expira em 24h, de proposito
+bot_pausado_por = (nenhum)     8
+                              ---
+                               60    e 57 receberiam resposta do bot agora
+```
+
+`PAUSAS_PERMANENTES` é `{CHAT_ANTERIOR, CONTATO_MANUAL}` - só essas duas vencem
+para sempre. `ATENDENTE` e `HANDOFF` descrevem atendimento em curso e expiram em
+24h, por decisão de 06/09/2026, para que uma conversa atendida uma vez não fique
+morta.
+
+Então nos 52: uma pessoa atendeu, a janela de 24h venceu, e como a pausa
+permanente nunca foi escrita, **o bot volta a entrar numa conversa que uma
+pessoa conduz desde antes de a gente existir** - exatamente o dano que o
+docstring de `esta_pausado` diz que o botão "Já iniciada" existe para impedir.
 
 **A raiz é comum:** a pausa é escrita sob condições que não têm relação com a
 decisão humana. Quem decide é uma pessoa; quem determina se a decisão vale é o
@@ -220,6 +245,21 @@ B e C ficam no meio da função que atende todo WhatsApp recebido. A ordem das
 guardas ali já é delicada - `primeira_vez` é capturado **antes** das mutações de
 propósito. Alterar exige ler a função inteira, não só as linhas citadas.
 
+### 5.4 A correção não alcança as 60 que já estão assim
+
+Consertar o código faz a pausa valer para conversas **futuras**. As 60 da
+instância C já têm sessão sem `CHAT_ANTERIOR`, e a guarda corrigida continuaria
+sem alcançá-las se ela depender de um gatilho que já passou.
+
+São 57 conversas em que o bot responderia hoje, a maioria conduzida por uma
+pessoa desde antes de nós. **Decidir na Spec:** escrever a pausa
+retroativamente nas 60 (um script, com a lista conferida antes), ou aceitar que
+a correção só vale daqui para frente.
+
+Inclinação: fazer o backfill. O dado para decidir quem recebe a pausa existe e é
+explícito - `scheduler.whatsapp_chats` -, e deixar 57 conversas sabidamente
+expostas depois de medi-las é diferente de não saber.
+
 ---
 
 ## 6. Critérios de aceite
@@ -232,7 +272,10 @@ propósito. Alterar exige ler a função inteira, não só as linhas citadas.
 - [ ] Teste da **propriedade geral**: pausa na sessão ⇒ `should_bot_reply` é
       `False`, para toda combinação de `bot_enabled` e `campanha_viva`
 - [ ] Decisão de 5.1 registrada (prazo na pausa, ou pausa só com sessão)
-- [ ] As 8 conversas da instância C conferidas depois do deploy
+- [ ] As 60 conversas da instância C conferidas depois do deploy, com atenção
+      aos 52 que têm `ATENDENTE` expirado
+- [ ] Decidido se as 60 recebem a pausa `CHAT_ANTERIOR` retroativamente, ou se a
+      correção só vale para conversas novas (ver 5.4)
 - [ ] A linha do TTL no `CLAUDE.md` corrigida
 
 ---
