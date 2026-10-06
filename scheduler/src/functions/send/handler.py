@@ -10,7 +10,7 @@ from src.utils.http import parse_body, http_response, require_api_key
 from src.services.db.postgres import PostgresService
 from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import get_provider
-from src.services.campanha import DURACAO_PADRAO_DIAS, MAX_DATAS, abre
+from src.services.campanha import DURACAO_PADRAO_DIAS, abre
 from src.services.session_store import abre_campanha
 
 logger = logging.getLogger(__name__)
@@ -100,11 +100,6 @@ def handler(event, context):
                 return http_response(400, {
                     "status": "ERROR",
                     "message": "campanha requer 'datas' com pelo menos uma data",
-                })
-            if len(campanha_pedida["datas"]) > MAX_DATAS:
-                return http_response(400, {
-                    "status": "ERROR",
-                    "message": f"campanha aceita no maximo {MAX_DATAS} datas",
                 })
 
         # 4. Buscar clinica no RDS

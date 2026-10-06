@@ -33,8 +33,8 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
     clinicTemplate?.trim() ? clinicTemplate : buildDefaultMessage(availableDates),
   )
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
-  // Tres datas por padrao (decisao do Andre em 09/09/2026), parametrizavel na
-  // propria tela. O bot assume por padrao: o disparo e o comeco de um
+  // Tres datas vem marcadas por padrao (decisao do Andre em 09/09/2026); a
+  // atendente marca ou desmarca quantas quiser, sem teto (06/10/2026). O bot assume por padrao: o disparo e o comeco de um
   // atendimento, nao uma mensagem solta.
   const [datasDaCampanha, setDatasDaCampanha] = useState(() => availableDates.slice(0, 3))
   const [botAssume, setBotAssume] = useState(true)

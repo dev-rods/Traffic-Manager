@@ -29,7 +29,11 @@ MODO_REAGENDAMENTO = "REAGENDAMENTO"
 
 # Decisão do André em 09/09/2026.
 DURACAO_PADRAO_DIAS = 7
-MAX_DATAS = 3
+
+# Nao ha teto de datas. Havia (3, em 09/09/2026) e foi retirado em 06/10/2026
+# a pedido do Andre: a atendente escolhe na tela quantas quiser, e o bot
+# oferece todas. O teto era um limite da tela que o backend copiava - regra
+# duplicada que divergiria calada se so uma mudasse.
 
 
 def abre(datas: List[str], dias: int = DURACAO_PADRAO_DIAS,
@@ -45,7 +49,7 @@ def abre(datas: List[str], dias: int = DURACAO_PADRAO_DIAS,
     return {
         "modo": MODO_REAGENDAMENTO,
         "expira_em": agora + dias * 86400,
-        "datas": list(datas[:MAX_DATAS]),
+        "datas": list(datas),
     }
 
 
