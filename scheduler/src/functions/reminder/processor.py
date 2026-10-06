@@ -1,6 +1,8 @@
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+
+from src.services.business_hours import em_silencio, fim_do_silencio
 
 from src.services.db.postgres import PostgresService
 from src.services.reminder_service import ReminderService
@@ -30,6 +32,7 @@ def handler(event, context):
 
     sent = 0
     failed = 0
+    skipped = 0
     processed = len(reminders)
 
     # Cache clinics to avoid repeated DB lookups
@@ -58,6 +61,33 @@ def handler(event, context):
                 logger.warning(f"[traceId: {trace_id}] Clinica {clinic_id} não encontrada, pulando lembrete {reminder_id}")
                 reminder_service.mark_failed(reminder_id, pk, sk, "Clinica não encontrada")
                 failed += 1
+                continue
+
+            # Sessao cancelada ou remarcada depois de o lembrete entrar na fila:
+            # `cancel_reminder` cobre o caminho normal, isto e a rede. Lembrar
+            # alguem de uma sessao que nao existe mais e pior do que nao lembrar.
+            appointment_id = reminder.get("appointmentId", "")
+            if not _sessao_confirmada(db, appointment_id):
+                logger.info(
+                    f"[traceId: {trace_id}] Sessao {appointment_id} nao esta confirmada, "
+                    f"lembrete {reminder_id} descartado"
+                )
+                reminder_service.mark_failed(reminder_id, pk, sk, "agendamento_nao_confirmado")
+                failed += 1
+                continue
+
+            # Janela de silencio: adia para a abertura, nao falha. Ver
+            # business_hours.SILENCIO_PADRAO e PRD 020 §3.5.
+            agora = datetime.now(timezone.utc)
+            if em_silencio(clinic, agora):
+                novo = fim_do_silencio(clinic, agora).astimezone(timezone.utc)
+                novo_iso = novo.strftime("%Y-%m-%dT%H:%M:%SZ")
+                logger.info(
+                    f"[traceId: {trace_id}] Janela de silencio, lembrete {reminder_id} "
+                    f"adiado para {novo_iso}"
+                )
+                reminder_service.adia(pk, sk, novo_iso, "janela_de_silencio")
+                skipped += 1
                 continue
 
             # Render reminder message
@@ -123,7 +153,23 @@ def handler(event, context):
 
     logger.info(
         f"[traceId: {trace_id}] [ReminderProcessor] Processamento concluido: "
-        f"{processed} processados, {sent} enviados, {failed} falhas"
+        f"{processed} processados, {sent} enviados, {failed} falhas, {skipped} adiados"
     )
 
-    return {"processed": processed, "sent": sent, "failed": failed}
+    return {"processed": processed, "sent": sent, "failed": failed, "skipped": skipped}
+
+
+def _sessao_confirmada(db, appointment_id):
+    """O agendamento ainda existe e esta CONFIRMED? Falha de consulta vale
+    como nao confirmado: na duvida, nao se manda lembrete."""
+    if not appointment_id:
+        return False
+    try:
+        linhas = db.execute_query(
+            "SELECT status FROM scheduler.appointments WHERE id = %s::uuid",
+            (appointment_id,),
+        )
+        return bool(linhas) and linhas[0].get("status") == "CONFIRMED"
+    except Exception as e:
+        logger.error(f"[ReminderProcessor] Nao li o status de {appointment_id}: {e}")
+        return False

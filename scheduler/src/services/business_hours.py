@@ -7,12 +7,70 @@ significa fechado, que é como sábado e domingo aparecem hoje na Essência.
 Só o contato ativo usa isso. Quando o lead escreve primeiro, o bot responde na
 hora: a pessoa está do outro lado esperando, e horário comercial não se aplica.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, time as hora_do_dia, timedelta
 from typing import Dict, Optional
 
 import pytz
 
 CLINIC_TZ = pytz.timezone("America/Sao_Paulo")
+
+# Janela em que a plataforma NAO inicia conversa, em nenhuma clinica. Decisao
+# do Andre em 05/10/2026 (PRD 020 §3.5): vale so para quem INICIA - lembrete,
+# abordagem, campanha, retomada. Quem escreve de madrugada e respondido na
+# hora. Inclusiva no inicio e exclusiva no fim, como `is_open`: 22:59:00 esta
+# em silencio, 04:59:00 nao.
+SILENCIO_PADRAO = {"start": "22:59", "end": "04:59"}
+
+
+def fuso(clinic: Optional[Dict]):
+    """O fuso da clinica (`clinics.timezone`), ou o padrao se ausente ou invalido."""
+    nome = (clinic or {}).get("timezone")
+    if not nome:
+        return CLINIC_TZ
+    try:
+        return pytz.timezone(nome)
+    except pytz.UnknownTimeZoneError:
+        return CLINIC_TZ
+
+
+def _hora(texto: str) -> hora_do_dia:
+    h, m = (int(p) for p in texto.split(":"))
+    return hora_do_dia(h, m)
+
+
+def _janela_de_silencio(clinic: Optional[Dict]):
+    janela = (clinic or {}).get("janela_de_silencio") or SILENCIO_PADRAO
+    try:
+        return _hora(janela["start"]), _hora(janela["end"])
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return _hora(SILENCIO_PADRAO["start"]), _hora(SILENCIO_PADRAO["end"])
+
+
+def em_silencio(clinic: Optional[Dict], agora: datetime) -> bool:
+    """A plataforma esta na janela em que nao inicia conversa?
+
+    `agora` tem de ter fuso; e convertido para o da clinica. A janela padrao
+    cruza a meia-noite, entao "dentro" e `hora >= inicio OU hora < fim`.
+    """
+    inicio, fim = _janela_de_silencio(clinic)
+    hora = agora.astimezone(fuso(clinic)).time().replace(second=0, microsecond=0)
+    if inicio > fim:
+        return hora >= inicio or hora < fim
+    return inicio <= hora < fim
+
+
+def fim_do_silencio(clinic: Optional[Dict], agora: datetime) -> datetime:
+    """O primeiro instante a partir de `agora` fora da janela. `agora` se ja estiver fora."""
+    if not em_silencio(clinic, agora):
+        return agora
+    _, fim = _janela_de_silencio(clinic)
+    tz = fuso(clinic)
+    local = agora.astimezone(tz)
+    candidato = local.replace(hour=fim.hour, minute=fim.minute, second=0, microsecond=0)
+    if candidato <= local:
+        candidato = candidato + timedelta(days=1)
+    # Relocaliza: somar dias nao ajusta o offset ao cruzar horario de verao.
+    return tz.localize(candidato.replace(tzinfo=None))
 
 # datetime.weekday(): 0 = segunda
 _DIAS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
