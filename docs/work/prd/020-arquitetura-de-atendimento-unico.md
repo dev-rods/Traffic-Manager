@@ -190,10 +190,12 @@ do código - `should_bot_reply` responde uma pergunta só.
 | `BOT_ACTIVE` | "Pausar bot" no painel | — | `HUMAN_ACTIVE` | idem |
 | `BOT_ACTIVE` | `request_human_handoff` do agente | — | `HUMAN_ACTIVE` | grava motivo + `pending_intent`, **cria tarefa** |
 | `BOT_ACTIVE` | guarda de risco nível 3 | determinística | `HUMAN_ACTIVE` | idem, sem passar pelo modelo |
-| `HUMAN_ACTIVE` | qualquer mensagem (de quem for) | — | `HUMAN_ACTIVE` | **renova** `human_until` |
+| `HUMAN_ACTIVE` | mensagem de pessoa **da clínica** | — | `HUMAN_ACTIVE` | **renova** `human_until` |
+| `HUMAN_ACTIVE` | mensagem do cliente | — | `HUMAN_ACTIVE` | **não renova**; registra para a retomada (§3.7) |
 | `HUMAN_ACTIVE` | relógio | `agora > human_until` | `HUMAN_EXPIRED` | — |
 | `HUMAN_EXPIRED` | avaliação | há `pending_intent` **ou** tarefa `OPEN` | `HUMAN_PENDING` | alerta na fila |
-| `HUMAN_EXPIRED` | avaliação | sem pendência | `COOLDOWN` | `cooldown_until = agora + C` |
+| `HUMAN_EXPIRED` | avaliação | sem pendência, guardas de §3.7 **passam** | `COOLDOWN` | **responde o que ficou em aberto** (uma vez), `cooldown_until = agora + C` |
+| `HUMAN_EXPIRED` | avaliação | sem pendência, alguma guarda de §3.7 falha | `COOLDOWN` | cala; alerta na fila se a última fala era do cliente |
 | `HUMAN_PENDING` | tarefa fechada no painel | — | `COOLDOWN` | — |
 | `HUMAN_PENDING` | "Retomar bot" | explícito | `BOT_ACTIVE` | limpa pendência |
 | `COOLDOWN` | mensagem do cliente | — | `BOT_ACTIVE` | atende normalmente |
@@ -201,17 +203,20 @@ do código - `should_bot_reply` responde uma pergunta só.
 | qualquer | "Retomar bot" | explícito | `BOT_ACTIVE` | limpa tudo |
 
 **Condição de saída de `HUMAN_ACTIVE` é só o relógio.** Nenhuma mensagem tira a
-conversa do humano - ela só renova. Isso é deliberado: hoje o `HANDOFF` vence em
-24h absolutas e a conversa volta ao bot mesmo que a atendente tenha respondido
-há 10 minutos.
+conversa do humano. Isso é deliberado: hoje o `HANDOFF` vence em 24h absolutas e
+a conversa volta ao bot mesmo que a atendente tenha respondido há 10 minutos.
+
+**Só a clínica renova.** Se mensagem do cliente renovasse, o cliente insistente -
+justamente quem está sem resposta - manteria o lock humano para sempre e nunca
+chegaria à retomada de §3.7. A mensagem dele é o sintoma; não pode ser o que
+adia a cura.
 
 ### 3.4 TTL por inatividade, renovável
 
 ```
-human_until = ultima_interacao_relevante + TTL_HUMANO     (24h)
+human_until = ultima_mensagem_da_clinica + TTL_HUMANO     (24h)
 ```
 
-"Interação relevante" = mensagem do cliente **ou** da clínica naquela conversa.
 Hoje o cálculo é `handoff_at + 24h`, fixo no momento do handoff - então um
 atendimento que dura dois dias volta ao bot no meio.
 
@@ -228,8 +233,9 @@ cooldown_until = fim_do_atendimento_humano + COOLDOWN     (sugestão: 24h)
 ```
 
 Durante o cooldown o bot **não dispara nada** - nem lembrete de retorno, nem
-campanha, nem "como posso ajudar?". Se o cliente escrever, o bot atende
-normalmente e o cooldown termina.
+campanha, nem "como posso ajudar?". A única exceção é o lembrete de 24h da
+sessão já marcada, que é transacional (ver tabela abaixo). Se o cliente
+escrever, o bot atende normalmente e o cooldown termina.
 
 Isto exige **separar as duas perguntas** que hoje são uma:
 
@@ -239,8 +245,96 @@ pode_iniciar(clinic, state, phone)     # proativo: campanha, lembrete, retomada
 ```
 
 `should_bot_reply` passa a ser `pode_responder`. Todo caminho de envio proativo
-(`outbound/processor.py`, `reminder_service`, `/send` com campanha) passa a
-consultar `pode_iniciar`.
+passa a consultar `pode_iniciar`. São **cinco**, e o quarto não chama
+`should_bot_reply` hoje - a varredura "pelos 6 chamadores" não o acharia:
+
+| caminho | hoje confere |
+|---|---|
+| `outbound/processor.py` (abordagem ativa) | política, pausa, horário comercial |
+| `/send` com campanha | política |
+| retomada pelo painel (`conversation_resume.py`) | só `ha_pergunta_em_aberto` - **nem `bot_paused`, nem política** |
+| `reminder/processor.py` (lembrete 24h) | **nada**: nem pausa, nem horário, nem fuso |
+| retomada por vencimento do TTL (§3.7, novo) | — |
+
+O lembrete é **transacional**, não conversa: vai mesmo em `COOLDOWN` e em
+`HUMAN_ACTIVE`, porque a sessão existe e a pessoa precisa saber. Mas respeita a
+janela de silêncio e não vai para agendamento cancelado. E tem um bug próprio a
+fechar na mesma fatia: `schedule_reminder` calcula a hora local sem fuso e grava
+com sufixo `Z`; o processador compara com `utcnow`. Sessão às 07:15 gera
+lembrete às 07:15 UTC - **04:15 em Brasília**.
+
+#### Janela de silêncio: só para quem inicia
+
+```
+janela_de_silencio = (22:59, 04:59)   # parâmetro por clínica, no fuso dela
+```
+
+Vale **apenas** para `pode_iniciar`. Decisão do André (05/10/2026): quem escreve
+de madrugada é respondido na hora - é o momento em que o lead está mais quente,
+e horário é problema de quem interrompe, não de quem responde. `pode_responder`
+não olha o relógio.
+
+Três regras para a janela não vazar:
+
+1. **O relógio que manda é o do envio**, não o do agendamento. Um item da fila
+   elegível às 22:58 que só é processado às 23:01 espera as 05:00.
+2. **Adiar, não falhar.** O item fica `PENDING` até a próxima abertura, com o
+   `expiresAt` que já existe decidindo quando desistir. É o que
+   `outbound_queue.adia` faz hoje com `fora_do_horario`.
+3. **Reavaliar ao sair da janela.** Entre 23:00 e 05:00 uma pessoa pode ter
+   respondido; às 05:00 o estado de atendimento é lido de novo antes de falar.
+
+### 3.7 Retomada por vencimento: o bot avalia, sem clique
+
+Hoje o bot só responde o que ficou em aberto quando alguém clica "Retomar bot"
+(`_agendar_retomada`). É essa dependência que acaba: ao vencer o TTL humano, o
+bot **avalia** se ficou pergunta sem resposta. Se ficou, responde uma vez. Se
+não, fica ativo só para o que vier - **não volta com mensagem do nada**.
+
+A assimetria do erro é o que desenha a avaliação: silêncio se corrige (a
+pessoa insiste, a fila mostra), mensagem fora de contexto não. Por isso ela
+**falha fechada**, e o modelo não decide - classifica.
+
+```
+1. guardas determinísticas, nesta ordem; qualquer uma falha -> cala
+   a. a última fala da conversa é do cliente
+   b. não é fecho social ("ok", "obrigada", "boa noite" - lista SOCIAL do roteador)
+   c. idade da fala <= IDADE_MAXIMA_DA_PENDENCIA
+   d. nenhum efeito no banco DEPOIS dela: agendamento criado, remarcado ou
+      cancelado após a mensagem é evidência de que a atendente resolveu por
+      telefone ou no balcão
+   e. nenhuma retomada já enviada para esta pendência (`retomada_em`)
+   f. pode_iniciar() == True (janela de silêncio, bot_paused, política)
+2. LLM classifica, com saída fechada:  {pendente: sim|nao, o_que: "..."}
+   "nao" ou saída inválida -> cala + alerta na fila
+3. LLM responde a pendência, com o histórico humano ROTULADO (ver abaixo)
+4. grava retomada_em; estado vai para COOLDOWN
+```
+
+**Idade máxima tem de ser maior que o TTL.** No vencimento a pendência tem no
+mínimo 24h, então um limite de 24h nunca passaria. Sugestão: **72h**, parâmetro
+por clínica, ao lado da janela de retorno de §3.1.
+
+**Datas relativas envelhecem.** "Tem horário amanhã?" perguntado há 30h já não
+significa amanhã. A retomada reconhece o atraso ("desculpa a demora") e
+**repergunta a data**; nunca responde com o "amanhã" de hoje. O bloco de
+calendário (`calendario.py`) é calculado no instante da resposta, e é isso que
+tornaria o erro invisível.
+
+**A fala da atendente entra rotulada.** Hoje `events_to_history` transforma
+mensagem humana em turno `assistant`: o bot passa a acreditar que disse o que a
+atendente disse e "continua" uma promessa que não fez - desconto, encaixe,
+exceção. No histórico que a retomada lê, mensagem sem `providerMessageId` entra
+como `[atendente da clínica]: ...`, no turno do usuário, e o prompt diz que isso
+é compromisso da clínica, não dele.
+
+**Uma vez só.** `retomada_em` na sessão impede que um TTL que vence todo dia
+mande a mesma pergunta todo dia. Nova retomada só com nova pendência, depois de
+novo atendimento humano.
+
+A retomada pelo clique continua existindo e passa pelas **mesmas guardas** - um
+clique às 23:30 em cima de um "obrigada" de cinco dias atrás não pode gerar
+"de nada, posso ajudar?".
 
 ### 3.6 Pendência: o bot não reassume assunto em aberto
 
@@ -535,9 +629,24 @@ alguém ligar TTL depois, `human_until` e `cooldown_until` desaparecem com o ite
       cadastro - teste com os dados reais da Yasmin
 - [ ] `pode_responder` e `pode_iniciar` são funções distintas, e todo envio
       proativo usa a segunda
-- [ ] `human_until` é renovado a cada interação relevante
+- [ ] `human_until` é renovado por mensagem da clínica, e **não** por mensagem
+      do cliente
 - [ ] Handoff com `pending_intent` **não** volta ao bot quando o TTL vence
 - [ ] Durante o cooldown o bot não dispara nada, e responde se o cliente escrever
+- [ ] Janela de silêncio vale só para `pode_iniciar`: mensagem recebida às
+      03:00 é respondida; item da fila elegível às 22:58 e processado às 23:01
+      espera as 05:00 - testes nos limites 22:58:59, 22:59:00, 04:59:59, 05:00:00
+- [ ] Lembrete da sessão de 07:15 sai no dia anterior às 07:15 em Brasília, não
+      às 04:15
+- [ ] Os cinco caminhos proativos da tabela de §3.5 consultam `pode_iniciar`,
+      inclusive o lembrete e as duas retomadas
+- [ ] Retomada por vencimento: responde quando a última fala é pergunta do
+      cliente dentro da idade máxima; **cala** quando é "obrigada", quando tem
+      mais de 72h, quando houve agendamento depois dela, e quando já houve
+      retomada para a mesma pendência
+- [ ] Retomada de "tem horário amanhã?" com 30h de idade **repergunta** a data
+- [ ] Mensagem da atendente aparece rotulada no histórico do agente, e o bot
+      não assume promessa que ela fez - teste com desconto prometido por humano
 - [ ] Intenção ambígua gera desambiguação, e só vai a handoff depois de 2
       tentativas
 - [ ] Intenção de nível 3 vai a handoff **independentemente da confiança** -
