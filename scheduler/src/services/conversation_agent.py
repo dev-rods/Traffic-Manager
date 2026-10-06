@@ -26,6 +26,7 @@ from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.identificacao_de_paciente import sem_passo_de_cadastro
+from src.services.narracao import narra_a_pessoa
 from src.services.calendario import bloco_de_contexto
 from src.services.menor_de_idade import TEXTO as AVISO_DE_MENOR
 from src.services.menor_de_idade import afirmacao_sem_respaldo as afirmacao_de_menor_sem_respaldo
@@ -399,6 +400,7 @@ class ConversationAgent:
         forcar_proxima = exige_consulta(user_content) and not gatilho
         ja_refez = False
         ja_refez_cadastro = False
+        ja_refez_narracao = False
         em_campanha = campanha_viva(session)
         # O contador do quebra-laço atravessa turnos: cada pergunta da trava é
         # uma mensagem nova, e um contador de uma rodada só veria a primeira
@@ -486,6 +488,36 @@ class ConversationAgent:
                         )})
                         text_parts = []
                         continue
+
+                    # O modelo escreveu o raciocinio como resposta: "ela
+                    # mencionou exatamente a Virilha Completa + anus" chegou a
+                    # paciente em 06/10/2026. Uma vez em 3020 mensagens, mas
+                    # uma vez na conversa de alguem. Mandar reescrever falando
+                    # COM ela; se insistir, segue (nao e erro de fato, e de
+                    # forma) e fica no log.
+                    narrado = narra_a_pessoa(texto_provisorio)
+                    if narrado and not ja_refez_narracao and not efeito_cometido:
+                        ja_refez_narracao = True
+                        logger.warning(
+                            f"[Narracao] {phone} narrou a pessoa em terceira pessoa "
+                            f"({narrado!r}); refazendo"
+                        )
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            "PARE. Voce escreveu sobre a pessoa em terceira pessoa "
+                            f"({narrado!r}), como se raciocinasse em voz alta para "
+                            "outra pessoa. Quem le e ela. Reescreva a mesma resposta "
+                            "falando diretamente com ela, sem narrar o que ela disse "
+                            "nem o que voce concluiu - so o que ela precisa saber ou "
+                            "responder."
+                        )})
+                        text_parts = []
+                        continue
+                    elif narrado:
+                        logger.error(
+                            f"[Narracao] {phone} insistiu em narrar ({narrado!r}); "
+                            f"resposta segue | {texto_provisorio[:160]!r}"
+                        )
 
                     if inventado and not ja_refez and not efeito_cometido:
                         ja_refez = True
