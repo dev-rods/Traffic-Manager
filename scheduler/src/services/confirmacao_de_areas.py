@@ -49,6 +49,38 @@ Duas lições, e a segunda é a que dói:
 E o defeito era invisível: nada quebrou, nada logou ERROR, a trava funcionou
 exatamente como escrita. O que faltava era conferi-la contra o catálogo REAL -
 que é o que [tests/unit/test_catalogo_real_e_alcancavel] passou a fazer.
+
+06/10/2026 - a mesma classe de defeito, agora na fração
+-------------------------------------------------------
+A área chama-se "1/2 Perna". A paciente disse "meia perna" - e o próprio bot
+tinha perguntado "perna completa ou meia perna?". A trava exigia as palavras
+"1", "2" e "perna"; "meia" não é "1" nem "2". Recusou duas vezes, o laço de
+recusa entregou a conversa a uma pessoa, e a atendente fechou à mão.
+
+O teste de alcançabilidade não pegou porque a frase dele para "1/2 Perna" era
+"1/2 perna" - circular: ninguém escreve fração no WhatsApp. Agora "1/2" no
+cadastro aceita "meia", "meio" e "metade", e "½" digitado vira "1/2". Ver
+`_alternativas` e `_normaliza`.
+
+No mesmo dia, mais duas conversas caíram pelo mesmo motivo com outras
+palavras: "virilha completa e peri anal" não liberava "Virilha Completa +
+ânus" (peri anal não é ânus), e "costas, ombro, peitoral e abdômen" não
+liberava "Costas total + ombros" (faltou "total", e "ombro" não é "ombros") -
+três recusas, mesmo depois de o bot listar as áreas e ela dizer "sim".
+
+A regra que fecha a classe inteira, e não uma palavra por vez:
+
+  - sinônimo: "ânus" aceita "anal" e "perianal";
+  - plural: "ombro" casa "ombros" - EXCETO quando o plural é o que distingue
+    duas áreas ("Perna Completa" x "Pernas Completas"), aí é exato;
+  - qualificador ("total", "completa", "comp.", "simples") é dispensável
+    quando nenhuma outra área do catálogo fica com as mesmas palavras sem ele.
+    "Costas total + ombros" vira alcançável por "costas e ombros"; "Virilha
+    Completa" NÃO vira alcançável por "virilha", porque "Virilha Simples"
+    também viraria.
+
+As duas últimas dependem do catálogo inteiro, e é por isso que a decisão
+mora em `_formas`, que o recebe. Ver [tests/unit/test_catalogo_real_e_alcancavel].
 """
 import re
 import unicodedata
@@ -57,8 +89,11 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 def _normaliza(texto: str) -> str:
     """Sem acento, sem caixa, sem pontuação - 'Buço' e 'buco' são a mesma área."""
+    # "½" sumiria na limpeza (não é letra nem dígito) e "½ perna" viraria só
+    # "perna". Vira a fração escrita, que é como o cadastro a grafa.
+    texto = (texto or "").replace("\u00bd", " 1/2 ")
     sem_acento = "".join(
-        c for c in unicodedata.normalize("NFD", texto or "")
+        c for c in unicodedata.normalize("NFD", texto)
         if unicodedata.category(c) != "Mn"
     )
     return re.sub(r"[^a-z0-9]+", " ", sem_acento.lower()).strip()
@@ -97,21 +132,106 @@ def _tokens(trecho: str) -> List[Tuple[str, bool]]:
     return saida
 
 
+# Como a fração do cadastro é dita. "1/2 Perna" é "meia perna"; "1/2 Braço" é
+# "meio braço"; e há quem diga "metade da perna". A paciente nunca digita "1/2".
+_FRACAO = [("1", False), ("2", False)]
+_FRACAO_FALADA = ("meia", "meio", "metade")
+
+
 def _alternativas(nome: str) -> List[List[Tuple[str, bool]]]:
     """Os jeitos de nomear a área. 'Perianal/ânus' aceita qualquer um dos dois.
 
     A barra separa sinônimos no cadastro ('Mento/Queixo'), mas também escreve
     fração ('1/2 Braço'). Por isso só separa quando os dois lados são palavra.
+
+    Fração vira palavra: '1/2 Perna' aceita '1/2 perna', 'meia perna', 'meio
+    perna' e 'metade da perna'. Desde 06/10/2026, quando 'meia perna' foi
+    recusada duas vezes e a conversa caiu para uma pessoa.
     """
     partes = re.split(
         r"(?<=[^\W\d_])\s*/\s*(?=[^\W\d_])|\s+ou\s+",
         _sem_glosa(nome),
         flags=re.UNICODE,
     )
-    return [t for t in (_tokens(p) for p in partes) if t]
+    saida = []
+    for tokens in (_tokens(p) for p in partes):
+        if not tokens:
+            continue
+        saida.append(tokens)
+        if tokens[:2] == _FRACAO:
+            resto = tokens[2:]
+            saida.extend([(palavra, False)] + resto for palavra in _FRACAO_FALADA)
+    return saida
 
 
-def _aparece(nome: str, texto: str) -> bool:
+# Palavras que distinguem versões da mesma área. Dispensáveis quando não há
+# versão vizinha para confundir; obrigatórias quando há.
+QUALIFICADORES = frozenset({
+    "total", "completa", "completo", "completas", "completos", "comp",
+    "simples", "inteira", "inteiro",
+})
+
+# O que a paciente escreve no lugar da palavra do cadastro.
+SINONIMOS = {
+    "anus": frozenset({"anal", "perianal"}),
+    "perianal": frozenset({"anal", "anus"}),
+}
+
+
+def _raiz(palavra: str) -> str:
+    """'ombros' e 'ombro' são a mesma coisa. 'mas' não vira 'ma'."""
+    return palavra[:-1] if len(palavra) > 3 and palavra.endswith("s") else palavra
+
+
+def _chave(tokens) -> frozenset:
+    return frozenset(_raiz(alvo) for alvo, _ in tokens)
+
+
+def _casa_palavra(palavra: str, alvo: str, abreviado: bool, exato: bool) -> bool:
+    if abreviado:
+        return palavra.startswith(alvo)
+    if palavra == alvo or palavra in SINONIMOS.get(alvo, ()):
+        return True
+    return (not exato) and _raiz(palavra) == _raiz(alvo)
+
+
+def _formas(nome: str, catalogo=None) -> List[Tuple[List[Tuple[str, bool]], bool]]:
+    """Os jeitos aceitos de dizer a área: (tokens, exato).
+
+    Sem catálogo, só as formas completas, exatas - é o comportamento seguro.
+    Com catálogo, duas tolerâncias que só valem quando NÃO confundem com outra
+    área: plural solto (exato=False) e qualificador dispensado.
+    """
+    completas = _alternativas(nome)
+    if catalogo is None:
+        return [(t, True) for t in completas]
+
+    chaves_das_outras = set()
+    for outro in catalogo:
+        if outro == nome:
+            continue
+        for t in _alternativas(outro):
+            chaves_das_outras.add(_chave(t))
+            sem = [x for x in t if x[0] not in QUALIFICADORES]
+            if sem and len(sem) < len(t):
+                chaves_das_outras.add(_chave(sem))
+
+    def tolerante(chave):
+        # Uma forma so pode ser frouxa se nenhuma outra area a CONTEM. "Coxas"
+        # esta dentro de "1/2 Coxa" e "Perna Completa" dentro de "Pernas
+        # Completas": frouxa, "1/2 coxa" liberaria as duas. Ai e exata.
+        return not any(chave <= outra for outra in chaves_das_outras)
+
+    formas = []
+    for t in completas:
+        formas.append((t, not tolerante(_chave(t))))
+        sem = [x for x in t if x[0] not in QUALIFICADORES]
+        if sem and len(sem) < len(t) and tolerante(_chave(sem)):
+            formas.append((sem, False))
+    return formas
+
+
+def _aparece(nome: str, texto: str, formas=None) -> bool:
     """A área foi nomeada neste texto?
 
     Casa por palavras, não pela string inteira do cadastro. Até 16/09/2026 era
@@ -128,9 +248,9 @@ def _aparece(nome: str, texto: str) -> bool:
     palavras = re.findall(r"[a-z0-9]+", texto or "")
     if not palavras:
         return False
-    for alternativa in _alternativas(nome):
+    for alternativa, exato in (formas if formas is not None else _formas(nome)):
         if all(
-            any(p.startswith(alvo) if abreviado else p == alvo for p in palavras)
+            any(_casa_palavra(p, alvo, abreviado, exato) for p in palavras)
             for alvo, abreviado in alternativa
         ):
             return True
@@ -144,6 +264,10 @@ def areas_conversadas(turnos: Sequence[Dict], areas_da_clinica: Iterable[Dict]) 
     "content": "..."}. Só conta a área cujo nome aparece num turno seguido de
     pelo menos uma fala da paciente - ou dito por ela mesma.
     """
+    areas = list(areas_da_clinica)
+    catalogo = [a.get("name") or "" for a in areas]
+    formas_por_area = {a.get("id"): _formas(a.get("name") or "", catalogo) for a in areas}
+
     liberadas = set()
     for i, turno in enumerate(turnos):
         texto = _normaliza(turno.get("content") or "")
@@ -156,8 +280,8 @@ def areas_conversadas(turnos: Sequence[Dict], areas_da_clinica: Iterable[Dict]) 
         if not (dita_pela_paciente or respondida):
             continue
 
-        for area in areas_da_clinica:
-            if _aparece(area.get("name") or "", texto):
+        for area in areas:
+            if _aparece(area.get("name") or "", texto, formas_por_area[area.get("id")]):
                 liberadas.add(str(area.get("id")))
     return liberadas
 

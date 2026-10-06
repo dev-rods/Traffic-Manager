@@ -28,11 +28,13 @@ from tests.unit.catalogo_real import AREAS, CATALOGO
 # Como uma paciente pede cada área no WhatsApp. Uma frase basta: o que se afirma
 # é que a área é ALCANÇÁVEL, não que todo sinônimo funciona.
 FRASES = {
-    "1/2 Braço": "quero 1/2 braço",
-    "1/2 Coxa": "1/2 coxa por favor",
-    "1/2 Glúteo": "gostaria de 1/2 glúteo",
-    "1/2 Perna": "1/2 perna",
-    "1/2 Virilha": "queria fazer 1/2 virilha",
+    # Fração é dita, não digitada. Até 06/10/2026 estas frases eram "1/2
+    # perna" - circular, e foi assim que "meia perna" passou despercebida.
+    "1/2 Braço": "quero meio braço",
+    "1/2 Coxa": "metade da coxa por favor",
+    "1/2 Glúteo": "gostaria de meio glúteo",
+    "1/2 Perna": "Meia perna",
+    "1/2 Virilha": "queria fazer meia virilha",
     "Abdômen": "quero abdômen",
     "Aréola": "aréola",
     "Axilas": "quero fazer axilas",
