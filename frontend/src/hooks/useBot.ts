@@ -8,6 +8,7 @@ export const botKeys = {
   recent: (clinicId: string) => [...botKeys.all, 'recent', clinicId] as const,
   messages: (clinicId: string, phone: string) => [...botKeys.all, 'messages', clinicId, phone] as const,
   metrics: (clinicId: string, period: string) => [...botKeys.all, 'metrics', clinicId, period] as const,
+  tarefas: (clinicId: string) => [...botKeys.all, 'tarefas', clinicId] as const,
 }
 
 export function useActiveConversations() {
@@ -51,6 +52,24 @@ export function useBotMetrics(period: 'today' | 'week' | 'month' = 'today') {
     queryFn: () => botService.getMetrics(clinicId!, period),
     enabled: !!clinicId,
     staleTime: 2 * 60 * 1000,
+  })
+}
+
+/**
+ * Fechar a tarefa e o que tira a conversa de HUMAN_PENDING: ela vai para o
+ * cooldown (o bot responde se a paciente escrever, mas nao inicia nada). A fila
+ * e recarregada porque a linha muda de aba.
+ */
+export function useFecharTarefa() {
+  const { clinicId } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (tarefaId: string) => botService.fecharTarefa(clinicId!, tarefaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: botKeys.active(clinicId!) })
+      queryClient.invalidateQueries({ queryKey: botKeys.tarefas(clinicId!) })
+    },
   })
 }
 

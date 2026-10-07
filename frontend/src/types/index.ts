@@ -416,6 +416,29 @@ export interface ActiveConversation {
    */
   handoff_reason_label: string
   updated_at: string
+  /**
+   * Quem atende agora (PRD 020): BOT_ACTIVE, HUMAN_ACTIVE, HUMAN_PENDING,
+   * COOLDOWN. HUMAN_PENDING e a conversa que o bot entregou com assunto em
+   * aberto e cujo prazo humano venceu - fica com uma pessoa ate a tarefa
+   * fechar.
+   */
+  handler?: string
+  /** O que o bot nao conseguiu atender ao entregar (vocabulario de motivos). */
+  pending_intent?: string | null
+  /** A tarefa humana aberta para esta conversa, se houver. */
+  pending_task_id?: string | null
+  /** O cron decidiu calar com a ultima fala sendo da paciente. Chave fechada. */
+  alerta?: string | null
+  /** O alerta em portugues, vindo do servidor pela mesma razao do handoff_reason_label. */
+  alerta_label?: string
+}
+
+export interface Tarefa {
+  id: string
+  phone: string
+  intent: string
+  motivo: string
+  aberta_em: string
 }
 
 export interface ConversationPreview {
