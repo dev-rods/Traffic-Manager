@@ -3,6 +3,8 @@ service: clinic-scheduler-infra
 frameworkVersion: "3"
 
 custom:
+  # Modo do plugin log-groups-fora-do-stack: vazio (nada), retain ou remove.
+  logGroups: ${param:logGroups, ''}
   stage: ${opt:stage, self:provider.stage}
   resourcePrefix: ${self:service}-${self:custom.stage}
   accountId: "796000356030"
@@ -124,3 +126,7 @@ resources:
 plugins:
   - serverless-python-requirements
   - serverless-iam-roles-per-function
+  # Tira os 78 log groups do stack (496/500 recursos). Ver o cabecalho do
+  # plugin: SEMPRE um deploy com --param="logGroups=retain" ANTES do deploy
+  # com --param="logGroups=remove"; pular o primeiro apaga os grupos.
+  - ./sls/plugins/log-groups-fora-do-stack.js
