@@ -115,7 +115,7 @@ class TestFonteUnica(unittest.TestCase):
         import inspect
         from src.services.ai_tools import ToolExecutor
 
-        fonte = inspect.getsource(ToolExecutor._tool_calculate_discount)
+        fonte = inspect.getsource(ToolExecutor._calcula_desconto)
         self.assertIn("e_primeira_visita(", fonte)
         self.assertNotIn("SELECT COUNT(*) as cnt FROM scheduler.appointments", fonte)
 
