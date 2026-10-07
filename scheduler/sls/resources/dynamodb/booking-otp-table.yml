@@ -1,0 +1,15 @@
+Resources:
+  BookingOtpCodesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ${self:custom.resourcePrefix}-booking-otp-codes
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: clinic_phone
+          AttributeType: S
+      KeySchema:
+        - AttributeName: clinic_phone
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true

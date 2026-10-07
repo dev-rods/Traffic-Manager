@@ -1,0 +1,11 @@
+node_modules
+dist
+.serverless
+__pycache__
+*.pyc
+.venv
+venv
+.pytest_cache
+infra
+scheduler
+.git

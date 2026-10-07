@@ -58,6 +58,8 @@ SQL_STATEMENTS = [
         idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72,
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
+        logo_url VARCHAR(500),
+        favicon_url VARCHAR(500),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -86,6 +88,7 @@ SQL_STATEMENTS = [
         name VARCHAR(255) NOT NULL,
         role VARCHAR(100),
         active BOOLEAN DEFAULT TRUE,
+        photo_url VARCHAR(500),
         created_at TIMESTAMP DEFAULT NOW()
     )
     """,
@@ -631,6 +634,23 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
     "idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72",
 
+    # FAQ da Essencia: "Qual o intervalo entre as sessoes?". Em 06/10/2026 uma
+    # paciente perguntou "fiz 29/9, faco 28/10?", a informacao existia so
+    # dentro de outras respostas, a busca nao achou e o bot pediu
+    # especialista. A resposta e a que a atendente deu. Dado da clinica, nao
+    # regra - fica aqui porque o Andre pediu no mesmo PR, e e idempotente.
+    # Aplicado a mao em dev e prod em 06/10/2026.
+    """
+    INSERT INTO scheduler.faq_items (clinic_id, question_key, question_label, answer, display_order, active)
+    SELECT 'clinicaessenciaestetica-9668a4', 'SESSION_INTERVAL', 'Qual o intervalo entre as sessões?',
+           'O intervalo entre as sessões é de aproximadamente 30 dias, podendo variar um pouco para mais ou para menos conforme as datas de cada mês. Uma diferença de poucos dias não interfere no tratamento - só não podemos fugir muito desse intervalo.',
+           COALESCE((SELECT MAX(display_order) FROM scheduler.faq_items
+                      WHERE clinic_id = 'clinicaessenciaestetica-9668a4'), 0) + 1, TRUE
+    WHERE EXISTS (SELECT 1 FROM scheduler.clinics WHERE clinic_id = 'clinicaessenciaestetica-9668a4')
+      AND NOT EXISTS (SELECT 1 FROM scheduler.faq_items
+                       WHERE clinic_id = 'clinicaessenciaestetica-9668a4' AND question_key = 'SESSION_INTERVAL')
+    """,
+
     # Dados de cadastro coletados na confirmação do agendamento.
     # Sem estas colunas o bot pediria CPF e data de nascimento e descartaria a
     # resposta, que além de inútil é ruim para dado pessoal.
@@ -747,6 +767,14 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS offline_conversion_action_id VARCHAR(30)",
     # Note: scheduler.lead_conversions is defined (CREATE IF NOT EXISTS) in the tables
     # section above, which also covers existing DBs on re-run.
+
+    # --- Site público de agendamento (booking-site) ---
+    # Logo do salão (header/hero do site público) e foto do profissional (avatar no wizard)
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500)",
+    "ALTER TABLE scheduler.professionals ADD COLUMN IF NOT EXISTS photo_url VARCHAR(500)",
+
+    # Favicon do salão (ícone da aba do navegador no site público), configurável no painel
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS favicon_url VARCHAR(500)",
 
     # Regras de duração da sessão por quantidade de áreas.
     # Semeia uma linha por clínica com o padrão da Essência: quem já opera não

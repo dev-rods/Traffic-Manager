@@ -223,5 +223,84 @@ class TestOsAchadosDaRevisao(unittest.TestCase):
         self.assertIn("Pode fazer em pele bronzeada/com sol?", titulos(r))
 
 
+class TestIntervaloEntreSessoes(unittest.TestCase):
+    """06/10/2026: "fiz 29/9, faço 28/10?" foi para especialista porque o FAQ
+    não tinha a pergunta - a resposta estava escondida dentro de "Quantas
+    sessões?" e de "mais de uma sessão no mesmo dia?". O item novo tem de
+    chegar ao modelo para as formas em que ele pergunta à tool."""
+
+    def test_o_item_chega_ao_modelo(self):
+        from tests.unit.faq_real import FAQ_ESSENCIA
+
+        for pergunta in (
+            "Qual o intervalo recomendado entre sessões de depilação a laser?",
+            "Qual o intervalo ideal entre uma sessão de depilação a laser e outra?",
+            "intervalo entre sessões",
+            "quanto tempo entre uma sessão e outra",
+        ):
+            with self.subTest(pergunta=pergunta):
+                achados = [a["question_label"] for a in busca(pergunta, FAQ_ESSENCIA)]
+                self.assertIn("Qual o intervalo entre as sessões?", achados)
+
+
+class TestPerguntasReaisDeProducao(unittest.TestCase):
+    """O que o modelo de fato perguntou à tool em produção (12 dias até
+    06/10/2026), com o item que deveria vir em primeiro - ou None quando o
+    FAQ não tem a resposta e o certo é voltar vazio.
+
+    Antes da cobertura do título: 24 de 33. Depois: 30. Os três que ainda
+    erram estão em `AINDA_ERRAM`, nomeados, para quem for mexer no ranqueador
+    saber o que ganha e o que perde.
+    """
+
+    INTERVALO = "Qual o intervalo entre as sessões?"
+    CASOS = [
+        ("Qual o intervalo recomendado entre sessões de depilação a laser?", INTERVALO),
+        ("Qual o intervalo ideal entre uma sessão de depilação a laser e outra?", INTERVALO),
+        ("intervalo entre sessões", INTERVALO),
+        ("quanto tempo entre uma sessão e outra", INTERVALO),
+        ("Quantas sessões são necessárias para resultado?", "Quantas sessões são necessárias?"),
+        ("Depilação a laser dói? Como funciona o método?", "Depilação a Laser dói?"),
+        ("virilha completa inclui região perianal/ânus?", "Virilha completa já inclui o ânus?"),
+        ("virilha inclui região do ânus/perianal?", "Virilha completa já inclui o ânus?"),
+        ("vocês fazem pacote de sessões?", {"Quantas sessões são necessárias?", None}),
+        ("Vocês fazem botox?", None),
+        ("Vocês emitem nota fiscal?", None),
+        ("Parcela? Formas de pagamento, aceita parcelamento?", None),
+        ("atraso para a sessão, posso chegar atrasada", None),
+        ("Posso escolher atendimento com uma profissional específica?", None),
+        ("Por que o preço das áreas mudou de um mês para outro?", None),
+    ]
+
+    # Conhecidos. Não são regressão: já erravam antes da cobertura.
+    AINDA_ERRAM = [
+        # "raspar" não vira "raspe", e "gilete" só aparece numa resposta.
+        ("Precisa raspar/passar gilete antes da sessão?",
+         {"Precisa de cuidados antes ou depois?", "A clínica pode auxiliar na raspagem pré-sessão?"}),
+        # "antes" e "durante" casam o item de cuidados.
+        ("Vocês abrem aos sábados ou apenas durante a semana?", None),
+        # "completo" e "inclui" casam o item da virilha.
+        ("Rosto completo inclui pescoço?", None),
+    ]
+
+    def test_o_primeiro_e_o_certo(self):
+        for pergunta, esperado in self.CASOS:
+            with self.subTest(pergunta=pergunta):
+                r = titulos(busca(pergunta, FAQ_ESSENCIA))
+                topo = r[0] if r else None
+                if isinstance(esperado, set):
+                    self.assertIn(topo, esperado)
+                else:
+                    self.assertEqual(topo, esperado)
+
+    def test_os_que_ainda_erram_continuam_nomeados(self):
+        """Quando um destes passar, ele sai daqui e entra em CASOS."""
+        for pergunta, esperado in self.AINDA_ERRAM:
+            with self.subTest(pergunta=pergunta):
+                r = titulos(busca(pergunta, FAQ_ESSENCIA))
+                topo = r[0] if r else None
+                acertou = topo in esperado if isinstance(esperado, set) else topo == esperado
+                self.assertFalse(acertou, "passou a acertar: mova para CASOS")
+
 if __name__ == "__main__":
     unittest.main()

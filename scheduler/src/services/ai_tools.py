@@ -10,6 +10,7 @@ from src.services.confirmacao_de_areas import (
     separa,
 )
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
+from src.services.combos import aplica as aplica_combos
 from src.services.areas_ambiguas import recado_de_recusa as recado_de_ambiguidade
 from src.services.bot_policy import (
     MOTIVOS_DO_MODELO,
@@ -41,6 +42,35 @@ _PT_MONTH = [
     "janeiro", "fevereiro", "março", "abril", "maio", "junho",
     "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
 ]
+
+
+def _anota_combos(resultado, trocas):
+    """O modelo precisa saber que trocou, para confirmar com a pessoa pelo
+    nome certo e nao anunciar as duas separadas."""
+    if trocas and isinstance(resultado, dict) and not resultado.get("error"):
+        resultado["combos_aplicados"] = [
+            {"de": t["de"], "para": t["para"], "economia_cents": t["economia_cents"]}
+            for t in trocas
+        ]
+        resultado["o_que_dizer"] = (
+            "As areas abaixo foram unidas num combo do cadastro, mais barato que "
+            "a soma. Ao confirmar com a pessoa, use o nome do combo: "
+            + "; ".join(f"{' + '.join(t['de'])} -> {t['para']}" for t in trocas)
+        )
+    return resultado
+
+
+def _normaliza_hora(valor) -> Optional[str]:
+    """'17:45', '17h45', '17:45h', '17h' -> 'HH:MM'. Lixo -> None."""
+    if not valor:
+        return None
+    m = re.match(r"^\s*(\d{1,2})\s*[:hH]\s*(\d{2})?\s*[hH]?\s*$", str(valor))
+    if not m:
+        return None
+    h, mm = int(m.group(1)), int(m.group(2) or 0)
+    if not (0 <= h <= 23 and 0 <= mm <= 59):
+        return None
+    return f"{h:02d}:{mm:02d}"
 
 
 def _format_pt_br_date_label(iso_date: str) -> str:
@@ -118,13 +148,29 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_time_slots",
-            "description": "Get available time slots for a specific date and the selected areas. Only call AFTER the patient has chosen a date from check_availability. Returns `available_slots` (HH:MM strings) and `date_label` (PT-BR formatted date — use for display).",
+            "description": (
+                "Get available time slots for a specific date and the selected areas. "
+                "Only call AFTER the patient has chosen a date from check_availability. "
+                "Returns `available_slots` (HH:MM strings, a GRID of suggestions - not "
+                "every time that fits) and `date_label` (PT-BR formatted date - use for "
+                "display). If the patient asked for a SPECIFIC time, pass it as "
+                "`horario_pedido`: the result then says whether that exact time fits "
+                "(`horario_pedido_disponivel`). Never tell the patient a time is "
+                "unavailable only because it is not in the grid."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "date": {
                         "type": "string",
                         "description": "Date in YYYY-MM-DD format",
+                    },
+                    "horario_pedido": {
+                        "type": "string",
+                        "description": (
+                            "The exact time the patient asked for, HH:MM, when they asked "
+                            "for one (e.g. '17:45'). Omit when they did not."
+                        ),
                     },
                     "service_area_pairs": {
                         "type": "array",
@@ -675,6 +721,10 @@ class ToolExecutor:
         recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
         if recusa:
             return recusa
+        trocas = self._troca_por_combos(args, clinic_id)
+        return _anota_combos(self._horarios(args, clinic_id, phone, ctx), trocas)
+
+    def _horarios(self, args, clinic_id, phone, ctx):
         target_date = args.get("date")
         if not target_date:
             return {"error": "date is required"}
@@ -682,11 +732,29 @@ class ToolExecutor:
             return {"error": "Availability engine not available"}
         total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
         slots = self.availability_engine.get_available_slots_multi(clinic_id, target_date, total_duration)
-        return {
+        resultado = {
             "date": target_date,
             "date_label": _format_pt_br_date_label(target_date),
             "available_slots": slots,
         }
+
+        # A grade sugere; ela nao responde "tem 17:45?". Em 06/10/2026 a
+        # Olivia pediu 17:45 no dia 21/10, a janela 16:25-18:25 estava livre,
+        # a grade de 35 em 35 devolveu 16:25, 17:00 e 17:35, e o bot disse que
+        # 17:45 nao existia. Cabia. Quem pergunta por hora exata recebe a
+        # resposta exata, e a hora entra na lista para a proveniencia a
+        # respaldar.
+        pedido = _normaliza_hora(args.get("horario_pedido"))
+        if pedido:
+            cabe = self.availability_engine.cabe_no_horario(
+                clinic_id, target_date, total_duration, pedido
+            )
+            resultado["horario_pedido"] = pedido
+            resultado["horario_pedido_disponivel"] = cabe
+            if cabe and pedido not in slots:
+                resultado["available_slots"] = sorted(set(slots) | {pedido})
+            logger.info(f"[Slots] {phone}: pediu {pedido} em {target_date} -> {'cabe' if cabe else 'nao cabe'}")
+        return resultado
 
     def _tool_sem_consulta_necessaria(self, args, clinic_id, phone, ctx):
         """A saída para quando a mensagem realmente não pede dado nenhum.
@@ -926,6 +994,51 @@ class ToolExecutor:
         recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
         if recusa:
             return recusa
+        trocas = self._troca_por_combos(args, clinic_id)
+        return _anota_combos(self._agenda(args, clinic_id, phone, ctx), trocas)
+
+    def _troca_por_combos(self, args, clinic_id):
+        """Partes que formam um combo do cadastro viram o combo, nos argumentos.
+
+        Depois da trava de areas (as PARTES e que foram conversadas; o combo
+        e substituicao deterministica) e antes de preco, horario e agendamento
+        - os tres leem `service_area_pairs`. Ver combos.py. Nunca levanta: sem
+        catalogo ou sem preco, os pares seguem como vieram.
+        """
+        pares = args.get("service_area_pairs") or []
+        if len(pares) < 2:
+            return []
+        try:
+            areas = self.db.execute_query(
+                "SELECT id, name FROM scheduler.areas WHERE clinic_id = %s AND active = true",
+                (clinic_id,),
+            ) or []
+
+            def preco_de(service_id, area_id):
+                rows = self.db.execute_query(
+                    """
+                    SELECT COALESCE(sa.price_cents, s.price_cents) as price_cents
+                    FROM scheduler.service_areas sa
+                    JOIN scheduler.services s ON s.id = sa.service_id
+                    WHERE sa.service_id = %s AND sa.area_id = %s AND sa.active = TRUE
+                    """,
+                    (service_id, area_id),
+                )
+                return rows[0].get("price_cents") if rows else None
+
+            novos, trocas = aplica_combos(pares, areas, preco_de)
+            if trocas:
+                args["service_area_pairs"] = novos
+                logger.info(
+                    f"[Combos] {clinic_id}: "
+                    + "; ".join(f"{' + '.join(t['de'])} -> {t['para']}" for t in trocas)
+                )
+            return trocas
+        except Exception as e:
+            logger.error(f"[Combos] Falha ao conferir combos em {clinic_id}: {e}")
+            return []
+
+    def _agenda(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
 
@@ -1103,6 +1216,10 @@ class ToolExecutor:
         recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
         if recusa:
             return recusa
+        trocas = self._troca_por_combos(args, clinic_id)
+        return _anota_combos(self._calcula_desconto(args, clinic_id, phone, ctx), trocas)
+
+    def _calcula_desconto(self, args, clinic_id, phone, ctx):
         service_area_pairs = args.get("service_area_pairs", [])
         if not service_area_pairs:
             return {"error": "service_area_pairs is required"}

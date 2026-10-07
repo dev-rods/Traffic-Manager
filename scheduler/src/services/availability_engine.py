@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, date, time, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
 
@@ -158,7 +158,45 @@ class AvailabilityEngine:
             return []
 
     def get_available_slots_multi(self, clinic_id: str, target_date: str, total_duration: int) -> List[str]:
-        """Calculate available slots using a direct duration value (sum of selected services)."""
+        """Calculate available slots using a direct duration value (sum of selected services).
+
+        A lista anda de `duracao + buffer` em `duracao + buffer` a partir do
+        inicio de cada janela livre. E uma GRADE, nao a lista de todo horario
+        que cabe: numa janela 16:25-18:25 com sessao de 35 min ela devolve
+        16:25, 17:00 e 17:35, e 17:45 nao aparece embora caiba. Quem pergunta
+        por um horario exato usa `cabe_no_horario`. Ver PR do dia 06/10/2026
+        (Olivia, dia 21/10 as 17:45).
+        """
+        try:
+            free_windows, buffer_minutes = self.janelas_livres(clinic_id, target_date)
+            slot_minutes = self._generate_slots_in_windows(free_windows, total_duration, buffer_minutes)
+            return [_minutes_to_time_str(s) for s in slot_minutes]
+        except Exception as e:
+            logger.error(f"[AvailabilityEngine] Erro ao calcular slots multi: {e}")
+            return []
+
+    def cabe_no_horario(self, clinic_id: str, target_date: str, total_duration: int, hora: str) -> bool:
+        """A sessao de `total_duration` minutos cabe comecando exatamente em `hora`?
+
+        Confere contra as janelas livres, nao contra a grade: a grade e um
+        conjunto de sugestoes, e a pergunta "tem 17:45?" tem resposta
+        independente de 17:45 estar entre as sugestoes. Falha fechada: erro
+        ou hora ilegivel e "nao cabe".
+        """
+        try:
+            inicio = _time_to_minutes(hora)
+            free_windows, _ = self.janelas_livres(clinic_id, target_date)
+            return any(
+                w_inicio <= inicio and inicio + total_duration <= w_fim
+                for w_inicio, w_fim in free_windows
+            )
+        except Exception as e:
+            logger.error(f"[AvailabilityEngine] Erro ao conferir {hora} em {target_date}: {e}")
+            return False
+
+    def janelas_livres(self, clinic_id: str, target_date: str):
+        """(janelas livres em minutos, buffer) do dia: regras menos excecoes
+        menos agendamentos confirmados. Lista vazia quando o dia esta fechado."""
         try:
             # 1. Fetch clinic buffer
             buffer_minutes = self._get_buffer_minutes(clinic_id)
@@ -177,7 +215,7 @@ class AvailabilityEngine:
                 (clinic_id, day_of_week, target_date),
             )
             if not rules:
-                return []
+                return [], buffer_minutes
 
             # Fixed-date rules take priority over recurring day_of_week rules
             fixed_rules = [r for r in rules if r.get("rule_date")]
@@ -195,7 +233,7 @@ class AvailabilityEngine:
 
             for exc in exceptions:
                 if exc["exception_type"] == "BLOCKED":
-                    return []
+                    return [], buffer_minutes
                 elif exc["exception_type"] == "SPECIAL_HOURS":
                     rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
 
@@ -208,15 +246,12 @@ class AvailabilityEngine:
                 (clinic_id, target_date),
             )
 
-            # 6. Calculate free windows and generate slots in gaps
-            free_windows = self._calculate_free_windows(rules, appointments, buffer_minutes)
-            slot_minutes = self._generate_slots_in_windows(free_windows, total_duration, buffer_minutes)
-
-            return [_minutes_to_time_str(s) for s in slot_minutes]
+            # 6. Calculate free windows
+            return self._calculate_free_windows(rules, appointments, buffer_minutes), buffer_minutes
 
         except Exception as e:
-            logger.error(f"[AvailabilityEngine] Erro ao calcular slots multi: {e}")
-            return []
+            logger.error(f"[AvailabilityEngine] Erro ao calcular janelas livres: {e}")
+            return [], 0
 
     def get_available_days_multi(self, clinic_id: str, total_duration: int, max_dates: Optional[int] = None) -> List[str]:
         """Find available days using a direct duration value (sum of selected services)."""
@@ -238,6 +273,82 @@ class AvailabilityEngine:
         except Exception as e:
             logger.error(f"[AvailabilityEngine] Erro ao buscar dias disponiveis multi: {e}")
             return []
+
+    def get_days_status(self, clinic_id: str, dates: List[str], duration_minutes: int) -> Dict[str, dict]:
+        """Status por dia (CLOSED | FULL | AVAILABLE) + horários livres, para uma lista de datas.
+
+        Mesma lógica de `get_available_slots_multi`, rodada por várias datas de uma vez,
+        mas sem descartar o motivo de "sem horário": distingue clínica fechada nesse dia
+        (sem regra / bloqueada) de clínica aberta mas com a agenda cheia — usado pelo
+        seletor de semana do booking-site. O bot de WhatsApp usa `get_available_days*`
+        (que só filtra os dias com vaga); esta função reaproveita as mesmas queries e
+        helpers, só que preservando os três estados para exibição.
+        """
+        clinics = self.db.execute_query(
+            "SELECT buffer_minutes FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
+            (clinic_id,),
+        )
+        buffer_minutes = clinics[0]["buffer_minutes"] if clinics else 10
+
+        result: Dict[str, dict] = {}
+        for target_date in dates:
+            dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+            day_of_week = dt.isoweekday() % 7
+
+            rules = self.db.execute_query(
+                """
+                SELECT start_time, end_time, rule_date FROM scheduler.availability_rules
+                WHERE clinic_id = %s AND active = TRUE
+                  AND (day_of_week = %s OR rule_date = %s)
+                """,
+                (clinic_id, day_of_week, target_date),
+            )
+            if not rules:
+                result[target_date] = {"status": "CLOSED", "slots": []}
+                continue
+
+            fixed_rules = [r for r in rules if r.get("rule_date")]
+            if fixed_rules:
+                rules = fixed_rules
+
+            exceptions = self.db.execute_query(
+                """
+                SELECT exception_type, start_time, end_time FROM scheduler.availability_exceptions
+                WHERE clinic_id = %s AND exception_date = %s
+                """,
+                (clinic_id, target_date),
+            )
+
+            blocked = False
+            for exc in exceptions:
+                if exc["exception_type"] == "BLOCKED":
+                    blocked = True
+                    break
+                elif exc["exception_type"] == "SPECIAL_HOURS":
+                    rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
+
+            if blocked:
+                result[target_date] = {"status": "CLOSED", "slots": []}
+                continue
+
+            appointments = self.db.execute_query(
+                """
+                SELECT start_time, end_time FROM scheduler.appointments
+                WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
+                """,
+                (clinic_id, target_date),
+            )
+
+            free_windows = self._calculate_free_windows(rules, appointments, buffer_minutes)
+            slot_minutes = self._generate_slots_in_windows(free_windows, duration_minutes, buffer_minutes)
+            slots = [_minutes_to_time_str(s) for s in slot_minutes]
+
+            result[target_date] = {
+                "status": "AVAILABLE" if slots else "FULL",
+                "slots": slots,
+            }
+
+        return result
 
     @staticmethod
     def _calculate_free_windows(rules: list, appointments: list, buffer_minutes: int) -> List[tuple]:
