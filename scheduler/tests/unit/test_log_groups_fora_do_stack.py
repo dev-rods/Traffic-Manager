@@ -93,7 +93,7 @@ class TestFiacao(unittest.TestCase):
     def test_plugin_declarado_e_modo_por_param(self):
         yml = open(os.path.join(RAIZ, "serverless.yml"), encoding="utf-8").read()
         self.assertIn("./sls/plugins/log-groups-fora-do-stack.js", yml)
-        self.assertIn("logGroups: ${param:logGroups, ''}", yml)
+        self.assertIn("logGroups: ${param:logGroups, 'remove'}", yml)
 
     def test_nenhuma_funcao_usa_disable_logs(self):
         """disableLogs no Serverless 3 e um Deny de PutLogEvents: desliga o log."""
