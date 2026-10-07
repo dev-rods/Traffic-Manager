@@ -151,6 +151,16 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
                ":u": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     sets = ["#s.#a = :a", "updatedAt = :u", "clinicId = :c", "phone = :p"]
     valores[":c"], valores[":p"] = clinic_id, phone
+    # Copias na RAIZ do item, para o indice handler-humanUntil-index: uma GSI
+    # nao indexa caminho aninhado. A fonte continua sendo `session.atendimento`.
+    nomes["#h"], nomes["#hu"] = "handler", "humanUntil"
+    valores[":h"] = bloco.get("handler") or "BOT_ACTIVE"
+    sets.append("#h = :h")
+    if bloco.get("human_until") is not None:
+        valores[":hu"] = int(bloco["human_until"])
+        sets.append("#hu = :hu")
+    else:
+        removes_raiz = ["#hu"]
     removes = []
     i = 0
     for campo in _PROJECAO_LEGADA + tuple((extras or {}).keys()):
@@ -166,6 +176,7 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
             removes.append(f"#s.#f{i}")
 
     expressao = "SET " + ", ".join(sets)
+    removes = removes + (locals().get("removes_raiz") or [])
     if removes:
         expressao += " REMOVE " + ", ".join(removes)
 
@@ -174,10 +185,14 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
     try:
         item = table.get_item(Key={"pk": pk, "sk": sk}).get("Item") or {}
         if not item.get("session"):
-            table.put_item(Item={
+            novo = {
                 "pk": pk, "sk": sk, "session": session, "clinicId": clinic_id,
                 "phone": phone, "updatedAt": valores[":u"],
-            })
+                "handler": valores[":h"],
+            }
+            if ":hu" in valores:
+                novo["humanUntil"] = valores[":hu"]
+            table.put_item(Item=novo)
             return True
 
         condicao = (

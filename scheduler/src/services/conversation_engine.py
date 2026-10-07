@@ -20,9 +20,9 @@ from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
 
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, get_duration_rules)
+from src.services.atendimento import TTL_HUMANO
 from src.services.bot_policy import (
     MOTIVO_FORA_DO_ESCOPO,
-    TTL_DO_ATENDIMENTO,
     entrega_a_humano,
     entrega_por_instabilidade,
 )
@@ -437,7 +437,7 @@ class ConversationEngine:
                     is_active = now < session.get("attendant_active_until", 0)
                 else:
                     handoff_at = session.get("human_handoff_requested_at", 0)
-                    is_active = now < (handoff_at + TTL_DO_ATENDIMENTO)
+                    is_active = now < (handoff_at + TTL_HUMANO)
 
                 if is_active:
                     logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone} state={current_state}")

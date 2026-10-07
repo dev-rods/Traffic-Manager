@@ -59,25 +59,32 @@ class TestAtendimentoEmCursoVence(unittest.TestCase):
         self.assertTrue(should_bot_reply(CLINICA_ABERTA, {}, "5511999990000"))
 
 
-class TestDeQuemEAConversaNaoVence(unittest.TestCase):
-    """Quem começou não deixa de ter começado amanhã."""
+class TestAsPausasDeOrigemVencem(unittest.TestCase):
+    """Decisão 9.1 do PRD 020 (André, 05/10/2026): nenhuma pausa é permanente.
 
-    def test_ja_iniciada_no_painel_nao_vence(self):
-        """Se vencesse, o bot entraria no dia seguinte numa conversa que uma
-        pessoa conduz - o dano exato que o botão existe para impedir."""
+    Até a fase 3, CONTATO_MANUAL e CHAT_ANTERIOR nunca venciam - 2912
+    conversas anteriores a nós ficariam sem bot para sempre. Agora vencem pelo
+    mesmo TTL de 24h, contado da última mensagem conhecida; o cooldown garante
+    que o bot só responde a quem escrever, sem iniciar nada.
+    """
+
+    def test_ja_iniciada_no_painel_segura_enquanto_o_prazo_corre(self):
         marcada = {CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL,
-                   "attendant_active_until": PASSADO, "bot_enabled": True}
-
+                   "attendant_active_until": FUTURO, "bot_enabled": True}
         self.assertTrue(esta_pausado(marcada))
         self.assertFalse(should_bot_reply(CLINICA_LEADS, marcada, "5511999990000"))
 
-    def test_chat_anterior_nao_vence(self):
-        self.assertTrue(esta_pausado({CAMPO_DE_PAUSA: PAUSA_CHAT_ANTERIOR}))
+    def test_ja_iniciada_vencida_libera_a_resposta(self):
+        marcada = {CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL,
+                   "attendant_active_until": PASSADO, "bot_enabled": True}
+        self.assertFalse(esta_pausado(marcada))
+        self.assertTrue(should_bot_reply(CLINICA_LEADS, marcada, "5511999990000"))
 
-    def test_sem_prazo_nenhum_continuam_pausadas(self):
+    def test_sem_prazo_nenhum_ja_venceram(self):
+        """Sessão legada sem data: vencida há muito. Responde, não inicia."""
         for motivo in (PAUSA_CONTATO_MANUAL, PAUSA_CHAT_ANTERIOR):
             with self.subTest(motivo=motivo):
-                self.assertTrue(esta_pausado({CAMPO_DE_PAUSA: motivo}))
+                self.assertFalse(esta_pausado({CAMPO_DE_PAUSA: motivo}))
 
 
 class TestCompatibilidade(unittest.TestCase):
@@ -117,10 +124,12 @@ class TestLeadsOnly(unittest.TestCase):
 
     def test_lead_com_conversa_humana_nao_recebe_resposta(self):
         """O caso que motivou tudo: o botão "Já iniciada" precisa governar, não
-        só registrar. Sem isso o bot respondia por cima da atendente."""
+        só registrar. Sem isso o bot respondia por cima da atendente. Desde a
+        decisão 9.1 governa pelo prazo de 24h, como qualquer atendimento."""
         self.assertFalse(should_bot_reply(
             CLINICA_LEADS,
-            {"bot_enabled": True, CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL},
+            {"bot_enabled": True, CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL,
+             "attendant_active_until": FUTURO},
             "5511999990000"))
 
 

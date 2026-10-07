@@ -27,12 +27,6 @@ CAMPO_DE_PAUSA = "bot_pausado_por"
 # André em 06/09/2026. A fonte e `atendimento.TTL_HUMANO`; isto e o nome antigo.
 TTL_DO_ATENDIMENTO = atendimento.TTL_HUMANO
 
-# As que NAO vencem por tempo (ainda). Decisao 9.1 do PRD 020: passam a
-# vencer na fase 3, quando houver a data da ultima mensagem; a regra mora em
-# `atendimento.migra_do_legado`. O nome fica so para quem ainda o importa.
-PAUSAS_PERMANENTES = frozenset({PAUSA_CONTATO_MANUAL, PAUSA_CHAT_ANTERIOR})
-
-
 def esta_pausado(session: Optional[Dict]) -> bool:
     """A conversa foi entregue a uma pessoa e o bot não fala.
 

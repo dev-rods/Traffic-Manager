@@ -91,8 +91,14 @@ def handler(event, context):
             conversations.append({
                 "phone": phone,
                 "state": state,
-                # Quem atende agora: BOT_ACTIVE, HUMAN_ACTIVE, COOLDOWN...
+                # Quem atende agora: BOT_ACTIVE, HUMAN_ACTIVE, HUMAN_PENDING, COOLDOWN.
                 "handler": atendimento.estado(session, now),
+                # O que ficou em aberto quando o bot entregou, a tarefa que
+                # carrega isso, e o alerta do cron quando ele decidiu calar
+                # com a ultima fala sendo do cliente (PRD 020 §3.6 e §3.7).
+                "pending_intent": atendimento.bloco(session).get("pending_intent"),
+                "pending_task_id": atendimento.bloco(session).get("pending_task_id"),
+                "alerta": atendimento.bloco(session).get("alerta"),
                 "bot_paused": not responde,
                 # Distingue "alguém pausou" de "a política não cobre esta conversa":
                 # o primeiro se resolve retomando, o segundo é o padrão da clínica.

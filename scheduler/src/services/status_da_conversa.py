@@ -51,6 +51,9 @@ def status_de_uma_sessao(sessao, agora=None):
     # antigos de `state` continuam valendo para sessao gravada antes do TTL
     # existir: um HUMAN_HANDOFF sem prazo nenhum ainda e alguem esperando.
     if atendimento.esta_com_pessoa(sessao, agora):
+        # Tarefa aberta e espera de pessoa, de quem quer que tenha entregue.
+        if atendimento.estado(sessao, agora) == atendimento.HUMAN_PENDING:
+            return AGUARDA_HUMANO
         return AGUARDA_HUMANO if atendimento.aguarda_especialista(sessao, agora) else HUMANO
     if estado in ESTADOS_DE_ATENDENTE and not sessao.get("attendant_active_until"):
         return HUMANO

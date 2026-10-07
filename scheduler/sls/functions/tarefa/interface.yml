@@ -1,0 +1,29 @@
+Tarefas:
+  handler: src.functions.tarefa.router.handler
+  memorySize: 256
+  timeout: 15
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-Tarefas-lambdaRole
+  iamRoleStatements:
+    # Fechar a tarefa move a conversa de HUMAN_PENDING para cooldown.
+    - Effect: Allow
+      Action:
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/tarefas
+        method: get
+        cors: true
+    - http:
+        path: clinics/{clinicId}/tarefas/{tarefaId}/close
+        method: post
+        cors: true

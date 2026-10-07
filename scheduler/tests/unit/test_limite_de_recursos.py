@@ -53,9 +53,13 @@ class TestNumeroDeFuncoes(unittest.TestCase):
     é dividir o stack (serverless-plugin-split-stacks) ou separar o serviço.
     """
 
-    # 76 em uso + 2 de margem. Subir isto exige MEDIR de novo, e não só somar:
+    # Medido em 07/10/2026, DEPOIS de os 78 log groups sairem do stack
+    # (sls/plugins/log-groups-fora-do-stack.js): prod em 418 de 500 com 78
+    # funcoes, ~5,4 recursos por funcao. Sobram 82 recursos, ~15 funcoes.
+    # 78 em uso + 2 da fase 3 (ExpiraAtendimentos, Tarefas) + margem.
+    # Subir isto exige MEDIR de novo, e nao so somar:
     #   aws cloudformation list-stack-resources --stack-name clinic-scheduler-infra-prod
-    LIMITE_DE_FUNCOES = 78
+    LIMITE_DE_FUNCOES = 86
 
     def test_cabe_no_stack(self):
         pasta = SERVERLESS.parent / "sls" / "functions"
