@@ -47,7 +47,7 @@ def handler(event, context):
             return http_response(401, {"status": "ERROR", "message": "Verificação por WhatsApp expirada. Confirme o código novamente."})
 
         db = PostgresService()
-        service = AppointmentService(db)
+        service = AppointmentService.completo(db)
         appointments = service.get_active_appointments_by_phone(clinic_id, phone)
 
         return http_response(200, {

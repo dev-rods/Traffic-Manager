@@ -62,7 +62,7 @@ def handler(event, context):
         if not owned:
             return http_response(404, {"status": "ERROR", "message": "Agendamento não encontrado para este telefone"})
 
-        service = AppointmentService(db)
+        service = AppointmentService.completo(db)
         result = service.cancel_appointment(appointment_id)
 
         return http_response(200, {

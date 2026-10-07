@@ -81,11 +81,6 @@ UploadAssetUrl:
         - "arn:aws:s3:::${self:custom.resourcePrefix}-clinic-assets/clinics/*"
     - Effect: Allow
       Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
         - logs:CreateLogGroup
         - logs:CreateLogStream
         - logs:PutLogEvents

@@ -134,7 +134,7 @@ def handler(event, context):
         if not clinics:
             return http_response(404, {"status": "ERROR", "message": "Salão não encontrado"})
 
-        service = AppointmentService(db)
+        service = AppointmentService.completo(db)
 
         result = service.create_appointment(
             clinic_id=clinic_id,
