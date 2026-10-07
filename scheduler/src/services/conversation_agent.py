@@ -788,7 +788,13 @@ class ConversationAgent:
         # banco. Se gravou, a resposta vai mesmo que a pessoa tenha escrito no
         # meio: um agendamento existe e ela precisa saber. Se nao gravou, a
         # resposta pode ser descartada em favor da rajada completa.
-        session["efeito_na_ultima_rodada"] = bool(efeito_cometido)
+        #
+        # Handoff E efeito: a pausa ja esta gravada nesta sessao. Em
+        # 06/10/2026 o agente pediu especialista, a paciente escreveu durante o
+        # processamento, o agregador descartou a MENSAGEM e manteve a PAUSA -
+        # a rodada seguinte viu "atendente ativa" e calou. Ela ficou tres horas
+        # sem resposta nenhuma, e ninguem lhe disse que alguem viria.
+        session["efeito_na_ultima_rodada"] = bool(efeito_cometido) or bool(handoff_requested)
         session[CAMPO_DE_RECUSAS] = recusas_da_conversa
         self._save_session(clinic_id, phone, session)
 
