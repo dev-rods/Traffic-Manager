@@ -27,6 +27,12 @@ from src.services.prompt_da_campanha import pede_cadastro
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.identificacao_de_paciente import sem_passo_de_cadastro
 from src.services.narracao import narra_a_pessoa
+from src.services.valor_para_recorrente import (
+    anuncia_valor,
+    e_recorrente,
+    pediu_valor,
+    sem_valor_no_roteiro,
+)
 from src.services.calendario import bloco_de_contexto
 from src.services.menor_de_idade import TEXTO as AVISO_DE_MENOR
 from src.services.menor_de_idade import afirmacao_sem_respaldo as afirmacao_de_menor_sem_respaldo
@@ -243,6 +249,12 @@ class ConversationAgent:
             # RETIRADO, nao contradito: o roteiro com texto pronto vence
             # qualquer "nao peca" colado no fim. Ver prompt_da_campanha.
             system_prompt = sem_passo_de_cadastro(system_prompt, paciente.get("nome", ""))
+        # Quem ja e paciente nao ouve o valor ao confirmar - so se perguntar.
+        # A campanha ja tem a propria regra e o proprio roteiro; fora dela,
+        # vale para qualquer recorrente. Ver valor_para_recorrente.
+        recorrente = e_recorrente(paciente) and not campanha_viva(session)
+        if recorrente:
+            system_prompt = sem_valor_no_roteiro(system_prompt)
 
         # 4. Load conversation history and append user message
         # Sanitize loaded history: sessions saved by older code versions may
@@ -401,6 +413,7 @@ class ConversationAgent:
         ja_refez = False
         ja_refez_cadastro = False
         ja_refez_narracao = False
+        ja_refez_valor = False
         em_campanha = campanha_viva(session)
         # O contador do quebra-laço atravessa turnos: cada pergunta da trava é
         # uma mensagem nova, e um contador de uma rodada só veria a primeira
@@ -516,6 +529,34 @@ class ConversationAgent:
                     elif narrado:
                         logger.error(
                             f"[Narracao] {phone} insistiu em narrar ({narrado!r}); "
+                            f"resposta segue | {texto_provisorio[:160]!r}"
+                        )
+
+                    # Paciente recorrente nao ouve valor sem ter perguntado.
+                    # Retirar do roteiro reduz a chance; a trava garante uma
+                    # reescrita. Se insistir, segue com log - e forma, nao fato.
+                    valor = (
+                        anuncia_valor(texto_provisorio)
+                        if recorrente and not pediu_valor(_turnos_para_trava(history)) else None
+                    )
+                    if valor and not ja_refez_valor and not efeito_cometido:
+                        ja_refez_valor = True
+                        logger.warning(
+                            f"[Valor] {phone} anunciou valor ({valor!r}) a paciente "
+                            f"recorrente que nao perguntou; refazendo"
+                        )
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            "PARE. Esta pessoa JA E PACIENTE e nao perguntou o valor. "
+                            "Nao anuncie valor, total nem desconto ao confirmar: "
+                            "reescreva a mesma mensagem so com areas, data e horario. "
+                            "Se ela perguntar o valor depois, ai sim responda."
+                        )})
+                        text_parts = []
+                        continue
+                    elif valor:
+                        logger.error(
+                            f"[Valor] {phone} insistiu em anunciar valor ({valor!r}); "
                             f"resposta segue | {texto_provisorio[:160]!r}"
                         )
 
@@ -1209,16 +1250,11 @@ class ConversationAgent:
             return {}
 
     def _is_attendant_active(self, session):
-        """Check if human attendant mode is active (TTL-based)."""
-        active_until = session.get("attendant_active_until")
-        if active_until and int(active_until) > int(time.time()):
-            return True
-        state = session.get("state")
-        if state == "HUMAN_ATTENDANT_ACTIVE":
-            # TTL expired — clear state
-            session.pop("attendant_active_until", None)
-            session["state"] = ""
-        return False
+        """A conversa esta com uma pessoa? Delega a `atendimento`: a porta de
+        verdade fica em quem chama o agente, e este check sai na fase 3 do
+        PRD 020. Ate la, nao pode divergir dela."""
+        from src.services import atendimento
+        return atendimento.esta_com_pessoa(session)
 
     @staticmethod
     def _convert_decimals(obj):

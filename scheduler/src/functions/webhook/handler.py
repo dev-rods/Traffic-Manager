@@ -20,14 +20,8 @@ from src.services.agregador_de_mensagens import (
     enfileira,
     junta_conteudo,
 )
-from src.services.bot_policy import (
-    CAMPO_DE_PAUSA,
-    PAUSA_ATENDENTE,
-    PAUSA_CHAT_ANTERIOR,
-    PAUSA_CONTATO_MANUAL,
-    should_bot_reply,
-)
-from src.services.session_store import mark_conversation_eligible
+from src.services import atendimento
+from src.services.session_store import grava_atendimento, mark_conversation_eligible
 from src.services.autoria_mensagem import foi_enviada_pelo_bot
 from src.services.identidade_whatsapp import chat_lid, deve_vincular_lid, telefone_da_conversa
 from src.services.session_store import telefone_do_lid, vincula_lid
@@ -311,13 +305,14 @@ def handler(event, context):
                 # fato e nao governava nada, e o bot respondia por cima da
                 # atendente assim que a pessoa escrevesse.
                 if leads_lp[0].get("first_contact_channel") == "HUMANO":
-                    session[CAMPO_DE_PAUSA] = PAUSA_CONTATO_MANUAL
+                    atendimento.entrega_a_humano(session, por=atendimento.POR_CONTATO_MANUAL)
+                    grava_atendimento(_get_sessions_table(), clinic_id, incoming.phone, session)
 
         # Conversa que ja existia antes de a gente entrar: quem comecou foi
         # gente. So vale na PRIMEIRA vez que vemos esta pessoa - depois disso a
         # conversa e nossa e o proprio bot criou o chat, entao o espelho diria
         # "existe conversa" sobre o trabalho dele mesmo.
-        if primeira_vez and not session.get(CAMPO_DE_PAUSA):
+        if primeira_vez and not atendimento.esta_com_pessoa(session):
             try:
                 ja_existia = db.execute_query(
                     "SELECT 1 FROM scheduler.whatsapp_chats "
@@ -329,18 +324,39 @@ def handler(event, context):
                         f"[Webhook] {incoming.phone} ja tinha conversa no WhatsApp "
                         f"antes de nos; bot pausado ate liberarem no painel"
                     )
-                    session[CAMPO_DE_PAUSA] = PAUSA_CHAT_ANTERIOR
+                    atendimento.entrega_a_humano(session, por=atendimento.POR_CHAT_ANTERIOR)
+                    # Gravada AQUI: a sessao deste request nao e a que o agente
+                    # salva (ele recarrega a sua), e no caminho suprimido
+                    # ninguem mais grava. Sem isto a marca so vivia neste
+                    # request e a proxima mensagem ja nao era "primeira vez".
+                    grava_atendimento(_get_sessions_table(), clinic_id, incoming.phone, session)
             except Exception as e:
                 # Falha aqui nao pode calar o bot nem solta-lo: sem resposta da
                 # consulta, segue o que as outras guardas disserem.
                 logger.error(f"[Webhook] Falha ao conferir conversa anterior: {e}")
-        if clinic.get("bot_paused", False) or not should_bot_reply(clinic, session, incoming.phone):
+
+        # A porta de atendimento (PRD 020 §3.5): pergunta REATIVA. Cooldown e
+        # horario nao entram - quem escreveu esta do outro lado esperando.
+        if not atendimento.pode_responder(clinic, session, incoming.phone):
+            # A fala do cliente fica registrada, e NAO renova o prazo humano:
+            # se renovasse, quem esta sem resposta nunca sairia do lock. E o
+            # que a retomada (fase 3) vai ler para saber se ficou pergunta.
+            if atendimento.esta_com_pessoa(session):
+                atendimento.registra_fala_do_cliente(session)
+                grava_atendimento(_get_sessions_table(), clinic_id, incoming.phone, session)
             logger.info(
                 f"[Webhook] Resposta automática suprimida para {incoming.phone} "
-                f"(paused={clinic.get('bot_paused', False)}, "
+                f"(handler={atendimento.estado(session)}, "
+                f"paused={clinic.get('bot_paused', False)}, "
                 f"policy={clinic.get('bot_autoreply_policy') or 'ALL'})"
             )
             return http_response(200, {"status": "OK"})
+
+        # Em COOLDOWN o cliente escreveu: a conversa volta ao bot. Materializa,
+        # senao `pode_iniciar` seguiria dizendo nao ate o cooldown vencer.
+        if atendimento.estado(session) == atendimento.COOLDOWN:
+            atendimento.registra_fala_do_cliente(session)
+            grava_atendimento(_get_sessions_table(), clinic_id, incoming.phone, session)
 
         # 5d. Guardar a mensagem e devolver 200 AGORA.
         #
@@ -653,7 +669,6 @@ def _get_appointment_service(db):
 
 # O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
 # e regra duplicada diverge em silencio quando alguem muda so um deles.
-from src.services.bot_policy import TTL_DO_ATENDIMENTO as ATTENDANT_TTL_SECONDS
 
 
 def _resolve_clinic_id(db: PostgresService, instance_id: str):
@@ -707,16 +722,12 @@ def _extract_text_content(body: dict) -> str:
 
 
 def _activate_attendant_mode(clinic_id: str, phone: str) -> None:
+    """Alguem da clinica falou pelo celular: a conversa e dela, e o prazo de
+    24h conta desta mensagem (PRD 020 §3.4 - so a clinica renova)."""
     table = _get_sessions_table()
     session = _load_session(table, clinic_id, phone)
-
-    session["_previous_state_before_attendant"] = session.get("state", "")
-    session["state"] = ConversationState.HUMAN_ATTENDANT_ACTIVE.value
-    session["attendant_active_until"] = int(time.time()) + ATTENDANT_TTL_SECONDS
-    # A pausa nao vence sozinha: so sai pelo "Retomar bot" no painel. O prazo
-    # acima fica para a tela mostrar desde quando, nao para liberar o bot.
-    session[CAMPO_DE_PAUSA] = PAUSA_ATENDENTE
-    _save_session(table, clinic_id, phone, session)
+    atendimento.renova_por_mensagem_da_clinica(session)
+    grava_atendimento(table, clinic_id, phone, session)
     logger.info(f"[Webhook] Modo atendente ativado/renovado para {phone} (TTL 24h)")
 
 

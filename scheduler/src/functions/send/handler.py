@@ -10,6 +10,7 @@ from src.utils.http import parse_body, http_response, require_api_key
 from src.services.db.postgres import PostgresService
 from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import get_provider
+from src.services import atendimento
 from src.services.campanha import DURACAO_PADRAO_DIAS, abre
 from src.services.session_store import abre_campanha
 
@@ -21,6 +22,41 @@ def _tabela_de_sessoes():
     return boto3.resource("dynamodb").Table(
         os.environ.get("CONVERSATION_SESSIONS_TABLE", "")
     )
+
+
+def _sessao(clinic_id, phone):
+    """A sessao como esta, ou vazia. Nunca levanta."""
+    try:
+        item = _tabela_de_sessoes().get_item(
+            Key={"pk": f"CLINIC#{clinic_id}", "sk": f"PHONE#{phone}"}
+        ).get("Item") or {}
+        return dict(item.get("session") or {})
+    except Exception as e:
+        logger.error(f"[Send] Falha ao ler sessao de {phone}: {e}")
+        return {}
+
+
+def _agora():
+    """Epoch UTC. Funcao para o teste fixar o relogio."""
+    import time
+    return int(time.time())
+
+
+def _por_que_nao_inicia(clinic, sessao, phone, agora):
+    """O motivo, para a tela dizer algo melhor do que 'erro'."""
+    from datetime import timezone as _tz
+
+    from src.services.business_hours import em_silencio
+
+    if clinic.get("bot_paused"):
+        return "bot_da_clinica_pausado"
+    if atendimento.esta_com_pessoa(sessao, agora):
+        return "atendimento_humano"
+    if atendimento.estado(sessao, agora) == atendimento.COOLDOWN:
+        return "cooldown"
+    if em_silencio(clinic, datetime.fromtimestamp(agora, tz=_tz.utc)):
+        return "janela_de_silencio"
+    return "politica"
 
 
 def handler(event, context):
@@ -122,6 +158,21 @@ def handler(event, context):
         # sairia, a campanha seria gravada, e a paciente receberia o fluxo de
         # lead - boas-vindas e pedido de CPF de quem ja e cadastrada. Barrado
         # aqui, na origem, em vez de virar log que ninguem le.
+        # Com campanha o BOT vai conduzir a conversa a partir deste disparo:
+        # e ele falando primeiro, entao passa pela pergunta proativa. Sem
+        # campanha e a atendente mandando mensagem a mao - nada barra.
+        if campanha_pedida is not None:
+            sessao = _sessao(clinic_id, phone)
+            agora = _agora()
+            if not atendimento.pode_iniciar(clinic, sessao, phone, agora):
+                motivo = _por_que_nao_inicia(clinic, sessao, phone, agora)
+                logger.info(f"[Send] Campanha para {phone} recusada: {motivo}")
+                return http_response(409, {
+                    "status": "ERROR",
+                    "message": f"o bot nao pode iniciar esta conversa agora ({motivo})",
+                    "motivo": motivo,
+                })
+
         if campanha_pedida is not None and not clinic.get("use_agent"):
             return http_response(400, {
                 "status": "ERROR",

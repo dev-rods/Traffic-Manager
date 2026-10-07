@@ -11,6 +11,9 @@ AttendantControl:
       Action:
         - dynamodb:GetItem
         - dynamodb:PutItem
+        # Pausar e retomar gravam so o bloco de atendimento, condicionado a
+        # versao (session_store.grava_atendimento). E um UpdateItem.
+        - dynamodb:UpdateItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
     # Lê a conversa para saber se ficou pergunta sem resposta e registra o que o

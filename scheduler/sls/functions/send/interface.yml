@@ -17,6 +17,9 @@ SendMessage:
       Action:
         - dynamodb:GetItem
         - dynamodb:PutItem
+        # session_store.grava_atendimento e UpdateItem; o /send nao o chama
+        # hoje, mas a role acompanha o modulo que ela carrega.
+        - dynamodb:UpdateItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
     - Effect: Allow

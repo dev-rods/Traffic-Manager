@@ -66,6 +66,19 @@ def responder_se_ficou_em_aberto(clinic_id, phone):
         logger.error(f"[Retomada] Clínica {clinic_id} não encontrada")
         return False
 
+    # Ninguem escreveu agora: e o bot falando primeiro, entao passa pela
+    # pergunta proativa. Antes nao conferia nem `bot_paused` nem politica.
+    from src.services import atendimento
+    from src.services.session_store import carrega_sessao
+
+    sessao = carrega_sessao(clinic_id, phone)
+    if not atendimento.pode_iniciar(rows[0], sessao, phone):
+        logger.info(
+            f"[Retomada] {phone}: porta fechada "
+            f"(handler={atendimento.estado(sessao)}), nao respondo"
+        )
+        return False
+
     enviou, quantas = falar(
         clinic_id, phone, GATILHO_RETOMADA,
         db=db, provider=get_provider(rows[0]), tracker=tracker,

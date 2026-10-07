@@ -20,8 +20,8 @@ import boto3
 
 from src.providers.whatsapp_provider import get_provider
 from src.services.agent_runner import falar
-from src.services.bot_policy import should_bot_reply
-from src.services.business_hours import CLINIC_TZ, is_open
+from src.services import atendimento
+from src.services.business_hours import fuso, is_open
 from src.services.db.postgres import PostgresService
 from src.services.message_tracker import MessageTracker
 from src.services.outbound_queue import OutboundQueueService
@@ -162,11 +162,12 @@ def handler(event, context):
             # pulava a pausa: `should_bot_reply` le `bot_pausado_por` da sessao,
             # e um dicionario inventado nunca a tem. Um item na fila disparava
             # em conversa com atendente ativa.
+            # Pergunta PROATIVA (PRD 020 §3.5): alem da politica e da pausa,
+            # cooldown e janela de silencio barram quem vai falar primeiro.
             sessao_real = _load_session(clinic_id, phone)
             sessao_real["bot_enabled"] = True
-            if clinic.get("bot_paused", False) or not should_bot_reply(
-                clinic, sessao_real, phone
-            ):
+            if not atendimento.pode_iniciar(clinic, sessao_real, phone,
+                                            int(agora_utc.timestamp())):
                 # ADIA, nao falha. A politica muda: o piloto de hoje sai
                 # amanha, e 3 leads de 02/09/2026 ficaram parados para sempre
                 # porque FAILED e terminal. Quem para a repeticao e o prazo.
@@ -179,7 +180,7 @@ def handler(event, context):
                 continue
 
             # Horário reconferido: a clínica pode ter mudado os horários depois.
-            if not is_open(clinic.get("business_hours") or {}, agora_utc.astimezone(CLINIC_TZ)):
+            if not is_open(clinic.get("business_hours") or {}, agora_utc.astimezone(fuso(clinic))):
                 logger.info(f"{prefixo} Clínica {clinic_id} fechada agora, adiando {message_id}")
                 queue.adia(message_id, item["pk"], item["sk"], "fora_do_horario")
                 skipped += 1

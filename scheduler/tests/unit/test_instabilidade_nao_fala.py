@@ -146,13 +146,24 @@ class TestOPrazoTemUmaFonteSo(unittest.TestCase):
             for linha in texto.splitlines():
                 if re.match(r"\s*[A-Z_]*TTL[A-Z_]*\s*=\s*24 \* 60 \* 60", linha):
                     definem.append(arquivo.name)
-        self.assertEqual(definem, ["bot_policy.py"], f"prazo duplicado em {definem}")
+        # Desde a fase 2 do PRD 020 o dono e `atendimento.py`; `bot_policy`
+        # so re-exporta o nome antigo.
+        self.assertEqual(definem, ["atendimento.py"], f"prazo duplicado em {definem}")
 
-    def test_quem_usa_importa_de_la(self):
-        from src.functions.webhook import handler as webhook
+    def test_bot_policy_reexporta_o_mesmo_prazo(self):
+        from src.services import atendimento
         from src.services.bot_policy import TTL_DO_ATENDIMENTO
 
-        self.assertEqual(webhook.ATTENDANT_TTL_SECONDS, TTL_DO_ATENDIMENTO)
+        self.assertIs(TTL_DO_ATENDIMENTO, atendimento.TTL_HUMANO)
+
+    def test_o_webhook_nao_calcula_mais_o_prazo(self):
+        """Mesmo avanco do agente: o webhook escrevia `attendant_active_until`
+        a mao em `_activate_attendant_mode`. Agora quem escreve e
+        `atendimento.renova_por_mensagem_da_clinica`, e o alias VOLTAR
+        significa que alguem montou a pausa a mao de novo."""
+        from src.functions.webhook import handler as webhook
+
+        self.assertFalse(hasattr(webhook, "ATTENDANT_TTL_SECONDS"))
 
     def test_o_agente_nao_calcula_mais_o_prazo(self):
         """O conversation_agent perdeu o alias de propósito, e isso é o avanço.

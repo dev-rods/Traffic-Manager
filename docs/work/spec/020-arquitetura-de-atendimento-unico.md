@@ -200,6 +200,18 @@ e o próximo `CONFIRMED` futuro). Devolve:
 
 ### 3.4 `services/atendimento.py` (fase 2, estendido na 3)
 
+> **Entregue em 06/10/2026 (fase 2).** Diferenças em relação ao texto abaixo:
+> `estado()` deriva `COOLDOWN` direto do vencimento de `human_until` (sem
+> `HUMAN_EXPIRED` materializado - ele só vai existir quando a avaliação da
+> fase 3 precisar dele); `HUMAN_PENDING` é reconhecido mas nenhuma transição
+> o produz ainda; `grava_atendimento` grava só o bloco e a projeção legada,
+> condicionado à versão, e em conflito descarta a transição com log em vez de
+> reaplicar; os campos legados continuam escritos como projeção para o
+> painel. `elegibilidade_do_bot` usa `pode_responder`, não `pode_iniciar`: o
+> botão enfileira para a próxima abertura, e a janela de silêncio de agora não
+> é motivo para desabilitá-lo.
+
+
 Módulo puro, sem I/O, como `bot_policy`. É a única fonte das duas perguntas.
 
 ```python

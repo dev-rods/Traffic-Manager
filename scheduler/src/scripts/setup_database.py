@@ -50,6 +50,12 @@ SQL_STATEMENTS = [
         -- Procedimentos que o bot NAO atende, alem da lista do codigo.
         -- Ver fora_do_escopo.
         bot_procedimentos_fora_do_escopo TEXT[] NOT NULL DEFAULT '{}',
+        -- Janela em que o bot NAO inicia conversa (PRD 020 §3.5). NULL usa o
+        -- padrao do codigo, 22:59-04:59. Formato {"start": "HH:MM", "end": "HH:MM"}.
+        janela_de_silencio JSONB,
+        -- Idade maxima de uma pergunta sem resposta para a retomada automatica
+        -- (PRD 020 §3.7). Tem de ser maior que o TTL humano de 24h.
+        idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72,
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         logo_url VARCHAR(500),
@@ -621,6 +627,12 @@ SQL_STATEMENTS = [
     # a gente saber dele, e que a clinica consegue barrar sozinha.
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
     "bot_procedimentos_fora_do_escopo TEXT[] NOT NULL DEFAULT '{}'",
+
+    # PRD 020 §3.5 e §3.7: a janela em que o bot nao inicia conversa (NULL =
+    # 22:59-04:59 do codigo) e a idade maxima da pendencia para a retomada.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS janela_de_silencio JSONB",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
+    "idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72",
 
     # FAQ da Essencia: "Qual o intervalo entre as sessoes?". Em 06/10/2026 uma
     # paciente perguntou "fiz 29/9, faco 28/10?", a informacao existia so
