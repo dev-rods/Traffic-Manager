@@ -3,8 +3,13 @@ service: clinic-scheduler-infra
 frameworkVersion: "3"
 
 custom:
-  # Modo do plugin log-groups-fora-do-stack: vazio (nada), retain ou remove.
-  logGroups: ${param:logGroups, ''}
+  # Modo do plugin log-groups-fora-do-stack. Os 78 log groups SAIRAM do stack
+  # em dev e prod em 07/10/2026 (etapas retain + remove). O padrao e `remove`
+  # para um deploy comum nao os trazer de volta - voltar seria recriar 78
+  # recursos que ja existem fora do stack, e o CloudFormation falharia.
+  # Retencao dos grupos: `aws logs put-retention-policy` (90 dias), uma vez
+  # por funcao nova.
+  logGroups: ${param:logGroups, 'remove'}
   stage: ${opt:stage, self:provider.stage}
   resourcePrefix: ${self:service}-${self:custom.stage}
   accountId: "796000356030"
@@ -126,7 +131,6 @@ resources:
 plugins:
   - serverless-python-requirements
   - serverless-iam-roles-per-function
-  # Tira os 78 log groups do stack (496/500 recursos). Ver o cabecalho do
-  # plugin: SEMPRE um deploy com --param="logGroups=retain" ANTES do deploy
-  # com --param="logGroups=remove"; pular o primeiro apaga os grupos.
+  # Mantem os log groups fora do stack (418/500 recursos desde 07/10/2026).
+  # Ver o cabecalho do plugin e custom.logGroups.
   - ./sls/plugins/log-groups-fora-do-stack.js
