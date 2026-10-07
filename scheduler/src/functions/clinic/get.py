@@ -6,6 +6,7 @@ from src.utils.acesso import require_acesso
 from src.services.visao_do_staff import para_o_staff, sem_segredos
 from src.utils.http import http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
+from src.services.vercel_domain_service import VercelDomainService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -63,6 +64,13 @@ def handler(event, context):
             })
 
         clinic = _serialize_row(rows[0])
+
+        # Status ao vivo na Vercel - não dá pra confiar só no banco, porque a
+        # verificação de DNS acontece do lado de lá e muda sem o painel saber.
+        if clinic.get("custom_domain"):
+            service = VercelDomainService()
+            if service.configured:
+                clinic["custom_domain_status"] = service.get_domain_status(clinic["custom_domain"])
 
         # O funcionário precisa do nome e do horário da clínica para a agenda
         # funcionar, e de mais nada. As credenciais do WhatsApp saem daqui:
