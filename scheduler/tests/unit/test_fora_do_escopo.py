@@ -41,16 +41,17 @@ from src.services.fora_do_escopo import PROCEDIMENTOS, detecta
 class PorQueOAcidenteNaoBasta(unittest.TestCase):
     """O FAQ de laser responde perguntas de injetável, e com confiança."""
 
-    def test_pergunta_de_injetavel_casa_item_de_laser(self):
-        # Esta é a razão de a guarda existir. Se um dia o FAQ passar a devolver
-        # vazio aqui, o teste falha e a guarda pode ser reavaliada - mas ela
-        # continua certa, porque a clínica pode cadastrar o item amanhã.
-        achados = busca("quanto custa a toxina botulinica por sessao?", FAQ_ESSENCIA)
-        self.assertTrue(
-            achados,
-            "Se o FAQ não casasse nada, o acidente seguraria. Casa - e por isso "
-            "a decisão não pode ser do FAQ.",
-        )
+    def test_a_guarda_nao_depende_do_que_o_faq_devolve(self):
+        # Esta foi a razão de a guarda existir: em 04/10/2026 esta pergunta
+        # CASAVA itens de laser no FAQ ("custa" e "sessão"), e a paciente
+        # receberia preço de laser para uma dúvida de injetável. Em 06/10 a
+        # cobertura do título (busca_no_faq.PESO_DA_COBERTURA) passou a
+        # devolver vazio aqui - e a guarda continua certa, porque a clínica
+        # pode cadastrar um item amanhã que volte a casar. O que se fixa é que
+        # a decisão é da guarda, qualquer que seja a resposta do FAQ.
+        pergunta = "quanto custa a toxina botulinica por sessao?"
+        busca(pergunta, FAQ_ESSENCIA)  # pode casar ou não; não muda o veredito
+        self.assertEqual(detecta(pergunta), "toxina_botulinica")
 
     def test_a_guarda_barra_antes_de_chegar_ao_faq(self):
         self.assertEqual(

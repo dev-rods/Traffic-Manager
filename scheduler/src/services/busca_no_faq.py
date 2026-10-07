@@ -73,6 +73,25 @@ esse aquilo la ali aqui preciso precisa precisam
 # que a clínica escreveu; a resposta é texto corrido.
 PESO_DO_TITULO = 3.0
 
+# Quanto da nota depende de a pergunta COBRIR o título do item.
+#
+# Em 06/10/2026 o modelo perguntou "Qual o intervalo recomendado entre
+# sessões de depilação a laser?" e a busca devolveu "Fiz depilação com cera,
+# posso fazer laser?" em primeiro: "depilação" e "laser" casavam no título,
+# com peso 3, e isso bastava. O item "Qual o intervalo entre as sessões?"
+# tinha o título INTEIRO coberto pela pergunta e perdia para um que tinha dois
+# terços - as palavras erradas. Casar palavras do título não é o mesmo que
+# ser a pergunta do título.
+#
+# Com a cobertura, um item cujo título a pergunta cobre por inteiro mantém a
+# nota; um item em que ela casa uma palavra de cinco fica com 30% mais 14%.
+# Medido contra as perguntas que o modelo fez em produção em 12 dias
+# (test_busca_no_faq, TestPerguntasReaisDeProducao): de 24 para 30 acertos em
+# 33, sem perder nenhum dos casos anteriores. 0,7 porque 0,5 deixa "Parcela?
+# Formas de pagamento" casar "O resultado é definitivo?" e 0,8 começa a
+# derrubar complementos legítimos.
+PESO_DA_COBERTURA = 0.7
+
 # Abaixo disto não é resposta, é coincidência de vocabulário. Calibrado contra
 # o FAQ real da Essência: ver test_busca_no_faq.
 PISO = 1.0
@@ -171,6 +190,12 @@ def pontua(pergunta: str, item: Dict, pesos: Dict[str, float]) -> float:
             total += peso * PESO_DO_TITULO
         elif t in na_resposta:
             total += peso
+
+    # A pergunta cobre quanto do título? Ver PESO_DA_COBERTURA. Item sem
+    # título com termos (não existe no FAQ real) fica como está.
+    if no_titulo:
+        cobertura = len(procurados & no_titulo) / len(no_titulo)
+        total *= (1 - PESO_DA_COBERTURA) + PESO_DA_COBERTURA * cobertura
     return total
 
 
