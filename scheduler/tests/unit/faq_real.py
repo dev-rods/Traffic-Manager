@@ -141,4 +141,13 @@ FAQ_ESSENCIA = [
             'Se tiver alguma gilete que você já tenha costume de usar, dá sua preferência, pode levar. De resto não precisa mais nada.',
         'display_order': 19,
     },
+    # Cadastrado em 06/10/2026: a pergunta de intervalo so existia escondida
+    # dentro de outras respostas, e a busca nao a achava.
+    {
+        'question_label':
+            'Qual o intervalo entre as sessões?',
+        'answer':
+            'O intervalo entre as sessões é de aproximadamente 30 dias, podendo variar um pouco para mais ou para menos conforme as datas de cada mês. Uma diferença de poucos dias não interfere no tratamento - só não podemos fugir muito desse intervalo.',
+        'display_order': 20,
+    },
 ]

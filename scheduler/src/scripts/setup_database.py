@@ -619,6 +619,23 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
     "bot_procedimentos_fora_do_escopo TEXT[] NOT NULL DEFAULT '{}'",
 
+    # FAQ da Essencia: "Qual o intervalo entre as sessoes?". Em 06/10/2026 uma
+    # paciente perguntou "fiz 29/9, faco 28/10?", a informacao existia so
+    # dentro de outras respostas, a busca nao achou e o bot pediu
+    # especialista. A resposta e a que a atendente deu. Dado da clinica, nao
+    # regra - fica aqui porque o Andre pediu no mesmo PR, e e idempotente.
+    # Aplicado a mao em dev e prod em 06/10/2026.
+    """
+    INSERT INTO scheduler.faq_items (clinic_id, question_key, question_label, answer, display_order, active)
+    SELECT 'clinicaessenciaestetica-9668a4', 'SESSION_INTERVAL', 'Qual o intervalo entre as sessões?',
+           'O intervalo entre as sessões é de aproximadamente 30 dias, podendo variar um pouco para mais ou para menos conforme as datas de cada mês. Uma diferença de poucos dias não interfere no tratamento - só não podemos fugir muito desse intervalo.',
+           COALESCE((SELECT MAX(display_order) FROM scheduler.faq_items
+                      WHERE clinic_id = 'clinicaessenciaestetica-9668a4'), 0) + 1, TRUE
+    WHERE EXISTS (SELECT 1 FROM scheduler.clinics WHERE clinic_id = 'clinicaessenciaestetica-9668a4')
+      AND NOT EXISTS (SELECT 1 FROM scheduler.faq_items
+                       WHERE clinic_id = 'clinicaessenciaestetica-9668a4' AND question_key = 'SESSION_INTERVAL')
+    """,
+
     # Dados de cadastro coletados na confirmação do agendamento.
     # Sem estas colunas o bot pediria CPF e data de nascimento e descartaria a
     # resposta, que além de inútil é ruim para dado pessoal.
