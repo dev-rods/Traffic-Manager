@@ -6,6 +6,7 @@ from psycopg2.extras import Json
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
+from src.services.vercel_domain_service import VercelDomainService, VercelDomainError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -33,6 +34,7 @@ ALLOWED_FIELDS = {
     "favicon_url",
     "bot_autoreply_policy",
     "bot_pilot_phones",
+    "custom_domain",
 }
 
 JSONB_FIELDS = {"business_hours"}
@@ -46,6 +48,32 @@ def _serialize_row(row):
         else:
             result[key] = value
     return result
+
+
+def _sync_vercel_domain(previous_domain, new_domain):
+    """Reflete a troca de domínio no projeto Vercel do booking-site.
+
+    Nunca derruba a resposta: o dado já foi persistido no banco quando isto
+    roda. Se a Vercel falhar (credencial ausente, domínio já em uso por
+    outro projeto, etc.), devolve um aviso pro painel mostrar - a clínica
+    não some, só o domínio não entra no ar até o problema ser corrigido.
+    """
+    service = VercelDomainService()
+    if not service.configured:
+        if new_domain:
+            logger.warning("[UpdateClinic] VERCEL_API_TOKEN ausente — domínio não registrado na Vercel")
+            return "Domínio salvo, mas a integração com a Vercel não está configurada."
+        return None
+
+    try:
+        if previous_domain:
+            service.remove_domain(previous_domain)
+        if new_domain:
+            service.add_domain(new_domain)
+        return None
+    except VercelDomainError as e:
+        logger.error(f"[UpdateClinic] Falha ao sincronizar domínio com a Vercel: {e}")
+        return str(e)
 
 
 def handler(event, context):
@@ -94,6 +122,18 @@ def handler(event, context):
 
         logger.info(f"Atualizando clinica: {clinic_id}")
 
+        db = PostgresService()
+
+        # Precisa do domínio ANTIGO antes de sobrescrever: é o que vai ser
+        # removido do projeto Vercel se a clínica trocar ou limpar o domínio.
+        previous_domain = None
+        if "custom_domain" in body:
+            existing = db.execute_query(
+                "SELECT custom_domain FROM scheduler.clinics WHERE clinic_id = %s", (clinic_id,)
+            )
+            if existing:
+                previous_domain = existing[0].get("custom_domain")
+
         # 4. Construir query dinamica apenas com campos fornecidos
         set_clauses = []
         params = []
@@ -126,8 +166,6 @@ def handler(event, context):
         """
 
         # 5. Executar atualizacao
-        db = PostgresService()
-
         result = db.execute_write_returning(query, tuple(params))
 
         if not result:
@@ -140,13 +178,21 @@ def handler(event, context):
 
         logger.info(f"Clinica atualizada com sucesso: {clinic_id}")
 
+        domain_warning = None
+        new_domain = clinic.get("custom_domain")
+        if "custom_domain" in body and new_domain != previous_domain:
+            domain_warning = _sync_vercel_domain(previous_domain, new_domain)
+
         # 6. Retornar resposta
-        return http_response(200, {
+        response_body = {
             "status": "SUCCESS",
             "message": "Clinica atualizada com sucesso",
             "clinicId": clinic_id,
             "clinic": clinic
-        })
+        }
+        if domain_warning:
+            response_body["domainWarning"] = domain_warning
+        return http_response(200, response_body)
 
     except Exception as e:
         error_msg = str(e)

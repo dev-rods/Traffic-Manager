@@ -88,6 +88,12 @@ provider:
     # (ver src/utils/booking_verification.py). Fallback vazio para não quebrar o deploy
     # antes do parâmetro ser provisionado no SSM — nesse caso os tokens não validam.
     BOOKING_VERIFICATION_SECRET: ${ssm:/${self:custom.stage}/BOOKING_VERIFICATION_SECRET, ''}
+    # Domínio customizado por clínica no booking-site (ver UpdateClinic e
+    # public_booking/resolve_domain). Projeto Vercel é um só pros dois stages -
+    # a distinção dev/prod vive no banco, não na Vercel - só o token é secreto.
+    VERCEL_API_TOKEN: ${ssm:/${self:custom.stage}/VERCEL_API_TOKEN, ''}
+    VERCEL_TEAM_ID: team_ZLFt6HlpGbYXZsEloIbOVq96
+    BOOKING_SITE_VERCEL_PROJECT_ID: prj_0TsMiEsoApAlYoVMN0YboJs5hmAf
     ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
     ALLOWED_PHONES: ${ssm:/${self:custom.stage}/ALLOWED_PHONES}
     OPENAI_API_KEY: ${ssm:/${self:custom.stage}/OPENAI_API_KEY}

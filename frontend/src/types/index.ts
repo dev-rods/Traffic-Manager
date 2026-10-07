@@ -20,6 +20,14 @@ export interface Clinic {
   active: boolean
   logo_url: string | null
   favicon_url: string | null
+  custom_domain: string | null
+  custom_domain_status?: CustomDomainStatus
+}
+
+export interface CustomDomainStatus {
+  registered: boolean
+  verified: boolean
+  dns_records: { type: string; name: string; value: string }[]
 }
 
 export interface UpdateClinicPayload {
@@ -39,6 +47,7 @@ export interface UpdateClinicPayload {
   batch_message_template?: string
   logo_url?: string
   favicon_url?: string
+  custom_domain?: string | null
 }
 
 // ── Booking site assets (upload) ────────────────────────────────

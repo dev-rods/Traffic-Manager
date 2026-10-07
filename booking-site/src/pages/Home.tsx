@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useClinicBootstrap } from '@/hooks/useBooking'
+import { useClinicId } from '@/hooks/useClinicId'
 import { useCart } from '@/store/useCart'
 import { ServiceCard } from '@/components/ServiceCard'
 import { CartAddedModal } from '@/components/CartAddedModal'
@@ -10,9 +11,9 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import type { Service } from '@/types'
 
 export function Home() {
-  const { clinicId } = useParams<{ clinicId: string }>()
+  const { clinicId, basePath } = useClinicId()
   const navigate = useNavigate()
-  const bootstrap = useClinicBootstrap(clinicId as string)
+  const bootstrap = useClinicBootstrap(clinicId)
   const cart = useCart()
   const [justAdded, setJustAdded] = useState<Service | null>(null)
 
@@ -24,7 +25,7 @@ export function Home() {
   useEffect(() => {
     if (singleService && cart.items.length === 0) {
       cart.addItem(singleService)
-      navigate(`/${clinicId}/agendar`, { replace: true })
+      navigate(`${basePath}/agendar`, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [singleService?.id])
@@ -94,7 +95,7 @@ export function Home() {
         service={justAdded}
         onClose={() => setJustAdded(null)}
         onAddAnother={() => setJustAdded(null)}
-        onContinue={() => navigate(`/${clinicId}/agendar`)}
+        onContinue={() => navigate(`${basePath}/agendar`)}
       />
     </div>
   )

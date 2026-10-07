@@ -60,6 +60,7 @@ SQL_STATEMENTS = [
         active BOOLEAN DEFAULT TRUE,
         logo_url VARCHAR(500),
         favicon_url VARCHAR(500),
+        custom_domain VARCHAR(255),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -1063,6 +1064,15 @@ SQL_STATEMENTS = [
     """CREATE INDEX IF NOT EXISTS idx_lead_conversions_agendamento_a_subir
        ON scheduler.lead_conversions (clinic_id)
        WHERE booking_uploaded_at IS NULL""",
+
+    # -- Domínio customizado do booking-site (ver vercel_domain_service.py) ---
+    #
+    # NULL-distinct no Postgres: duas clínicas sem domínio não colidem no
+    # índice único, só colidiriam se as duas tentassem o MESMO domínio - que é
+    # exatamente o que a constraint tem que impedir.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS custom_domain VARCHAR(255)",
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_clinics_custom_domain
+       ON scheduler.clinics(custom_domain) WHERE custom_domain IS NOT NULL""",
 ]
 
 

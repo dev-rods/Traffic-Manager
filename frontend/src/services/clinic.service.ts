@@ -6,6 +6,10 @@ interface GetClinicResponse {
   clinic: Clinic
 }
 
+interface UpdateClinicResponse extends GetClinicResponse {
+  domainWarning?: string
+}
+
 export const clinicService = {
   get(clinicId: string) {
     return api
@@ -15,8 +19,8 @@ export const clinicService = {
 
   update(clinicId: string, payload: UpdateClinicPayload) {
     return api
-      .put<GetClinicResponse>(`/clinics/${clinicId}`, payload)
-      .then((r) => r.data.clinic)
+      .put<UpdateClinicResponse>(`/clinics/${clinicId}`, payload)
+      .then((r) => ({ clinic: r.data.clinic, domainWarning: r.data.domainWarning }))
   },
 
   getAssetUploadUrl(clinicId: string, kind: ClinicAssetKind, contentType: string) {
