@@ -8,7 +8,6 @@ export interface Clinic {
   timezone: string | null
   buffer_minutes: number | null
   max_future_dates: number | null
-  max_session_minutes: number | null
   display_name: string | null
   welcome_message: string | null
   welcome_intro_message: string | null
@@ -30,7 +29,6 @@ export interface UpdateClinicPayload {
   address?: string
   buffer_minutes?: number
   max_future_dates?: number
-  max_session_minutes?: number
   welcome_message?: string
   welcome_intro_message?: string
   pre_session_instructions?: string
@@ -54,11 +52,29 @@ export interface AssetUploadUrlResponse {
 
 // ── Patient ───────────────────────────────────────────────────
 export interface Patient {
+  /**
+   * Marcado SO pela profissional, no painel. Decide qual protocolo de laser
+   * alimenta a sugestao de parametro. O bot nunca escreve aqui.
+   */
+  skin_type: SkinType | null
   id: string
   clinic_id: string
   phone: string
   name: string
   gender: 'M' | 'F'
+  /** Só dígitos, como o backend guarda. Vazio = ainda não informado. */
+  cpf: string | null
+  /** ISO `YYYY-MM-DD`. */
+  birth_date: string | null
+  email: string | null
+  /**
+   * Desconto fixo combinado com a paciente, em porcento.
+   *
+   * `null` e `0` sao coisas DIFERENTES: null significa "sem combinado, vale a
+   * politica da clinica"; 0 significa "combinado, e o combinado e nenhum
+   * desconto". Nunca troque um pelo outro com `?? 0`.
+   */
+  custom_discount_pct: number | null
   deleted_at?: string | null
   created_at: string
   updated_at: string
@@ -68,6 +84,18 @@ export interface CreatePatientPayload {
   name: string
   phone: string
   gender?: 'M' | 'F'
+  /** Opcionais: o cadastro completo raramente existe no primeiro contato. */
+  cpf?: string
+  birth_date?: string
+  email?: string
+  /** null = sem combinado; inteiro = o percentual fixo da paciente. */
+  custom_discount_pct?: number | null
+  /**
+   * Tipo de pele. Marcado pela profissional, no painel, e so por ela: decide
+   * qual protocolo de laser sugere os parametros no historico de sessao.
+   * `null` desfaz a marcacao.
+   */
+  skin_type?: SkinType | null
 }
 
 export interface CreatePatientResponse {
@@ -112,6 +140,24 @@ export interface DiscountRule {
   is_active: boolean
 }
 
+/**
+ * Duração da sessão por quantidade de áreas.
+ *
+ * A duração é a soma das durações por área, arredondada para cima ao passo e
+ * limitada por piso e teto. O backend é a autoridade: o que o painel calcula
+ * é preview, e é reaplicado no servidor antes de virar agenda.
+ */
+export interface DurationRule {
+  clinic_id: string
+  /** Nenhuma sessão é mais curta que isto. */
+  floor_minutes: number
+  /** Nenhuma sessão é mais longa que isto. */
+  ceiling_minutes: number
+  /** Toda duração é múltiplo disto. */
+  step_minutes: number
+  is_active: boolean
+}
+
 export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'partnership' | 'custom' | null
 
 export interface DiscountBreakdown {
@@ -122,17 +168,24 @@ export interface DiscountBreakdown {
 }
 
 // ── Appointment ───────────────────────────────────────────────
-export type AppointmentStatus = 'CONFIRMED' | 'CANCELLED'
+// NO_SHOW entrou em 04/10/2026. Falta e diferente de cancelamento: quem cancela
+// com antecedencia libera a agenda, quem nao aparece queima o horario. A
+// conversao offline depende da distincao - ela afirma uma COMPRA ao Google Ads.
+export type AppointmentStatus = 'CONFIRMED' | 'CANCELLED' | 'NO_SHOW'
 
 export interface Appointment {
   id: string
   clinic_id: string
   service_id: string
+  /** Leva ao prontuario pelo atalho "Registrar sessao" na agenda. */
+  patient_id: string | null
   appointment_date: string   // YYYY-MM-DD
   start_time: string         // HH:MM:SS
   end_time: string           // HH:MM:SS
   status: AppointmentStatus
   notes: string | null
+  /** Marca visual na agenda: a pessoa esta pisando na clinica pela primeira vez. */
+  is_first_visit: boolean
   patient_name: string | null
   patient_phone: string | null
   service_name: string | null
@@ -140,6 +193,8 @@ export interface Appointment {
   areas: string | null       // comma-separated area names
   area_ids: string | null    // comma-separated area UUIDs
   duration_minutes: number | null
+  /** Duracao que uma pessoa fixou para ESTE agendamento. null = segue o calculo. */
+  manual_duration_minutes: number | null
   discount_pct: number
   discount_reason: DiscountReason
   original_price_cents: number | null
@@ -168,9 +223,21 @@ export interface CreateAppointmentPayload {
   fullName?: string
   discountPct?: number
   discountReason?: string
+  /** Observacao curta da atendente. Aparece no popover da agenda. */
+  notes?: string
+  /**
+   * Estreia na clinica. Obrigatorio, e nao opcional: omitir faz o backend
+   * decidir pela contagem do banco, que e o comportamento revertido em
+   * 09/09/2026. Pelo painel quem decide e a recepcao.
+   */
+  isFirstVisit: boolean
+  /** Fixa a duracao DESTE agendamento. Omitir = calculada pelas areas. */
+  manualDurationMinutes?: number | null
 }
 
 export interface UpdateAppointmentPayload {
+  /** Desmarcar quando a pessoa ja veio antes por fora do sistema. */
+  isFirstVisit?: boolean
   status?: AppointmentStatus
   notes?: string
   date?: string
@@ -179,6 +246,11 @@ export interface UpdateAppointmentPayload {
   serviceAreaPairs?: { serviceId: string; areaId: string }[]
   discountPct?: number
   discountReason?: string | null
+  /**
+   * Fixa a duracao DESTE agendamento. `null` volta ao calculado; omitir nao mexe.
+   * A distincao importa: e `null` que solta o override.
+   */
+  manualDurationMinutes?: number | null
 }
 
 // ── Availability Rule ────────────────────────────────────────
@@ -200,6 +272,11 @@ export interface CreateAvailabilityRulePayload {
   end_time: string
 }
 
+export interface UpdateAvailabilityRulePayload {
+  start_time?: string
+  end_time?: string
+}
+
 export interface AvailabilityException {
   id: string
   clinic_id: string
@@ -208,7 +285,6 @@ export interface AvailabilityException {
   start_time: string | null
   end_time: string | null
   reason: string | null
-  active: boolean
 }
 
 export interface CreateAvailabilityExceptionPayload {
@@ -257,10 +333,43 @@ export interface AuthCredentials {
   password: string
 }
 
+/**
+ * ADMIN vê tudo. STAFF vê a agenda, os pacientes e o prontuário, dentro de uma
+ * janela de datas, e sem nenhum valor em reais.
+ *
+ * Isto serve para a tela não OFERECER o que o servidor vai recusar. Quem
+ * autoriza de verdade é o backend: o token do funcionário chama a API direto
+ * se alguém quiser, e é lá que a porta está fechada.
+ */
+export type PapelDoUsuario = 'ADMIN' | 'STAFF'
+
+/**
+ * Os dois interruptores que o administrador liga por pessoa.
+ *
+ * Servem para a tela não oferecer o que não há. O servidor aplica os mesmos
+ * dois por conta própria - o preço nem sequer chega no navegador de quem não
+ * pode vê-lo.
+ */
+export interface PermissoesDoUsuario {
+  see_prices: boolean
+  see_patient_list: boolean
+}
+
+export interface JanelaDaAgenda {
+  /** YYYY-MM-DD, inclusive. */
+  from: string
+  /** YYYY-MM-DD, inclusive. */
+  to: string
+}
+
 export interface AuthResponse {
   token: string
   clinic_id: string
   clinic: Clinic
+  role?: PapelDoUsuario
+  agenda_window?: JanelaDaAgenda | null
+  permissions?: PermissoesDoUsuario
+  user?: { id: string; name: string | null; email: string }
 }
 
 // ── API responses ─────────────────────────────────────────────
@@ -277,11 +386,35 @@ export interface ApiError {
 }
 
 // ── Bot / Conversations ──────────────────────────────────────
+/** Por que o bot não responde uma conversa. null quando ele está respondendo. */
+export type PauseReason = 'attendant' | 'clinic_paused' | 'not_eligible' | null
+
 export interface ActiveConversation {
   phone: string
   state: string
   bot_paused: boolean
+  pause_reason: PauseReason
   attendant_active_until: number | null
+  /** Nome da paciente, quando ela esta cadastrada. Vazio para quem nao esta. */
+  name?: string
+  /**
+   * Epoch em segundos de quando o bot entregou a conversa.
+   *
+   * A fila ordena por ISTO, nao por `updated_at`: updated_at muda a cada
+   * mensagem que a paciente manda enquanto ninguem responde, e usa-lo
+   * empurraria a conversa mais negligenciada para o fim da lista.
+   */
+  handoff_requested_at: number | null
+  /** Motivo em vocabulario fechado (bot_policy.MOTIVOS_LEGIVEIS). */
+  handoff_reason: string | null
+  /**
+   * O motivo em portugues, pronto para a tela.
+   *
+   * Vem do servidor de proposito: a traducao mora em `bot_policy`, e repeti-la
+   * aqui criaria a mesma regra em dois lugares - divergencia que ninguem ve,
+   * porque um rotulo errado ainda parece um rotulo.
+   */
+  handoff_reason_label: string
   updated_at: string
 }
 
@@ -334,6 +467,187 @@ export interface Lead {
   first_appointment_id: string | null
   first_appointment_value: number | null
   raw_message: string | null
+  /** Estado da abordagem ativa do bot: QUEUED enfileirada, SENT enviada, FAILED falhou. */
+  first_contact_status: 'QUEUED' | 'SENT' | 'FAILED' | null
+  /** Quando o bot falou com o lead. */
+  first_contact_at: string | null
+  /** Quando o lead respondeu. Distinto de first_contact_at: é o que mede a taxa de resposta. */
+  conversation_started_at: string | null
+  /**
+   * Quem está conduzindo a conversa agora. Vem das sessões e do espelho do
+   * WhatsApp na hora da listagem, não de coluna gravada no lead - foi um campo
+   * copiado que mostrou "sem contato" para quem tinha conversa desenvolvida.
+   */
+  conversation_status: 'BOT' | 'HUMANO' | 'AGUARDA_HUMANO' | 'SEM_CONVERSA' | null
+  /**
+   * Existe conversa no WhatsApp, mesmo que nunca tenha passado pelo bot. O
+   * atendimento humano nao deixa rastro no webhook: a atendente responde pelo
+   * celular e a mensagem chega com LID sem vinculo.
+   */
+  has_whatsapp_chat: boolean | null
+  /** Ultima mensagem trocada no WhatsApp, do espelho do z-api. */
+  whatsapp_last_message_at: string | null
+  /** Quem iniciou a conversa. NULL = ninguem iniciou ainda. */
+  first_contact_channel: 'BOT' | 'HUMANO' | null
+  /**
+   * O bot pode abrir conversa com este lead?
+   *
+   * Calculado no SERVIDOR e so renderizado aqui. A regra tem seis condicoes e
+   * duplica-la no frontend criaria duas fontes que divergem em silencio - o
+   * defeito que originou esta tela.
+   */
+  can_start_bot: boolean | null
+  /** Chave do motivo do bloqueio, para telemetria. */
+  bot_block_reason: string | null
+  /** Texto pronto para a tela. Botao apagado sem explicacao vira suporte. */
+  bot_block_message: string | null
+  /** Da para desfazer o "Ja iniciada"? So o que uma pessoa marcou. */
+  can_unmark_contact: boolean | null
+  /**
+   * A conversa ja comecou, por qualquer caminho que a gente consiga enxergar.
+   * Derivado no servidor - a tela nao recalcula, so mostra.
+   */
+  contact_started: boolean | null
+  /** De onde veio essa certeza. NULL = ninguem iniciou que a gente saiba. */
+  contact_started_source: 'RESPONDEU' | 'BOT' | 'HUMANO' | 'WHATSAPP' | null
+  /** Texto pronto explicando a origem, para o title do botao. */
+  contact_started_message: string | null
+  /**
+   * O Google Ads ja soube deste lead?
+   *
+   * Distinto de `booked`, e a distincao e o ponto: `booked` diz que a pessoa
+   * agendou; isto diz se a conversao chegou ao Google. Foram semanas com 24
+   * leads convertidos e zero enviados, sem nada na tela que revelasse o vao.
+   *
+   * NULL quando nao ha o que enviar (lead sem gclid) - ausencia e a informacao
+   * correta, nao um estado a mais.
+   */
+  conversion_status: 'ENVIADO' | 'AGUARDANDO' | 'RETRATADO' | null
   created_at: string
   updated_at: string
+}
+
+
+// ── Prontuario: historico por sessao ─────────────────────────
+
+export type SkinType = 'BRANCA' | 'NEGRA'
+
+export type MetodoLaser = 'SHR' | 'SHR_STACKING' | 'HR'
+
+/** Uma linha da tabela de referencia dos protocolos. */
+export interface ParametroDoProtocolo {
+  skin_type: SkinType
+  method: MetodoLaser
+  protocol_area_key: string
+  protocol_area_name: string
+  fluence_j: number
+  energy_kj: number | null
+  stacks: number | null
+  passes: number | null
+  /** 'PDF' = material da clinica; 'CLINICA' = acrescentado depois. */
+  source: 'PDF' | 'CLINICA'
+}
+
+export interface LigacaoDeArea {
+  area_id: string
+  area_name: string
+  protocol_area_key: string
+  display_order: number
+}
+
+export interface ProtocoloLaser {
+  methods: { key: MetodoLaser; label: string; fields: string[]; movement: string }[]
+  parameters: ParametroDoProtocolo[]
+  area_map: LigacaoDeArea[]
+}
+
+/** Uma area aplicada na sessao. */
+export interface AplicacaoDeSessao {
+  id?: string
+  area_id: string | null
+  /** Snapshot: renomear a area no catalogo nao reescreve o passado. */
+  area_name: string
+  protocol_area_key: string | null
+  method: MetodoLaser | null
+  fluence_j: number | null
+  energy_kj: number | null
+  stacks: number | null
+  passes: number | null
+  display_order: number
+}
+
+export interface RegistroDeSessao {
+  id: string
+  clinic_id: string
+  patient_id: string
+  appointment_id: string | null
+  professional_id: string | null
+  professional_name: string | null
+  session_date: string
+  tanned_skin: boolean
+  skin_type_snapshot: SkinType | null
+  notes: string | null
+  applications: AplicacaoDeSessao[]
+  /** Quantas vezes foi editado. Alimenta o selo "editado". */
+  edit_count: number
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+/** Agendamento do paciente que ainda nao virou registro. */
+export interface SessaoSemRegistro {
+  id: string
+  appointment_date: string
+  start_time: string
+  areas: string
+}
+
+export interface PacienteDoProntuario {
+  id: string
+  name: string | null
+  phone: string
+  skin_type: SkinType | null
+}
+
+export interface ListaDeRegistros {
+  /** Vem junto para a pagina nao precisar de uma segunda chamada. */
+  patient: PacienteDoProntuario
+  records: RegistroDeSessao[]
+  appointments_without_record: SessaoSemRegistro[]
+}
+
+export interface AplicacaoPayload {
+  areaId: string | null
+  areaName: string
+  protocolAreaKey: string | null
+  method: MetodoLaser | null
+  fluenceJ: number | null
+  energyKj: number | null
+  stacks: number | null
+  passes: number | null
+  displayOrder: number
+}
+
+export interface RegistroPayload {
+  appointmentId?: string | null
+  sessionDate?: string
+  professionalId?: string | null
+  tannedSkin?: boolean
+  notes?: string
+  applications?: AplicacaoPayload[]
+  /** Quem declarou a edicao. Autoria declarada, nao provada - ver PRD 012. */
+  changedBy?: string
+}
+
+export interface EdicaoDoRegistro {
+  id: string
+  action: 'CREATE' | 'UPDATE' | 'DELETE'
+  snapshot: RegistroDeSessao
+  changed_by_name: string | null
+  changed_at: string
+}
+
+export interface TrilhaDeEdicoes {
+  history: EdicaoDoRegistro[]
 }

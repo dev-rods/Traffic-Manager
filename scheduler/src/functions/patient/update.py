@@ -2,8 +2,12 @@ import json
 import logging
 from datetime import datetime, date, time
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
 from src.utils.phone import normalize_phone
+from src.services.desconto_personalizado import normaliza_entrada as normaliza_desconto
+from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
 from src.services.db.postgres import PostgresService
 
 logger = logging.getLogger(__name__)
@@ -28,7 +32,7 @@ def handler(event, context):
     try:
         logger.info("Update patient request received")
 
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "pacientes.escrever")
         if error_response:
             return error_response
 
@@ -61,12 +65,35 @@ def handler(event, context):
             })
 
         # Build dynamic SET clause
-        allowed_fields = {"name", "phone", "gender"}
+        # `birth_date` e `cpf` entram aqui porque a clinica precisa deles para
+        # nota e cadastro, e ate agora so o bot conseguia grava-los - quem
+        # chegou por outro caminho ficava sem, sem forma de corrigir pela tela.
+        #
+        # `skin_type` entra aqui e SO aqui. E a profissional que marca, no
+        # painel, olhando a paciente: e o que decide qual protocolo de laser
+        # alimenta a sugestao de parametro. Nenhuma tool do agente expoe este
+        # campo, e test_bot_nao_ve_prontuario garante isso.
+        allowed_fields = {"name", "phone", "gender", "birth_date", "cpf", "email",
+                          "custom_discount_pct", "skin_type"}
+
+        # Desconto personalizado é decisão comercial, e o funcionário nem vê o
+        # valor atual - a resposta o remove. Deixá-lo ESCREVER um campo que não
+        # enxerga seria dar de graça a chave do preço a quem foi afastado dele.
+        if not identidade.e_admin:
+            allowed_fields = allowed_fields - {"custom_discount_pct"}
         sets = []
         params = []
         for field in allowed_fields:
             if field in body:
                 val = body[field]
+                if field == "skin_type":
+                    # Vazio volta a NULO: e assim que se desfaz uma marcacao
+                    # errada, e sem tipo de pele a tela simplesmente nao sugere.
+                    val = (val or "").strip().upper() or None
+                    if val and val not in ("BRANCA", "NEGRA"):
+                        return http_response(400, {
+                            "status": "ERROR",
+                            "message": "Tipo de pele deve ser BRANCA ou NEGRA"})
                 if field == "gender" and val and val not in ("M", "F"):
                     return http_response(400, {
                         "status": "ERROR",
@@ -74,6 +101,27 @@ def handler(event, context):
                     })
                 if field == "phone" and val:
                     val = normalize_phone(val)
+                if field == "cpf":
+                    val = normaliza_cpf(val)
+                    if val is False:
+                        return http_response(400, {
+                            "status": "ERROR", "message": "CPF deve ter 11 digitos"})
+                if field == "birth_date":
+                    val = normaliza_data_nascimento(val)
+                    if val is False:
+                        return http_response(400, {
+                            "status": "ERROR",
+                            "message": "Data de nascimento invalida"})
+                if field == "custom_discount_pct":
+                    # Vazio volta a ser NULO: e assim que a clinica desfaz um
+                    # desconto combinado.
+                    ok, val = normaliza_desconto(val)
+                    if not ok:
+                        return http_response(400, {
+                            "status": "ERROR",
+                            "message": "custom_discount_pct deve ser de 0 a 100, com ate duas casas decimais"})
+                if field == "email":
+                    val = (str(val).strip() or None) if val else None
                 sets.append(f"{field} = %s")
                 params.append(val)
 
@@ -100,10 +148,10 @@ def handler(event, context):
         patient = _serialize_row(result)
         logger.info(f"Patient updated: {patient_id}")
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "patient": patient,
-        })
+        }))
 
     except Exception as e:
         error_msg = str(e)

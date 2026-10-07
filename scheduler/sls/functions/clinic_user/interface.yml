@@ -1,0 +1,28 @@
+# Gestao de quem entra no painel.
+#
+# As duas rotas sao de ADMIN: usam require_api_key, entao o proprio funcionario
+# nao alcanca a lista de contas nem a propria janela de datas.
+#
+# Nao existe rota para CRIAR usuario de proposito. Criar acesso e ato de
+# administracao e sai por script (src/scripts/seed_funcionario.py), nao por uma
+# tela que ainda nao sabe provar quem esta do outro lado.
+
+ListClinicUsers:
+  handler: src.functions.clinic_user.list.handler
+  memorySize: 512
+  timeout: 30
+  events:
+    - http:
+        path: clinics/{clinicId}/users
+        method: get
+        cors: true
+
+UpdateClinicUser:
+  handler: src.functions.clinic_user.update.handler
+  memorySize: 512
+  timeout: 30
+  events:
+    - http:
+        path: clinics/{clinicId}/users/{userId}
+        method: patch
+        cors: true

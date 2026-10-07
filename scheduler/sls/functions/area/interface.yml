@@ -2,19 +2,6 @@ CreateArea:
   handler: src.functions.area.create.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-CreateArea-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/areas
@@ -25,19 +12,6 @@ ListAreas:
   handler: src.functions.area.list.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ListAreas-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/areas
@@ -48,19 +22,6 @@ GetArea:
   handler: src.functions.area.get.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetArea-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: areas/{areaId}
@@ -71,19 +32,6 @@ UpdateArea:
   handler: src.functions.area.update.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-UpdateArea-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: areas/{areaId}
@@ -94,19 +42,6 @@ DeleteArea:
   handler: src.functions.area.delete.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-DeleteArea-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: areas/{areaId}

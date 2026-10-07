@@ -46,6 +46,7 @@ describe('appointmentsService', () => {
       serviceId: 's-1',
       date: '2026-03-08',
       time: '09:00',
+      isFirstVisit: false,
     }
     mockApi.post.mockResolvedValueOnce({ data: { id: 'new-appt', ...payload } })
     await appointmentsService.create(payload)

@@ -84,3 +84,38 @@ export const reportsService = {
       .then((r) => r.data)
   },
 }
+
+/** Um dia de agenda, do ponto de vista de quem gerencia a clínica. */
+export interface AgendaDay {
+  date: string
+  confirmed: number
+  cancelled: number
+  patients: number
+  gross_cents: number
+  discount_cents: number
+  net_cents: number
+  /** Receita que deixou de entrar por cancelamento. Perda, não desconto. */
+  lost_cents: number
+  booked_minutes: number
+  avg_ticket_cents: number
+  cancellation_rate: number
+}
+
+export interface AgendaSummary {
+  status: string
+  start: string
+  end: string
+  days: AgendaDay[]
+  total: Omit<AgendaDay, 'date' | 'patients' | 'avg_ticket_cents' | 'cancellation_rate'> & {
+    days_with_agenda: number
+  }
+}
+
+export const agendaSummaryService = {
+  /** Resumo dia a dia. Sem datas, o backend olha 30 dias para a frente. */
+  get(clinicId: string, params?: { start?: string; end?: string }) {
+    return api
+      .get<AgendaSummary>(`/clinics/${clinicId}/agenda-summary`, { params })
+      .then((r) => r.data)
+  },
+}

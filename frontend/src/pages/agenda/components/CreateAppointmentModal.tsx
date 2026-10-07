@@ -1,9 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 import { Modal } from '@/components/ui/Modal'
+import { DateSelect } from '@/components/ui/DateSelect'
 import { Input } from '@/components/ui/Input'
+import { TimeField } from './TimeField'
+import { ObservacaoField } from './ObservacaoField'
+import { PrimeiraVisitaField } from './PrimeiraVisitaField'
+import { ehHorarioValido } from '@/lib/horario'
 import { Button } from '@/components/ui/Button'
 import { useCreateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
+import { calculaDuracao } from '@/lib/duracao'
+import { DuracaoField } from './DuracaoField'
+import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { usePatients, useCreatePatient } from '@/hooks/usePatients'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
@@ -11,6 +19,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useAuth } from '@/hooks/useAuth'
 import { formatPhone } from '@/utils/formatPhone'
 import type { PatientWithStats } from '@/types'
+import { precoComDesconto } from '@/lib/cadastroPaciente'
 
 interface CreateAppointmentModalProps {
   open: boolean
@@ -26,10 +35,14 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
 
   const [date, setDate] = useState(initialDate ?? '')
   const [time, setTime] = useState(initialTime ?? '')
+  const [notes, setNotes] = useState('')
+  // Desmarcada por padrao: pelo painel a estreia e decisao da recepcao.
+  const [primeiraVisita, setPrimeiraVisita] = useState(false)
   const [serviceId, setServiceId] = useState(() =>
     services?.length === 1 ? services[0].id : ''
   )
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([])
+  const [manualDuration, setManualDuration] = useState<number | null>(null)
   const [discountMode, setDiscountMode] = useState<'none' | 'partnership' | 'custom'>('none')
   const [customDiscountPct, setCustomDiscountPct] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -55,28 +68,39 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     per_page: 8,
   })
 
-  // Auto-select service when there's only one
-  useEffect(() => {
+  // Serviço único é escolha automática. Feito no render, como o reset de áreas
+  // abaixo, para o campo não piscar vazio antes de ser preenchido.
+  const [prevServices, setPrevServices] = useState(services)
+  if (services !== prevServices) {
+    setPrevServices(services)
     if (services?.length === 1 && !serviceId) {
       setServiceId(services[0].id)
     }
-  }, [services, serviceId])
+  }
 
   // Fetch areas for selected service
   const { data: serviceAreas } = useServiceAreas(serviceId || undefined)
+  const { data: durationRulesData } = useDurationRules()
+  const durationRules = durationRulesData?.duration_rules
 
-  // Compute total duration from selected areas (if any), for accurate slot calculation
-  const totalDuration = selectedAreaIds.length > 0 && serviceAreas
+  const somaDasAreas = selectedAreaIds.length > 0 && serviceAreas
     ? serviceAreas
         .filter((a) => selectedAreaIds.includes(a.area_id))
         .reduce((sum, a) => sum + a.effective_duration_minutes, 0)
     : undefined
+  // Preview: o backend reaplica a mesma regra antes de devolver horários.
+  const totalDuration =
+    somaDasAreas === undefined ? undefined : calculaDuracao(somaDasAreas, durationRules)
+
+  // A duração que a sessão vai de fato ocupar. Os horários vêm dela, não da
+  // calculada: senão a tela oferece um horário em que a sessão não cabe.
+  const duracaoEfetiva = manualDuration ?? totalDuration
 
   // Fetch available slots when date + service are set
   const { data: slotsData, isLoading: slotsLoading } = useAvailableSlots(
     date || undefined,
     serviceId || undefined,
-    totalDuration,
+    duracaoEfetiva,
   )
   const slots = slotsData?.slots ?? []
 
@@ -84,12 +108,27 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   if (serviceId !== prevServiceId) {
     setPrevServiceId(serviceId)
     setSelectedAreaIds([])
+    // Trocar de serviço zera as áreas, e a duração fixada foi decidida para
+    // elas. Mesma razão do descarte na edição.
+    setManualDuration(null)
   }
 
-  // Clear selected time when date, service, or areas change (slots will change)
-  useEffect(() => {
+  // Trocar as áreas também solta a duração fixada.
+  const areasKey = [...selectedAreaIds].sort().join(',')
+  const [prevAreasKey, setPrevAreasKey] = useState(areasKey)
+  if (areasKey !== prevAreasKey) {
+    setPrevAreasKey(areasKey)
+    setManualDuration(null)
+  }
+
+  // Mudou data, serviço ou áreas, os horários disponíveis mudam junto: manter a
+  // hora escolhida deixaria selecionado um horário que pode não existir mais.
+  const chaveDosHorarios = `${date}|${serviceId}|${duracaoEfetiva ?? ''}`
+  const [prevChaveDosHorarios, setPrevChaveDosHorarios] = useState(chaveDosHorarios)
+  if (chaveDosHorarios !== prevChaveDosHorarios) {
+    setPrevChaveDosHorarios(chaveDosHorarios)
     if (!initialTime) setTime('')
-  }, [date, serviceId, totalDuration, initialTime])
+  }
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -115,6 +154,17 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     setPatientSearch(patient.name ?? formatPhone(patient.phone))
     setShowResults(false)
     setShowNewPatient(false)
+
+    // Desconto combinado com a paciente entra JA SELECIONADO. O backend tambem
+    // o aplica quando ninguem escolhe nada, mas deixa-lo invisivel aqui faria a
+    // atendente ver um total e a paciente pagar outro.
+    //
+    // `!= null` e nao `?` de proposito: 0 e um combinado legitimo - "esta
+    // paciente nunca recebe desconto" - e cairia fora com teste de verdade.
+    if (patient.custom_discount_pct != null) {
+      setDiscountMode('custom')
+      setCustomDiscountPct(String(patient.custom_discount_pct))
+    }
   }
 
   const handleCreatePatient = async () => {
@@ -161,6 +211,13 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
       setError('Preencha todos os campos obrigatorios.')
       return
     }
+    // O horário agora pode ser digitado. `<input type="time">` cobre o teclado,
+    // mas não o que chega colado ou vindo de fora - e uma hora malformada só
+    // apareceria como 500 no backend.
+    if (!ehHorarioValido(time)) {
+      setError('Horário inválido. Use o formato HH:MM.')
+      return
+    }
 
     setError(null)
     try {
@@ -175,6 +232,11 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         date,
         time,
         serviceAreaPairs,
+        ...(notes.trim() ? { notes: notes.trim() } : {}),
+        // Sempre enviado, inclusive `false`: omitir devolveria a decisao ao
+        // backend, que e exatamente o que se reverteu.
+        isFirstVisit: primeiraVisita,
+        ...(manualDuration !== null ? { manualDurationMinutes: manualDuration } : {}),
         ...(discountMode === 'partnership'
           ? { discountPct: 100, discountReason: 'partnership' }
           : discountMode === 'custom' && customDiscountPct
@@ -337,12 +399,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         )}
 
         {/* Date */}
-        <Input
-          label="Data"
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
+        <DateSelect value={date} onChange={setDate} />
 
         {/* Service */}
         <div>
@@ -391,38 +448,24 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           </div>
         )}
 
-        {/* Time slot picker */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Horario</label>
-          {!date || !serviceId ? (
-            <p className="text-sm text-gray-300 py-3">Selecione data e servico para ver horarios</p>
-          ) : slotsLoading ? (
-            <div className="flex items-center gap-2 py-3">
-              <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-gray-400">Carregando horarios...</span>
-            </div>
-          ) : slots.length === 0 ? (
-            <p className="text-sm text-gray-400 py-3">Nenhum horario disponivel para esta data</p>
-          ) : (
-            <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-              {slots.map((slot) => (
-                <button
-                  key={slot}
-                  type="button"
-                  onClick={() => setTime(slot)}
-                  className={[
-                    'px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
-                    time === slot
-                      ? 'bg-gray-900 text-white shadow-sm'
-                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-                  ].join(' ')}
-                >
-                  {slot}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <PrimeiraVisitaField checked={primeiraVisita} onChange={setPrimeiraVisita} />
+
+        <ObservacaoField value={notes} onChange={setNotes} />
+
+        {/* Antes do horário de propósito: a duração decide quais horários cabem. */}
+        <DuracaoField
+          calculada={totalDuration}
+          manual={manualDuration}
+          onChange={setManualDuration}
+        />
+
+        <TimeField
+          value={time}
+          onChange={setTime}
+          slots={slots}
+          loading={slotsLoading}
+          enabled={Boolean(date && serviceId)}
+        />
 
         {/* Discount section */}
         <div>
@@ -476,8 +519,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           const discountPct = discountMode === 'partnership' ? 100
             : discountMode === 'custom' && customDiscountPct ? Number(customDiscountPct)
             : 0
-          const discountAmount = subtotal * discountPct / 100
-          const total = subtotal - discountAmount
+          const total = precoComDesconto(subtotal, discountPct)
+          const discountAmount = subtotal - total
           const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
           return (

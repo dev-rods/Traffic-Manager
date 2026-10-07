@@ -2,8 +2,10 @@ import json
 import logging
 from datetime import datetime, date, time
 
-from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
+from src.utils.http import http_response, extract_path_param, extract_query_param
+from src.utils.acesso import require_acesso
 from src.services.db.postgres import PostgresService
+from src.services.visao_do_staff import limita_intervalo, para_o_staff
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -27,7 +29,7 @@ def handler(event, context):
     Includes patient name and phone via JOIN.
     """
     try:
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "agenda.ler")
         if error_response:
             return error_response
 
@@ -39,15 +41,38 @@ def handler(event, context):
         date_from = extract_query_param(event, "date_from")
         date_to = extract_query_param(event, "date_to")
         status_filter = extract_query_param(event, "status")
+        # O prontuario precisa dos agendamentos de UMA paciente para oferecer
+        # "de qual sessao e este registro?". Sem este filtro a tela puxaria a
+        # agenda inteira da clinica para achar tres linhas.
+        patient_filter = extract_query_param(event, "patientId")
+
+        # A janela do funcionário vale SEMPRE, inclusive quando o pedido não
+        # trouxe data nenhuma - e é justamente esse o pedido perigoso: sem
+        # filtro, a consulta abaixo devolveria a agenda inteira da clínica,
+        # incluindo todo o passado.
+        if not identidade.e_admin:
+            if date_filter:
+                date_from = date_to = date_filter
+                date_filter = None
+            date_from, date_to = limita_intervalo(identidade, date_from, date_to)
 
         db = PostgresService()
 
         query = """
             SELECT
                 a.id, a.clinic_id, a.service_id, a.appointment_date, a.start_time, a.end_time,
+                -- A agenda precisa dele para o atalho "Registrar sessao" saber
+                -- de qual paciente e o prontuario.
+                a.patient_id,
                 a.status, a.notes, a.version, a.created_at, a.updated_at,
+                -- A agenda colore por este campo e o modal de edicao marca a
+                -- caixinha com ele. Sem estar no SELECT, o PUT gravava e a tela
+                -- nunca mostrava: a atendente marcava, salvava, reabria e via
+                -- desmarcado - parecendo que nao salvou.
+                a.is_first_visit,
                 a.discount_pct, a.discount_reason, a.original_price_cents, a.final_price_cents,
                 a.full_name, a.total_duration_minutes as duration_minutes,
+                a.manual_duration_minutes,
                 p.name as patient_name, p.phone as patient_phone,
                 s.name as service_name,
                 pr.name as professional_name,
@@ -82,17 +107,21 @@ def handler(event, context):
             query += " AND a.status = %s"
             params.append(status_filter)
 
+        if patient_filter:
+            query += " AND a.patient_id = %s::uuid"
+            params.append(patient_filter)
+
         query += " ORDER BY a.appointment_date ASC, a.start_time ASC"
 
         results = db.execute_query(query, tuple(params))
         appointments = [_serialize_row(r) for r in results]
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "clinicId": clinic_id,
             "appointments": appointments,
             "total": len(appointments),
-        })
+        }))
 
     except Exception as e:
         logger.error(f"Erro ao listar agendamentos: {e}")

@@ -21,6 +21,33 @@ custom:
       - "**/*.pyo"
 
 provider:
+  # Nao publicar uma versao imutavel por deploy.
+  #
+  # Em 05/09/2026 o deploy quebrou em "Number of resources, 502, is greater
+  # than maximum allowed, 500": adicionar UMA Lambda estourou o limite do
+  # CloudFormation. Cada funcao carregava um AWS::Lambda::Version, e sao 65 -
+  # 65 recursos que nada referencia, porque o projeto nao usa alias nem
+  # provisioned concurrency.
+  #
+  # O que se perde: o historico de versoes publicadas. Rollback passa a ser
+  # redeploy do commit anterior, que ja era como faziamos - nunca apontamos
+  # alias para versao nenhuma.
+  versionFunctions: false
+
+  # As funcoes que nao tocam nenhum servico da AWS usam a role COMPARTILHADA
+  # que o provider cria, e nao uma propria.
+  #
+  # Eram 75 roles para 74 funcoes, e 57 delas concediam exatamente a mesma
+  # coisa: logs mais `ssm:GetParameter`. O ssm era permissao MORTA - os
+  # segredos sao resolvidos no deploy por `${ssm:/...}` aqui embaixo e chegam
+  # como variavel de ambiente, entao nenhuma Lambda le SSM em runtime.
+  #
+  # Cada role custava um recurso de CloudFormation, e a stack de prod estava em
+  # 497 de 500: a proxima Lambda com endpoint nao subia. Fazer 57 copias da
+  # mesma politica nao comprava isolamento nenhum - comprava o limite.
+  #
+  # As 17 que tocam DynamoDB ou invocam outra Lambda MANTEM role propria, e
+  # ai a separacao significa alguma coisa. Ver o PR que fez a mudanca.
   name: aws
   runtime: python3.8
   stage: ${opt:stage, 'dev'}
@@ -33,10 +60,12 @@ provider:
     STAGE: ${self:custom.stage}
     ACCOUNT_ID: ${self:custom.accountId}
     CONVERSATION_SESSIONS_TABLE: ${self:custom.resourcePrefix}-conversation-sessions
+    OUTBOUND_PROCESSOR_FUNCTION: ${self:service}-${self:custom.stage}-OutboundProcessor
     MESSAGE_EVENTS_TABLE: ${self:custom.resourcePrefix}-message-events
     SCHEDULED_REMINDERS_TABLE: ${self:custom.resourcePrefix}-scheduled-reminders
     BOOKING_OTP_TABLE: ${self:custom.resourcePrefix}-booking-otp-codes
     CLINIC_ASSETS_BUCKET: ${self:custom.resourcePrefix}-clinic-assets
+    OUTBOUND_QUEUE_TABLE: ${self:custom.resourcePrefix}-outbound-queue
     RDS_HOST: ${ssm:/${self:custom.stage}/SUPABASE_DB_HOST}
     RDS_PORT: ${ssm:/${self:custom.stage}/SUPABASE_DB_PORT}
     RDS_DATABASE: ${ssm:/${self:custom.stage}/SUPABASE_DB_NAME}
@@ -59,6 +88,7 @@ provider:
 
 functions:
   - ${file(sls/functions/webhook/interface.yml)}
+  - ${file(sls/functions/sync/interface.yml)}
   - ${file(sls/functions/send/interface.yml)}
   - ${file(sls/functions/message/interface.yml)}
   - ${file(sls/functions/clinic/interface.yml)}
@@ -73,11 +103,15 @@ functions:
   - ${file(sls/functions/reminder/interface.yml)}
   - ${file(sls/functions/report/interface.yml)}
   - ${file(sls/functions/discount_rules/interface.yml)}
+  - ${file(sls/functions/duration_rules/interface.yml)}
   - ${file(sls/functions/auth/interface.yml)}
   - ${file(sls/functions/patient/interface.yml)}
+  - ${file(sls/functions/patient_record/interface.yml)}
   - ${file(sls/functions/lead/interface.yml)}
   - ${file(sls/functions/attendant/interface.yml)}
   - ${file(sls/functions/public_booking/interface.yml)}
+  - ${file(sls/functions/outbound/interface.yml)}
+  - ${file(sls/functions/clinic_user/interface.yml)}
 
 resources:
   - ${file(sls/resources/dynamodb/conversation-sessions-table.yml)}
@@ -85,6 +119,7 @@ resources:
   - ${file(sls/resources/dynamodb/scheduled-reminders-table.yml)}
   - ${file(sls/resources/dynamodb/booking-otp-table.yml)}
   - ${file(sls/resources/s3/clinic-assets-bucket.yml)}
+  - ${file(sls/resources/dynamodb/outbound-queue-table.yml)}
 
 plugins:
   - serverless-python-requirements

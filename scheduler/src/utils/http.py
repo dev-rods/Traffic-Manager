@@ -107,11 +107,36 @@ def http_response(status_code: int, body: Any, headers: Optional[Dict[str, str]]
 
 
 def require_api_key(event: Dict[str, Any], body: Optional[Dict[str, Any]] = None) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Rota de administrador. É o padrão, e o padrão é negar.
+
+    As 76 rotas do scheduler chamam isto e, por chamarem isto, continuam
+    fechadas para funcionário. Só as poucas que ele precisa usam
+    `require_acesso`, declarando o que exigem.
+
+    Esquecer de abrir uma rota deixa o funcionário de fora; esquecer de fechar
+    uma rota o deixaria dentro. A primeira falha é visível e reclamada, a
+    segunda é silenciosa - por isso o padrão é este.
+    """
     api_key = extract_api_key(event, body)
     is_valid, error_message = validate_api_key(api_key)
 
-    if not is_valid:
+    if is_valid:
+        # Chave mestra: o caminho de sempre, sem tocar o banco.
+        return api_key, None
+
+    # Import tardio: `acesso` importa deste módulo, e um import no topo daqui
+    # fecharia o ciclo.
+    from src.utils.acesso import identifica
+
+    identidade = identifica(event)
+    if identidade is None:
         return None, http_response(401, {"status": "ERROR", "message": error_message})
+
+    if not identidade.e_admin:
+        return None, http_response(403, {
+            "status": "ERROR",
+            "message": "Seu usuário não tem acesso a esta função",
+        })
 
     return api_key, None
 

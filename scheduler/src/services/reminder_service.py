@@ -2,13 +2,21 @@ import os
 import time
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 
+from src.services.business_hours import CLINIC_TZ, fuso
+
 logger = logging.getLogger(__name__)
+
+# Ha "lembrete" no codigo desde o commit inicial, mas NUNCA foi ligado:
+# `AppointmentService.completo()` nao passa `reminder_service`, nenhuma clinica
+# tem o template REMINDER_24H e a tabela de prod esta vazia (conferido em
+# 06/10/2026). O que esta aqui e codigo latente, corrigido para o dia em que
+# alguem decidir ligar - ligar e decisao de produto, nao deste arquivo.
 
 
 class ReminderService:
@@ -17,7 +25,14 @@ class ReminderService:
         dynamodb = boto3.resource("dynamodb")
         self.table = dynamodb.Table(os.environ["SCHEDULED_REMINDERS_TABLE"])
 
-    def schedule_reminder(self, appointment: Dict[str, Any]) -> Dict[str, Any]:
+    def schedule_reminder(self, appointment: Dict[str, Any],
+                          clinic: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Agenda o lembrete para 24h antes da sessao, no fuso da clinica.
+
+        `clinic` traz o `timezone`. Sem ele, America/Sao_Paulo. Antes a hora
+        local era gravada com sufixo Z e comparada com utcnow: sessao as 07:15
+        em Brasilia gerava lembrete as 07:15 UTC, 04:15 local.
+        """
         reminder_id = str(uuid.uuid4())
         clinic_id = appointment.get("clinic_id", "")
         appointment_id = str(appointment.get("id", ""))
@@ -40,8 +55,11 @@ class ReminderService:
             total_seconds = int(appt_time.total_seconds())
             dt = dt.replace(hour=total_seconds // 3600, minute=(total_seconds % 3600) // 60)
 
-        # 24h before appointment (UTC assumed, timezone should be handled by caller)
-        send_at_dt = dt - timedelta(hours=24)
+        # A sessao e hora LOCAL da clinica; o `sendAt` e UTC, porque e com
+        # utcnow que o processador compara.
+        tz = fuso(clinic) if clinic else CLINIC_TZ
+        sessao_local = tz.localize(dt)
+        send_at_dt = (sessao_local - timedelta(hours=24)).astimezone(timezone.utc)
         send_at_iso = send_at_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         # Get patient info
         phone = appointment.get("patient_phone", "")
@@ -135,6 +153,24 @@ class ReminderService:
             )
         except Exception as e:
             logger.error(f"[ReminderService] Erro ao marcar como enviado: {e}")
+
+    def adia(self, pk: str, sk: str, novo_send_at: str, motivo: str) -> None:
+        """Deixa PENDING e empurra o `sendAt`. Adiar, nao falhar: FAILED e
+        terminal, e um lembrete que caiu na janela de silencio ainda tem de
+        sair - as 05:00. So o atributo muda; o `sk` carrega o horario antigo
+        mas nada consulta por ele, e o indice le `sendAt`."""
+        try:
+            self.table.update_item(
+                Key={"pk": pk, "sk": sk},
+                UpdateExpression="SET sendAt = :s, adiadoPor = :m, updatedAt = :u",
+                ExpressionAttributeValues={
+                    ":s": novo_send_at,
+                    ":m": motivo,
+                    ":u": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                },
+            )
+        except Exception as e:
+            logger.error(f"[ReminderService] Erro ao adiar lembrete: {e}")
 
     def mark_failed(self, reminder_id: str, pk: str, sk: str, error: str) -> None:
         try:

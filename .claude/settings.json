@@ -1,0 +1,52 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(serverless invoke local:*)",
+      "Bash(npm install)",
+      "WebFetch(domain:developer.z-api.io)",
+      "Bash(npx serverless:*)",
+      "Bash(git add:*)",
+      "Bash(wc:*)",
+      "Bash(git checkout:*)",
+      "Bash(python -m pytest tests/unit/test_conversation_engine.py -v)",
+      "Bash(python -m unittest:*)",
+      "Bash(git commit:*)",
+      "Bash(git reset:*)",
+      "Bash(git stash:*)",
+      "Bash(git push:*)",
+      "WebSearch",
+      "Bash(uvx:*)",
+      "Bash(uv:*)",
+      "Bash(pip:*)",
+      "Bash(python -c:*)",
+      "Bash(serverless logs:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(python -m src.scripts.setup_database:*)",
+      "Bash(cd:*)",
+      "Bash(npm run:*)",
+      "Bash(npm:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vitest:*)",
+      "Bash(xargs grep:*)",
+      "Bash(python:*)",
+      "Bash(serverless deploy:*)",
+      "Bash(source:*)",
+      "Bash(aws ssm:*)",
+      "Bash(grep:*)",
+      "Bash(source .env:*)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "google-ads-mcp"
+  ],
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Reading SSM parameters under /dev/ or /prod/ with the dev-andre profile (including --with-decryption and WithDecryption via boto3) to load SUPABASE_DB_* / RDS_* database credentials into the environment of a scheduler or infra script. This is the project's normal way to point a script at a given stage's database; the local .env points at a decommissioned RDS instance and must not be used."
+    ]
+  }
+}

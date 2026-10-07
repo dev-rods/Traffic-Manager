@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Drawer } from '@/components/ui/Drawer'
 import { useAuth } from '@/hooks/useAuth'
 import { useBranding } from '@/hooks/useBranding'
 import { useTheme } from '@/hooks/useTheme'
+import { podeVer } from '@/lib/permissoes'
 
 // ── SVG Icon components (Lucide-style, 24x24) ──────────────
 function Icon({ d, className = '' }: { d: string; className?: string }) {
@@ -26,6 +28,7 @@ function IconGlobe() { return <Icon d="M12 21a9 9 0 100-18 9 9 0 000 18zM3.6 9h1
 function IconBot() { return <Icon d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.3 24.3 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-1.5 4.5H6.5L5 14.5m14 0H5m14 0l-.938-2.813M5 14.5l.938-2.813M12 20.5v-2" /> }
 function IconTarget() { return <Icon d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" /> }
 function IconHelp() { return <Icon d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /> }
+function IconShield() { return <Icon d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /> }
 function IconSettings() { return <Icon d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z M15 12a3 3 0 11-6 0 3 3 0 016 0z" /> }
 function IconLogout() { return <Icon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /> }
 
@@ -38,11 +41,13 @@ const ICON_MAP: Record<string, () => React.ReactNode> = {
   '/areas': () => <IconGrid />,
   '/servicos-areas': () => <IconLink />,
   '/descontos': () => <IconTag />,
+  '/duracao': () => <IconClock />,
   '/horarios': () => <IconClock />,
   '/site-agendamento': () => <IconGlobe />,
   '/bot': () => <IconBot />,
   '/leads': () => <IconTarget />,
   '/faq': () => <IconHelp />,
+  '/usuarios': () => <IconShield />,
   '/configuracoes': () => <IconSettings />,
 }
 
@@ -56,6 +61,24 @@ interface NavGroup {
   items: NavItemDef[]
 }
 
+interface ConteudoDaSidebarProps {
+  clinic: ReturnType<typeof useAuth>['clinic']
+  gruposVisiveis: NavGroup[]
+  openGroups: Set<string>
+  toggleGroup: (label: string) => void
+  papel: ReturnType<typeof useAuth>['papel']
+  permissoes: ReturnType<typeof useAuth>['permissoes']
+  isDark: boolean
+  setTheme: ReturnType<typeof useTheme>['setTheme']
+  logout: () => void
+}
+
+/**
+ * Os grupos, antes de qualquer filtro. O que o STAFF enxerga sai de
+ * `podeVer`, em `lib/permissoes` - e a lista de la espelha as rotas que o
+ * backend abriu. Duas listas que precisam concordar: a daqui e so para nao
+ * oferecer uma tela que responderia 403.
+ */
 const NAV_GROUPS: NavGroup[] = [
   {
     label: '',
@@ -64,6 +87,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/agenda', label: 'Agenda' },
       { to: '/pacientes', label: 'Pacientes' },
       { to: '/relatorios', label: 'Relatórios' },
+      { to: '/usuarios', label: 'Usuários' },
     ],
   },
   {
@@ -73,6 +97,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/areas', label: 'Áreas' },
       { to: '/servicos-areas', label: 'Serviços & Áreas' },
       { to: '/descontos', label: 'Descontos' },
+      { to: '/duracao', label: 'Duração' },
       { to: '/horarios', label: 'Horários' },
       { to: '/site-agendamento', label: 'Site de Agendamento' },
     ],
@@ -98,9 +123,37 @@ function useActiveGroup(): string {
 }
 
 export default function AppLayout() {
-  const { clinic, logout } = useAuth()
+  const { clinic, logout, papel, permissoes } = useAuth()
   const { isDark, setTheme } = useTheme()
   useBranding(clinic?.display_name || clinic?.name)
+
+  // Grupo que fica sem nenhum item para este papel desaparece inteiro:
+  // um cabecalho "Catalogo" vazio so faria a pessoa clicar e nao achar nada.
+  const gruposVisiveis = useMemo(
+    () =>
+      NAV_GROUPS.map((grupo) => ({
+        ...grupo,
+        items: grupo.items.filter((item) =>
+          podeVer({ papel, permissoes }, item.to),
+        ),
+      })).filter((grupo) => grupo.items.length > 0),
+    [papel, permissoes],
+  )
+
+  // O menu em celular. Fecha sozinho ao trocar de tela: sem isto, ele ficaria
+  // aberto por cima da pagina recem-aberta e cobriria justamente o que a
+  // pessoa foi ver.
+  //
+  // Estado derivado, e nao `useEffect`: e o padrao que a AgendaPage ja usa
+  // (`prevSlotKey`), e o lint barra setState sincrono dentro de efeito - com
+  // razao, porque dispara render em cascata.
+  const { pathname } = useLocation()
+  const [menuAberto, setMenuAberto] = useState(false)
+  const [caminhoAnterior, setCaminhoAnterior] = useState(pathname)
+  if (pathname !== caminhoAnterior) {
+    setCaminhoAnterior(pathname)
+    if (menuAberto) setMenuAberto(false)
+  }
 
   const activeGroupLabel = useActiveGroup()
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
@@ -121,104 +174,70 @@ export default function AppLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-[#0f1117]">
-      {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 bg-white dark:bg-[#16181d] border-r border-gray-200 dark:border-gray-800 flex flex-col h-screen">
-        {/* Clinic branding */}
-        <div className="px-5 py-5 border-b border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-              {clinic?.name?.[0]?.toUpperCase() ?? 'C'}
-            </div>
-            <div className="min-w-0">
-              <p className="font-bold text-gray-800 dark:text-gray-100 text-sm leading-tight truncate">
-                {clinic?.display_name || clinic?.name || 'Carregando...'}
-              </p>
-              <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
-                {clinic?.owner_email ?? ''}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-1">
-          {NAV_GROUPS.map((group) => {
-            const isOpen = openGroups.has(group.label)
-            const hasActiveChild = group.items.some((item) => location.pathname.startsWith(item.to))
-
-            if (!group.label) {
-              return (
-                <div key="top" className="space-y-0.5">
-                  {group.items.map((item) => (
-                    <SidebarLink key={item.to} {...item} />
-                  ))}
-                </div>
-              )
-            }
-
-            return (
-              <div key={group.label} className="pt-2">
-                <button
-                  onClick={() => toggleGroup(group.label)}
-                  className={[
-                    'w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer rounded',
-                    hasActiveChild ? 'text-brand-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300',
-                  ].join(' ')}
-                >
-                  {group.label}
-                  <svg
-                    className={['w-3.5 h-3.5 transition-transform duration-150', isOpen ? 'rotate-180' : ''].join(' ')}
-                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
-                {isOpen && (
-                  <div className="mt-0.5 space-y-0.5">
-                    {group.items.map((item) => (
-                      <SidebarLink key={item.to} {...item} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </nav>
-
-        {/* Footer */}
-        <div className="border-t border-gray-100 dark:border-gray-800">
-          <SidebarLink to="/configuracoes" label="Configurações" className="px-6" />
-        </div>
-        <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
-          <button
-            onClick={logout}
-            className="flex items-center gap-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"
-          >
-            <IconLogout />
-            <span className="text-xs font-medium">Sair</span>
-          </button>
-          <button
-            onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            title={isDark ? 'Modo claro' : 'Modo escuro'}
-            className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-          >
-            {isDark ? (
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-              </svg>
-            )}
-          </button>
-        </div>
+      {/* A coluna fixa, de `md` para cima. Em celular ela nao cabe: 224px de
+          uma tela de 375px deixariam menos de 150px para o conteudo. */}
+      <aside className="hidden md:flex w-56 flex-shrink-0 bg-white dark:bg-[#16181d] border-r border-gray-200 dark:border-gray-800 flex-col h-screen">
+        <ConteudoDaSidebar
+          clinic={clinic}
+          gruposVisiveis={gruposVisiveis}
+          openGroups={openGroups}
+          toggleGroup={toggleGroup}
+          papel={papel}
+          permissoes={permissoes}
+          isDark={isDark}
+          setTheme={setTheme}
+          logout={logout}
+        />
       </aside>
 
+      {/* O mesmo menu, por cima, em celular. */}
+      <div className="md:hidden">
+        <Drawer open={menuAberto} onClose={() => setMenuAberto(false)} title="Menu">
+          <div className="flex h-full flex-col">
+            <ConteudoDaSidebar
+              clinic={clinic}
+              gruposVisiveis={gruposVisiveis}
+              openGroups={openGroups}
+              toggleGroup={toggleGroup}
+              papel={papel}
+              permissoes={permissoes}
+              isDark={isDark}
+              setTheme={setTheme}
+              logout={logout}
+            />
+          </div>
+        </Drawer>
+      </div>
+
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
-        <Outlet />
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Cabecalho de celular: com a sidebar escondida, e ele quem diz em que
+            clinica a pessoa esta e da o caminho de volta ao menu. */}
+        <header className="md:hidden flex flex-shrink-0 items-center gap-2 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-[#16181d] px-2 py-2">
+          <button
+            type="button"
+            onClick={() => setMenuAberto(true)}
+            aria-label="Abrir menu"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-gray-500 dark:text-gray-400 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+          >
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-brand-500 text-xs font-bold text-white">
+              {clinic?.name?.[0]?.toUpperCase() ?? 'C'}
+            </div>
+            <p className="truncate text-sm font-bold text-gray-800 dark:text-gray-100">
+              {clinic?.display_name || clinic?.name || 'Carregando...'}
+            </p>
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }
@@ -241,5 +260,123 @@ function SidebarLink({ to, label, className = '' }: NavItemDef & { className?: s
       {renderIcon ? renderIcon() : null}
       {label}
     </NavLink>
+  )
+}
+
+
+/**
+ * O conteudo da barra lateral, em um lugar so.
+ *
+ * Ele aparece em dois recipientes: a coluna fixa do desktop e o Drawer do
+ * celular. Duplicar o JSX faria um item de menu novo nascer em so um dos
+ * dois - e ninguem perceberia ate alguem reclamar que nao acha a tela pelo
+ * telefone.
+ */
+function ConteudoDaSidebar({
+  clinic,
+  gruposVisiveis,
+  openGroups,
+  toggleGroup,
+  papel,
+  permissoes,
+  isDark,
+  setTheme,
+  logout,
+}: ConteudoDaSidebarProps) {
+  return (
+    <>
+          {/* Clinic branding */}
+          <div className="px-5 py-5 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {clinic?.name?.[0]?.toUpperCase() ?? 'C'}
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-gray-800 dark:text-gray-100 text-sm leading-tight truncate">
+                  {clinic?.display_name || clinic?.name || 'Carregando...'}
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">
+                  {clinic?.owner_email ?? ''}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 px-3 py-3 overflow-y-auto space-y-1">
+            {gruposVisiveis.map((group) => {
+              const isOpen = openGroups.has(group.label)
+              const hasActiveChild = group.items.some((item) => location.pathname.startsWith(item.to))
+
+              if (!group.label) {
+                return (
+                  <div key="top" className="space-y-0.5">
+                    {group.items.map((item) => (
+                      <SidebarLink key={item.to} {...item} />
+                    ))}
+                  </div>
+                )
+              }
+
+              return (
+                <div key={group.label} className="pt-2">
+                  <button
+                    onClick={() => toggleGroup(group.label)}
+                    className={[
+                      'w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer rounded',
+                      hasActiveChild ? 'text-brand-400' : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300',
+                    ].join(' ')}
+                  >
+                    {group.label}
+                    <svg
+                      className={['w-3.5 h-3.5 transition-transform duration-150', isOpen ? 'rotate-180' : ''].join(' ')}
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    >
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                  {isOpen && (
+                    <div className="mt-0.5 space-y-0.5">
+                      {group.items.map((item) => (
+                        <SidebarLink key={item.to} {...item} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </nav>
+
+          {/* Footer */}
+          {podeVer({ papel, permissoes }, '/configuracoes') && (
+            <div className="border-t border-gray-100 dark:border-gray-800">
+              <SidebarLink to="/configuracoes" label="Configurações" className="px-6" />
+            </div>
+          )}
+          <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+            <button
+              onClick={logout}
+              className="flex items-center gap-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors cursor-pointer"
+            >
+              <IconLogout />
+              <span className="text-xs font-medium">Sair</span>
+            </button>
+            <button
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              title={isDark ? 'Modo claro' : 'Modo escuro'}
+              className="p-1.5 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+            >
+              {isDark ? (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                </svg>
+              )}
+            </button>
+          </div>
+    </>
   )
 }

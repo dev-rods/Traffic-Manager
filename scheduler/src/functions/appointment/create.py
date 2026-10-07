@@ -2,9 +2,17 @@ import json
 import logging
 from datetime import datetime, date, time
 
-from src.utils.http import parse_body, http_response, require_api_key
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import (
+    clinica_confere,
+    dentro_da_janela,
+    fora_da_janela,
+    para_o_staff,
+)
+from src.utils.http import parse_body, http_response
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
+from src.services.duracao_manual import DuracaoInvalida
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -35,11 +43,13 @@ def handler(event, context):
         "serviceAreaPairs": [            // optional, for services with areas
             {"serviceId": "uuid", "areaId": "uuid"}
         ],
-        "professionalId": "uuid"         // optional
+        "professionalId": "uuid",        // optional
+        "manualDurationMinutes": 75      // optional, fixa a duracao DESTE
+                                         // agendamento; vazio = calculada
     }
     """
     try:
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "agenda.escrever")
         if error_response:
             return error_response
 
@@ -53,6 +63,17 @@ def handler(event, context):
         service_ids = body.get("serviceIds")
         appt_date = body.get("date")
         appt_time = body.get("time")
+
+        # Esta rota recebe a clinica no CORPO, e nao no caminho: o
+        # `_confere_a_clinica` do require_acesso le o path e aqui nao alcanca.
+        # Sem esta linha, um token da Essencia agendaria na Nobre Laser.
+        if not clinica_confere(identidade, clinic_id):
+            return http_response(403, {
+                "status": "ERROR",
+                "message": "Seu usuario nao tem acesso a esta clinica"})
+
+        if not dentro_da_janela(identidade, appt_date):
+            return fora_da_janela()
 
         # Accept either serviceId (string) or serviceIds (array)
         if not service_id and not service_ids:
@@ -75,7 +96,10 @@ def handler(event, context):
 
         db = PostgresService()
 
-        service = AppointmentService(db)
+        # `.completo(db)` e nao o construtor: sem o lead_service, a conversao
+        # do gclid nao e registrada e o agendamento fica invisivel para o
+        # Google Ads. Era esse o caso ate 27/09/2026.
+        service = AppointmentService.completo(db)
 
         # Parse serviceAreaPairs from body
         raw_pairs = body.get("serviceAreaPairs")
@@ -97,17 +121,33 @@ def handler(event, context):
             service_ids=service_ids,
             service_area_pairs=service_area_pairs if service_area_pairs else None,
             full_name=body.get("fullName"),
+            # Observação curta que a atendente escreve ao marcar. Aparece no
+            # popover da agenda; a edição já aceitava, a criação não.
+            notes=(body.get("notes") or "").strip()[:500] or None,
             discount_pct=body.get("discountPct", 0),
             discount_reason=body.get("discountReason"),
+            # Sempre um booleano, nunca None: pelo painel a estreia e decisao de
+            # quem esta na recepcao, e o padrao e desmarcado. A contagem
+            # automatica so enxerga este banco, e a clinica atende desde antes
+            # dele existir.
+            is_first_visit=bool(body.get("isFirstVisit")),
+            # A duracao que a recepcao fixou para ESTE agendamento. Nao mexe na
+            # regra da clinica, e o bot nao chega aqui: nenhuma tool do agente
+            # expoe este campo. Ver duracao_manual.
+            manual_duration_minutes=body.get("manualDurationMinutes"),
         )
 
         appointment = _serialize_row(result)
 
-        return http_response(201, {
+        return http_response(201, para_o_staff(identidade, {
             "status": "SUCCESS",
             "message": "Agendamento criado com sucesso",
             "appointment": appointment,
-        })
+        }))
+
+    except DuracaoInvalida as e:
+        # Dedo errado no formulario e 400, nao 500.
+        return http_response(400, {"status": "ERROR", "message": str(e)})
 
     except ConflictError as e:
         return http_response(409, {"status": "ERROR", "message": str(e)})

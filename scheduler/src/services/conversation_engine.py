@@ -2,6 +2,7 @@ import os
 import time
 import uuid
 import unicodedata
+from src.services.desconto_personalizado import aplica as aplica_desconto
 import logging
 from datetime import date, datetime, time as dt_time, timedelta
 from decimal import Decimal
@@ -16,6 +17,20 @@ from src.services.db.postgres import PostgresService
 from src.services.template_service import TemplateService
 from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import IncomingMessage, WhatsAppProvider
+
+from src.services.duration_rules import (
+    calcula_duracao, duracao_da_sessao, get_duration_rules)
+from src.services.bot_policy import (
+    MOTIVO_FORA_DO_ESCOPO,
+    TTL_DO_ATENDIMENTO,
+    entrega_a_humano,
+    entrega_por_instabilidade,
+)
+from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
+from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
+from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
+from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
+from src.services.areas_ambiguas import perguntas as perguntas_de_ambiguidade
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +381,7 @@ FLOW_SESSION_KEYS = [
     "_is_first_session", "_skipped_services", "_welcome_intro", "_prepend_message",
     "_classifier_suggested_areas", "_classifier_faq_topic", "_classifier_service_hint",
     "_pending_classifier_transition",
+    "_ambiguidades_perguntadas",
 ]
 
 
@@ -405,7 +421,6 @@ class ConversationEngine:
         )
 
         # 1.5 Check if human attendant mode is active
-        HANDOFF_TTL_SECONDS = 24 * 60 * 60  # 24h
         if current_state in (ConversationState.HUMAN_ATTENDANT_ACTIVE, ConversationState.HUMAN_HANDOFF):
             # Allow "Retomar atendimento" button to reactivate bot from HUMAN_HANDOFF
             if current_state == ConversationState.HUMAN_HANDOFF and incoming.button_id == "resume_bot":
@@ -422,7 +437,7 @@ class ConversationEngine:
                     is_active = now < session.get("attendant_active_until", 0)
                 else:
                     handoff_at = session.get("human_handoff_requested_at", 0)
-                    is_active = now < (handoff_at + HANDOFF_TTL_SECONDS)
+                    is_active = now < (handoff_at + TTL_DO_ATENDIMENTO)
 
                 if is_active:
                     logger.info(f"[ConversationEngine] Bot pausado (atendimento humano) para {phone} state={current_state}")
@@ -435,6 +450,30 @@ class ConversationEngine:
                     session.pop("_previous_state_before_attendant", None)
                     self._save_session(clinic_id, phone, session)
                     current_state = ConversationState.WELCOME
+
+        # 1.6 Procedimento que o bot não atende.
+        #
+        # A MESMA regra do [conversation_agent], no caminho legado. Aplicar só
+        # num dos dois é como a divergência começa: a clínica que ainda não
+        # migrou para o agente responderia sobre botox, e ninguém veria.
+        try:
+            citado = procedimento_fora_do_escopo(
+                incoming.content, self._get_clinic(clinic_id)
+            )
+        except Exception as e:
+            # Sem os termos da clínica, a lista do código ainda barra o que
+            # nomeia. Derrubar a mensagem aqui seria pior.
+            logger.warning(f"[ForaDoEscopo] não li a clínica {clinic_id}: {e}")
+            citado = procedimento_fora_do_escopo(incoming.content)
+        if citado:
+            logger.info(
+                f"[ForaDoEscopo] {phone}: citou {citado} -> especialista"
+            )
+            entrega_a_humano(session, MOTIVO_FORA_DO_ESCOPO)
+            self._save_session(clinic_id, phone, session)
+            return [OutgoingMessage(
+                message_type="text", content=TEXTO_FORA_DO_ESCOPO
+            )]
 
         # 2. Identify input
         user_input = self._identify_input(incoming, session)
@@ -473,6 +512,7 @@ class ConversationEngine:
                 session.pop("selected_service_area_pairs", None)
                 session.pop("_available_areas", None)
                 session.pop("_areas_input", None)
+                session.pop("_ambiguidades_perguntadas", None)
                 logger.info("[ConversationEngine] Back navigation: cleared area selection keys")
         elif user_input == "human":
             next_state = ConversationState.HUMAN_HANDOFF
@@ -509,6 +549,16 @@ class ConversationEngine:
         template_vars, dynamic_buttons, override_content = self._on_enter(
             next_state, clinic_id, phone, session
         )
+
+        # O on_enter falhou: ninguém recebe mensagem de erro. A sessão já foi
+        # marcada como entregue a uma pessoa; aqui só se garante o silêncio.
+        if session.pop("_falha_de_sistema", False):
+            logger.error(
+                f"[Instabilidade] {phone}: bot calado e conversa entregue a uma "
+                f"pessoa. A paciente está sem resposta."
+            )
+            self._save_session(clinic_id, phone, session)
+            return []
 
         # 5. Build outgoing messages (use effective state — on_enter may redirect)
         effective_state = ConversationState(session["state"])
@@ -914,8 +964,12 @@ class ConversationEngine:
 
         except Exception as e:
             logger.error(f"[ConversationEngine] Error in on_enter for {state}: {e}", exc_info=True)
-            override_content = "Desculpe, ocorreu um erro. Tente novamente."
-            session["state"] = ConversationState.MAIN_MENU.value
+            # Saía daqui "Desculpe, ocorreu um erro. Tente novamente." - a mesma
+            # classe de mensagem que o agente mandava, e que não pode chegar ao
+            # cliente. A conversa vai para uma pessoa e o bot cala. Ver
+            # bot_policy.entrega_por_instabilidade.
+            entrega_por_instabilidade(session)
+            session["_falha_de_sistema"] = True
 
         # If on_enter redirected and set dynamic_buttons in session, pick them up
         effective_state = ConversationState(session.get("state", state.value))
@@ -1315,6 +1369,41 @@ class ConversationEngine:
             session["dynamic_buttons"] = back_button
             return {}, content
 
+        # "Barriga" e "virilha" cobrem mais de uma área da lista, e aqui a
+        # escolha veio por número: ela pode ter apontado a errada sem saber que
+        # existia a outra. Ver areas_ambiguas. Devolve para a lista com a
+        # pergunta - uma vez por ambiguidade, senão a pessoa não sai daqui.
+        ja_perguntadas = set(session.get("_ambiguidades_perguntadas") or [])
+        pendentes = [
+            p for p in ambiguidades_pendentes(
+                selected_service_area_pairs, available_areas, []
+            )
+            if p["id"] not in ja_perguntadas
+        ]
+        if pendentes:
+            session["_ambiguidades_perguntadas"] = sorted(
+                ja_perguntadas | {p["id"] for p in pendentes}
+            )
+            session["state"] = ConversationState.SELECT_AREAS.value
+            service_names = list(dict.fromkeys(a.get("service_name", "") for a in available_areas))
+            multi_service = len(service_names) > 1
+            price_map = {(a["service_id"], a["id"]): a.get("price_cents") for a in available_areas}
+            areas_list = self._build_areas_list(available_areas, multi_service, price_map)
+            perguntas = "\n\n".join(perguntas_de_ambiguidade(pendentes))
+            logger.info(
+                f"[ConversationEngine] _on_enter_confirm_areas: ambiguidade "
+                f"{[p['id'] for p in pendentes]} -> voltando para SELECT_AREAS"
+            )
+            session["dynamic_buttons"] = [
+                {"id": "human", "label": "Falar com atendente"},
+                {"id": "back", "label": "Voltar"},
+            ]
+            return {}, (
+                f"{perguntas}\n\nSe quiser trocar, é só digitar os *números* das "
+                f"áreas de novo. Para seguir com o que você escolheu, repita os "
+                f"mesmos números.\n\n{areas_list}"
+            )
+
         session["selected_area_ids"] = selected_area_ids
         session["selected_service_area_pairs"] = selected_service_area_pairs
         areas_display = ", ".join(selected_area_names)
@@ -1364,7 +1453,7 @@ class ConversationEngine:
                 discount_pct = 0
                 discount_reason = None
 
-        discounted_price = total_price * (100 - discount_pct) // 100
+        discounted_price = aplica_desconto(total_price, discount_pct)
 
         session["discount_pct"] = discount_pct
         session["discount_reason"] = discount_reason
@@ -1395,18 +1484,19 @@ class ConversationEngine:
                     params = ()
                     for pair in service_area_pairs:
                         params += (pair["service_id"], pair["area_id"])
+                    # O preço continua sendo soma por área; a duração passou a vir
+                    # da quantidade de áreas. Ver duration_rules.py.
                     rows = self.db.execute_query(
-                        f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration,
-                               SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price_cents
+                        f"""SELECT SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price_cents
                         FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
                         JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
                         LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
                         params,
                     )
-                    total_duration = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else 0
                     total_price = int(rows[0]["total_price_cents"]) if rows and rows[0]["total_price_cents"] else 0
 
-                    # Add duration/price for services without area pairs (no areas configured)
+                    # Serviços sem área configurada somam preço, mas não duração:
+                    # a duração é uma só, calculada pela contagem total de áreas.
                     paired_service_ids = {pair["service_id"] for pair in service_area_pairs}
                     unpaired_service_ids = [sid for sid in selected_service_ids if sid not in paired_service_ids]
                     if unpaired_service_ids:
@@ -1416,25 +1506,29 @@ class ConversationEngine:
                             tuple(unpaired_service_ids),
                         )
                         for row in unpaired_rows:
-                            total_duration += int(row["duration_minutes"] or 0)
                             total_price += int(row["price_cents"] or 0)
+
+                    # As áreas mandam; serviços sem área somam a própria duração.
+                    bruto = 0
+                    if service_area_pairs:
+                        from src.services.duration_rules import soma_das_areas
+                        bruto += soma_das_areas(self.db, service_area_pairs)
+                    bruto += sum(int(r["duration_minutes"] or 0) for r in unpaired_rows) if unpaired_service_ids else 0
+                    total_duration = duracao_da_sessao(bruto, get_duration_rules(self.db, clinic_id))
                 else:
                     services = self.db.execute_query(
                         f"SELECT id, duration_minutes, price_cents FROM scheduler.services WHERE id::text IN ({svc_placeholders}) AND active = TRUE",
                         tuple(selected_service_ids),
                     )
-                    total_duration = sum(s["duration_minutes"] for s in services)
+                    total_duration = duracao_da_sessao(
+                        sum(int(s.get("duration_minutes") or 0) for s in services),
+                        get_duration_rules(self.db, clinic_id))
                     total_price = sum(s.get("price_cents") or 0 for s in services)
-                # Cap duration at max_session_minutes (default 60)
+                # O teto agora vive em duration_rules.ceiling_minutes, aplicado
+                # dentro de duracao_da_sessao. clinics.max_session_minutes era um
+                # segundo teto, que discordava do primeiro; deixou de decidir.
                 clinic = self._get_clinic(clinic_id)
-                max_session = (clinic.get("max_session_minutes") or 60) if clinic else 60
                 buffer_minutes = int(clinic.get("buffer_minutes") or 0) if clinic else 0
-
-                if total_duration > max_session:
-                    logger.info(
-                        f"[ConversationEngine] _on_enter_available_days: capping duration {total_duration}min -> {max_session}min (max_session_minutes)"
-                    )
-                    total_duration = max_session
 
                 session["service_duration_minutes"] = total_duration
                 session["buffer_minutes"] = buffer_minutes
@@ -1593,32 +1687,10 @@ class ConversationEngine:
                 logger.error(f"[ConversationEngine] _on_enter_booked: FAILED to create appointment: {e}", exc_info=True)
                 return {}, "Desculpe, ocorreu um erro ao confirmar seu agendamento. Tente novamente."
 
-        clinic = self._get_clinic(clinic_id)
-        clinic_instructions = (clinic.get("pre_session_instructions") or "") if clinic else ""
-
-        # Hierarchical: service_area instructions take priority, then clinic-level
-        sa_instructions = ""
-        service_area_pairs = session.get("selected_service_area_pairs")
-        if service_area_pairs and self.db:
-            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
-            params = ()
-            for pair in service_area_pairs:
-                params += (pair["service_id"], pair["area_id"])
-            rows = self.db.execute_query(
-                f"""
-                SELECT pre_session_instructions
-                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
-                JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id
-                WHERE sa.pre_session_instructions IS NOT NULL
-                AND sa.active = TRUE
-                """,
-                params,
-            )
-            sa_parts = [r["pre_session_instructions"] for r in rows if r.get("pre_session_instructions")]
-            sa_instructions = "\n".join(sa_parts)
-
-        parts = [p for p in [sa_instructions, clinic_instructions] if p]
-        pre_instructions = "\n\n".join(parts)
+        # O mesmo aviso do outro fluxo, do mesmo lugar: os dois fluxos fecham
+        # agendamento, e a pessoa não sabe por qual deles passou. Ver
+        # orientacoes_pos_sessao.
+        pre_instructions = orientacoes_da_clinica(self.template_service, clinic_id)
 
         total_min = session.get("total_duration_minutes")
         if total_min:
@@ -1637,12 +1709,11 @@ class ConversationEngine:
         }
         content = self.template_service.get_and_render(clinic_id, "BOOKED", variables)
 
-        # If there are pre-session instructions, append recommendations and override buttons
+        # O aviso vai cru, sem o embrulho do RECOMMENDATIONS: ele é a orientação
+        # exata que a clínica escreveu, e cabeçalho em cima dela é texto que
+        # ninguém revisou entrando junto com contraindicação médica.
         if pre_instructions:
-            recommendations_msg = self.template_service.get_and_render(
-                clinic_id, "RECOMMENDATIONS", {"recommendations": pre_instructions}
-            )
-            content = content + "\n\n" + recommendations_msg
+            content = content + "\n\n" + pre_instructions
             session["dynamic_buttons"] = [
                 {"id": "confirm_read", "label": "Li e entendi"},
                 {"id": "human", "label": "Falar com atendente"},

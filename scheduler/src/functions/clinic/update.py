@@ -26,12 +26,13 @@ ALLOWED_FIELDS = {
     "max_future_dates",
     "active",
     "display_name",
-    "max_session_minutes",
     "welcome_intro_message",
     "bot_paused",
     "batch_message_template",
     "logo_url",
     "favicon_url",
+    "bot_autoreply_policy",
+    "bot_pilot_phones",
 }
 
 JSONB_FIELDS = {"business_hours"}

@@ -31,11 +31,25 @@ SQL_STATEMENTS = [
         google_spreadsheet_id VARCHAR(255),  -- DEPRECATED: will be dropped by migration
         google_sheet_name VARCHAR(100) DEFAULT 'Agenda',  -- DEPRECATED: will be dropped by migration
         owner_email VARCHAR(255),
-        max_session_minutes INTEGER DEFAULT 60,
+        -- Google Ads. As tres entraram por migration e nunca estiveram aqui;
+        -- numa base nova as migrations as acrescentariam de todo jeito, entao
+        -- listar nao muda comportamento - muda o que o arquivo diz existir.
+        google_ads_customer_id VARCHAR(20),
+        -- A action de COMPRA: so confirmado, sessao passada. Ver PRD 016.
+        offline_conversion_action_id VARCHAR(30),
+        -- A action de AGENDAMENTO: todo agendamento, inclusive cancelado e
+        -- falta. Um evento otimiza, o outro mede. Ver PRD 017.
+        booking_conversion_action_id VARCHAR(30),
         welcome_intro_message TEXT,
         display_name VARCHAR(255),
         use_agent BOOLEAN DEFAULT FALSE,
         bot_paused BOOLEAN DEFAULT FALSE,
+        bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL',
+        debounce_seconds INTEGER NOT NULL DEFAULT 68,
+        bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}',
+        -- Procedimentos que o bot NAO atende, alem da lista do codigo.
+        -- Ver fora_do_escopo.
+        bot_procedimentos_fora_do_escopo TEXT[] NOT NULL DEFAULT '{}',
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         logo_url VARCHAR(500),
@@ -79,7 +93,8 @@ SQL_STATEMENTS = [
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
         professional_id UUID REFERENCES scheduler.professionals(id),
-        day_of_week INTEGER NOT NULL,
+        day_of_week INTEGER,
+        rule_date DATE,
         start_time TIME NOT NULL,
         end_time TIME NOT NULL,
         active BOOLEAN DEFAULT TRUE,
@@ -109,6 +124,11 @@ SQL_STATEMENTS = [
         phone VARCHAR(20) NOT NULL,
         name VARCHAR(255),
         gender VARCHAR(1) CHECK (gender IN ('M', 'F')),
+        birth_date DATE,
+        cpf VARCHAR(14),
+        email VARCHAR(255),
+        custom_discount_pct NUMERIC(5,2) CHECK (custom_discount_pct IS NULL
+            OR (custom_discount_pct >= 0 AND custom_discount_pct <= 100)),
         last_message_at TIMESTAMPTZ,
         deleted_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
@@ -128,9 +148,13 @@ SQL_STATEMENTS = [
         appointment_date DATE NOT NULL,
         start_time TIME NOT NULL,
         end_time TIME NOT NULL,
+        -- CONFIRMED | CANCELLED | NO_SHOW. A CHECK vem por migration,
+        -- porque esta tabela ja existe em producao e o IF NOT EXISTS
+        -- daqui nao reexecuta - ver appointments_status_check.
         status VARCHAR(20) DEFAULT 'CONFIRMED',
         notes TEXT,
         full_name VARCHAR(255),
+        manual_duration_minutes INTEGER,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -217,6 +241,18 @@ SQL_STATEMENTS = [
     # Add total_duration_minutes to appointments
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS total_duration_minutes INTEGER",
 
+    # A duracao que uma PESSOA fixou para ESTE agendamento. NULL = sem override,
+    # que e o comportamento de sempre.
+    #
+    # Separada de total_duration_minutes de proposito: aquela guarda a duracao
+    # que vale (a efetiva), esta guarda que alguem decidiu. Poder comparar as
+    # duas e o que permite mostrar "a regra calcula 30, a recepcao marcou 50" e
+    # o que permite voltar atras. Ver src/services/duracao_manual.py.
+    #
+    # Sem CHECK de faixa aqui: a faixa vive em duracao_manual.py, e escreve-la
+    # tambem no schema criaria duas fontes que divergem quando uma muda.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS manual_duration_minutes INTEGER",
+
     # Add rule_date column to availability_rules (fixed-date rules)
     "ALTER TABLE scheduler.availability_rules ALTER COLUMN day_of_week DROP NOT NULL",
     "ALTER TABLE scheduler.availability_rules ADD COLUMN IF NOT EXISTS rule_date DATE",
@@ -256,6 +292,15 @@ SQL_STATEMENTS = [
             ADD CONSTRAINT uq_availability_rules_clinic_day UNIQUE (clinic_id, day_of_week);
         END IF;
     END $$
+    """,
+
+    # Impede data fixa duplicada (mesma data + mesmo horario de inicio).
+    # Indice parcial: nao afeta regras recorrentes, onde rule_date e NULL.
+    # Inclui start_time para permitir faixas distintas na mesma data (manha e tarde).
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_availability_rules_clinic_date
+    ON scheduler.availability_rules (clinic_id, rule_date, start_time)
+    WHERE rule_date IS NOT NULL
     """,
 
     # Índices
@@ -302,6 +347,20 @@ SQL_STATEMENTS = [
 
     # Discount rules per clinic (configurable progressive discounts)
     """
+    CREATE TABLE IF NOT EXISTS scheduler.duration_rules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        floor_minutes INTEGER NOT NULL DEFAULT 10,
+        ceiling_minutes INTEGER NOT NULL DEFAULT 50,
+        step_minutes INTEGER NOT NULL DEFAULT 5,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(clinic_id)
+    )
+    """,
+
+    """
     CREATE TABLE IF NOT EXISTS scheduler.discount_rules (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
@@ -319,11 +378,10 @@ SQL_STATEMENTS = [
     """,
 
     # Max session minutes and welcome intro message for clinics
-    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS max_session_minutes INTEGER DEFAULT 60",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS welcome_intro_message TEXT",
 
     # Discount fields on appointments
-    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_pct INTEGER DEFAULT 0",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_pct NUMERIC(5,2) DEFAULT 0",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_reason VARCHAR(50)",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS original_price_cents INTEGER",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS final_price_cents INTEGER",
@@ -451,6 +509,9 @@ SQL_STATEMENTS = [
         first_appointment_id UUID REFERENCES scheduler.appointments(id),
         first_appointment_value DECIMAL(10,2),
         raw_message TEXT,
+        first_contact_status VARCHAR(20),
+        first_contact_at TIMESTAMPTZ,
+        conversation_started_at TIMESTAMPTZ,
         metadata JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -476,7 +537,10 @@ SQL_STATEMENTS = [
         value_cents INTEGER NOT NULL,
         conversion_date TIMESTAMPTZ NOT NULL,
         click_date TIMESTAMPTZ NOT NULL,
+        -- `uploaded_at` e do evento de COMPRA, por acidente historico:
+        -- ele nasceu quando havia um evento so. Ver PRD 017.
         uploaded_at TIMESTAMPTZ,
+        booking_uploaded_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE(appointment_id)
     )
@@ -494,6 +558,137 @@ SQL_STATEMENTS = [
 
     # Bot pause flag per clinic
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_paused BOOLEAN DEFAULT FALSE",
+
+    # Política de resposta automática do bot, por clínica.
+    # ALL preserva o comportamento atual de quem já usa o bot; as demais restringem.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL'",
+
+    # Segundos que o bot espera juntando a rajada antes de comecar a pensar.
+    # 68s veio da medicao das conversas reais: junta 49% dos turnos e fica no
+    # joelho da curva (90s so acrescenta 0,6pp). 0 desliga o agrupamento.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS debounce_seconds INTEGER NOT NULL DEFAULT 68",
+
+    # Quem iniciou a conversa: 'BOT' (a atendente clicou em Iniciar pelo Bot) ou
+    # 'HUMANO' (ela marcou Ja iniciada). NULL = ninguem iniciou. Sem esta coluna
+    # nao da para saber se o "Ja iniciada" pode ser desfeito - desmarcar um envio
+    # do bot apagaria o registro de uma mensagem que existe.
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_channel VARCHAR(10)",
+
+    # Marca visual na agenda: quem esta pisando na clinica pela primeira vez.
+    # Gravada e nao derivada porque a atendente precisa poder desmarcar - a
+    # pessoa pode ter vindo antes por fora do sistema.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS is_first_visit BOOLEAN NOT NULL DEFAULT FALSE",
+
+    # Espelho da lista de conversas do WhatsApp (z-api GET /chats). Existe
+    # porque o atendimento humano nao passa pelo webhook: a atendente responde
+    # pelo celular, a mensagem chega com LID sem vinculo e e descartada. Sem
+    # isto, 17 dos 37 leads do site apareciam como sem contato tendo conversa.
+    #
+    # E espelho, nao fonte: o z-api manda. Recriar do zero e seguro.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.whatsapp_chats (
+        clinic_id VARCHAR(100) NOT NULL,
+        phone VARCHAR(20) NOT NULL,
+        lid VARCHAR(50),
+        name VARCHAR(255),
+        last_message_at TIMESTAMPTZ,
+        unread_count INTEGER DEFAULT 0,
+        synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (clinic_id, phone)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_whatsapp_chats_clinic ON scheduler.whatsapp_chats(clinic_id)",
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_bot_autoreply_policy') THEN
+            ALTER TABLE scheduler.clinics ADD CONSTRAINT chk_bot_autoreply_policy
+            CHECK (bot_autoreply_policy IN ('ALL', 'PILOT', 'LEADS_ONLY', 'OFF'));
+        END IF;
+    END $$
+    """,
+    # Telefones do piloto, normalizados (55DDDNNNNNNNNN). Só usado com policy=PILOT.
+    # Separado de ALLOWED_PHONES do SSM de propósito: aquela governa também lembretes
+    # de consulta e disparos do painel, e restringi-la deixaria pacientes sem lembrete.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS bot_pilot_phones TEXT[] NOT NULL DEFAULT '{}'",
+
+    # Procedimentos que o bot NAO atende nesta clinica, ACRESCENTADOS a lista do
+    # codigo. Texto simples, nao regex: quem preenche e a recepcao.
+    #
+    # Vazio e o normal. A Essencia vende preenchimento, toxina botulinica e
+    # bioestimulador, e os tres ja estao em [fora_do_escopo.PROCEDIMENTOS] -
+    # esta coluna existe para o procedimento novo que entra no cardapio antes de
+    # a gente saber dele, e que a clinica consegue barrar sozinha.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
+    "bot_procedimentos_fora_do_escopo TEXT[] NOT NULL DEFAULT '{}'",
+
+    # Dados de cadastro coletados na confirmação do agendamento.
+    # Sem estas colunas o bot pediria CPF e data de nascimento e descartaria a
+    # resposta, que além de inútil é ruim para dado pessoal.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS birth_date DATE",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS cpf VARCHAR(14)",
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS email VARCHAR(255)",
+
+    # Desconto fixo da paciente, em porcento. NULO e o normal: sem personalizado,
+    # vale a politica da clinica (primeira sessao, faixas de areas).
+    #
+    # NULO e nao zero, e a diferenca nao e detalhe: zero e um valor legitimo -
+    # "esta paciente nunca recebe desconto" - e so o nulo consegue dizer "nao ha
+    # personalizado aqui". Com zero como padrao, as duas situacoes ficariam
+    # indistinguiveis e ninguem descobriria o engano olhando a tabela.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS custom_discount_pct NUMERIC(5,2)",
+    # Duas casas decimais (11/09/2026). 12,5% e 33,33% sao combinados reais e o
+    # inteiro os arredondava calado.
+    #
+    # `appointments.discount_pct` vai junto por obrigacao: o percentual e
+    # GRAVADO no agendamento, e deixa-la inteira faria o 12,5 do cadastro virar
+    # 12 na hora de marcar - o cadastro diria uma coisa e a sessao outra.
+    #
+    # USING converte o que ja existe; inteiro cabe em NUMERIC(5,2) sem perda.
+    """
+    DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'scheduler' AND table_name = 'patients'
+                     AND column_name = 'custom_discount_pct'
+                     AND data_type = 'integer') THEN
+            ALTER TABLE scheduler.patients
+                ALTER COLUMN custom_discount_pct TYPE NUMERIC(5,2)
+                USING custom_discount_pct::NUMERIC(5,2);
+        END IF;
+    END $$;
+    """,
+    """
+    DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'scheduler' AND table_name = 'appointments'
+                     AND column_name = 'discount_pct'
+                     AND data_type = 'integer') THEN
+            ALTER TABLE scheduler.appointments
+                ALTER COLUMN discount_pct TYPE NUMERIC(5,2)
+                USING discount_pct::NUMERIC(5,2);
+        END IF;
+    END $$;
+    """,
+    """
+    DO $$ BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'patients_custom_discount_pct_range'
+        ) THEN
+            ALTER TABLE scheduler.patients
+                ADD CONSTRAINT patients_custom_discount_pct_range
+                CHECK (custom_discount_pct IS NULL
+                       OR (custom_discount_pct >= 0 AND custom_discount_pct <= 100));
+        END IF;
+    END $$;
+    """,
+
+    # Rastreio do primeiro contato ativo com o lead.
+    # first_contact_at é "falamos com ele"; conversation_started_at é "ele respondeu".
+    # Sem separar não dá para medir a taxa de resposta da abordagem.
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_status VARCHAR(20)",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS first_contact_at TIMESTAMPTZ",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS conversation_started_at TIMESTAMPTZ",
+    "CREATE INDEX IF NOT EXISTS idx_leads_first_contact ON scheduler.leads(clinic_id, first_contact_status)",
 
     # Configurable default message template for batch WhatsApp sends
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS batch_message_template TEXT",
@@ -551,7 +746,353 @@ SQL_STATEMENTS = [
 
     # Favicon do salão (ícone da aba do navegador no site público), configurável no painel
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS favicon_url VARCHAR(500)",
+
+    # Regras de duração da sessão por quantidade de áreas.
+    # Semeia uma linha por clínica com o padrão da Essência: quem já opera não
+    # fica sem regra, e quem quiser ajusta pelo painel.
+    """
+    INSERT INTO scheduler.duration_rules (clinic_id)
+    SELECT clinic_id FROM scheduler.clinics
+    ON CONFLICT (clinic_id) DO NOTHING
+    """,
+
+    # A duracao deixou de ser faixa por quantidade de areas e passou a ser a
+    # soma das duracoes das areas, limitada por piso e teto e arredondada ao
+    # passo. As colunas de faixa nao decidem mais nada. Ver duration_rules.py.
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS floor_minutes INTEGER NOT NULL DEFAULT 10",
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS ceiling_minutes INTEGER NOT NULL DEFAULT 50",
+    "ALTER TABLE scheduler.duration_rules ADD COLUMN IF NOT EXISTS step_minutes INTEGER NOT NULL DEFAULT 5",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS base_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_max_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_2_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_max_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_3_duration_minutes",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_4_min_areas",
+    "ALTER TABLE scheduler.duration_rules DROP COLUMN IF EXISTS tier_4_duration_minutes",
+
+    # clinics.max_session_minutes era um segundo teto, aplicado so no engine
+    # antigo e em desacordo com ceiling_minutes. O teto agora e um so.
+    "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS max_session_minutes",
+
+    # -- Prontuario: historico por sessao -------------------------------------
+    #
+    # O tipo de pele decide qual dos dois protocolos alimenta a sugestao de
+    # parametro. Marcado SO pela profissional, no painel: o bot nunca escreve
+    # aqui e nenhuma tool dele expoe este campo. Ver protocolo_laser.
+    "ALTER TABLE scheduler.patients ADD COLUMN IF NOT EXISTS skin_type VARCHAR(10)",
+    "ALTER TABLE scheduler.patients DROP CONSTRAINT IF EXISTS patients_skin_type_check",
+    """
+    ALTER TABLE scheduler.patients ADD CONSTRAINT patients_skin_type_check
+        CHECK (skin_type IS NULL OR skin_type IN ('BRANCA', 'NEGRA'))
+    """,
+
+    # Os parametros iniciais dos tres metodos, por tipo de pele. Sem clinic_id:
+    # uma tabela so, decisao do Andre em 19/09/2026. `source` distingue o que
+    # veio dos PDFs do que veio da clinica - a tabela e referencia clinica, e
+    # quem ler daqui a um ano precisa saber a procedencia de cada numero.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.laser_protocol_parameters (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        skin_type VARCHAR(10) NOT NULL,
+        method VARCHAR(20) NOT NULL,
+        protocol_area_key VARCHAR(60) NOT NULL,
+        protocol_area_name VARCHAR(120) NOT NULL,
+        fluence_j NUMERIC(5,2) NOT NULL,
+        energy_kj NUMERIC(5,2),
+        stacks SMALLINT,
+        passes SMALLINT,
+        source VARCHAR(20) NOT NULL DEFAULT 'PDF',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (skin_type, method, protocol_area_key)
+    )
+    """,
+
+    # A ligacao entre area vendida e area do protocolo. Tabela explicita, e nao
+    # casamento de nome: em 16/09/2026 comparar nomes por aproximacao deixou
+    # uma area inalcancavel e custou cinco perguntas repetidas a uma paciente.
+    # Aqui o mesmo erro sugeriria a fluencia de OUTRA area. Uma area pode ter
+    # DUAS linhas - a composta abre em duas aplicacoes.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.area_protocol_map (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        area_id UUID NOT NULL REFERENCES scheduler.areas(id) ON DELETE CASCADE,
+        protocol_area_key VARCHAR(60) NOT NULL,
+        display_order SMALLINT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (area_id, protocol_area_key)
+    )
+    """,
+
+    # O registro de uma sessao.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.patient_session_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        patient_id UUID NOT NULL REFERENCES scheduler.patients(id),
+        appointment_id UUID REFERENCES scheduler.appointments(id),
+        professional_id UUID REFERENCES scheduler.professionals(id),
+        session_date DATE NOT NULL,
+        tanned_skin BOOLEAN NOT NULL DEFAULT FALSE,
+        skin_type_snapshot VARCHAR(10),
+        notes TEXT,
+        created_by_user_id UUID,
+        deleted_at TIMESTAMPTZ,
+        version INTEGER NOT NULL DEFAULT 1,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+
+    # Uma linha por area aplicada. `area_name` e snapshot de texto e nunca e
+    # nulo: renomear a area no catalogo NAO pode reescrever o passado, e e isso
+    # que tambem permite digitar area fora do catalogo. Mesmo padrao de
+    # appointment_service_areas.
+    #
+    # Colunas explicitas em vez de JSONB porque a pergunta que justifica a
+    # tabela inteira - "qual fluencia usei nesta area" - tem de ser um WHERE.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.patient_session_applications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        record_id UUID NOT NULL REFERENCES scheduler.patient_session_records(id) ON DELETE CASCADE,
+        area_id UUID REFERENCES scheduler.areas(id),
+        area_name VARCHAR(160) NOT NULL,
+        protocol_area_key VARCHAR(60),
+        method VARCHAR(20),
+        fluence_j NUMERIC(5,2),
+        energy_kj NUMERIC(5,2),
+        stacks SMALLINT,
+        passes SMALLINT,
+        display_order SMALLINT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+
+    # A trilha. SEM foreign key em record_id, de proposito: ela tem de
+    # sobreviver ao registro. Snapshot completo e nao diff - diff parece
+    # economico e depois nao reconstitui nada sozinho.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.patient_session_record_audit (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        record_id UUID NOT NULL,
+        clinic_id VARCHAR(100) NOT NULL,
+        action VARCHAR(10) NOT NULL,
+        snapshot JSONB NOT NULL,
+        changed_by_name VARCHAR(255),
+        changed_at TIMESTAMPTZ DEFAULT NOW()
+    )
+    """,
+
+    """CREATE INDEX IF NOT EXISTS idx_session_records_patient
+       ON scheduler.patient_session_records(patient_id, session_date DESC)
+       WHERE deleted_at IS NULL""",
+    """CREATE INDEX IF NOT EXISTS idx_session_records_appointment
+       ON scheduler.patient_session_records(appointment_id)
+       WHERE deleted_at IS NULL""",
+    """CREATE INDEX IF NOT EXISTS idx_session_applications_record
+       ON scheduler.patient_session_applications(record_id)""",
+    # "qual fluencia usei nesta area" - a pergunta que justifica a tabela
+    # separada, e que sem indice varre o historico inteiro da clinica.
+    """CREATE INDEX IF NOT EXISTS idx_session_applications_area
+       ON scheduler.patient_session_applications(area_id)""",
+    """CREATE INDEX IF NOT EXISTS idx_session_audit_record
+       ON scheduler.patient_session_record_audit(record_id, changed_at)""",
+    """CREATE INDEX IF NOT EXISTS idx_area_protocol_map_area
+       ON scheduler.area_protocol_map(area_id)""",
+
+    # -- Acesso por papel ------------------------------------------------------
+    #
+    # Ate 21/09/2026 o login devolvia a SCHEDULER_API_KEY para todo mundo: uma
+    # chave so, sem identidade, com acesso a tudo.
+    #
+    # O DEFAULT 'ADMIN' e deliberado: todo usuario que ja existe continua
+    # exatamente como estava. Um default 'STAFF' trancaria o Andre para fora do
+    # proprio painel no instante da migration.
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'ADMIN'",
+    "ALTER TABLE scheduler.clinic_users DROP CONSTRAINT IF EXISTS clinic_users_role_check",
+    """
+    ALTER TABLE scheduler.clinic_users ADD CONSTRAINT clinic_users_role_check
+        CHECK (role IN ('ADMIN', 'STAFF'))
+    """,
+
+    # Ate onde o funcionario enxerga a agenda. Os dois controles convivem e o
+    # mais restritivo vence: travar numa data nao pode ser afrouxado pelo
+    # contador de dias, nem o contrario. NULL nos dois cai no padrao do codigo.
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS agenda_days_ahead SMALLINT",
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS agenda_visible_until DATE",
+    "ALTER TABLE scheduler.clinic_users DROP CONSTRAINT IF EXISTS clinic_users_days_ahead_check",
+    """
+    ALTER TABLE scheduler.clinic_users ADD CONSTRAINT clinic_users_days_ahead_check
+        CHECK (agenda_days_ahead IS NULL
+               OR (agenda_days_ahead >= 0 AND agenda_days_ahead <= 365))
+    """,
+
+    # A sessao de quem NAO usa a chave mestra. Guarda o hash, nunca o token:
+    # vazamento desta tabela nao pode virar sessao valida.
+    #
+    # Em banco, e nao JWT assinado, porque revogar e o ponto: funcionario que
+    # sai da clinica tem de perder o acesso no mesmo minuto, e nao quando o
+    # token expirar sozinho.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.user_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES scheduler.clinic_users(id) ON DELETE CASCADE,
+        token_hash CHAR(64) NOT NULL UNIQUE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        revoked_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        last_used_at TIMESTAMPTZ
+    )
+    """,
+    """CREATE INDEX IF NOT EXISTS idx_user_sessions_hash
+       ON scheduler.user_sessions(token_hash)""",
+    """CREATE INDEX IF NOT EXISTS idx_user_sessions_user
+       ON scheduler.user_sessions(user_id)""",
+
+    # Dois interruptores por pessoa, decisao do Andre em 21/09/2026: nem toda
+    # recepcao e igual, e a clinica que cobra no balcao precisa de uma coisa
+    # que a que so agenda nao precisa.
+    #
+    # Os DEFAULTs reproduzem o comportamento que ja estava no ar, para ligar a
+    # coluna nao mudar nada para quem ja existe: preco escondido, lista de
+    # pacientes visivel. Sao ignorados para ADMIN, que enxerga tudo.
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS can_see_prices BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE scheduler.clinic_users ADD COLUMN IF NOT EXISTS can_see_patient_list BOOLEAN NOT NULL DEFAULT TRUE",
+
+    # -- Retratacao de conversao offline ---------------------------------------
+    #
+    # A conversao passa a subir quando a pessoa AGENDA, e nao quando comparece
+    # (decisao do Andre em 27/09/2026): o sinal chega semanas antes e o Google
+    # aprende mais rapido.
+    #
+    # O preco disso e que cancelamento vira conversao errada. Medido na
+    # Essencia: 5 das 12 conversoes estavam CANCELLED - 42%. Sem retratar, o
+    # algoritmo aprenderia a buscar quem cancela.
+    #
+    # `retracted_at` marca o que ja foi desfeito no Google. NULL = nunca
+    # retratado; nao e o mesmo que "nao precisa".
+    "ALTER TABLE scheduler.lead_conversions ADD COLUMN IF NOT EXISTS retracted_at TIMESTAMPTZ",
+
+    # So ha o que retratar quando a conversao CHEGOU a subir. O indice serve a
+    # pergunta que a Lambda faz toda semana: "o que subiu e depois caiu?"
+    """CREATE INDEX IF NOT EXISTS idx_lead_conversions_a_retratar
+       ON scheduler.lead_conversions (clinic_id)
+       WHERE uploaded_at IS NOT NULL AND retracted_at IS NULL""",
+
+    # -- Falta do paciente (NO_SHOW) ------------------------------------------
+    #
+    # A conversao offline e uma COMPRA, e compra precisa que a pessoa tenha
+    # COMPARECIDO. Ate aqui o sistema nao registrava isso: so havia CONFIRMED e
+    # CANCELLED, e 604 dos 618 CONFIRMED tinham data passada e ficavam assim
+    # para sempre - um no-show era indistinguivel de uma sessao realizada.
+    #
+    # A coluna NAO tinha constraint nenhuma (conferido em prod: so as chaves
+    # estrangeira e primaria). Ou seja o banco ja aceitava qualquer string, e o
+    # handler escrevia o status cru. Um typo como "NOSHOW" era gravado em
+    # silencio e tirava o agendamento das DUAS queries do uploader: nao elegivel
+    # (`= CONFIRMED`) e sem valor zerado (`= CANCELLED`). A conversao ficava
+    # orfa - viva no Google e invisivel aqui.
+    #
+    # `status IS NULL OR` segue o padrao de `patients_skin_type_check`: a coluna
+    # e nullable, e uma CHECK que proibisse NULL reprovaria linha que o default
+    # nunca preencheu.
+    "ALTER TABLE scheduler.appointments "
+    "DROP CONSTRAINT IF EXISTS appointments_status_check",
+
+    """DO $$ BEGIN
+       IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                      WHERE conname = 'appointments_status_check') THEN
+         ALTER TABLE scheduler.appointments
+           ADD CONSTRAINT appointments_status_check
+           CHECK (status IS NULL OR status IN ('CONFIRMED', 'CANCELLED', 'NO_SHOW'));
+       END IF;
+       END $$""",
+
+    # -- Segunda conversion action: "Agendou pelo WhatsApp" (PRD 017) ---------
+    #
+    # Um evento otimiza, o outro mede. A action de COMPRA conta so quem
+    # confirmou e cuja sessao passou; esta conta TODO agendamento vindo de
+    # anuncio - confirmado, cancelado ou falta -, porque quem marcou e desmarcou
+    # agendou de verdade: o lead era qualificado.
+    #
+    # Por que duas colunas e nao uma tabela `clinic_conversion_actions`: ha dois
+    # eventos, e o segundo acabou de ser decidido. Tabela normalizada e o que
+    # fazer SE aparecer um terceiro.
+    #
+    # Divida nomeada: `uploaded_at` sem qualificador passa a significar "compra
+    # enviada", por acidente historico. Renomear exige mexer no uploader e no
+    # `resumo_de_conversoes` do PR #74 ao mesmo tempo, em producao.
+    "ALTER TABLE scheduler.clinics "
+    "ADD COLUMN IF NOT EXISTS booking_conversion_action_id VARCHAR(30)",
+
+    "ALTER TABLE scheduler.lead_conversions "
+    "ADD COLUMN IF NOT EXISTS booking_uploaded_at TIMESTAMPTZ",
+
+    # Espelha o idx_lead_conversions_a_retratar e serve a pergunta que a Lambda
+    # faz todo mes: "que agendamento ainda nao subiu?"
+    """CREATE INDEX IF NOT EXISTS idx_lead_conversions_agendamento_a_subir
+       ON scheduler.lead_conversions (clinic_id)
+       WHERE booking_uploaded_at IS NULL""",
 ]
+
+
+# O protocolo e o mapa vivem em src/services/protocolo_laser.py, que e a fonte
+# unica lida pelo app e conferida pelos testes. Semear a partir de la evita a
+# copia que diverge em silencio - e numero de laser divergindo em silencio e
+# exatamente o que nao pode acontecer.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from src.services.protocolo_laser import MAPA_DE_AREAS, PROTOCOLO  # noqa: E402
+
+
+def _seed_do_protocolo():
+    """Todas as linhas do protocolo, num INSERT. Idempotente e corretivo.
+
+    ON CONFLICT DO UPDATE e nao DO NOTHING: se um valor for corrigido no
+    modulo, rodar o setup tem de propagar a correcao. Valor de laser errado
+    parado no banco e pior que qualquer duplicacao de escrita.
+    """
+    valores, params = [], []
+    for pele, metodo, chave, nome, fluencia, energia, stacks, passadas, origem in PROTOCOLO:
+        valores.append("(%s, %s, %s, %s, %s, %s, %s, %s, %s)")
+        params += [pele, metodo, chave, nome, fluencia, energia, stacks, passadas, origem]
+    sql = (
+        "INSERT INTO scheduler.laser_protocol_parameters "
+        "(skin_type, method, protocol_area_key, protocol_area_name, "
+        " fluence_j, energy_kj, stacks, passes, source) VALUES "
+        + ", ".join(valores) +
+        " ON CONFLICT (skin_type, method, protocol_area_key) DO UPDATE SET"
+        "   protocol_area_name = EXCLUDED.protocol_area_name,"
+        "   fluence_j = EXCLUDED.fluence_j,"
+        "   energy_kj = EXCLUDED.energy_kj,"
+        "   stacks = EXCLUDED.stacks,"
+        "   passes = EXCLUDED.passes,"
+        "   source = EXCLUDED.source"
+    )
+    return sql, tuple(params)
+
+
+def _seed_do_mapa():
+    """Liga area do catalogo a chave do protocolo, por NOME EXATO.
+
+    Casamento exato aqui e so aqui, porque e seed conferido contra o catalogo
+    real por tests/unit/test_mapa_de_areas.py. Area renomeada no painel deixa
+    de casar, e quem avisa e aquele teste - nao o silencio.
+    """
+    valores, params = [], []
+    for nome, chaves in MAPA_DE_AREAS.items():
+        for ordem, chave in enumerate(chaves):
+            valores.append("(%s, %s, %s)")
+            params += [nome, chave, ordem]
+    sql = (
+        "INSERT INTO scheduler.area_protocol_map (area_id, protocol_area_key, display_order) "
+        "SELECT a.id, m.chave, m.ordem FROM (VALUES "
+        + ", ".join(valores) +
+        ") AS m(area_name, chave, ordem) "
+        "JOIN scheduler.areas a ON a.name = m.area_name "
+        "ON CONFLICT (area_id, protocol_area_key) DO NOTHING"
+    )
+    return sql, tuple(params)
 
 
 def main():
@@ -576,6 +1117,19 @@ def main():
             conn.rollback()
             label = sql.strip().split('\n')[0][:80]
             print(f"[{i+1}/{len(SQL_STATEMENTS)}] ERRO: {label} -> {e}")
+
+    # Seeds parametrizados, depois de as tabelas existirem.
+    for rotulo, (sql, params) in (
+        ("protocolo do laser", _seed_do_protocolo()),
+        ("mapa de areas", _seed_do_mapa()),
+    ):
+        try:
+            cursor.execute(sql, params)
+            conn.commit()
+            print("[seed] OK: " + rotulo + " (" + str(cursor.rowcount) + " linhas)")
+        except Exception as e:
+            conn.rollback()
+            print("[seed] ERRO: " + rotulo + " -> " + str(e))
 
     cursor.close()
     conn.close()

@@ -5,9 +5,9 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonCard, SkeletonTable, SkeletonChart } from '@/components/ui/Skeleton'
 import { KpiCards } from './components/KpiCards'
 import { TodayAppointments } from './components/TodayAppointments'
-import { WeeklyChart } from './components/WeeklyChart'
 import { DiscountsSummary } from './components/DiscountsSummary'
 import { TopServices } from './components/TopServices'
+import { AgendaPorData } from './components/AgendaPorData'
 import { todayStr } from '@/utils/dateHelpers'
 
 function formatDateBR(dateStr: string) {
@@ -79,14 +79,19 @@ export function DashboardPage() {
 
       <TodayAppointments appointments={data.today_appointments} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <WeeklyChart dailyCounts={data.daily_counts} />
-        </div>
-        <div className="space-y-6">
-          <DiscountsSummary discounts={data.discount_breakdown} />
-          <TopServices services={data.top_services} />
-        </div>
+      {/* A agenda por data vem ANTES dos agregados do mes.
+          Quem gerencia decide sobre o que ainda da para mudar: a quinta que
+          esta com dois horarios vagos, o dia que acumulou cancelamento. O
+          fechamento do mes e leitura, nao decisao - fica embaixo.
+
+          O grafico de contagem semanal saiu: ele mostrava quantos por dia, que
+          e a coluna menos informativa da tabela nova, e sem faturamento,
+          desconto nem cancelamento ao lado. */}
+      <AgendaPorData />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <DiscountsSummary discounts={data.discount_breakdown} />
+        <TopServices services={data.top_services} />
       </div>
     </div>
   )

@@ -4,9 +4,6 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 from google.ads.googleads.client import GoogleAdsClient
 from google.ads.googleads.errors import GoogleAdsException
-from google.ads.googleads.v20.services.services.customer_client_link_service.client import CustomerClientLinkServiceClient
-from google.ads.googleads.v20.services.types.customer_client_link_service import CustomerClientLinkOperation, MutateCustomerClientLinkResponse
-from google.ads.googleads.v20.resources.types.customer_client_link import CustomerClientLink
 from src.utils.encryption import TokenEncryption
 from src.services.google_ads_config import GoogleAdsConfig
 
@@ -37,7 +34,7 @@ class GoogleAdsMCCService:
             print(f"Configuração do cliente MCC: {config}")
             # Criar cliente seguindo o mesmo padrão da action.py
 
-            google_ads_client = GoogleAdsClient.load_from_dict(config, version="v20")
+            google_ads_client = GoogleAdsClient.load_from_dict(config)
             print(f"Cliente MCC criado com sucesso: {google_ads_client}")
             self._mcc_client_cache = google_ads_client
             
@@ -61,17 +58,22 @@ class GoogleAdsMCCService:
             if manager_customer_id:
                 manager_customer_id = manager_customer_id.replace("-", "")
             print(f"Enviando convite MCC do manager '{manager_customer_id}' para cliente '{clean_customer_id}'")            
-            customer_client_link_service: CustomerClientLinkServiceClient = (
-                mcc_client.get_service("CustomerClientLinkService")
+            # `get_service` e `get_type` resolvem a versao da API sozinhos,
+            # a partir do SDK instalado. As anotacoes que estavam aqui vinham
+            # de `google.ads.googleads.v20...`, e prendiam este arquivo a UMA
+            # versao: com o SDK 31 (v21..v25) o import falha e o modulo inteiro
+            # nao carrega - nem as funcoes que nao usam link de MCC.
+            customer_client_link_service = mcc_client.get_service(
+                "CustomerClientLinkService"
             )
-            client_link_operation: CustomerClientLinkOperation = mcc_client.get_type(
+            client_link_operation = mcc_client.get_type(
                 "CustomerClientLinkOperation"
             )
-            client_link: CustomerClientLink = client_link_operation.create
+            client_link = client_link_operation.create
             client_link.client_customer = customer_client_link_service.customer_path(clean_customer_id)
             client_link.status = mcc_client.enums.ManagerLinkStatusEnum.PENDING.value
             print(f"Client link: {client_link}")
-            response: MutateCustomerClientLinkResponse = (
+            response = (
                 customer_client_link_service.mutate_customer_client_link(
                     customer_id=manager_customer_id, 
                     operation=client_link_operation

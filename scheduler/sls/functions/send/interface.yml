@@ -9,11 +9,16 @@ SendMessage:
         - dynamodb:PutItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+    # Abertura da campanha de reagendamento (session_store.abre_campanha).
+    # Le-mescla-grava, entao precisa de GetItem junto: so PutItem apagaria o
+    # resto da sessao. Sem estas duas, o disparo sai, o bot nao responde, e
+    # nada acusa - foi assim que a agregacao de rajada morreu em 04/09.
     - Effect: Allow
       Action:
-        - ssm:GetParameter
+        - dynamodb:GetItem
+        - dynamodb:PutItem
       Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
@@ -30,19 +35,6 @@ GetMessageQueue:
   handler: src.functions.send.queue.handler
   memorySize: 512
   timeout: 30
-  iamRoleStatementsName: ${self:service}-${self:custom.stage}-GetMessageQueue-lambdaRole
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - ssm:GetParameter
-      Resource:
-        - "arn:aws:ssm:${self:provider.region}:*:parameter/${self:custom.stage}/*"
-    - Effect: Allow
-      Action:
-        - logs:CreateLogGroup
-        - logs:CreateLogStream
-        - logs:PutLogEvents
-      Resource: "arn:aws:logs:*:*:*"
   events:
     - http:
         path: clinics/{clinicId}/queue

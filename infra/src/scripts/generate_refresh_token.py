@@ -21,7 +21,43 @@ import sys
 from urllib.parse import unquote
 from google_auth_oauthlib.flow import Flow
 
-_SCOPE = "https://www.googleapis.com/auth/adwords"
+# O terminal do Windows usa cp1252, e os 22 emojis deste script nao cabem nele.
+# Sem isto o programa morre na PRIMEIRA linha que imprime - antes de abrir o
+# navegador, antes de qualquer coisa - com um UnicodeEncodeError que nao diz
+# nada sobre OAuth. Aconteceu em 27/09/2026, e custou uma ida e volta.
+#
+# `errors="replace"` e o cinto de seguranca: num terminal que nao aceite UTF-8
+# de jeito nenhum, o emoji vira "?" e o script SEGUE. Perder um desenho e
+# aceitavel; perder o fluxo de autenticacao por causa dele nao e.
+# `line_buffering=True` resolve um segundo modo de falha, do mesmo tipo:
+# quando a saida nao e um terminal (rodando por um harness, um pipe, um
+# `>arquivo`), o Python guarda tudo em buffer - e este script IMPRIME a URL de
+# autorizacao e logo depois BLOQUEIA em sock.accept(), esperando o navegador.
+# O buffer so seria descarregado no fim, que nunca chega: a URL fica presa, a
+# pessoa nao tem o que autorizar, e o processo espera para sempre segurando a
+# porta 8080. Aconteceu em 03/10/2026; a saida tinha 0 byte.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+
+# Os DOIS escopos por default, desde 05/10/2026.
+#
+# `adwords` serve a Google Ads API (campanhas, keywords, conversion actions).
+# `datamanager` serve a Data Manager API, que e por onde a conversao offline
+# sobe desde que o Google fechou o ConversionUploadService.
+#
+# Juntos de proposito: um consentimento cobre os dois, e o projeto guarda UM
+# token num parametro so do SSM. Gerar so com `adwords` quebraria o upload de
+# conversao - e o cron e mensal, entao a descoberta viria semanas depois.
+#
+# Atencao: gerar token novo REVOGA o anterior. Depois de gerar, copie para o
+# SSM e DEPLOYE - o serverless resolve o `${ssm:...}` no deploy e injeta como
+# env var, entao corrigir o SSM nao alcanca as Lambdas em execucao.
+_SCOPES = [
+    "https://www.googleapis.com/auth/adwords",
+    "https://www.googleapis.com/auth/datamanager",
+]
 _SERVER = "127.0.0.1"
 _PORT = 8080
 _REDIRECT_URI = f"http://{_SERVER}:{_PORT}"
@@ -247,7 +283,7 @@ REQUISITOS:
     
     try:
         # Configurar scopes
-        configured_scopes = [_SCOPE]
+        configured_scopes = list(_SCOPES)
         
         if args.additional_scopes:
             configured_scopes.extend(args.additional_scopes)

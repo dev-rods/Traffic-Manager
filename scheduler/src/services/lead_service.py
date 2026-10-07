@@ -159,16 +159,21 @@ class LeadService:
         )
         return rows[0] if rows else None
 
-    def list_leads(
+    def _filtros(
         self,
         clinic_id: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         booked: Optional[bool] = None,
-        limit: int = 50,
-        offset: int = 0,
+        exclude_sources: Optional[List[str]] = None,
     ):
-        """List leads for a clinic with optional filters."""
+        """Monta o WHERE da listagem de leads. Devolve (where, params).
+
+        Existe para que `list_leads` e `contar_leads` filtrem pelo MESMO
+        critério. Eram duas montagens iguais escritas a mão, e a página passou
+        a mostrar "77 leads, 12 convertidos" porque o total vinha de um
+        conjunto e a contagem de outro.
+        """
         conditions = ["clinic_id = %s"]
         params = [clinic_id]
 
@@ -181,8 +186,72 @@ class LeadService:
         if booked is not None:
             conditions.append("booked = %s")
             params.append(booked)
+        if exclude_sources:
+            marcadores = ", ".join(["%s"] * len(exclude_sources))
+            # COALESCE: source NULL não casa com NOT IN e o lead sumiria calado.
+            conditions.append(f"COALESCE(source, '') NOT IN ({marcadores})")
+            params.extend(exclude_sources)
 
-        where = " AND ".join(conditions)
+        return " AND ".join(conditions), params
+
+    def contar_leads(
+        self,
+        clinic_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        exclude_sources: Optional[List[str]] = None,
+    ) -> Dict[str, int]:
+        """Totais do conjunto INTEIRO, não da página.
+
+        O handler devolvia `len(leads)` como total, então "Total de leads"
+        mostrava o tamanho da página - 50, numa clínica com 77. E a taxa de
+        conversão saía de uma divisão entre um numerador da página e um
+        denominador do servidor.
+
+        Sem o filtro `booked`: os três números descrevem o mesmo conjunto, e
+        quem está com a aba "Convertidos" aberta continua vendo o total real.
+        """
+        where, params = self._filtros(
+            clinic_id, start_date, end_date, None, exclude_sources)
+        linha = self.db.execute_query(
+            f"""
+            SELECT COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE booked) AS convertidos
+            FROM scheduler.leads WHERE {where}
+            """,
+            tuple(params),
+        )[0]
+        total = int(linha["total"])
+        convertidos = int(linha["convertidos"])
+        return {
+            "total": total,
+            "convertidos": convertidos,
+            "nao_convertidos": total - convertidos,
+        }
+
+    def list_leads(
+        self,
+        clinic_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        booked: Optional[bool] = None,
+        exclude_sources: Optional[List[str]] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ):
+        """List leads for a clinic with optional filters.
+
+        `exclude_sources` remove origens do resultado. É exclusão e não lista
+        branca de propósito: as origens do site crescem (`landing-page`,
+        `harmonizacao`, a próxima campanha), e uma lista branca faria a origem
+        nova sumir da tela sem erro nenhum. O que se quer tirar tem nome fixo.
+
+        O filtro vive aqui, não no cliente, porque o LIMIT corta no banco antes
+        de qualquer filtro em JS - filtrar depois esconderia leads do site assim
+        que a clínica passasse do limite da página.
+        """
+        where, params = self._filtros(
+            clinic_id, start_date, end_date, booked, exclude_sources)
         params.extend([limit, offset])
 
         # id tiebreaker keeps OFFSET pages from overlapping/skipping when created_at ties
@@ -290,6 +359,118 @@ class LeadService:
             )
         return result
 
+    def resumo_de_conversoes(self, clinic_id: str) -> Dict[str, Any]:
+        """O que o Google já recebeu desta clínica, e o que ainda não.
+
+        Relata FATO, não previsão: quantas conversões existem, quantas têm
+        `uploaded_at`, quantas foram retratadas. Não tenta antecipar quais o
+        uploader vai considerar elegíveis - essa regra tem um dono só
+        (infra/src/functions/conversions/uploader.py) e uma terceira cópia dela
+        aqui seria a mesma armadilha que já custou uma suíte verde mentindo.
+
+        Consequência aceita: "aguardando envio" pode incluir alguma conversão
+        que o uploader descarte pela janela de 90 dias do clique. Preferível a
+        um número que parece exato e diverge em silêncio quando a regra mudar.
+
+        ## São DOIS eventos, e eles são contados SEPARADOS
+
+        Desde o PRD 017 há duas conversion actions: compra (`uploaded_at`) e
+        agendamento (`booking_uploaded_at`). Um número só, somando os dois,
+        esconderia um deles parar - e foi exatamente isso que deixou a
+        `Lead - Whatsapp` morta e invisível por 6 meses, porque a `Lead jardins`
+        duplicada mantinha o total parecendo saudável.
+
+        Esta função existe para detectar silêncio. Agregar derrotaria o
+        próprio propósito dela.
+
+        O evento de agendamento **não tem retratação** nem filtro de status:
+        cancelado e falta sobem igual, porque quem marcou agendou de verdade.
+        Por isso o par dele não tem `retratadas` nem olha `a.status`.
+        """
+        linha = self.db.execute_query(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE a.status = 'CONFIRMED'
+                                   AND lc.uploaded_at IS NULL)  AS aguardando,
+                COALESCE(SUM(lc.value_cents) FILTER (
+                    WHERE a.status = 'CONFIRMED'
+                      AND lc.uploaded_at IS NULL), 0)           AS aguardando_cents,
+                COUNT(*) FILTER (WHERE lc.uploaded_at IS NOT NULL
+                                   AND lc.retracted_at IS NULL) AS enviadas,
+                COALESCE(SUM(lc.value_cents) FILTER (
+                    WHERE lc.uploaded_at IS NOT NULL
+                      AND lc.retracted_at IS NULL), 0)          AS enviadas_cents,
+                COUNT(*) FILTER (WHERE lc.retracted_at IS NOT NULL) AS retratadas,
+                COUNT(*) FILTER (WHERE a.status = 'CANCELLED')  AS canceladas,
+                MAX(lc.uploaded_at)                             AS ultimo_envio,
+
+                -- O evento de AGENDAMENTO. Sem filtro de status de proposito:
+                -- cancelado e falta sobem igual.
+                COUNT(*) FILTER (WHERE lc.booking_uploaded_at IS NOT NULL)
+                                                                AS ag_enviadas,
+                COUNT(*) FILTER (WHERE lc.booking_uploaded_at IS NULL)
+                                                                AS ag_aguardando,
+                COALESCE(SUM(lc.value_cents) FILTER (
+                    WHERE lc.booking_uploaded_at IS NOT NULL), 0) AS ag_enviadas_cents,
+                MAX(lc.booking_uploaded_at)                     AS ag_ultimo_envio
+            FROM scheduler.lead_conversions lc
+            JOIN scheduler.appointments a ON a.id = lc.appointment_id
+            WHERE lc.clinic_id = %s
+            """,
+            (clinic_id,),
+        )[0]
+        return {
+            "aguardando": int(linha["aguardando"]),
+            "aguardando_cents": int(linha["aguardando_cents"]),
+            "enviadas": int(linha["enviadas"]),
+            "enviadas_cents": int(linha["enviadas_cents"]),
+            "retratadas": int(linha["retratadas"]),
+            "canceladas": int(linha["canceladas"]),
+            "ultimo_envio": linha["ultimo_envio"],
+            "ag_enviadas": int(linha["ag_enviadas"]),
+            "ag_aguardando": int(linha["ag_aguardando"]),
+            "ag_enviadas_cents": int(linha["ag_enviadas_cents"]),
+            "ag_ultimo_envio": linha["ag_ultimo_envio"],
+        }
+
+    def conversoes_por_lead(self, clinic_id: str, lead_ids: List[str]) -> Dict[str, str]:
+        """Estado da conversão de cada lead, para a coluna da tabela.
+
+        Um lead recorrente tem várias conversões. O estado mostrado é o do
+        conjunto, na ordem em que importa a quem olha a tela: se alguma já
+        subiu, o Google sabe deste lead (ENVIADO); senão, se há alguma à
+        espera, AGUARDANDO; se todas foram retratadas, RETRATADO.
+
+        Lead sem gclid não aparece no resultado - a coluna fica vazia, que é a
+        informação correta: não há o que enviar.
+        """
+        if not lead_ids:
+            return {}
+        linhas = self.db.execute_query(
+            """
+            SELECT lc.lead_id,
+                   COUNT(*) FILTER (WHERE lc.uploaded_at IS NOT NULL
+                                      AND lc.retracted_at IS NULL) AS enviadas,
+                   COUNT(*) FILTER (WHERE a.status = 'CONFIRMED'
+                                      AND lc.uploaded_at IS NULL)  AS aguardando,
+                   COUNT(*) FILTER (WHERE lc.retracted_at IS NOT NULL) AS retratadas
+            FROM scheduler.lead_conversions lc
+            JOIN scheduler.appointments a ON a.id = lc.appointment_id
+            WHERE lc.clinic_id = %s AND lc.lead_id = ANY(%s::uuid[])
+            GROUP BY lc.lead_id
+            """,
+            (clinic_id, [str(i) for i in lead_ids]),
+        )
+        estados = {}
+        for l in linhas:
+            if l["enviadas"]:
+                estados[str(l["lead_id"])] = "ENVIADO"
+            elif l["aguardando"]:
+                estados[str(l["lead_id"])] = "AGUARDANDO"
+            elif l["retratadas"]:
+                estados[str(l["lead_id"])] = "RETRATADO"
+        return estados
+
     def update_conversion_date(self, appointment_id: str, conversion_date: str) -> None:
         """Refresh a pending conversion's date after a reschedule (clamped to click).
 
@@ -306,36 +487,16 @@ class LeadService:
             (conversion_date, appointment_id),
         )
 
-    def get_pending_conversions(self, clinic_id: str) -> List[Dict[str, Any]]:
-        """Return conversions ready to upload to Google Ads for a clinic.
-
-        Eligibility (delay against cancellations + gclid 90-day window):
-          - not yet uploaded
-          - appointment still CONFIRMED (not CANCELLED)
-          - appointment date already passed (session occurred; no COMPLETED status exists)
-          - within 90 days of the click (lead.created_at proxy)
-        """
-        return self.db.execute_query(
-            """
-            SELECT lc.id, lc.gclid, lc.value_cents, lc.conversion_date
-            FROM scheduler.lead_conversions lc
-            JOIN scheduler.appointments a ON a.id = lc.appointment_id
-            WHERE lc.clinic_id = %s
-              AND lc.uploaded_at IS NULL
-              AND a.status = 'CONFIRMED'
-              AND a.appointment_date < CURRENT_DATE
-              AND lc.conversion_date <= lc.click_date + INTERVAL '90 days'
-            ORDER BY lc.conversion_date ASC
-            """,
-            (clinic_id,),
-        )
-
-    def mark_conversion_uploaded(self, conversion_id: str) -> None:
-        """Mark a conversion as successfully uploaded to Google Ads."""
-        self.db.execute_write(
-            "UPDATE scheduler.lead_conversions SET uploaded_at = NOW() WHERE id = %s::uuid",
-            (conversion_id,),
-        )
+    # get_pending_conversions / mark_conversion_uploaded viviam aqui e foram
+    # removidos em 27/09/2026. Eram codigo morto - nada em producao os chamava -
+    # que carregava uma SEGUNDA copia da regra de elegibilidade. A copia ficou
+    # divergente: seguia exigindo `appointment_date < CURRENT_DATE` depois que o
+    # uploader passou a contar a conversao no agendamento, e os testes dela
+    # ficaram verdes afirmando a regra derrubada.
+    #
+    # A regra tem um dono: infra/src/functions/conversions/uploader.py, que e
+    # quem de fato fala com o Google. Testes em
+    # infra/tests/unit/test_conversao_e_retracao.py.
 
     def get_accumulated_return(self, clinic_id: str, lead_id: str) -> int:
         """Total value (cents) of non-cancelled appointments for a lead (recurring return)."""

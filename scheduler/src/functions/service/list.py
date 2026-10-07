@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import datetime, date, time
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
 
@@ -30,7 +32,7 @@ def handler(event, context):
         logger.info(f"Requisicao recebida para listagem de servicos: {json.dumps(event)}")
 
         # 1. Validar API key
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "catalogo.ler")
         if error_response:
             return error_response
 
@@ -61,10 +63,10 @@ def handler(event, context):
         logger.info(f"Listagem concluida: {len(services)} servico(s) encontrado(s)")
 
         # 5. Retornar resposta
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "services": services
-        })
+        }))
 
     except Exception as e:
         error_msg = str(e)

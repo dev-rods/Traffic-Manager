@@ -5,6 +5,12 @@ export interface SendMessagePayload {
   phone: string
   template: string
   body: string
+  /**
+   * Abre a campanha de reagendamento na conversa: a partir deste disparo o bot
+   * assume e fecha o agendamento. Ausente, o /send se comporta como sempre -
+   * e e assim que a atendente responde a mao, sem colocar o bot na frente dela.
+   */
+  campanha?: { datas: string[] }
 }
 
 export interface SendMessageResponse {
@@ -36,6 +42,7 @@ export const messagesService = {
         type: 'text',
         content: payload.body,
         metadata: { patient_id: payload.patient_id, template: payload.template },
+        ...(payload.campanha ? { campanha: payload.campanha } : {}),
       })
       .then((r) => r.data)
   },

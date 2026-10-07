@@ -1,0 +1,426 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Duracao Manual",
+    "description": "Override de duracao por agendamento (PRD/Spec 011).\n\nA duracao normalmente e DERIVADA das areas, com piso/teto/passo da clinica. Estes requests exercitam a excecao: a recepcao fixa um valor para UM agendamento.\n\nO criterio final e o ultimo request: a regra da clinica (duration_rules) tem de continuar exatamente como estava.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "areaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "outraAreaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Criar agendamento com duracao fixada (75 min)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments"
+          ]
+        },
+        "description": "O teto da clinica e 50 minutos. Pedir 75 e o caso que motivou a task.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"clinicId\": \"{{clinicId}}\", \"phone\": \"5511999990000\", \"serviceId\": \"{{serviceId}}\", \"date\": \"2026-10-01\", \"time\": \"14:00\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}], \"isFirstVisit\": false, \"manualDurationMinutes\": 75}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "",
+              "// O teto da clinica e 50. Se 75 virar 50 aqui, o override nao esta valendo.",
+              "pm.test(\"A duracao manual foi gravada\", function () {",
+              "    var a = pm.response.json().appointment;",
+              "    pm.expect(a.manual_duration_minutes).to.eql(75);",
+              "    pm.expect(a.total_duration_minutes).to.eql(75);",
+              "});",
+              "",
+              "pm.test(\"O fim da sessao reflete 75 min\", function () {",
+              "    pm.expect(pm.response.json().appointment.end_time).to.include(\"15:15\");",
+              "});",
+              "",
+              "pm.collectionVariables.set(\"appointmentId\", pm.response.json().appointment.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Remarcar - o override NAO pode sumir",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments",
+            "{{appointmentId}}"
+          ]
+        },
+        "description": "Remarcar para outro dia/hora. A duracao fixada tem de atravessar intacta.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"date\": \"2026-10-08\", \"time\": \"09:00\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "",
+              "// O caso central. Ate 16/09/2026 o reschedule reaplicava a regra da",
+              "// clinica sobre o valor gravado, e 75 virava 50 no teto.",
+              "pm.test(\"A duracao manual sobreviveu\", function () {",
+              "    pm.expect(pm.response.json().appointment.manual_duration_minutes).to.eql(75);",
+              "});",
+              "",
+              "// Divergencia que existia mesmo SEM override: o end_time mudava e a",
+              "// coluna ficava com o valor velho.",
+              "pm.test(\"Coluna e end_time concordam\", function () {",
+              "    var a = pm.response.json().appointment;",
+              "    pm.expect(a.total_duration_minutes).to.eql(75);",
+              "    pm.expect(a.end_time).to.include(\"10:15\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Soltar o override volta ao CALCULO",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments",
+            "{{appointmentId}}"
+          ]
+        },
+        "description": "null explicito solta o override; omitir o campo nao mexe. Sao coisas diferentes.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"manualDurationMinutes\": null}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "",
+              "// `null` explicito e o que SOLTA. Omitir o campo nao mexe em nada.",
+              "pm.test(\"Voltou a ser calculada\", function () {",
+              "    pm.expect(pm.response.json().appointment.manual_duration_minutes).to.eql(null);",
+              "});",
+              "",
+              "// Recalcula das areas gravadas - nao devolve o ultimo valor.",
+              "pm.test(\"A duracao respeita a regra de novo\", function () {",
+              "    pm.expect(pm.response.json().appointment.total_duration_minutes).to.be.at.most(50);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trocar as areas descarta o override",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments",
+            "{{appointmentId}}"
+          ]
+        },
+        "description": "Rode depois de fixar 75 de novo. Mudou a area, mudou a premissa.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"serviceId\": \"{{serviceId}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{outraAreaId}}\"}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "",
+              "// O override foi decidido para OUTRO conjunto de areas.",
+              "pm.test(\"Override descartado\", function () {",
+              "    pm.expect(pm.response.json().appointment.manual_duration_minutes).to.eql(null);",
+              "});",
+              "",
+              "// Sem o aviso, o valor some da tela e a atendente nao entende por que.",
+              "pm.test(\"A resposta conta que descartou\", function () {",
+              "    pm.expect(pm.response.json().message.toLowerCase()).to.include(\"dura\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recusa valor fora da faixa (600)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments",
+            "{{appointmentId}}"
+          ]
+        },
+        "description": "Faixa de sanidade: 5 a 480 minutos, inteiro.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"manualDurationMinutes\": 600}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Dedo errado no formulario e 400, nunca 500.",
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });",
+              "",
+              "pm.test(\"A mensagem diz a faixa\", function () {",
+              "    var m = pm.response.json().message;",
+              "    pm.expect(m).to.include(\"5\");",
+              "    pm.expect(m).to.include(\"480\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recusa texto no lugar de minutos",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments",
+            "{{appointmentId}}"
+          ]
+        },
+        "description": "Texto nao e duracao.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"manualDurationMinutes\": \"abc\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "A REGRA DA CLINICA ficou intacta",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/duration-rules",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "duration-rules"
+          ]
+        },
+        "description": "O criterio final da task. Ajuste os valores esperados para os da clinica testada."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "",
+              "// O criterio do Andre, em uma frase: mudar a duracao de UM",
+              "// agendamento nao pode mexer na regra do banco. Rode este request",
+              "// ANTES de tudo, guarde os valores, e compare aqui no fim.",
+              "pm.test(\"Piso, teto e passo nao mudaram\", function () {",
+              "    var r = pm.response.json().duration_rules;",
+              "    pm.expect(r.floor_minutes).to.eql(10);",
+              "    pm.expect(r.ceiling_minutes).to.eql(50);",
+              "    pm.expect(r.step_minutes).to.eql(5);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

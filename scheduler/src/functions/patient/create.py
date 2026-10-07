@@ -2,9 +2,13 @@ import json
 import logging
 from datetime import datetime, date, time
 
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
 from src.utils.phone import normalize_phone
 from src.services.db.postgres import PostgresService
+from src.services.desconto_personalizado import normaliza_entrada as normaliza_desconto
+from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -29,7 +33,7 @@ def handler(event, context):
     try:
         logger.info("Create patient request received")
 
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "pacientes.escrever")
         if error_response:
             return error_response
 
@@ -50,6 +54,23 @@ def handler(event, context):
         name = body.get("name", "").strip()
         phone = body.get("phone", "").strip()
         gender = body.get("gender")
+        # Opcionais: o cadastro completo raramente existe no primeiro contato.
+        # Vazio grava NULL - o campo fica visivelmente pendente na tela, em vez
+        # de parecer preenchido com string vazia.
+        ok, desconto = normaliza_desconto(body.get("custom_discount_pct"))
+        if not ok:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "custom_discount_pct deve ser de 0 a 100, com ate duas casas decimais"})
+        cpf = normaliza_cpf(body.get("cpf"))
+        birth_date = normaliza_data_nascimento(body.get("birth_date"))
+        if cpf is False:
+            return http_response(400, {"status": "ERROR",
+                                       "message": "CPF deve ter 11 digitos"})
+        if birth_date is False:
+            return http_response(400, {"status": "ERROR",
+                                       "message": "Data de nascimento invalida"})
+        email = (body.get("email") or "").strip() or None
 
         if not name:
             return http_response(400, {
@@ -90,10 +111,16 @@ def handler(event, context):
             # Soft-deleted patient with same phone — restore and update fields
             restored = db.execute_write_returning("""
                 UPDATE scheduler.patients
-                SET name = %s, gender = %s, deleted_at = NULL, updated_at = NOW()
+                SET name = %s, gender = %s,
+                    -- COALESCE: restaurar nao pode apagar CPF e nascimento que
+                    -- ja estavam la so porque o formulario veio sem eles.
+                    cpf = COALESCE(%s, cpf),
+                    birth_date = COALESCE(%s::date, birth_date),
+                    email = COALESCE(%s, email),
+                    deleted_at = NULL, updated_at = NOW()
                 WHERE id = %s::uuid
                 RETURNING *
-            """, (name, gender, str(row["id"])))
+            """, (name, gender, cpf, birth_date, email, str(row["id"])))
 
             if not restored:
                 return http_response(500, {
@@ -103,16 +130,17 @@ def handler(event, context):
 
             patient = _serialize_row(restored)
             logger.info(f"Patient restored: {patient['id']} for clinic {clinic_id}")
-            return http_response(200, {
+            return http_response(200, para_o_staff(identidade, {
                 "status": "RESTORED",
                 "patient": patient,
-            })
+            }))
 
         result = db.execute_write_returning("""
-            INSERT INTO scheduler.patients (clinic_id, name, phone, gender, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, NOW(), NOW())
+            INSERT INTO scheduler.patients (clinic_id, name, phone, gender, cpf, birth_date, email,
+                                             custom_discount_pct, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s::date, %s, %s, NOW(), NOW())
             RETURNING *
-        """, (clinic_id, name, phone, gender))
+        """, (clinic_id, name, phone, gender, cpf, birth_date, email, desconto))
 
         if not result:
             return http_response(500, {
@@ -123,10 +151,10 @@ def handler(event, context):
         patient = _serialize_row(result)
         logger.info(f"Patient created: {patient['id']} for clinic {clinic_id}")
 
-        return http_response(201, {
+        return http_response(201, para_o_staff(identidade, {
             "status": "CREATED",
             "patient": patient,
-        })
+        }))
 
     except Exception as e:
         error_msg = str(e)

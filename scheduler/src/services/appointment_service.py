@@ -3,8 +3,31 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
+from src.services.desconto_personalizado import aplica as aplica_desconto
+from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
+from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
+from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
+from src.services.duration_rules import (
+    calcula_duracao, duracao_da_sessao, get_duration_rules)
+from src.services.duracao_manual import efetiva as duracao_efetiva
+from src.services.duracao_manual import valida as valida_duracao_manual
 
 logger = logging.getLogger(__name__)
+
+
+class _SemMudanca:
+    """Marca "o pedido nao falou sobre isso".
+
+    `None` ja significa outra coisa - limpar a duracao manual - entao nao serve
+    como padrao. Sem separar os dois, trocar a area sempre pareceria um pedido
+    de limpar o override.
+    """
+
+    def __repr__(self):
+        return "SEM_MUDANCA"
+
+
+SEM_MUDANCA = _SemMudanca()
 
 
 class ConflictError(Exception):
@@ -26,6 +49,41 @@ class AppointmentService:
         self.reminder_service = reminder_service
         self.lead_service = lead_service
 
+    @classmethod
+    def completo(cls, db: PostgresService) -> "AppointmentService":
+        """O serviço com tudo que ele precisa para não perder conversão.
+
+        Existe porque `lead_service=None` é um default silencioso: sem ele, o
+        bloco que marca o lead como agendado e registra a conversão do gclid
+        simplesmente não roda, e ninguém percebe - o agendamento é criado
+        normalmente, só não chega ao Google Ads.
+
+        Foi o que aconteceu em produção até 27/09/2026: o webhook do bot
+        passava `lead_service`, mas o painel, a edição e o agente montavam o
+        serviço sem ele. **57% dos agendamentos vindos de anúncio ficaram
+        invisíveis** para o Google - 16 de 28 em 30 dias, R$ 3.984,50 de
+        receita não reportada.
+
+        Quem cria agendamento usa esta fábrica. O construtor continua aberto
+        para os testes, que precisam injetar dublê.
+        """
+        from src.services.lead_service import LeadService
+
+        return cls(db, lead_service=LeadService(db))
+
+    def _fuso_da_clinica(self, clinic_id):
+        """So o `timezone`, para o lembrete sair na hora certa. Falha vira
+        vazio, que o lembrete trata como America/Sao_Paulo."""
+        try:
+            linhas = self.db.execute_query(
+                "SELECT timezone FROM scheduler.clinics WHERE clinic_id = %s",
+                (clinic_id,),
+            )
+            return linhas[0] if linhas else {}
+        except Exception as e:
+            logger.warning(f"[AppointmentService] Nao li o fuso de {clinic_id}: {e}")
+            return {}
+
     def create_appointment(
         self,
         clinic_id: str,
@@ -36,15 +94,25 @@ class AppointmentService:
         professional_id: Optional[str] = None,
         service_ids: Optional[List[str]] = None,
         total_duration_minutes: Optional[int] = None,
+        manual_duration_minutes: Optional[int] = None,
         service_area_pairs: Optional[List[Dict[str, str]]] = None,
         discount_pct: int = 0,
         discount_reason: Optional[str] = None,
         original_price_cents: Optional[int] = None,
         final_price_cents: Optional[int] = None,
         full_name: Optional[str] = None,
+        notes: Optional[str] = None,
+        is_first_visit: Optional[bool] = None,
     ) -> Dict[str, Any]:
+        """`is_first_visit=None` deixa o sistema decidir; um booleano manda.
+
+        O bot passa None: ele conversa com quem chega da landing page e nao tem
+        ninguem para conferir. O painel manda o valor da caixinha, porque quem
+        esta na recepcao sabe de historico que o banco nao tem - pessoa que ja
+        veio antes do sistema existir, ou que remarcou por fora.
+        """
         # 1. Get or create patient
-        patient = self._get_or_create_patient(clinic_id, phone)
+        patient = self._get_or_create_patient(clinic_id, phone, full_name)
         patient_id = str(patient["id"])
 
         # 2. Resolve service list and duration
@@ -63,24 +131,54 @@ class AppointmentService:
         # Build a lookup by id for ordering and data
         svc_lookup = {str(s["id"]): s for s in services}
 
-        if total_duration_minutes:
-            duration_minutes = int(total_duration_minutes)
-        elif service_area_pairs:
-            # Sum duration for each (service, area) pair with area-specific override
-            values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
-            params = ()
-            for pair in service_area_pairs:
-                params += (pair["service_id"], pair["area_id"])
-            rows = self.db.execute_query(
-                f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration
-                FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
-                JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
-                LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
-                params,
-            )
-            duration_minutes = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else sum(s["duration_minutes"] for s in services)
+        # A duração é sempre derivada, nunca informada. O parâmetro
+        # total_duration_minutes continua na assinatura para não quebrar quem
+        # chama, mas não decide nada: o agente já pediu horário para uma sessão
+        # de 4 minutos com ele. Ver duration_rules.py.
+        if service_area_pairs:
+            duration_minutes = calcula_duracao(self.db, clinic_id, service_area_pairs)
         else:
-            duration_minutes = sum(s["duration_minutes"] for s in services)
+            # Serviço sem área detalhada: a soma bruta são as durações dos
+            # próprios serviços, e passa pelos mesmos piso, teto e passo.
+            bruto = sum(int(svc_lookup[sid]["duration_minutes"] or 0)
+                        for sid in all_service_ids if sid in svc_lookup)
+            duration_minutes = duracao_da_sessao(bruto, get_duration_rules(self.db, clinic_id))
+
+        if total_duration_minutes and int(total_duration_minutes) != duration_minutes:
+            logger.info(
+                f"[Duracao] {clinic_id}: ignorando total_duration_minutes="
+                f"{total_duration_minutes} do chamador; calculado={duration_minutes}"
+            )
+
+        # A duracao que uma PESSOA fixou vale sobre o calculo - e so ela.
+        # `total_duration_minutes` acima continua valendo zero: quem passa aquele
+        # campo e o bot (ai_tools e conversation_engine), e foi ele que pediu
+        # horario para uma sessao de 4 minutos. Sao dois campos com significados
+        # diferentes de proposito. Ver duracao_manual.
+        manual = valida_duracao_manual(manual_duration_minutes)
+        if manual:
+            logger.info(
+                f"[Duracao] {clinic_id}: duracao manual de {manual}min "
+                f"(calculado={duration_minutes})"
+            )
+        duration_minutes = duracao_efetiva(duration_minutes, manual)
+
+        # 2a-bis. Desconto combinado com a paciente.
+        #
+        # So quando o chamador NAO opinou: `discount_pct` zerado E sem razao
+        # significa "ninguem decidiu". O bot sempre opina, porque a
+        # calculate_discount ja considera o personalizado; o painel opina quando
+        # a atendente escolhe parceria ou digita um percentual - e a escolha
+        # dela vale para AQUELE agendamento, porque e decisao de agora contra
+        # uma regra permanente.
+        #
+        # Fica antes do bloco de precos de proposito: o final_price_cents e
+        # calculado logo abaixo a partir do discount_pct, e mudar o desconto
+        # depois deixaria o valor gravado divergente do desconto gravado.
+        if not discount_pct and not discount_reason:
+            personalizado = desconto_do_paciente(self.db, clinic_id, phone)
+            if personalizado is not None:
+                discount_pct, discount_reason = personalizado, RAZAO_PERSONALIZADA
 
         # 2b. Auto-calculate prices when not provided by caller
         if original_price_cents is None:
@@ -101,7 +199,7 @@ class AppointmentService:
                 original_price_cents = sum(s.get("price_cents") or 0 for s in services) or None
 
             if original_price_cents is not None:
-                final_price_cents = original_price_cents * (100 - discount_pct) // 100
+                final_price_cents = aplica_desconto(original_price_cents, discount_pct)
 
         # 3. Calculate end_time
         start_parts = time.split(":")
@@ -145,31 +243,53 @@ class AppointmentService:
             INSERT INTO scheduler.appointments (
                 clinic_id, patient_id, professional_id, service_id,
                 appointment_date, start_time, end_time,
-                total_duration_minutes,
+                total_duration_minutes, manual_duration_minutes,
                 discount_pct, discount_reason, original_price_cents, final_price_cents,
-                full_name,
+                full_name, notes,
                 status, created_at, updated_at, version
             ) VALUES (
                 %s, %s::uuid, %s::uuid, %s::uuid,
                 %s, %s::time, %s::time,
-                %s,
+                %s, %s,
                 %s, %s, %s, %s,
-                %s,
+                %s, %s,
                 'CONFIRMED', NOW(), NOW(), 1
             )
             RETURNING *
             """,
             (clinic_id, patient_id, prof_id_param, primary_service_id,
              date, time, end_time,
-             duration_minutes,
+             duration_minutes, manual,
              discount_pct, discount_reason, original_price_cents, final_price_cents,
-             full_name),
+             full_name, (notes or None)),
         )
 
         if not result:
             raise Exception("Erro ao criar agendamento")
 
         appointment_id = str(result["id"])
+
+        # Estreia. Quando o chamador nao opina (`None`), o sistema conta os
+        # agendamentos confirmados: e o caso do bot, que atende quem chega da
+        # landing page sem ninguem por perto para conferir.
+        #
+        # O painel opina sempre, e por decisao do Andre em 09/09/2026 opina
+        # False por padrao. A contagem automatica so enxerga o que esta neste
+        # banco, e a clinica atende desde antes dele existir - marcar "primeira
+        # vez" em cliente antiga na frente dela e o erro que custa caro.
+        #
+        # Depois do INSERT e por isso `ignorar_id`: neste ponto o proprio
+        # agendamento ja esta no banco e contaria a si mesmo.
+        estreia = (
+            e_primeira_visita(self.db, clinic_id, phone, ignorar_id=appointment_id)
+            if is_first_visit is None
+            else is_first_visit
+        )
+        if estreia:
+            self.db.execute_write(
+                "UPDATE scheduler.appointments SET is_first_visit = TRUE "
+                "WHERE id = %s::uuid", (appointment_id,))
+            result["is_first_visit"] = True
 
         # 7. Insert into junction tables
         if service_area_pairs:
@@ -224,7 +344,7 @@ class AppointmentService:
         # 8. Schedule reminder (if available)
         if self.reminder_service:
             try:
-                self.reminder_service.schedule_reminder(result)
+                self.reminder_service.schedule_reminder(result, self._fuso_da_clinica(clinic_id))
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao agendar lembrete: {e}")
 
@@ -301,7 +421,21 @@ class AppointmentService:
                     duration_minutes = services[0]["duration_minutes"] if services else 60
 
         # 3. Calculate new end_time
-        duration_minutes = int(duration_minutes)
+        #
+        # A normalização existe para agendamento criado sob a regra antiga
+        # (faixas por quantidade de áreas): ele é normalizado aqui em vez de
+        # arrastar a duração velha para a agenda nova. Isso continua valendo.
+        #
+        # Mas duração que uma PESSOA fixou não é regra velha. Até 16/09/2026
+        # esta linha rodava sobre ela também, e um override de 75min virava 50
+        # no teto assim que alguém remarcasse - sem ninguém pedir e sem nada
+        # avisar. Ver duracao_manual.
+        manual = appointment.get("manual_duration_minutes")
+        if manual:
+            duration_minutes = duracao_efetiva(duration_minutes, manual)
+        else:
+            duration_minutes = duracao_da_sessao(
+                duration_minutes, get_duration_rules(self.db, clinic_id))
         start_parts = new_time.split(":")
         start_hour, start_min = int(start_parts[0]), int(start_parts[1])
         total_minutes = start_hour * 60 + start_min + duration_minutes
@@ -331,16 +465,25 @@ class AppointmentService:
             """
             UPDATE scheduler.appointments
             SET appointment_date = %s, start_time = %s::time, end_time = %s::time,
+                total_duration_minutes = %s,
                 version = version + 1, updated_at = NOW()
             WHERE id = %s::uuid AND version = %s
             """,
-            (new_date, new_time, new_end_time, appointment_id, current_version),
+            # A duracao vai junto do end_time, SEMPRE - com e sem override.
+            # Ate 16/09/2026 o reschedule mudava o end_time e deixava a coluna
+            # com o valor velho: a agenda mostrava uma coisa e o banco guardava
+            # outra, e isso ja acontecia sem override nenhum.
+            (new_date, new_time, new_end_time, duration_minutes,
+             appointment_id, current_version),
         )
 
         if updated_rows == 0:
             raise OptimisticLockError("Agendamento foi modificado por outro processo")
 
         # 6. Cancel old reminder and schedule new
+        # A estreia passa para a proxima sessao confirmada, se houver.
+        passa_a_marca_adiante(self.db, appointment_id)
+
         if self.reminder_service:
             try:
                 self.reminder_service.cancel_reminder(appointment_id)
@@ -355,7 +498,10 @@ class AppointmentService:
 
         if self.reminder_service:
             try:
-                self.reminder_service.schedule_reminder(updated_appointment)
+                self.reminder_service.schedule_reminder(
+                    updated_appointment,
+                    self._fuso_da_clinica(updated_appointment.get("clinic_id")),
+                )
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao agendar novo lembrete: {e}")
 
@@ -381,8 +527,27 @@ class AppointmentService:
         appointment_id: str,
         service_id: str,
         service_area_pairs: Optional[List[Dict[str, str]]] = None,
+        manual_duration_minutes=SEM_MUDANCA,
+        verificar_conflito: bool = True,
     ) -> Dict[str, Any]:
-        """Update the service and areas of an existing appointment, recalculating duration/end_time."""
+        """Troca o servico e as areas, recalculando duracao e fim da sessao.
+
+        `manual_duration_minutes` existe porque trocar a area e fixar a duracao
+        costumam ser o MESMO pedido. Em 20/09/2026 o Andre trocou a area da
+        Larissa de "Virilha Completa" para "Virilha Completa + anus" e fixou 10
+        minutos; recebeu conflito de horario. A troca de area recalculava 15
+        minutos, conferia o conflito com ESSE numero e recusava - antes de a
+        duracao que ele digitou sequer ser lida.
+
+        Trocar a area continua DESCARTANDO um override anterior, como o Andre
+        decidiu em 17/09: aquele valor foi escolhido para outras areas. Mas um
+        valor mandado no MESMO pedido nao e override anterior - e a decisao de
+        agora, e ela vence.
+
+        `verificar_conflito=False` para quando um reschedule vem logo em
+        seguida: aqui a data ainda e a antiga, e conferir contra ela acusaria
+        conflito num dia que a paciente nem vai ocupar.
+        """
         # 1. Fetch appointment with optimistic lock
         appointments = self.db.execute_query(
             "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
@@ -407,6 +572,26 @@ class AppointmentService:
 
         svc = services[0]
 
+        # Trocar as areas DESCARTA a duracao manual, por decisao do Andre em
+        # 16/09/2026: o override foi decidido para OUTRO conjunto de areas.
+        # Mudou a area, mudou a premissa - manter seria carregar 50 minutos
+        # escolhidos para quatro areas numa sessao que agora tem uma.
+        #
+        # Quem chamou precisa SABER que descartou, senao o valor some da tela e
+        # a atendente nao entende por que. Ver o handler de update.
+        # So e descarte quando o pedido NAO trouxe duracao nova: se trouxe, o
+        # valor nao foi perdido, foi substituido - e avisar "descartada" na tela
+        # seria mentira.
+        duracao_manual_descartada = (
+            bool(appointment.get("manual_duration_minutes"))
+            and manual_duration_minutes is SEM_MUDANCA
+        )
+        if duracao_manual_descartada:
+            logger.info(
+                f"[Duracao] {appointment_id}: duracao manual de "
+                f"{appointment['manual_duration_minutes']}min descartada - as areas mudaram"
+            )
+
         # 3. Calculate new duration and price
         discount_pct = appointment.get("discount_pct") or 0
         if service_area_pairs:
@@ -414,21 +599,33 @@ class AppointmentService:
             params: tuple = ()
             for pair in service_area_pairs:
                 params += (pair["serviceId"], pair["areaId"])
+            # O preço continua sendo a soma por área; só a duração passou a vir
+            # da quantidade de áreas. Ver duration_rules.py.
             rows = self.db.execute_query(
-                f"""SELECT SUM(COALESCE(sa.duration_minutes, s.duration_minutes)) as total_duration,
-                       SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price
+                f"""SELECT SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price
                 FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
                 JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
                 LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
                 params,
             )
-            duration_minutes = int(rows[0]["total_duration"]) if rows and rows[0]["total_duration"] else svc["duration_minutes"]
+            duration_minutes = calcula_duracao(
+                self.db, appointment["clinic_id"], service_area_pairs)
             original_price_cents = int(rows[0]["total_price"]) if rows and rows[0]["total_price"] else svc.get("price_cents")
         else:
-            duration_minutes = svc["duration_minutes"]
+            duration_minutes = duracao_da_sessao(
+                svc.get("duration_minutes"), get_duration_rules(self.db, appointment["clinic_id"]))
             original_price_cents = svc.get("price_cents")
 
-        final_price_cents = original_price_cents * (100 - discount_pct) // 100 if original_price_cents else original_price_cents
+        # A duracao mandada no mesmo pedido vence a recalculada. Sem isto, o
+        # conflito abaixo seria conferido contra um numero que o pedido ja
+        # substituiu.
+        manual_do_pedido = None
+        if manual_duration_minutes is not SEM_MUDANCA:
+            manual_do_pedido = valida_duracao_manual(manual_duration_minutes)
+            duration_minutes = duracao_efetiva(duration_minutes, manual_do_pedido)
+
+        final_price_cents = (aplica_desconto(original_price_cents, discount_pct)
+                             if original_price_cents else original_price_cents)
 
         # 4. Calculate new end_time
         start_parts = start_time.split(":")
@@ -451,19 +648,24 @@ class AppointmentService:
             """,
             (clinic_id, appt_date, appointment_id, new_end_time, start_time, new_end_time, start_time, start_time, new_end_time),
         )
-        if conflicts:
-            raise ConflictError(f"Conflito de horário com nova duração: {appt_date} {start_time}-{new_end_time}")
+        if conflicts and verificar_conflito:
+            raise ConflictError(
+                f"Conflito de horário com nova duração: {appt_date} "
+                f"{start_time}-{new_end_time}"
+            )
 
         # 6. Update appointment record
         updated_rows = self.db.execute_write(
             """
             UPDATE scheduler.appointments
             SET service_id = %s::uuid, end_time = %s::time, total_duration_minutes = %s,
+                manual_duration_minutes = %s,
                 original_price_cents = %s, final_price_cents = %s,
                 version = version + 1, updated_at = NOW()
             WHERE id = %s::uuid AND version = %s
             """,
-            (service_id, new_end_time, duration_minutes, original_price_cents, final_price_cents, appointment_id, current_version),
+            (service_id, new_end_time, duration_minutes, manual_do_pedido,
+             original_price_cents, final_price_cents, appointment_id, current_version),
         )
         if updated_rows == 0:
             raise OptimisticLockError("Agendamento foi modificado por outro processo")
@@ -527,7 +729,122 @@ class AppointmentService:
             f"service={service_id} areas={len(service_area_pairs) if service_area_pairs else 0}"
         )
 
+        # A bandeira viaja junto do agendamento porque quem responde a atendente
+        # e o handler, e ele nao tem como saber o que havia antes do UPDATE.
+        updated_appointment = dict(updated_appointment)
+        updated_appointment["manual_duration_descartada"] = duracao_manual_descartada
+
         return updated_appointment
+
+    def set_manual_duration(
+        self,
+        appointment_id: str,
+        minutos: Optional[int],
+        verificar_conflito: bool = True,
+    ) -> Dict[str, Any]:
+        """Fixa (ou solta) a duração de UM agendamento.
+
+        `minutos=None` solta: a duração volta a ser CALCULADA a partir das áreas
+        gravadas, não ao último valor que estava na coluna. Voltar ao cálculo tem
+        de voltar ao cálculo, senão "soltar" só congela o override com outro nome.
+
+        `verificar_conflito=False` existe para o caso de o mesmo request também
+        remarcar. A checagem aqui roda contra a data ATUAL, que o reschedule vai
+        trocar em seguida - conferir duas vezes acusaria conflito numa data que a
+        paciente nem vai ocupar. Quem confere, nesse caso, é o reschedule, já com
+        a data final. Ver o handler de update.
+        """
+        manual = valida_duracao_manual(minutos)
+
+        appointments = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
+            (appointment_id,),
+        )
+        if not appointments:
+            raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou não confirmado")
+
+        appointment = appointments[0]
+        current_version = appointment.get("version", 1)
+        clinic_id = appointment["clinic_id"]
+        appt_date = str(appointment["appointment_date"])
+        start_time = str(appointment["start_time"])[:5]
+
+        if manual:
+            duration_minutes = manual
+        else:
+            # Recalcula das áreas gravadas, passando pela regra da clínica -
+            # exatamente o que a criação faria hoje para este agendamento.
+            areas = self.db.execute_query(
+                """SELECT service_id, area_id FROM scheduler.appointment_service_areas
+                   WHERE appointment_id = %s::uuid""",
+                (appointment_id,),
+            ) or []
+            pares = [{"service_id": str(a["service_id"]), "area_id": str(a["area_id"])}
+                     for a in areas]
+            if pares:
+                duration_minutes = calcula_duracao(self.db, clinic_id, pares)
+            else:
+                # Serviço sem área detalhada: a duração do próprio serviço,
+                # pelos mesmos piso, teto e passo.
+                svc = self.db.execute_query(
+                    "SELECT duration_minutes FROM scheduler.services WHERE id = %s::uuid",
+                    (str(appointment["service_id"]),),
+                )
+                duration_minutes = duracao_da_sessao(
+                    svc[0]["duration_minutes"] if svc else 0,
+                    get_duration_rules(self.db, clinic_id),
+                )
+
+        start_hour, start_min = (int(p) for p in start_time.split(":")[:2])
+        total_minutes = start_hour * 60 + start_min + duration_minutes
+        new_end_time = f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+        if verificar_conflito:
+            conflicts = self.db.execute_query(
+                """
+                SELECT id FROM scheduler.appointments
+                WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
+                AND id != %s::uuid
+                AND (
+                    (start_time < %s::time AND end_time > %s::time)
+                    OR (start_time < %s::time AND end_time > %s::time)
+                    OR (start_time >= %s::time AND end_time <= %s::time)
+                )
+                """,
+                (clinic_id, appt_date, appointment_id, new_end_time, start_time,
+                 new_end_time, start_time, start_time, new_end_time),
+            )
+            if conflicts:
+                raise ConflictError(
+                    f"Conflito de horário com a duração de {duration_minutes} minutos: "
+                    f"{appt_date} {start_time}-{new_end_time}"
+                )
+
+        updated_rows = self.db.execute_write(
+            """
+            UPDATE scheduler.appointments
+            SET manual_duration_minutes = %s, total_duration_minutes = %s,
+                end_time = %s::time,
+                version = version + 1, updated_at = NOW()
+            WHERE id = %s::uuid AND version = %s
+            """,
+            (manual, duration_minutes, new_end_time, appointment_id, current_version),
+        )
+        if updated_rows == 0:
+            raise OptimisticLockError("Agendamento foi modificado por outro processo")
+
+        logger.info(
+            f"[Duracao] {appointment_id}: "
+            + (f"duracao manual de {manual}min" if manual
+               else f"override solto, voltou ao calculado ({duration_minutes}min)")
+            + f" | {start_time}-{new_end_time}"
+        )
+
+        result = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid",
+            (appointment_id,),
+        )
+        return result[0] if result else appointment
 
     def cancel_appointment(self, appointment_id: str) -> Dict[str, Any]:
         result = self.db.execute_write_returning(
@@ -543,6 +860,9 @@ class AppointmentService:
         if not result:
             raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou já cancelado")
 
+        # A estreia passa para a proxima sessao confirmada, se houver.
+        passa_a_marca_adiante(self.db, appointment_id)
+
         if self.reminder_service:
             try:
                 self.reminder_service.cancel_reminder(appointment_id)
@@ -550,6 +870,108 @@ class AppointmentService:
                 logger.error(f"[AppointmentService] Erro ao cancelar lembrete: {e}")
 
         logger.info(f"[AppointmentService] Agendamento cancelado: id={appointment_id}")
+        return result
+
+    def marca_no_show(self, appointment_id: str) -> Dict[str, Any]:
+        """A pessoa nao compareceu. Marca a falta, sem liberar o horario.
+
+        Falta e diferente de cancelamento: quem cancela com antecedencia libera
+        a agenda, quem nao aparece queima o horario. Ate 04/10/2026 os dois
+        viravam CANCELLED, e a diferenca se perdia.
+
+        Existe para a conversao offline ser honesta: ela e uma COMPRA, e compra
+        exige comparecimento. Sem este status, `CONFIRMED` com data passada
+        significava so "ninguem cancelou", e um no-show subia ao Google como
+        venda. Ver infra/src/functions/conversions/uploader.py.
+
+        ## Nao ha guard de data, por decisao do Andre em 04/10/2026
+
+        A primeira versao exigia `appointment_date < hoje`, pensando na
+        correcao da conversao. Estava errado: avisar no DIA e falta, nao
+        cancelamento - o horario ja nao da para preencher. Com o guard, a
+        recepcionista que precisasse liberar o horario de hoje as 10h30 teria
+        de CANCELAR, perdendo exatamente a informacao que este status existe
+        para capturar.
+
+        Quem decide se foi falta ou cancelamento e quem esta no balcao, com
+        contexto que o codigo nao tem: a razao da cliente, a chance de
+        reocupar. Encodar uma politica ("menos de 24h e falta") seria inventar
+        regra que ninguem pediu.
+
+        O que a distingue de CANCELLED, entao, nao e o momento: e a contagem.
+        As duas liberam o horario (as queries de conflito e de horarios livres
+        usam `= 'CONFIRMED'`), mas NO_SHOW registra que o horario foi perdido.
+
+        ## O filtro de status esta no WHERE, de proposito
+
+        Consultar primeiro e escrever depois deixa janela entre as duas: a
+        recepcao marca falta no mesmo instante em que a paciente cancela pelo
+        bot, e o segundo UPDATE sobrescreve o primeiro sem ninguem notar. No
+        WHERE, o banco decide, e quem perdeu recebe NotFoundError.
+
+        ## O que esta funcao NAO faz, e por que
+
+        Nao chama `passa_a_marca_adiante`, ao contrario de `cancel_appointment`.
+        Aquela funcao move `is_first_visit` para a proxima sessao confirmada e
+        **nao tem inverso**. Como marcar falta e reversivel (ver
+        `desmarca_no_show`), espelha-la tornaria o desmarcar lossy - a marca de
+        estreia nao voltaria.
+
+        O preco disso esta registrado: quem falta na estreia mantem a marca na
+        linha da falta, e a sessao em que de fato pisa na clinica aparece como
+        veterana. E o mesmo defeito que a decisao de 09/09/2026 resolveu para
+        cancelamento, e fica como pendencia propria - inventar um inverso aqui
+        trocaria um defeito de exibicao estreito por risco de corromper a marca.
+
+        Nao toca lembrete: so se marca falta de sessao que ja passou, e o
+        lembrete dela ja disparou.
+        """
+        result = self.db.execute_write_returning(
+            """
+            UPDATE scheduler.appointments
+            SET status = 'NO_SHOW', updated_at = NOW(), version = version + 1
+            WHERE id = %s::uuid AND status = 'CONFIRMED'
+            RETURNING *
+            """,
+            (appointment_id,),
+        )
+
+        if not result:
+            raise NotFoundError(
+                f"Agendamento {appointment_id} nao pode receber falta: ou nao "
+                f"existe, ou nao esta CONFIRMED"
+            )
+
+        logger.info(f"[AppointmentService] Falta marcada: id={appointment_id}")
+        return result
+
+    def desmarca_no_show(self, appointment_id: str) -> Dict[str, Any]:
+        """Desfaz a falta. Marcar errado tem de ter volta.
+
+        E o que permite `marca_no_show` ser acao direta no painel, sem modal de
+        confirmacao: cerimonia se paga quando a acao e irreversivel, e esta nao
+        e.
+
+        `status = 'NO_SHOW'` no WHERE impede ressuscitar cancelado: sem ele,
+        desmarcar falta viraria um jeito obliquo de descancelar - e cancelamento
+        ja liberou o horario, que pode ter sido ocupado por outra pessoa.
+        """
+        result = self.db.execute_write_returning(
+            """
+            UPDATE scheduler.appointments
+            SET status = 'CONFIRMED', updated_at = NOW(), version = version + 1
+            WHERE id = %s::uuid AND status = 'NO_SHOW'
+            RETURNING *
+            """,
+            (appointment_id,),
+        )
+
+        if not result:
+            raise NotFoundError(
+                f"Agendamento {appointment_id} nao esta marcado como falta"
+            )
+
+        logger.info(f"[AppointmentService] Falta desmarcada: id={appointment_id}")
         return result
 
     def get_active_appointment_by_phone(
@@ -619,9 +1041,22 @@ class AppointmentService:
 
         return appointments
 
-    def _get_or_create_patient(self, clinic_id: str, phone: str) -> Dict[str, Any]:
+    def _get_or_create_patient(self, clinic_id: str, phone: str,
+                               full_name: Optional[str] = None) -> Dict[str, Any]:
+        """O paciente do agendamento, criado se ainda não existir.
+
+        O nome entra junto. Antes o INSERT levava só clínica e telefone, e todo
+        paciente novo nascia anônimo: a agenda mostrava a linha sem nome, e o
+        painel de pacientes também. Isso valia para o bot e para o painel - o
+        `full_name` chegava até aqui e era descartado na porta.
+
+        Nome já cadastrado NÃO é sobrescrito. Quem está no sistema pode ter sido
+        corrigido à mão, e o que vem no agendamento é o que a pessoa digitou no
+        WhatsApp naquele dia - não é mais confiável que a clínica.
+        """
         from src.utils.phone import normalize_phone
         phone = normalize_phone(phone)
+        nome = (full_name or "").strip() or None
 
         # Lookup includes soft-deleted records so we can restore in place
         # and avoid violating the UNIQUE(clinic_id, phone) constraint.
@@ -633,6 +1068,15 @@ class AppointmentService:
         if patients:
             existing = patients[0]
             if existing.get("deleted_at") is None:
+                # Cadastro sem nome é o rastro do defeito antigo. Preencher na
+                # primeira oportunidade evita que ele fique anônimo para sempre.
+                if nome and not (existing.get("name") or "").strip():
+                    atualizado = self.db.execute_write_returning(
+                        "UPDATE scheduler.patients SET name = %s, updated_at = NOW() "
+                        "WHERE id = %s::uuid RETURNING *",
+                        (nome, str(existing["id"])),
+                    )
+                    return atualizado or existing
                 return existing
 
             # Soft-deleted patient came back — restore in place
@@ -652,11 +1096,11 @@ class AppointmentService:
 
         result = self.db.execute_write_returning(
             """
-            INSERT INTO scheduler.patients (clinic_id, phone, created_at, updated_at)
-            VALUES (%s, %s, NOW(), NOW())
+            INSERT INTO scheduler.patients (clinic_id, phone, name, created_at, updated_at)
+            VALUES (%s, %s, %s, NOW(), NOW())
             RETURNING *
             """,
-            (clinic_id, phone),
+            (clinic_id, phone, nome),
         )
 
         return result

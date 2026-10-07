@@ -7,4 +7,40 @@ booking-site/.env
 booking-site/.env.local
 booking-site/.env*.local
 .vercel
-.env*
+
+# Python
+__pycache__/
+*.pyc
+
+# Credenciais e tokens: nunca versionar, em nenhum diretório do monorepo.
+# Os padrões abaixo valem para o repo inteiro; infra/.gitignore tem as regras
+# específicas do Google Ads. client_secret.json e o refresh token do Google Ads
+# ficavam de fora dos dois: um `git add -A` distraído publicaria a credencial.
+client_secret*.json
+*refresh_token*.txt
+*access_token*.txt
+infra/src/scripts/tokens/
+
+# Artefatos de build: nunca versionar. Em 28/09/2026 um lambda.zip de 2 MB
+# ficou na raiz do repo com 648 arquivos dentro - .env e .claude/settings.local.json
+# incluidos. Estava untracked por sorte, nao por regra: um `git add -A` distraido
+# teria publicado a credencial.
+*.zip
+
+# O .env da RAIZ nao era coberto. scheduler/.gitignore e infra/.gitignore tinham
+# a regra cada um; a raiz ficou de fora, e foi um .env de raiz que entrou no zip
+# acima. Sem barra inicial o padrao vale para o repo inteiro, entao isto fecha a
+# porta nos tres lugares de uma vez.
+.env
+.env.*
+!.env.example
+
+# Config do Claude Code: `settings.json` e do time e vai versionado;
+# `settings.local.json` e da maquina de cada um - caminho absoluto de
+# executavel, shell do SO, versao do python pelo launcher.
+#
+# Ficava versionado por acidente: o ignore GLOBAL do andre ja cobria o padrao,
+# mas regra de ignore nao desfaz o tracking de arquivo que ja entrou. Por isso
+# ele carregava um `del` com caminho de outra maquina e tres mensagens de
+# commit antigas viradas regra de permissao. Aqui a regra vale para todo mundo.
+.claude/settings.local.json

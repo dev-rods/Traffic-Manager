@@ -1,0 +1,20 @@
+GetDurationRules:
+  handler: src.functions.duration_rules.get.handler
+  memorySize: 512
+  timeout: 30
+  events:
+    - http:
+        path: clinics/{clinicId}/duration-rules
+        method: get
+        cors: true
+
+UpdateDurationRules:
+  handler: src.functions.duration_rules.update.handler
+  memorySize: 512
+  timeout: 30
+  events:
+    - http:
+        path: clinics/{clinicId}/duration-rules
+        method: put
+        cors: true
+

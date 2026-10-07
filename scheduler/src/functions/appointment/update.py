@@ -2,12 +2,38 @@ import json
 import logging
 from datetime import datetime, date, time
 
-from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
+from src.utils.acesso import require_acesso
+from src.services.visao_do_staff import (
+    dentro_da_janela,
+    fora_da_janela,
+    para_o_staff,
+    pode_tocar_agendamento,
+)
+from src.utils.http import parse_body, http_response, extract_path_param
+from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.db.postgres import PostgresService
-from src.services.appointment_service import AppointmentService, NotFoundError, OptimisticLockError, ConflictError
+from src.services.appointment_service import (
+    SEM_MUDANCA,
+    AppointmentService,
+    ConflictError,
+    NotFoundError,
+    OptimisticLockError,
+)
+from src.services.duracao_manual import DuracaoInvalida
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# O status era escrito CRU: `updates.append("status = %s")`. Sem lista, um typo
+# como "NOSHOW" ou "no_show" era gravado em silencio e tirava o agendamento das
+# DUAS queries do uploader de conversao - nao elegivel (`= CONFIRMED`) e sem
+# valor zerado (`= CANCELLED`). A conversao ficava orfa: viva no Google e
+# invisivel aqui.
+#
+# A CHECK no banco (appointments_status_check) e a outra metade. Esta lista erra
+# antes, com mensagem que diz o que vale; a do banco e a rede de seguranca para
+# quem escrever por fora deste handler.
+STATUS_VALIDOS = ("CONFIRMED", "CANCELLED", "NO_SHOW")
 
 
 def _serialize_row(row):
@@ -31,13 +57,16 @@ def handler(event, context):
         "date": "2026-03-15",
         "time": "14:00",
         "serviceId": "uuid",
-        "serviceAreaPairs": [{"serviceId":"..","areaId":".."}]
+        "serviceAreaPairs": [{"serviceId":"..","areaId":".."}],
+        "manualDurationMinutes": 75      // fixa a duracao DESTE agendamento.
+                                         // null volta ao calculado; ausente
+                                         // nao mexe.
     }
 
     Supports combined operations in a single request (e.g. reschedule + change service + update notes).
     """
     try:
-        api_key, error_response = require_api_key(event)
+        identidade, error_response = require_acesso(event, "agenda.escrever")
         if error_response:
             return error_response
 
@@ -51,6 +80,14 @@ def handler(event, context):
 
         db = PostgresService()
         new_status = body.get("status")
+
+        # Antes de qualquer escrita: status desconhecido nao chega ao banco.
+        if new_status is not None and new_status not in STATUS_VALIDOS:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "status invalido: %r. Aceitos: %s" % (
+                    new_status, ", ".join(STATUS_VALIDOS)),
+            })
         notes = body.get("notes")
         new_date = body.get("date")
         new_time = body.get("time")
@@ -58,31 +95,135 @@ def handler(event, context):
         new_service_area_pairs = body.get("serviceAreaPairs")
         new_discount_pct = body.get("discountPct")
         new_discount_reason = body.get("discountReason")
+        nova_primeira_visita = body.get("isFirstVisit")
+        # `in body` e nao `.get()`: o payload manda `null` para SOLTAR a duracao
+        # manual, e `.get()` devolve None tanto para "null" quanto para "nao
+        # veio". Tratar os dois igual tiraria o unico jeito de voltar ao
+        # calculado, e o defeito seria mudo - a atendente clica e nada acontece.
+        mexeu_na_duracao = "manualDurationMinutes" in body
+        nova_duracao_manual = body.get("manualDurationMinutes")
 
-        service = AppointmentService(db)
+        # Duas perguntas antes de deixar editar, e as duas por causa desta
+        # rota nao carregar clinica nenhuma na URL:
+        #   - o agendamento e da clinica dele?
+        #   - esta na janela de datas dele?
+        # Sem isto, bastaria ter o id - e ids circulam pela propria tela.
+        if not pode_tocar_agendamento(identidade, db, appointment_id):
+            return fora_da_janela()
+
+        # Mover para fora da janela e tao ruim quanto editar de fora dela: seria
+        # empurrar a sessao para um dia que ele nao enxerga mais.
+        if new_date and not dentro_da_janela(identidade, new_date):
+            return fora_da_janela()
+
+        # Ver a nota em appointment/create.py: o construtor cru perde a
+        # conversao do lead.
+        service = AppointmentService.completo(db)
 
         # Cancel is exclusive — cannot combine with other operations
         if new_status == "CANCELLED":
             result = service.cancel_appointment(appointment_id)
-            return http_response(200, {
+            return http_response(200, para_o_staff(identidade, {
                 "status": "SUCCESS",
                 "message": "Agendamento cancelado com sucesso",
                 "appointment": _serialize_row(result),
-            })
+            }))
+
+        # Falta tambem e exclusiva, e pelo mesmo motivo do cancelamento: o
+        # guard de "sessao ja passou" vive no WHERE do UPDATE, e combinar com
+        # um reschedule no mesmo pedido mudaria a data que o guard confere.
+        if new_status == "NO_SHOW":
+            result = service.marca_no_show(appointment_id)
+            return http_response(200, para_o_staff(identidade, {
+                "status": "SUCCESS",
+                "message": "Falta marcada",
+                "appointment": _serialize_row(result),
+            }))
+
+        # `CONFIRMED` sobre um agendamento que esta em falta e o DESMARCAR, e
+        # precisa do guard de `desmarca_no_show`. Sem ler o status atual, isto
+        # cairia no UPDATE generico la embaixo e viraria um jeito obliquo de
+        # descancelar: `status = CONFIRMED` passaria por cima de CANCELLED,
+        # cujo horario pode ja ter sido ocupado por outra pessoa.
+        if new_status == "CONFIRMED":
+            atual = db.execute_query(
+                "SELECT status FROM scheduler.appointments WHERE id = %s::uuid",
+                (appointment_id,),
+            )
+            if not atual:
+                return http_response(404, {"status": "ERROR",
+                                           "message": "Agendamento nao encontrado"})
+            if atual[0]["status"] == "NO_SHOW":
+                result = service.desmarca_no_show(appointment_id)
+                return http_response(200, para_o_staff(identidade, {
+                    "status": "SUCCESS",
+                    "message": "Falta desmarcada",
+                    "appointment": _serialize_row(result),
+                }))
+            if atual[0]["status"] == "CANCELLED":
+                return http_response(409, {
+                    "status": "ERROR",
+                    "message": "Agendamento cancelado nao volta por aqui - o "
+                               "horario pode ter sido ocupado. Crie um novo.",
+                })
 
         # Process all non-cancel changes sequentially
         changed = False
         messages = []
 
+        # A ORDEM DAS ETAPAS IMPORTA, e mudou em 16/09/2026.
+        #
+        #   1. serviço/áreas  descarta a duração manual (premissa mudou)
+        #   2. duração manual grava e recalcula o end_time
+        #   3. reschedule     move a sessão, JÁ com a duração certa
+        #   4. campos simples notes, status, desconto, primeira visita
+        #
+        # A duração não pode entrar em 4: o end_time já teria sido calculado em
+        # 3 com a duração antiga, e a sessão ocuparia a sala errada.
+
+        # A duração só é conferida contra a data FINAL. Quando um reschedule vem
+        # a seguir, a data ainda é a antiga aqui, e conferir contra ela acusaria
+        # conflito num dia que a paciente nem vai ocupar.
+        confere_conflito_agora = not (new_date or new_time)
+        duracao_ja_aplicada = False
+
         # 1. Update service/areas first (changes duration → affects end_time calculation)
         if new_service_id:
-            service.update_appointment_services(
-                appointment_id, new_service_id, new_service_area_pairs
+            # A duração do MESMO pedido vai junto. Sem isso, a troca de área
+            # recalcula a duração pelas áreas novas e confere o conflito com
+            # ESSE número - antes de ler a duração que a atendente digitou.
+            # Foi o que recusou a edição da Larissa em 20/09/2026: área nova
+            # dava 15 minutos, ela fixou 10, e o conflito era com os 15.
+            resultado_areas = service.update_appointment_services(
+                appointment_id, new_service_id, new_service_area_pairs,
+                manual_duration_minutes=(
+                    nova_duracao_manual if mexeu_na_duracao else SEM_MUDANCA
+                ),
+                verificar_conflito=confere_conflito_agora,
             )
             changed = True
             messages.append("serviço/áreas")
+            duracao_ja_aplicada = mexeu_na_duracao
+            # A atendente precisa saber por que o valor que ela fixou sumiu.
+            if resultado_areas.get("manual_duration_descartada"):
+                messages.append("duração manual descartada (as áreas mudaram)")
 
-        # 2. Reschedule date/time (recalculates end_time with current duration)
+        # 2. Duração manual, ANTES do reschedule - e só se a etapa 1 não a
+        #    aplicou. Repetir aqui refaria a conta e conferiria o conflito duas
+        #    vezes, pelo mesmo motivo e com o mesmo resultado.
+        if mexeu_na_duracao and not duracao_ja_aplicada:
+            service.set_manual_duration(
+                appointment_id, nova_duracao_manual,
+                verificar_conflito=confere_conflito_agora,
+            )
+            changed = True
+
+        if mexeu_na_duracao:
+            messages.append(
+                "duração" if nova_duracao_manual else "duração (voltou ao cálculo)"
+            )
+
+        # 3. Reschedule date/time (recalculates end_time with current duration)
         if new_date or new_time:
             if not new_date or not new_time:
                 existing = db.execute_query(
@@ -100,7 +241,7 @@ def handler(event, context):
             changed = True
             messages.append("data/horário")
 
-        # 3. Update simple fields (notes, status, discount)
+        # 4. Update simple fields (notes, status, discount)
         updates = []
         params = []
 
@@ -108,6 +249,13 @@ def handler(event, context):
             updates.append("status = %s")
             params.append(new_status)
             messages.append("status")
+
+        if nova_primeira_visita is not None:
+            # A marca e automatica, mas a atendente manda: a pessoa pode ter
+            # vindo antes por fora do sistema, e so ela sabe disso.
+            updates.append("is_first_visit = %s")
+            params.append(bool(nova_primeira_visita))
+            messages.append("primeira visita")
 
         if notes is not None:
             updates.append("notes = %s")
@@ -130,7 +278,7 @@ def handler(event, context):
             if existing and existing[0].get("original_price_cents") is not None:
                 orig = existing[0]["original_price_cents"]
                 updates.append("final_price_cents = %s")
-                params.append(orig * (100 - discount_pct) // 100)
+                params.append(aplica_desconto(orig, discount_pct))
             messages.append("desconto")
 
         if updates:
@@ -153,11 +301,15 @@ def handler(event, context):
         if not final:
             return http_response(404, {"status": "ERROR", "message": "Agendamento não encontrado"})
 
-        return http_response(200, {
+        return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
             "message": f"Agendamento atualizado ({', '.join(messages)})",
             "appointment": _serialize_row(final[0]),
-        })
+        }))
+
+    except DuracaoInvalida as e:
+        # Dedo errado no formulario e 400, nao 500.
+        return http_response(400, {"status": "ERROR", "message": str(e)})
 
     except NotFoundError as e:
         return http_response(404, {"status": "ERROR", "message": str(e)})

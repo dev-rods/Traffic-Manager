@@ -16,6 +16,19 @@
   --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
 }
 
+/* Entrada do Toast: so transform e opacity, easing exponencial, sem bounce.
+   Aplicado via motion-safe, entao prefers-reduced-motion nao anima. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Dark mode surface overrides */
 .dark {
   color-scheme: dark;

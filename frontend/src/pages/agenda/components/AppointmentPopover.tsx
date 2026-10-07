@@ -1,5 +1,7 @@
+import { Link } from 'react-router-dom'
 import { useEffect, useRef } from 'react'
 import { formatCurrency } from '@/utils/formatCurrency'
+import { useEhDesktop } from '@/hooks/useMediaQuery'
 import type { Appointment } from '@/types'
 
 const DISCOUNT_LABELS: Record<string, string> = {
@@ -16,10 +18,27 @@ interface AppointmentPopoverProps {
   onClose: () => void
   onEdit: (appointment: Appointment) => void
   onCancel: (appointment: Appointment) => void
+  onMarcarFalta: (appointment: Appointment) => void
+  onDesmarcarFalta: (appointment: Appointment) => void
 }
 
-export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, onCancel }: AppointmentPopoverProps) {
+/**
+ * Os detalhes de um agendamento.
+ *
+ * **Em celular ele vira uma folha que sobe de baixo.** O posicionamento do
+ * desktop ancora em `anchorRect.right + 8`, ou seja, pressupõe espaço à
+ * direita do clique. Numa tela de 375px uma caixa de 320px tocada perto da
+ * borda direita não tem para onde abrir, e o recuo `Math.min(left, innerWidth
+ * - 340)` a faria cobrir justamente o agendamento que se quis ver.
+ *
+ * A folha de baixo não depende de onde o toque aconteceu, e é onde o polegar
+ * já está.
+ */
+export function AppointmentPopover({
+  appointment, anchorRect, onClose, onEdit, onCancel, onMarcarFalta, onDesmarcarFalta,
+}: AppointmentPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
+  const ehDesktop = useEhDesktop()
 
   useEffect(() => {
     if (!appointment) return
@@ -41,25 +60,46 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
     }
   }, [appointment, onClose])
 
-  if (!appointment || !anchorRect) return null
+  // Em celular a folha não se ancora em nada, então `anchorRect` deixa de ser
+  // obrigatório - só o desktop precisa dele para saber onde abrir.
+  if (!appointment) return null
+  if (ehDesktop && !anchorRect) return null
 
   const a = appointment
   const displayName = a.patient_name || a.full_name || 'Sem nome'
-  const serviceLine = [a.service_name, a.areas].filter(Boolean).join(' · ')
+  const duracao = a.duration_minutes ?? null
   const timeSlot = `${a.start_time.slice(0, 5)}–${a.end_time.slice(0, 5)}`
   const isCancelled = a.status === 'CANCELLED'
+  const faltou = a.status === 'NO_SHOW'
 
-  // Position the popover near the anchor
-  const top = Math.min(anchorRect.top, window.innerHeight - 400)
-  const left = anchorRect.right + 8
+
+  // Position the popover near the anchor (desktop)
+  const posicao = ehDesktop && anchorRect
+    ? {
+        top: `${Math.max(Math.min(anchorRect.top, window.innerHeight - 400), 8)}px`,
+        left: `${Math.min(anchorRect.right + 8, window.innerWidth - 340)}px`,
+      }
+    : undefined
 
   return (
-    <div className="fixed inset-0 z-50">
+    <div className={ehDesktop ? 'fixed inset-0 z-50' : 'fixed inset-0 z-50 bg-black/40'}>
       <div
         ref={ref}
-        className="absolute bg-white rounded-xl shadow-xl border border-gray-200 w-80 animate-in fade-in"
-        style={{ top: `${Math.max(top, 8)}px`, left: `${Math.min(left, window.innerWidth - 340)}px` }}
+        className={
+          ehDesktop
+            ? 'absolute bg-white rounded-xl shadow-xl border border-gray-200 w-80 animate-in fade-in'
+            : // Folha de baixo: largura inteira, presa no rodapé, e com teto de
+              // altura para um agendamento com muitas áreas não cobrir a tela.
+              'absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white shadow-xl border-t border-gray-200 pb-[env(safe-area-inset-bottom)]'
+        }
+        style={posicao}
       >
+        {/* A alça: diz "isto se fecha para baixo" sem precisar de texto. */}
+        {!ehDesktop && (
+          <div aria-hidden className="flex justify-center pt-2">
+            <span className="h-1 w-10 rounded-full bg-gray-300" />
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-start justify-between p-4 pb-2">
           <div className="min-w-0">
@@ -70,8 +110,18 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
                   PARCERIA
                 </span>
               )}
+              {/* A caixa da agenda passou a mostrar so horario e nome, entao a
+                  estreia precisa aparecer aqui - senao a informacao existia na
+                  tela e deixou de existir. */}
+              {a.is_first_visit && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-fuchsia-100 text-fuchsia-700 flex-shrink-0">
+                  1ª VEZ
+                </span>
+              )}
             </div>
-            {serviceLine && <p className="text-sm text-gray-500">{serviceLine}</p>}
+            {a.service_name && (
+              <p className="text-sm text-gray-500">{a.service_name}</p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -81,12 +131,37 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
           </button>
         </div>
 
-        {/* Details */}
+        {/* Details
+
+            Areas e Duracao ganharam linha propria em 21/09/2026. Antes, a area
+            vivia espremida no subtitulo cinza junto do nome do servico, e a
+            duracao nao aparecia em lugar nenhum - so dava para deduzir do
+            intervalo. Para quem NAO ve preco, essas duas sao a informacao
+            principal da caixa, e estavam sendo as menos visiveis dela. */}
         <div className="px-4 pb-3 space-y-1.5 text-sm">
+          {a.areas && (
+            <div className="flex justify-between gap-3">
+              <span className="text-gray-400 flex-shrink-0">Áreas</span>
+              {/* Sem truncar: "Virilha Completa + ânus, Axilas" cortado no meio
+                  é pior do que uma linha a mais. */}
+              <span className="font-medium text-gray-800 text-right">{a.areas}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-gray-400">Horario</span>
             <span className="font-medium text-gray-800">{timeSlot}</span>
           </div>
+          {duracao != null && (
+            <div className="flex justify-between">
+              <span className="text-gray-400">Duração</span>
+              <span className="font-medium text-gray-800">
+                {duracao} min
+                {a.manual_duration_minutes != null && (
+                  <span className="text-gray-400 font-normal"> · ajustada</span>
+                )}
+              </span>
+            </div>
+          )}
           {a.professional_name && (
             <div className="flex justify-between">
               <span className="text-gray-400">Profissional</span>
@@ -135,13 +210,45 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
 
         {/* Actions */}
         <div className="border-t border-gray-100 p-2 space-y-0.5">
-          {!isCancelled && (
+          {!isCancelled && !faltou && (
             <>
               <button
                 onClick={() => { onEdit(a); onClose() }}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 Editar agendamento
+              </button>
+              {/* O caminho curto do caso mais comum: ela acabou de atender e
+                  a paciente esta na tela. Ir ate Pacientes, buscar pelo nome e
+                  abrir Documentos seria o caminho longo para o que acontece
+                  todo dia. Leva a mesma tela, com a sessao ja escolhida. */}
+              {a.patient_id && (
+                <Link
+                  to={`/pacientes/${a.patient_id}/documentos?agendamento=${a.id}`}
+                  onClick={onClose}
+                  className="block w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Registrar sessão
+                </Link>
+              )}
+              {/* Sem guard de data, por decisão do André em 04/10/2026:
+                  avisar no DIA é falta, não cancelamento - o horário já não dá
+                  para preencher. Exigir que a sessão tivesse passado obrigaria
+                  a recepção a cancelar para liberar o horário, perdendo
+                  exatamente a informação que o status existe para capturar.
+
+                  Quem decide se foi falta ou cancelamento é quem está no
+                  balcão, com contexto que a tela não tem.
+
+                  Sem modal, ao contrário de cancelar: cancelar é irreversível
+                  ("Essa acao nao pode ser desfeita") e a confirmação se paga;
+                  falta tem "Desfazer" no próprio toast. Cerimônia que não
+                  compra nada treina a clicar sem ler. */}
+              <button
+                onClick={() => { onMarcarFalta(a); onClose() }}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Marcar falta
               </button>
               <button
                 onClick={() => { onCancel(a); onClose() }}
@@ -150,6 +257,17 @@ export function AppointmentPopover({ appointment, anchorRect, onClose, onEdit, o
                 Cancelar agendamento
               </button>
             </>
+          )}
+
+          {/* O caminho de volta. Sem ele, marcar errado seria permanente - e é
+              justamente por ele existir que marcar não pede confirmação. */}
+          {faltou && (
+            <button
+              onClick={() => { onDesmarcarFalta(a); onClose() }}
+              className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              Desmarcar falta
+            </button>
           )}
         </div>
       </div>

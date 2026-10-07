@@ -1,0 +1,267 @@
+/**
+ * Os vãos livres de um dia de agenda.
+ *
+ * A lista do celular mostrava só o que está marcado. Descobrir que das 10h às
+ * 14h não há nada exigia subtrair horários de cabeça, linha a linha - e é
+ * justamente o que se quer saber ao olhar a agenda no balcão.
+ */
+import { describe, expect, it } from 'vitest'
+import {
+  comoHora,
+  duracaoPorExtenso,
+  janelaDoDia,
+  vaosLivres,
+  type Vao,
+} from './expediente'
+import type { Appointment, AvailabilityRule } from '@/types'
+
+const DIA = { inicio: 7 * 60, fim: 22 * 60 }
+
+let seq = 0
+function atendimento(start: string, end: string, status = 'CONFIRMED'): Appointment {
+  seq += 1
+  return {
+    id: `a-${seq}`,
+    start_time: `${start}:00`,
+    end_time: `${end}:00`,
+    status,
+  } as Appointment
+}
+
+/** "09:00-10:30", para as asserções lerem como a tela. */
+function legivel(vaos: Vao[]): string[] {
+  return vaos.map((v) => `${comoHora(v.inicio)}-${comoHora(v.fim)}`)
+}
+
+describe('vaosLivres', () => {
+  it('acha o buraco entre dois atendimentos', () => {
+    const vaos = vaosLivres(
+      [atendimento('09:00', '10:00'), atendimento('14:00', '15:00')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toEqual(['07:00-09:00', '10:00-14:00', '15:00-22:00'])
+  })
+
+  it('não inventa vão onde os atendimentos se encostam', () => {
+    const vaos = vaosLivres(
+      [atendimento('09:00', '10:00'), atendimento('10:00', '11:00')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toEqual(['07:00-09:00', '11:00-22:00'])
+  })
+
+  it('mostra vão de 10 minutos', () => {
+    // Regressão de 28/09/2026, relatada na agenda de 29/09: entre um
+    // atendimento que terminava 17:20 e outro que começava 17:30, a lista não
+    // mostrava nada. O piso era 15 minutos - a granularidade da GRADE - e a
+    // clínica marca 34 sessões de 10 minutos e 13 de 5.
+    const vaos = vaosLivres(
+      [atendimento('16:45', '17:20'), atendimento('17:30', '17:40')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toContain('17:20-17:30')
+  })
+
+  it('mostra vão de 5 minutos, a menor sessão que a clínica marca', () => {
+    const vaos = vaosLivres(
+      [atendimento('16:10', '16:25'), atendimento('16:30', '16:45')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toContain('16:25-16:30')
+  })
+
+  it('ignora vão menor que o mínimo', () => {
+    // 3 minutos: não existe sessão desse tamanho, e a linha seria ruído
+    const vaos = vaosLivres(
+      [atendimento('09:00', '10:00'), atendimento('10:03', '11:00')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toEqual(['07:00-09:00', '11:00-22:00'])
+  })
+
+  it('aceita vão exatamente do tamanho mínimo', () => {
+    const vaos = vaosLivres(
+      [atendimento('09:00', '10:00'), atendimento('10:05', '11:00')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toContain('10:00-10:05')
+  })
+
+  it('não abre vão fantasma com atendimento dentro de outro', () => {
+    // A grade do desktop distribui simultâneos em colunas; aqui o risco é o
+    // cursor seguir o ÚLTIMO da lista e abrir 14:45-15:00 como livre.
+    const vaos = vaosLivres(
+      [atendimento('14:00', '15:00'), atendimento('14:30', '14:45')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toEqual(['07:00-14:00', '15:00-22:00'])
+  })
+
+  it('lida com atendimentos que se sobrepõem parcialmente', () => {
+    const vaos = vaosLivres(
+      [atendimento('09:00', '10:30'), atendimento('10:00', '11:00')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toEqual(['07:00-09:00', '11:00-22:00'])
+  })
+
+  it('cancelado não ocupa horário', () => {
+    const vaos = vaosLivres(
+      [atendimento('09:00', '10:00', 'CANCELLED'), atendimento('14:00', '15:00')],
+      DIA,
+    )
+
+    expect(legivel(vaos)).toEqual(['07:00-14:00', '15:00-22:00'])
+  })
+
+  it('atendimento antes da janela empurra o cursor', () => {
+    // Começou 06:30 e vai até 08:00: as 7h não estão livres, ainda que a
+    // sessão comece fora do que a tela desenha.
+    const vaos = vaosLivres([atendimento('06:30', '08:00')], DIA)
+
+    expect(legivel(vaos)).toEqual(['08:00-22:00'])
+  })
+
+  it('atendimento que passa do fim da janela não gera vão negativo', () => {
+    const vaos = vaosLivres([atendimento('21:00', '23:30')], DIA)
+
+    expect(legivel(vaos)).toEqual(['07:00-21:00'])
+  })
+
+  it('o vão para no fechamento, não no atendimento fora dele', () => {
+    // Encaixe às 19h30 numa clínica que fecha às 19h. Sem o corte, o vão
+    // anterior iria até 19h30 e ofereceria meia hora de clínica fechada.
+    const vaos = vaosLivres([atendimento('19:30', '20:00')], {
+      inicio: 8 * 60,
+      fim: 19 * 60,
+    })
+
+    expect(legivel(vaos)).toEqual(['08:00-19:00'])
+  })
+
+  it('atendimento que comeca no fechamento nao gera vao extra depois', () => {
+    const vaos = vaosLivres([atendimento('19:00', '20:00')], {
+      inicio: 8 * 60,
+      fim: 19 * 60,
+    })
+
+    expect(legivel(vaos)).toEqual(['08:00-19:00'])
+  })
+
+  it('dia inteiro livre é um vão só', () => {
+    expect(legivel(vaosLivres([], DIA))).toEqual(['07:00-22:00'])
+  })
+
+  it('dia inteiro ocupado não tem vão', () => {
+    expect(vaosLivres([atendimento('07:00', '22:00')], DIA)).toEqual([])
+  })
+
+  it('não depende da ordem de entrada', () => {
+    const fora = vaosLivres(
+      [atendimento('14:00', '15:00'), atendimento('09:00', '10:00')],
+      DIA,
+    )
+
+    expect(legivel(fora)).toEqual(['07:00-09:00', '10:00-14:00', '15:00-22:00'])
+  })
+})
+
+describe('comoHora', () => {
+  it.each([
+    [7 * 60, '07:00'],
+    [9 * 60 + 5, '09:05'],
+    [22 * 60, '22:00'],
+    [0, '00:00'],
+  ])('%i vira %s', (minutos, esperado) => {
+    expect(comoHora(minutos)).toBe(esperado)
+  })
+})
+
+describe('duracaoPorExtenso', () => {
+  it.each([
+    [45, '45 min'],
+    [60, '1h'],
+    [90, '1h30'],
+    [65, '1h05'],
+    [240, '4h'],
+  ])('%i min vira %s', (minutos, esperado) => {
+    expect(duracaoPorExtenso(minutos)).toBe(esperado)
+  })
+})
+
+/**
+ * A janela de funcionamento do dia.
+ *
+ * Antes, a lista desenhava os vãos sobre 7h-22h, a janela fixa da grade. Numa
+ * clínica que fecha às 19h isso oferecia três horas que não existem.
+ */
+describe('janelaDoDia', () => {
+  function regra(over: Partial<AvailabilityRule> = {}): AvailabilityRule {
+    return {
+      id: Math.random().toString(),
+      clinic_id: 'c1',
+      day_of_week: null,
+      rule_date: '2026-09-23',
+      start_time: '08:00:00',
+      end_time: '19:00:00',
+      professional_id: null,
+      active: true,
+      ...over,
+    }
+  }
+
+  it('usa o horário da regra daquele dia', () => {
+    expect(janelaDoDia([regra()], '2026-09-23')).toEqual({
+      inicio: 8 * 60,
+      fim: 19 * 60,
+    })
+  })
+
+  it('une os horários quando há vários profissionais', () => {
+    // A agenda mostra todos: abre com o primeiro, fecha com o último.
+    const janela = janelaDoDia(
+      [
+        regra({ start_time: '08:00:00', end_time: '14:00:00' }),
+        regra({ start_time: '12:00:00', end_time: '20:00:00' }),
+      ],
+      '2026-09-23',
+    )
+
+    expect(janela).toEqual({ inicio: 8 * 60, fim: 20 * 60 })
+  })
+
+  it('ignora regra de outro dia', () => {
+    expect(janelaDoDia([regra({ rule_date: '2026-09-24' })], '2026-09-23')).toBeNull()
+  })
+
+  it('ignora regra inativa', () => {
+    expect(janelaDoDia([regra({ active: false })], '2026-09-23')).toBeNull()
+  })
+
+  it('ignora regra recorrente', () => {
+    // day_of_week tem a sutileza de 0=domingo e já vive resolvido no servidor.
+    // A agenda só exibe dias com regra fixa, então seguir só elas reproduz a
+    // prioridade do backend sem copiar a resolução.
+    expect(
+      janelaDoDia([regra({ rule_date: null, day_of_week: 3 })], '2026-09-23'),
+    ).toBeNull()
+  })
+
+  it('sem regra nenhuma, devolve null em vez de inventar horário', () => {
+    expect(janelaDoDia([], '2026-09-23')).toBeNull()
+  })
+
+  it('recusa janela invertida ou vazia', () => {
+    expect(
+      janelaDoDia([regra({ start_time: '19:00:00', end_time: '19:00:00' })], '2026-09-23'),
+    ).toBeNull()
+  })
+})
