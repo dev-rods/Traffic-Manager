@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useClinicBootstrap, useCreateAppointment, useWeekAvailability } from '@/hooks/useBooking'
+import { useClinicId } from '@/hooks/useClinicId'
 import { useCart } from '@/store/useCart'
 import { ProfessionalPicker } from '@/components/ProfessionalPicker'
 import { AreaPicker } from '@/components/AreaPicker'
@@ -18,11 +19,11 @@ import { buildServiceAreaPairs, cartHasAreas, cartPendingAreaSelection, computeC
 import type { WizardStep } from '@/types'
 
 export function Booking() {
-  const { clinicId } = useParams<{ clinicId: string }>()
+  const { clinicId, basePath } = useClinicId()
   const navigate = useNavigate()
-  const bootstrap = useClinicBootstrap(clinicId as string)
+  const bootstrap = useClinicBootstrap(clinicId)
   const cart = useCart()
-  const createAppointment = useCreateAppointment(clinicId as string)
+  const createAppointment = useCreateAppointment(clinicId)
 
   const [step, setStep] = useState<WizardStep>('cart')
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(startOfToday()))
@@ -32,11 +33,11 @@ export function Booking() {
   const { durationMinutes, priceCents } = computeCartTotals(cart.items, serviceAreas)
 
   const weekIsoDates = weekDates(weekStart).map(toISODate)
-  const weekAvailability = useWeekAvailability(clinicId as string, weekIsoDates, durationMinutes)
+  const weekAvailability = useWeekAvailability(clinicId, weekIsoDates, durationMinutes)
 
   useEffect(() => {
     if (cart.items.length === 0 && step !== 'success') {
-      navigate(`/${clinicId}`, { replace: true })
+      navigate(basePath || '/', { replace: true })
     }
     // Só precisa reagir a mudanças no tamanho do carrinho, não a cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,7 +78,7 @@ export function Booking() {
 
   function goBack() {
     if (step === 'cart') {
-      navigate(`/${clinicId}`)
+      navigate(basePath || '/')
     } else if (step === 'areas') {
       setStep('cart')
     } else if (step === 'professional') {
@@ -159,7 +160,7 @@ export function Booking() {
         <Button
           onClick={() => {
             cart.clearCart()
-            navigate(`/${clinicId}`)
+            navigate(basePath || '/')
           }}
         >
           Voltar ao início
@@ -197,7 +198,7 @@ export function Booking() {
       {step === 'cart' ? (
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link
-            to={`/${clinicId}`}
+            to={basePath || '/'}
             className="inline-flex h-12 items-center justify-center rounded-lg border border-ink-200 px-6 text-sm font-medium text-ink-700 transition-colors hover:border-ink-400"
           >
             Adicionar outro serviço

@@ -17,6 +17,7 @@ from src.functions.public_booking import (
     confirm_otp,
     create_appointment,
     list_appointments,
+    resolve_domain,
     send_otp,
     slots,
 )
@@ -34,6 +35,7 @@ ROUTES = {
     ("POST", "public/clinics/{clinicId}/appointments"): create_appointment.handler,
     ("GET", "public/clinics/{clinicId}/my-appointments"): list_appointments.handler,
     ("POST", "public/clinics/{clinicId}/appointments/{appointmentId}/cancel"): cancel_appointment.handler,
+    ("GET", "public/resolve-domain"): resolve_domain.handler,
 }
 
 

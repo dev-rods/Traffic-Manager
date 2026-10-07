@@ -5,6 +5,11 @@ export const bookingService = {
   bootstrap: (clinicId: string) =>
     api.get<BootstrapResponse>(`/public/clinics/${clinicId}/bootstrap`).then((r) => r.data),
 
+  // Domínio próprio da clínica (ver CustomDomainField no painel) em vez do
+  // clinicId na URL: resolve qual clínica é dona do host atual.
+  resolveDomain: (host: string) =>
+    api.get<{ clinicId: string }>('/public/resolve-domain', { params: { host } }).then((r) => r.data.clinicId),
+
   // Status (CLOSED | FULL | AVAILABLE) + horários livres para uma lista de datas —
   // mesma AvailabilityEngine do bot de WhatsApp (get_days_status). Uma chamada só
   // já traz tudo que o seletor de semana precisa (dias abertos/lotados) e os
