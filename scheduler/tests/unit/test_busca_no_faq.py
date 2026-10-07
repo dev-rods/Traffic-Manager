@@ -223,5 +223,24 @@ class TestOsAchadosDaRevisao(unittest.TestCase):
         self.assertIn("Pode fazer em pele bronzeada/com sol?", titulos(r))
 
 
+class TestIntervaloEntreSessoes(unittest.TestCase):
+    """06/10/2026: "fiz 29/9, faço 28/10?" foi para especialista porque o FAQ
+    não tinha a pergunta - a resposta estava escondida dentro de "Quantas
+    sessões?" e de "mais de uma sessão no mesmo dia?". O item novo tem de
+    chegar ao modelo para as formas em que ele pergunta à tool."""
+
+    def test_o_item_chega_ao_modelo(self):
+        from tests.unit.faq_real import FAQ_ESSENCIA
+
+        for pergunta in (
+            "Qual o intervalo recomendado entre sessões de depilação a laser?",
+            "Qual o intervalo ideal entre uma sessão de depilação a laser e outra?",
+            "intervalo entre sessões",
+            "quanto tempo entre uma sessão e outra",
+        ):
+            with self.subTest(pergunta=pergunta):
+                achados = [a["question_label"] for a in busca(pergunta, FAQ_ESSENCIA)]
+                self.assertIn("Qual o intervalo entre as sessões?", achados)
+
 if __name__ == "__main__":
     unittest.main()

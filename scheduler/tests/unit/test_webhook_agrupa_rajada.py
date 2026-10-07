@@ -109,6 +109,22 @@ class TestOAgenteMarcaOEfeito(unittest.TestCase):
 
         self.assertTrue(sessao.get("efeito_na_ultima_rodada"))
 
+    def test_handoff_marca_verdadeiro(self):
+        """06/10/2026: o agente pediu especialista, a paciente escreveu no meio,
+        o agregador descartou a mensagem e manteve a pausa. Tres horas sem
+        resposta nenhuma. Pausa gravada e efeito: a mensagem tem de sair."""
+        from tests.unit.dublagem_agente import texto_do_modelo, usa_tool
+
+        sessao = self._sessao_depois_de(
+            [usa_tool("request_human_handoff", {"reason": "faq_sem_resposta"}),
+             texto_do_modelo("Vou confirmar com uma especialista e já te retorno 😊")],
+            resultado_da_tool={"success": True, "handoff_requested": True,
+                               "reason": "faq_sem_resposta"},
+        )
+
+        self.assertTrue(sessao.get("efeito_na_ultima_rodada"))
+        self.assertEqual(sessao.get("bot_pausado_por"), "HANDOFF")
+
 
 if __name__ == "__main__":
     unittest.main()
