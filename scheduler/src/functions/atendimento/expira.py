@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Cron: atendimentos humanos vencidos. PRD 020 §3.3 e §3.7.
 
-A cada 10 minutos, lê no índice `handler-humanUntil-index` as conversas com
+A cada 60 minutos, lê no índice `handler-humanUntil-index` as conversas com
 `handler = HUMAN_ACTIVE` e `humanUntil <= agora`, e para cada uma decide:
 
   pendente  há pending_intent ou tarefa aberta  -> HUMAN_PENDING (a fila mostra)

@@ -123,7 +123,7 @@ class TestRetomada(unittest.TestCase):
 class TestNadaVencido(unittest.TestCase):
     def test_calada_nao_volta_no_ciclo_seguinte(self):
         """O que a GSI le e o `handler` gravado: calar sem encerrar fazia a
-        mesma conversa voltar a cada 10 minutos (visto em prod em 08/10)."""
+        mesma conversa voltar a cada ciclo (visto em prod em 08/10)."""
         s = at.entrega_a_humano({}, por=at.POR_ATENDENTE, agora=AGORA - 30 * H)
         _, gravadas, _ = roda(s, [evento("INBOUND", "obrigada!", 30)])
         final = gravadas[-1]
