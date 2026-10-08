@@ -4,18 +4,26 @@ import { useProfessionals } from '@/hooks/useProfessionals'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { ImageUploadField } from '@/components/ui/ImageUploadField'
+import { CustomDomainField } from '@/components/ui/CustomDomainField'
 
 export function SiteAgendamentoPage() {
   const { data: clinic, isLoading, isError, error, refetch } = useClinic()
   const professionals = useProfessionals()
   const updateClinic = useUpdateClinic()
   const [savedField, setSavedField] = useState<'logo_url' | 'favicon_url' | null>(null)
+  const [domainWarning, setDomainWarning] = useState<string | null>(null)
 
   async function handleUploaded(field: 'logo_url' | 'favicon_url', publicUrl: string) {
     setSavedField(null)
     await updateClinic.mutateAsync({ [field]: publicUrl })
     setSavedField(field)
     setTimeout(() => setSavedField((prev) => (prev === field ? null : prev)), 3000)
+  }
+
+  async function handleSaveDomain(domain: string | null) {
+    setDomainWarning(null)
+    const result = await updateClinic.mutateAsync({ custom_domain: domain })
+    setDomainWarning(result.domainWarning ?? null)
   }
 
   if (isLoading) return <div className="p-6"><SkeletonTable rows={4} /></div>
@@ -112,6 +120,26 @@ export function SiteAgendamentoPage() {
 
           {savedField && <p className="text-sm text-green-600 font-medium">Salvo com sucesso</p>}
           {updateClinic.isError && <p className="text-sm text-red-500">Erro ao salvar</p>}
+        </section>
+
+        <hr className="border-gray-100" />
+
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-800">Domínio customizado</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Use seu próprio domínio na página de agendamento, em vez do endereço padrão
+            </p>
+          </div>
+
+          <CustomDomainField
+            value={clinic.custom_domain}
+            status={clinic.custom_domain_status}
+            saving={updateClinic.isPending}
+            onSave={handleSaveDomain}
+            onRefreshStatus={() => void refetch()}
+            warning={domainWarning}
+          />
         </section>
       </div>
     </div>
