@@ -265,13 +265,15 @@ class TestTransicoes(unittest.TestCase):
         self.assertEqual(s[at.CAMPO]["handoff_reason"], "primeiro")
         self.assertEqual(s[at.CAMPO]["human_until"], T0 + 25 * H)
 
-    def test_versao_sobe_a_cada_transicao(self):
-        s = at.entrega_a_humano({}, por=at.POR_ATENDENTE, agora=T0)
-        self.assertEqual(s[at.CAMPO]["versao"], 1)
+    def test_transicao_nao_mexe_na_versao(self):
+        """A versão conta escritas no banco, não transições. Subir por
+        transição quebrava cadeias (alerta + encerra): a escrita condicional
+        esperava uma versão que o banco nunca teve."""
+        s = {at.CAMPO: {"handler": at.BOT_ACTIVE, "versao": 7}}
+        at.entrega_a_humano(s, por=at.POR_ATENDENTE, agora=T0)
         at.registra_fala_do_cliente(s, agora=T0 + H)
-        self.assertEqual(s[at.CAMPO]["versao"], 2)
         at.retoma_pelo_painel(s)
-        self.assertEqual(s[at.CAMPO]["versao"], 3)
+        self.assertEqual(s[at.CAMPO]["versao"], 7)
 
     def test_pendencia_gravada_no_handoff(self):
         s = at.entrega_a_humano({}, por=at.POR_HANDOFF, motivo="x", agora=T0, pending_intent="RESCHEDULE")
