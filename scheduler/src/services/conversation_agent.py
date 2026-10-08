@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 # ultima ferramenta ("vou ver os horarios") - e nada depois. Visto em prod em
 # 08/10/2026 em duas conversas. Depois destas rodadas ha UMA chamada de
 # fechamento, sem ferramentas, para responder com o que ja foi apurado.
-MAX_AGENT_ITERATIONS = 8
+MAX_AGENT_ITERATIONS = 10
 MAX_HISTORY_PAIRS = 20
 # O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
 # e regra duplicada diverge em silencio quando alguem muda so um deles.
