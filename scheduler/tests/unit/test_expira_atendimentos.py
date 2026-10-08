@@ -76,6 +76,7 @@ class TestRetomada(unittest.TestCase):
         falar.assert_called_once()
         final = gravadas[-1]
         self.assertEqual(at.estado(final, AGORA), at.COOLDOWN)
+        self.assertEqual(final[at.CAMPO]["handler"], at.COOLDOWN, "gravado, nao so derivado: a GSI le o handler")
         self.assertEqual(final[at.CAMPO]["retomada_em"], AGORA)
         self.assertIsNone(final[at.CAMPO]["retomada_contexto"])
         # O contexto chegou a ser gravado ANTES de o agente rodar.
@@ -89,6 +90,7 @@ class TestRetomada(unittest.TestCase):
         self.assertEqual(resultado["calados"], 1)
         self.assertEqual(gravadas[-1][at.CAMPO]["alerta"], retomada.MODELO_DISSE_NAO)
         self.assertEqual(gravadas[-1][at.CAMPO]["retomada_em"], AGORA, "uma vez por pendência, mesmo calando")
+        self.assertEqual(gravadas[-1][at.CAMPO]["handler"], at.COOLDOWN, "calar tambem encerra, senao volta a cada ciclo")
 
     def test_fecho_social_cala_sem_chamar_o_modelo(self):
         s = at.entrega_a_humano({}, por=at.POR_ATENDENTE, agora=AGORA - 30 * H)
@@ -96,6 +98,7 @@ class TestRetomada(unittest.TestCase):
         falar.assert_not_called()
         self.assertEqual(resultado["calados"], 1)
         self.assertEqual(at.estado(gravadas[-1], AGORA), at.COOLDOWN)
+        self.assertEqual(gravadas[-1][at.CAMPO]["handler"], at.COOLDOWN)
         # Fecho social da pessoa nao e pergunta sem resposta: sem alerta?
         # E alerta sim: a ultima fala era dela, e a fila decide se importa.
         self.assertEqual(gravadas[-1][at.CAMPO]["alerta"], retomada.FECHO_SOCIAL)
@@ -105,6 +108,7 @@ class TestRetomada(unittest.TestCase):
         resultado, gravadas, falar = roda(s, [evento("INBOUND", "tem horário sábado?", 30)], efeitos=1)
         falar.assert_not_called()
         self.assertEqual(gravadas[-1][at.CAMPO]["alerta"], retomada.RESOLVIDO_FORA)
+        self.assertEqual(gravadas[-1][at.CAMPO]["handler"], at.COOLDOWN)
 
     def test_ultima_fala_do_bot_cala_sem_alerta(self):
         s = at.entrega_a_humano({}, por=at.POR_ATENDENTE, agora=AGORA - 30 * H)
@@ -113,9 +117,20 @@ class TestRetomada(unittest.TestCase):
         self.assertEqual(resultado["calados"], 1)
         self.assertIsNone(gravadas[-1][at.CAMPO]["alerta"])
         self.assertEqual(at.estado(gravadas[-1], AGORA), at.COOLDOWN)
+        self.assertEqual(gravadas[-1][at.CAMPO]["handler"], at.COOLDOWN)
 
 
 class TestNadaVencido(unittest.TestCase):
+    def test_calada_nao_volta_no_ciclo_seguinte(self):
+        """O que a GSI le e o `handler` gravado: calar sem encerrar fazia a
+        mesma conversa voltar a cada 10 minutos (visto em prod em 08/10)."""
+        s = at.entrega_a_humano({}, por=at.POR_ATENDENTE, agora=AGORA - 30 * H)
+        _, gravadas, _ = roda(s, [evento("INBOUND", "obrigada!", 30)])
+        final = gravadas[-1]
+        self.assertEqual(final[at.CAMPO]["handler"], at.COOLDOWN)
+        self.assertNotEqual(final[at.CAMPO]["handler"], at.HUMAN_ACTIVE)
+        self.assertEqual(at.estado(final, AGORA + 3600), at.COOLDOWN)
+
     def test_sem_itens_nao_toca_em_nada(self):
         from src.functions.atendimento import expira as modulo
         tabela = mock.MagicMock(); tabela.query.return_value = {"Items": []}
