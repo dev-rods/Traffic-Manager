@@ -70,9 +70,15 @@ POR_CHAT_ANTERIOR = "CHAT_ANTERIOR"    # já havia conversa antes de nós
 # especialista", não como "atendente ativa".
 ENTREGAS_DO_BOT = frozenset({POR_HANDOFF, POR_INSTABILIDADE})
 
-# Sem `human_until` (None) o atendimento humano não vence. É o caso das pausas
-# que hoje são permanentes (`CONTATO_MANUAL`, `CHAT_ANTERIOR`); a decisão 9.1
-# do PRD 020 as faz vencer na fase 3, quando houver de onde tirar a data.
+# Decisão 9.1 do PRD 020 (André, 05/10/2026): NENHUMA pausa é permanente.
+# `CONTATO_MANUAL` e `CHAT_ANTERIOR` vencem pelo mesmo TTL, contado da última
+# mensagem conhecida (quem chama passa `ate`). Sessão legada sem prazo é
+# tratada como vencida há muito: o bot volta a responder se a pessoa
+# escrever, e a retomada automática não dispara para ela (idade máxima).
+
+# O que o cron devolve ao avaliar um vencimento.
+ACAO_PENDENTE = "pendente"
+ACAO_AVALIAR_RETOMADA = "avaliar_retomada"
 
 POLICY_ALL = "ALL"
 POLICY_PILOT = "PILOT"
@@ -109,8 +115,9 @@ def migra_do_legado(session: Dict) -> Dict:
     except (TypeError, ValueError):
         ate = None
 
-    if por in (POR_CONTATO_MANUAL, POR_CHAT_ANTERIOR):
-        return _bloco(HUMAN_ACTIVE, por=por, human_until=None,
+    if por in (POR_CONTATO_MANUAL, POR_CHAT_ANTERIOR) and not ate:
+        # Sem data: venceu há muito (9.1). human_until=0 é "no passado".
+        return _bloco(HUMAN_ACTIVE, por=por, human_until=0,
                       motivo=session.get("handoff_reason"))
     if ate:
         return _bloco(HUMAN_ACTIVE, por=por or POR_ATENDENTE, human_until=ate,
@@ -133,6 +140,8 @@ def _bloco(handler, *, por=None, human_until=None, cooldown_until=None,
         "pending_since": None,
         "ultima_fala_cliente_em": None,
         "retomada_em": None,
+        "alerta": None,
+        "retomada_contexto": None,
         "versao": versao,
     }
     b.update(extras)
@@ -158,7 +167,11 @@ def estado(session: Optional[Dict], agora: Optional[int] = None) -> str:
         ate = b.get("human_until")
         if ate is None or int(ate) > agora:
             return HUMAN_ACTIVE
-        # Venceu. O cooldown conta do vencimento.
+        # Venceu. Com pendência, a conversa fica com uma pessoa (a tarefa):
+        # o bot não reassume assunto em aberto (PRD 020 §3.6).
+        if b.get("pending_intent") or b.get("pending_task_id"):
+            return HUMAN_PENDING
+        # Sem pendência, o cooldown conta do vencimento.
         if agora < int(ate) + COOLDOWN_PADRAO:
             return COOLDOWN
         return BOT_ACTIVE
@@ -228,11 +241,12 @@ def pode_iniciar(clinic: Optional[Dict], session: Optional[Dict], phone: str,
     """Ninguém escreveu. O bot pode falar primeiro?
 
     Tudo de `pode_responder`, mais: em COOLDOWN não inicia, e na janela de
-    silêncio não inicia. `transacional=True` existe para UM chamador - o
-    lembrete de 24h da sessão marcada, que vai mesmo em cooldown porque a
-    sessão existe e a pessoa precisa saber. Um segundo chamador transacional é
-    sinal de que a mensagem não é transacional. A janela de silêncio vale
-    SEMPRE, inclusive para ele.
+    silêncio não inicia. `transacional=True` pula SÓ o cooldown, e tem dois
+    chamadores: o lembrete de 24h da sessão marcada (a sessão existe e a
+    pessoa precisa saber) e a retomada por vencimento (ela É a transição que
+    abre o cooldown; barrá-la pelo cooldown seria circular). Um terceiro
+    chamador é sinal de que a mensagem não é nenhuma das duas coisas. A janela
+    de silêncio vale SEMPRE, inclusive para eles.
     """
     agora = _agora(agora)
     if not pode_responder(clinic, session, phone, agora):
@@ -295,7 +309,7 @@ def entrega_a_humano(session: Optional[Dict], *, por: str, motivo: Optional[str]
     agora = _agora(agora)
     b = bloco(session)
 
-    if ate is None and por not in (POR_CONTATO_MANUAL, POR_CHAT_ANTERIOR):
+    if ate is None:
         ate = agora + TTL_HUMANO
 
     if estado(session, agora) == HUMAN_ACTIVE:
@@ -324,8 +338,7 @@ def renova_por_mensagem_da_clinica(session: Optional[Dict], agora: Optional[int]
     if estado(session, agora) != HUMAN_ACTIVE:
         return entrega_a_humano(session, por=POR_ATENDENTE, agora=agora)
     b = bloco(session)
-    if b.get("human_until") is not None:
-        b["human_until"] = agora + TTL_HUMANO
+    b["human_until"] = agora + TTL_HUMANO
     return _comete(session, b)
 
 
@@ -354,6 +367,73 @@ def retoma_pelo_painel(session: Optional[Dict]) -> Dict:
                                    ultima_fala_cliente_em=b.get("ultima_fala_cliente_em")))
 
 
+def avalia_vencimento(session: Optional[Dict], agora: Optional[int] = None):
+    """O cron encontrou `human_until` vencido. Devolve (session, ação).
+
+    Com pendência (intenção que o bot não atendeu ou tarefa aberta), a
+    conversa vai para HUMAN_PENDING e fica lá até alguém fechar a tarefa ou
+    clicar "Retomar bot". Sem pendência, devolve ACAO_AVALIAR_RETOMADA: quem
+    chama roda as guardas de `retomada` e então encerra em cooldown.
+    """
+    session = session if session is not None else {}
+    agora = _agora(agora)
+    b = bloco(session)
+    if b.get("pending_intent") or b.get("pending_task_id"):
+        b["handler"] = HUMAN_PENDING
+        return _comete(session, b), ACAO_PENDENTE
+    return session, ACAO_AVALIAR_RETOMADA
+
+
+def vincula_tarefa(session: Optional[Dict], tarefa_id: str) -> Dict:
+    session = session if session is not None else {}
+    b = bloco(session)
+    b["pending_task_id"] = str(tarefa_id)
+    return _comete(session, b)
+
+
+def fecha_pendencia(session: Optional[Dict], agora: Optional[int] = None) -> Dict:
+    """Tarefa fechada no painel: HUMAN_PENDING -> COOLDOWN, pendência limpa."""
+    session = session if session is not None else {}
+    agora = _agora(agora)
+    b = bloco(session)
+    novo = _bloco(COOLDOWN, cooldown_until=agora + COOLDOWN_PADRAO, versao=b.get("versao", 0),
+                  ultima_fala_cliente_em=b.get("ultima_fala_cliente_em"),
+                  retomada_em=b.get("retomada_em"))
+    return _comete(session, novo)
+
+
+def marca_retomada(session: Optional[Dict], agora: Optional[int] = None) -> Dict:
+    """Uma retomada por pendência: quem já foi retomado não é de novo."""
+    session = session if session is not None else {}
+    b = bloco(session)
+    b["retomada_em"] = _agora(agora)
+    return _comete(session, b)
+
+
+def marca_alerta(session: Optional[Dict], motivo: str) -> Dict:
+    """A última fala era do cliente e o bot decidiu calar: a fila precisa ver."""
+    session = session if session is not None else {}
+    b = bloco(session)
+    b["alerta"] = motivo
+    return _comete(session, b)
+
+
+def poe_contexto_de_retomada(session: Optional[Dict], texto: str) -> Dict:
+    session = session if session is not None else {}
+    b = bloco(session)
+    b["retomada_contexto"] = texto
+    return _comete(session, b)
+
+
+def limpa_contexto_de_retomada(session: Optional[Dict]) -> Dict:
+    session = session if session is not None else {}
+    b = bloco(session)
+    if b.get("retomada_contexto"):
+        b["retomada_contexto"] = None
+        return _comete(session, b)
+    return session
+
+
 def encerra_atendimento_humano(session: Optional[Dict], agora: Optional[int] = None) -> Dict:
     """O atendimento humano acabou (prazo vencido e avaliado): COOLDOWN
     explícito, contado de agora. Usado pela avaliação de vencimento (fase 3)."""
@@ -362,5 +442,5 @@ def encerra_atendimento_humano(session: Optional[Dict], agora: Optional[int] = N
     b = bloco(session)
     novo = _bloco(COOLDOWN, cooldown_until=agora + COOLDOWN_PADRAO, versao=b.get("versao", 0),
                   ultima_fala_cliente_em=b.get("ultima_fala_cliente_em"),
-                  retomada_em=b.get("retomada_em"))
+                  retomada_em=b.get("retomada_em"), alerta=b.get("alerta"))
     return _comete(session, novo)

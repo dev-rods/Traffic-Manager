@@ -68,9 +68,12 @@ class TestCampanhaNaoAtropelaOLead(unittest.TestCase):
                             "attendant_active_until": AGORA + 3600})
         self.assertFalse(should_bot_reply(LEADS_ONLY, s, FONE))
 
-    def test_campanha_nao_vence_pausa_permanente(self):
-        """'Já iniciada' no painel continua mandando."""
-        s = com_campanha(**{CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL})
+    def test_campanha_nao_vence_pausa_de_origem_em_curso(self):
+        """'Já iniciada' no painel manda enquanto o prazo dela corre (24h,
+        decisão 9.1)."""
+        import time as _t
+        s = com_campanha(**{CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL,
+                            "attendant_active_until": int(_t.time()) + 3600})
         self.assertFalse(should_bot_reply(LEADS_ONLY, s, FONE))
 
     def test_campanha_nao_fura_o_off(self):

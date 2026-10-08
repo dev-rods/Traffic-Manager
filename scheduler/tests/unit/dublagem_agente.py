@@ -115,7 +115,6 @@ def monta_agente(anthropic=None, tool_executor=None, resultado_da_tool=None,
     # turnos e um teste de conversa multi-turno mediria três conversas de um
     # turno. Foi o que escondeu a janela curta de respaldo.
     agente._load_session = lambda c, p: dict(agente.sessao_salva)
-    agente._is_attendant_active = lambda s: False
     # Quem esta falando. Sem banco aqui: lead desconhecida por padrao, ou o
     # dict que o teste passar (ver identificacao_de_paciente).
     agente._identifica_paciente = lambda c, p: dict(paciente or {})

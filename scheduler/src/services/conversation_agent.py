@@ -14,10 +14,7 @@ from src.services.consumo import do_retorno as consumo_do_retorno
 from src.services.consumo import registra_total as registra_consumo_total
 from src.services.consumo import soma as soma_consumo
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
-from src.services.bot_policy import (
-    entrega_por_instabilidade,
-    esta_pausado,
-)
+from src.services.bot_policy import entrega_por_instabilidade
 from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
 from src.services.fora_do_escopo import INSTRUCAO_DO_PROMPT as INSTRUCAO_FORA_DO_ESCOPO
 from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
@@ -121,6 +118,21 @@ def limpar_gatilhos(history):
     return limpo
 
 
+def foi_de_pessoa_da_clinica(event):
+    """OUTBOUND digitado no celular, nao enviado pelo bot.
+
+    O webhook marca `metadata.autor = HUMANO` desde a fase 3. Antes disso o
+    sinal era a ausencia de providerMessageId num SENT (ver autoria_mensagem):
+    o bot sempre guarda o id que o provider devolve.
+    """
+    if event.get("direction") != "OUTBOUND":
+        return False
+    meta = event.get("metadata") or {}
+    if isinstance(meta, dict) and meta.get("autor") == "HUMANO":
+        return True
+    return event.get("status") == "SENT" and not event.get("providerMessageId")
+
+
 def events_to_history(events):
     """Converte eventos de mensagem em turnos de conversa para o agente.
 
@@ -136,6 +148,13 @@ def events_to_history(events):
         if not content:
             continue
         papel = "assistant" if event.get("direction") == "OUTBOUND" else "user"
+        # Fala da ATENDENTE pelo celular nao e fala do bot. Virava turno
+        # `assistant` e o bot "continuava" promessas que nao fez - desconto,
+        # encaixe, excecao. Entra como turno do usuario, rotulada: o prompt
+        # diz que e compromisso da clinica, nao dele. PRD 020 §3.4.
+        if papel == "assistant" and foi_de_pessoa_da_clinica(event):
+            papel = "user"
+            content = f"[atendente da clínica]: {content}"
         if history and history[-1]["role"] == papel:
             history[-1]["content"] = f"{history[-1]['content']}\n{content}"
         else:
@@ -232,9 +251,15 @@ class ConversationAgent:
         # 1. Load session
         session = self._load_session(clinic_id, phone)
 
-        # 2. Check attendant mode
-        if self._is_attendant_active(session):
-            logger.info(f"[ConversationAgent] Attendant active for {phone}, skipping")
+        # 2. A porta de atendimento e de quem chama (webhook, cron, painel):
+        # `atendimento.pode_responder` / `pode_iniciar`. Aqui so se registra
+        # quem pulou a porta, para o defeito nao ser mudo.
+        from src.services import atendimento as _atendimento
+        if _atendimento.esta_com_pessoa(session):
+            logger.error(
+                f"[ConversationAgent] {phone}: chamado com a conversa em "
+                f"{_atendimento.estado(session)} - quem chamou pulou a porta. Calando."
+            )
             return []
 
         # 2b. Quem e a pessoa. Uma consulta por mensagem, antes de tudo: o
@@ -290,6 +315,12 @@ class ConversationAgent:
         user_content = incoming.content or ""
         if incoming.button_id:
             user_content = incoming.button_text or incoming.button_id
+        # Retomada por vencimento (fase 3): o cron deixou na sessao o contexto
+        # (ha quantas horas ela espera, o que perguntou). Entra no turno do
+        # gatilho, nao no system, pelo mesmo motivo do calendario: e volatil.
+        contexto_de_retomada = (session.get("atendimento") or {}).get("retomada_contexto")
+        if gatilho and contexto_de_retomada:
+            user_content = f"{contexto_de_retomada}\n═══ GATILHO ═══\n{user_content}"
         history.append({"role": "user", "content": user_content})
 
         # ── Procedimento que o bot não atende ───────────────────────────
@@ -659,6 +690,10 @@ class ConversationAgent:
         # 6. Handle handoff
         if handoff_requested:
             entrega_a_humano(session, motivo_do_handoff)
+            # A pendencia e o que o bot nao conseguiu atender; vira tarefa
+            # para uma pessoa (PRD 020 §3.6). Sem isto HUMAN_PENDING seria
+            # conversa esquecida com cara de resolvida.
+            self._abre_pendencia(session, clinic_id, phone, motivo_do_handoff)
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
@@ -979,6 +1014,14 @@ class ConversationAgent:
         # precisa vencer o "toda dúvida começa com get_faq_answer".
         system_prompt += INSTRUCAO_FORA_DO_ESCOPO
 
+        system_prompt += (
+            "\n═══ FALA DA ATENDENTE ═══\n"
+            "No historico, turnos que comecam com [atendente da clinica]: foram\n"
+            "escritos por uma pessoa da clinica, nao por voce. Sao compromissos da\n"
+            "clinica: nao os repita como seus, nao os contradiga e nao os estenda\n"
+            "(se ela prometeu um desconto ou um encaixe, nao invente outro).\n"
+        )
+
         # Regra de datas: fica aqui, no prefixo cacheado, porque é estática. O
         # que muda por mensagem é o bloco CALENDÁRIO, que entra no turno da
         # pessoa. Sem esta regra o agente tinha a data e ainda assim não sabia o
@@ -1241,6 +1284,23 @@ class ConversationAgent:
         except Exception as e:
             logger.error(f"[ConversationAgent] Error saving session for {phone}: {e}")
 
+    def _abre_pendencia(self, session, clinic_id, phone, motivo):
+        """Grava a intencao pendente no bloco e abre a tarefa. Nunca levanta."""
+        try:
+            from src.services import atendimento as _atendimento
+            from src.services import tarefas as _tarefas
+
+            intencao = motivo or "handoff"
+            b = _atendimento.bloco(session)
+            b["pending_intent"] = intencao
+            b["pending_since"] = b.get("pending_since") or int(time.time())
+            tarefa = _tarefas.abre(self.db, clinic_id, phone, intencao, motivo or "")
+            if tarefa:
+                b["pending_task_id"] = tarefa
+            _atendimento._comete(session, b)
+        except Exception as e:
+            logger.error(f"[Tarefas] {phone}: nao abri a pendencia do handoff: {e}")
+
     def _identifica_paciente(self, clinic_id, phone):
         """Nunca levanta: sem identificacao o fluxo e o de lead, que pergunta."""
         try:
@@ -1248,13 +1308,6 @@ class ConversationAgent:
         except Exception as e:
             logger.error(f"[Identificacao] {phone}: {e}")
             return {}
-
-    def _is_attendant_active(self, session):
-        """A conversa esta com uma pessoa? Delega a `atendimento`: a porta de
-        verdade fica em quem chama o agente, e este check sai na fase 3 do
-        PRD 020. Ate la, nao pode divergir dela."""
-        from src.services import atendimento
-        return atendimento.esta_com_pessoa(session)
 
     @staticmethod
     def _convert_decimals(obj):

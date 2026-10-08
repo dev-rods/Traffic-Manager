@@ -124,6 +124,8 @@ functions:
   - ${file(sls/functions/attendant/interface.yml)}
   - ${file(sls/functions/public_booking/interface.yml)}
   - ${file(sls/functions/outbound/interface.yml)}
+  - ${file(sls/functions/atendimento/interface.yml)}
+  - ${file(sls/functions/tarefa/interface.yml)}
   - ${file(sls/functions/clinic_user/interface.yml)}
 
 resources:

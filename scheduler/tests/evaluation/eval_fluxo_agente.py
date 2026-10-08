@@ -282,7 +282,6 @@ def monta_agente(anthropic, tools, prompt):
     agente.sessao = {}
     agente._load_session = lambda c, p: agente.sessao
     agente._save_session = lambda c, p, s: agente.sessao.update(s)
-    agente._is_attendant_active = lambda s: False
     agente._identifica_paciente = lambda c, p: FIXTURES["identificar_paciente"]
     # Sem MessageEvents: o corpus JA e a conversa, reconstruir duplicaria turnos.
     agente.rebuild_history_from_events = lambda c, p: []

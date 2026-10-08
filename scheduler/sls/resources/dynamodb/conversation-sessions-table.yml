@@ -9,8 +9,25 @@ Resources:
           AttributeType: S
         - AttributeName: sk
           AttributeType: S
+        - AttributeName: handler
+          AttributeType: S
+        - AttributeName: humanUntil
+          AttributeType: N
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
         - AttributeName: sk
           KeyType: RANGE
+      # Atendimentos humanos vencidos, para o cron ExpiraAtendimentos
+      # (PRD 020 §3.3). `handler` e `humanUntil` sao copias na raiz do item
+      # escritas por session_store.grava_atendimento; a fonte e
+      # session.atendimento.
+      GlobalSecondaryIndexes:
+        - IndexName: handler-humanUntil-index
+          KeySchema:
+            - AttributeName: handler
+              KeyType: HASH
+            - AttributeName: humanUntil
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY

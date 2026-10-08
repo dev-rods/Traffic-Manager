@@ -632,6 +632,23 @@ SQL_STATEMENTS = [
     # PRD 020 §3.5 e §3.7: a janela em que o bot nao inicia conversa (NULL =
     # 22:59-04:59 do codigo) e a idade maxima da pendencia para a retomada.
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS janela_de_silencio JSONB",
+
+    # PRD 020 §3.6: tarefa humana. Nasce no handoff do bot com a intencao que
+    # ele nao atendeu; fecha pelo painel, e fechar devolve a conversa ao cooldown.
+    """
+    CREATE TABLE IF NOT EXISTS scheduler.tarefas (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) REFERENCES scheduler.clinics(clinic_id),
+        phone VARCHAR(20) NOT NULL,
+        intent VARCHAR(40) NOT NULL,
+        motivo VARCHAR(40) NOT NULL,
+        status VARCHAR(10) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'CLOSED')),
+        aberta_em TIMESTAMPTZ DEFAULT NOW(),
+        fechada_em TIMESTAMPTZ,
+        fechada_por VARCHAR(100)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_tarefas_abertas ON scheduler.tarefas (clinic_id) WHERE status = 'OPEN'",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
     "idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72",
 

@@ -160,6 +160,10 @@ def handler(event, context):
                                 message_type="TEXT",
                                 content=content,
                                 status="SENT",
+                                # Quem escreveu. Sem isto a fala da atendente
+                                # virava turno do bot na reconstrucao do
+                                # historico (conversation_agent.events_to_history).
+                                metadata={"autor": "HUMANO"},
                             )
                         except Exception as e:
                             logger.error(f"[Webhook] Erro ao rastrear mensagem do atendente: {e}")
@@ -315,16 +319,25 @@ def handler(event, context):
         if primeira_vez and not atendimento.esta_com_pessoa(session):
             try:
                 ja_existia = db.execute_query(
-                    "SELECT 1 FROM scheduler.whatsapp_chats "
+                    "SELECT last_message_at FROM scheduler.whatsapp_chats "
                     "WHERE clinic_id = %s AND phone = %s LIMIT 1",
                     (clinic_id, incoming.phone),
                 )
                 if ja_existia:
+                    # Decisao 9.1: vence como qualquer atendimento humano, com o
+                    # prazo contado da ultima mensagem que o espelho conhece.
+                    # Conversa de meses atras vence na hora; a de ontem segura
+                    # o bot ate amanha.
+                    ultima = ja_existia[0].get("last_message_at")
+                    base = int(ultima.timestamp()) if hasattr(ultima, "timestamp") else int(time.time())
                     logger.info(
                         f"[Webhook] {incoming.phone} ja tinha conversa no WhatsApp "
-                        f"antes de nos; bot pausado ate liberarem no painel"
+                        f"antes de nos; atendimento humano contado da ultima mensagem"
                     )
-                    atendimento.entrega_a_humano(session, por=atendimento.POR_CHAT_ANTERIOR)
+                    atendimento.entrega_a_humano(
+                        session, por=atendimento.POR_CHAT_ANTERIOR,
+                        ate=base + atendimento.TTL_HUMANO,
+                    )
                     # Gravada AQUI: a sessao deste request nao e a que o agente
                     # salva (ele recarrega a sua), e no caminho suprimido
                     # ninguem mais grava. Sem isto a marca so vivia neste
