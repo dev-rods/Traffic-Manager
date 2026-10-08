@@ -1,4 +1,5 @@
 import json
+import uuid
 import logging
 import re
 from datetime import date, datetime
@@ -562,6 +563,14 @@ def get_tool_definitions(format="anthropic"):
 # Tool Executor
 # ──────────────────────────────────────────────
 
+def _parece_uuid(valor) -> bool:
+    try:
+        uuid.UUID(str(valor))
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 class ToolExecutor:
     """Executes AI tool calls by delegating to existing services."""
 
@@ -666,9 +675,16 @@ class ToolExecutor:
         return {"services": services, "single_service": single_service}
 
     def _tool_list_areas(self, args, clinic_id, phone, ctx):
-        service_ids = args.get("service_ids", [])
+        # Sem service_ids (ou com placeholder como "<UNKNOWN>", visto em prod
+        # em 08/10/2026), usa todos os servicos ativos da clinica. Devolver
+        # erro custava duas rodadas de ferramenta (list_services e de novo
+        # list_areas) e ajudava a estourar o limite do turno.
+        service_ids = [s for s in (args.get("service_ids") or []) if _parece_uuid(s)]
         if not service_ids:
-            return {"error": "service_ids is required"}
+            servicos = self._tool_list_services({}, clinic_id, phone, ctx).get("services") or []
+            service_ids = [s["id"] for s in servicos]
+            if not service_ids:
+                return {"error": "a clinica nao tem servicos ativos", "areas": []}
 
         placeholders = ",".join(["%s"] * len(service_ids))
         rows = self.db.execute_query(

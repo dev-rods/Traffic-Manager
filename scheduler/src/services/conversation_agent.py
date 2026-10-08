@@ -44,13 +44,21 @@ from src.services.template_service import TemplateService
 
 logger = logging.getLogger(__name__)
 
-MAX_AGENT_ITERATIONS = 5
+# Rodadas de ferramenta por mensagem. O caminho feliz de um agendamento ja
+# gasta cinco (list_services, list_areas, calculate_discount,
+# check_availability, get_time_slots) ANTES de ter o que responder; com 5 o
+# bot estourava no meio e mandava como resposta o aviso que escreveu junto da
+# ultima ferramenta ("vou ver os horarios") - e nada depois. Visto em prod em
+# 08/10/2026 em duas conversas. Depois destas rodadas ha UMA chamada de
+# fechamento, sem ferramentas, para responder com o que ja foi apurado.
+MAX_AGENT_ITERATIONS = 8
 MAX_HISTORY_PAIRS = 20
 # O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
 # e regra duplicada diverge em silencio quando alguem muda so um deles.
 from src.services.bot_policy import (
     MOTIVO_AFIRMOU_MENOR,
     MOTIVO_AGENDA_SEM_RESPALDO,
+    MOTIVO_ESGOTOU,
     MOTIVO_AREAS_EM_LACO,
     MOTIVO_FORA_DO_ESCOPO,
     MOTIVO_INSISTIU_CADASTRO,
@@ -182,6 +190,23 @@ class OutgoingMessage:
     buttons: Optional[List[Dict[str, str]]] = None
     sections: Optional[List[Dict]] = None
     button_text: Optional[str] = None
+
+
+def _anexa_ao_turno_do_usuario(history, texto):
+    """Anexa `texto` como fala do usuario sem criar dois turnos `user`
+    seguidos (a API responde 400). Se o ultimo turno ja e do usuario em
+    texto (um PARE anterior), concatena; se e lista (tool_results), vira um
+    bloco de texto no fim da lista."""
+    if history and history[-1].get("role") == "user":
+        conteudo = history[-1].get("content")
+        if isinstance(conteudo, str):
+            history[-1]["content"] = conteudo + "\n\n" + texto
+        elif isinstance(conteudo, list):
+            history[-1]["content"] = list(conteudo) + [{"type": "text", "text": texto}]
+        else:
+            history[-1]["content"] = texto
+        return
+    history.append({"role": "user", "content": texto})
 
 
 def _turnos_para_trava(history):
@@ -452,18 +477,38 @@ class ConversationAgent:
         recusas_da_conversa = dict(session.get(CAMPO_DE_RECUSAS) or {})
         laco_de_recusa = False
         efeito_cometido = None
+        esgotou = False
         efeito_gravado = {}
         consumo_da_mensagem = {}
         chamadas_ao_modelo = 0
 
         try:
-            for iteration in range(MAX_AGENT_ITERATIONS):
+            for iteration in range(MAX_AGENT_ITERATIONS + 1):
                 logger.info(f"[ConversationAgent] Iteration {iteration + 1} for {phone}")
+
+                # Ultima volta: fechamento. Sem ferramentas, o modelo responde
+                # com o que as consultas ja devolveram. Se ainda nao der, a
+                # conversa vai para uma pessoa (abaixo, no `else` do laco).
+                fechando = iteration == MAX_AGENT_ITERATIONS
+                if fechando:
+                    logger.warning(
+                        f"[Esgotado] {phone}: {MAX_AGENT_ITERATIONS} rodadas de ferramenta; "
+                        f"pedindo fechamento sem ferramentas"
+                    )
+                    _anexa_ao_turno_do_usuario(history, (
+                        "PARE. Voce ja fez todas as consultas que podia nesta rodada. "
+                        "Responda AGORA a pessoa, com o que as consultas devolveram "
+                        "(horarios, valores, areas). Nao anuncie o que vai fazer. Se "
+                        "faltar algo, diga que vai confirmar com a equipe e ja retorna."
+                    ))
+                    forcar_proxima = False
 
                 # Consumido a cada volta: forçar sempre deixaria o modelo sem
                 # como encerrar, já que toda resposta exigiria mais uma tool.
                 forcar_tool = {"type": "any"} if forcar_proxima else None
                 forcar_proxima = False
+                if fechando:
+                    forcar_tool = {"type": "none"}
                 if forcar_tool:
                     logger.info(f"[ConversationAgent] Consulta obrigatória para {phone}")
 
@@ -495,8 +540,22 @@ class ConversationAgent:
                     elif block["type"] == "tool_use":
                         tool_uses.append(block)
 
+                # Texto escrito JUNTO de uma ferramenta e narracao de intencao
+                # ("agora vamos ver os horarios"), nao resposta. Fica como
+                # ultimo recurso para o caso de o fechamento vir vazio depois
+                # de present_options; nunca e a resposta de um turno que
+                # estourou (ver o `else` do laco).
                 if current_text_parts:
                     text_parts = current_text_parts
+                if fechando and tool_uses:
+                    # Pediu-se sem ferramentas e veio ferramenta: nao executa.
+                    # O historico fica valido (sem tool_use pendente) porque o
+                    # bloco nao e anexado.
+                    logger.error(f"[Esgotado] {phone}: o fechamento ainda pediu ferramenta; calando")
+                    text_parts = []
+                    tool_uses = []
+                    esgotou = True
+                    break
 
                 stop_reason = response.get("stop_reason", "end_turn")
 
@@ -662,6 +721,22 @@ class ConversationAgent:
                 # num 400 da API.
                 if laco_de_recusa:
                     break
+            else:
+                # Nenhum `break`: as rodadas acabaram e o fechamento nao
+                # produziu resposta aceita.
+                esgotou = True
+
+            if esgotou:
+                # Narracao de intencao NAO e resposta; a pessoa fica com uma
+                # atendente e a fila ve a pendencia.
+                logger.error(
+                    f"[Esgotado] {phone}: sem resposta apos {MAX_AGENT_ITERATIONS} rodadas "
+                    f"e o fechamento; bot calado e conversa entregue a uma pessoa"
+                )
+                text_parts = []
+                pending_buttons = None
+                handoff_requested = True
+                motivo_do_handoff = MOTIVO_ESGOTOU
 
         except AnthropicError as e:
             logger.error(f"[ConversationAgent] Anthropic API error for {phone}: {e}")

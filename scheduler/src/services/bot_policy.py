@@ -82,6 +82,7 @@ MOTIVO_AGENDA_SEM_RESPALDO = "agenda_sem_respaldo"
 MOTIVO_AFIRMOU_MENOR = "afirmou_menor_sem_respaldo"
 MOTIVO_INSISTIU_CADASTRO = "insistiu_em_cadastro"
 MOTIVO_INCOMPREENSAO = "incompreensao"
+MOTIVO_ESGOTOU = "esgotou_as_consultas"
 
 # Como a recepção lê cada motivo. Fica aqui, e não na tela, porque é a mesma
 # régua de [status_da_conversa]: regra que mora em dois lugares diverge calada.
@@ -95,6 +96,7 @@ MOTIVOS_LEGIVEIS = {
     MOTIVO_AFIRMOU_MENOR: "O bot errou sobre a idade",
     MOTIVO_INSISTIU_CADASTRO: "O bot insistiu em cadastro",
     MOTIVO_INCOMPREENSAO: "O bot não entendeu",
+    MOTIVO_ESGOTOU: "O bot não conseguiu responder (esgotou as consultas)",
 }
 
 # Os que o MODELO pode escolher. Os outros são escritos pelo código quando uma
