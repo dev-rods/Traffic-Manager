@@ -53,6 +53,23 @@ MODELO_DISSE_NAO = "modelo_disse_nao"
 
 _SOCIAL = re.compile(SOCIAL)
 
+# Como a recepção lê o alerta. Aqui, e não na tela, pela mesma razão de
+# bot_policy.MOTIVOS_LEGIVEIS: regra em dois lugares diverge calada.
+ALERTAS_LEGIVEIS = {
+    FECHO_SOCIAL: "Última mensagem foi um agradecimento",
+    PENDENCIA_VELHA: "Pergunta sem resposta há mais de 3 dias",
+    RESOLVIDO_FORA: "Agendamento mexido depois da pergunta",
+    JA_RETOMADO: "O bot já respondeu uma vez",
+    PORTA_FECHADA: "Bot não pôde falar (política ou horário)",
+    MODELO_DISSE_NAO: "Não parecia esperar resposta",
+}
+
+
+def alerta_legivel(chave) -> str:
+    if not chave:
+        return ""
+    return ALERTAS_LEGIVEIS.get(chave, str(chave))
+
 PROMPT_DO_CLASSIFICADOR = (
     "Você lê o fim de uma conversa de WhatsApp entre uma clínica de depilação a "
     "laser e uma pessoa. A última mensagem é da pessoa e ficou sem resposta há "

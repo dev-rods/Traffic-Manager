@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { ActiveConversation, ConversationPreview, ConversationMessage, BotMetrics } from '@/types'
+import type { ActiveConversation, ConversationPreview, ConversationMessage, BotMetrics, Tarefa } from '@/types'
 
 interface ActiveConversationsResponse {
   status: string
@@ -30,6 +30,19 @@ interface AttendantResponse {
   message: string
   /** Ao retomar: o bot encontrou uma pergunta sem resposta e vai respondê-la. */
   answering_open_question?: boolean
+}
+
+interface TarefasResponse {
+  status: string
+  tarefas: Tarefa[]
+  total: number
+}
+
+interface FecharTarefaResponse {
+  status: string
+  phone: string
+  /** Para onde a conversa foi ao fechar: COOLDOWN, normalmente. */
+  handler: string
 }
 
 interface AttendantStatusResponse {
@@ -77,6 +90,17 @@ export const botService = {
   resumeForPhone(clinicId: string, phone: string) {
     return api
       .post<AttendantResponse>('/attendant/deactivate', { clinic_id: clinicId, phone })
+      .then((r) => r.data)
+  },
+
+  // Tarefas humanas (PRD 020 §3.6)
+  listTarefas(clinicId: string) {
+    return api.get<TarefasResponse>(`/clinics/${clinicId}/tarefas`).then((r) => r.data)
+  },
+
+  fecharTarefa(clinicId: string, tarefaId: string) {
+    return api
+      .post<FecharTarefaResponse>(`/clinics/${clinicId}/tarefas/${tarefaId}/close`, {})
       .then((r) => r.data)
   },
 

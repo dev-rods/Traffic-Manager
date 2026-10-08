@@ -18,6 +18,19 @@ interface FilaDeAtendimentoProps {
   onSelect: (phone: string, nome: string) => void
   onResume: (phone: string) => void
   resumeLoading: boolean
+  /** Fecha a tarefa humana da conversa (HUMAN_PENDING -> cooldown). */
+  onFecharTarefa?: (tarefaId: string) => void
+  fecharLoading?: boolean
+}
+
+/** A conversa venceu o prazo humano com assunto em aberto: fica com uma pessoa. */
+function temTarefa(c: ActiveConversation) {
+  return c.handler === 'HUMAN_PENDING' || !!c.pending_task_id
+}
+
+/** O cron decidiu calar e a ultima fala era da paciente: alguem precisa olhar. */
+function temAlerta(c: ActiveConversation) {
+  return !!c.alerta && c.handler !== 'HUMAN_ACTIVE'
 }
 
 /**
@@ -41,16 +54,22 @@ export function FilaDeAtendimento({
   onSelect,
   onResume,
   resumeLoading,
+  onFecharTarefa,
+  fecharLoading = false,
 }: FilaDeAtendimentoProps) {
   const [aba, setAba] = useState<Aba>('especialista')
 
-  // Aguardando especialista: o bot pediu ajuda e ninguém assumiu. Quem já tem
-  // atendente fica de fora - aquela conversa não está esperando ninguém.
+  // Aguardando especialista: o bot pediu ajuda e ninguém assumiu; a conversa
+  // cujo prazo venceu com assunto em aberto (tarefa); e a que o cron deixou
+  // calada com a paciente sendo a última a falar (alerta). As três são
+  // trabalho a fazer. Quem já tem atendente fica de fora - aquela conversa não
+  // está esperando ninguém.
   const aguardando = conversations
-    .filter((c) => c.state === 'HUMAN_HANDOFF')
+    .filter((c) => c.state === 'HUMAN_HANDOFF' || temTarefa(c) || temAlerta(c))
     .sort((a, b) => (a.handoff_requested_at ?? 0) - (b.handoff_requested_at ?? 0))
 
-  const pausadas = conversations.filter((c) => c.bot_paused && c.state !== 'HUMAN_HANDOFF')
+  const naFila = new Set(aguardando.map((c) => c.phone))
+  const pausadas = conversations.filter((c) => c.bot_paused && !naFila.has(c.phone))
 
   const lista = aba === 'especialista' ? aguardando : pausadas
 
@@ -114,6 +133,8 @@ export function FilaDeAtendimento({
               onSelect={onSelect}
               onResume={onResume}
               resumeLoading={resumeLoading}
+              onFecharTarefa={onFecharTarefa}
+              fecharLoading={fecharLoading}
             />
           ))}
         </ul>
@@ -171,15 +192,21 @@ function LinhaDaFila({
   onSelect,
   onResume,
   resumeLoading,
+  onFecharTarefa,
+  fecharLoading,
 }: {
   conversa: ActiveConversation
   mostraEspera: boolean
   onSelect: (phone: string, nome: string) => void
   onResume: (phone: string) => void
   resumeLoading: boolean
+  onFecharTarefa?: (tarefaId: string) => void
+  fecharLoading: boolean
 }) {
   const nome = conversa.name || ''
   const atrasada = mostraEspera && esperaDemais(conversa.handoff_requested_at)
+  const tarefa = temTarefa(conversa)
+  const alerta = temAlerta(conversa)
 
   return (
     <li className="flex items-center justify-between gap-4 px-4 py-3">
@@ -195,7 +222,9 @@ function LinhaDaFila({
             mostrar um rótulo vazio que pareceria um defeito da tela.
           */}
           {mostraEspera
-            ? conversa.handoff_reason_label || 'Motivo não registrado'
+            ? alerta && !tarefa
+              ? `Ficou sem resposta: ${conversa.alerta_label || conversa.alerta}`
+              : conversa.handoff_reason_label || 'Motivo não registrado'
             : conversa.pause_reason === 'attendant'
               ? 'Atendente assumiu'
               : conversa.pause_reason === 'clinic_paused'
@@ -205,6 +234,12 @@ function LinhaDaFila({
       </div>
 
       <div className="flex items-center gap-3 flex-shrink-0">
+        {/*
+          A tarefa e o prazo humano vencido com assunto em aberto: diferente de
+          "espera 3h", que e urgencia, isto e dever de casa - alguem tem que
+          fechar. O rotulo diz os dois.
+        */}
+        {mostraEspera && tarefa && <Badge variant="warning">tarefa aberta</Badge>}
         {mostraEspera && conversa.handoff_requested_at && (
           // Não é só cor: o texto diz o tempo, e quem não distingue vermelho de
           // cinza lê "3h" do mesmo jeito.
@@ -225,14 +260,31 @@ function LinhaDaFila({
         >
           Ver conversa
         </Button>
-        <Button
-          variant={mostraEspera ? 'secondary' : 'primary'}
-          size="sm"
-          onClick={() => onResume(conversa.phone)}
-          loading={resumeLoading}
-        >
-          Retomar bot
-        </Button>
+        {/*
+          Com tarefa, a acao que encerra o trabalho e "Concluir tarefa": fecha
+          a tarefa e poe a conversa em cooldown (o bot responde, nao inicia).
+          "Retomar bot" continua existindo para quem quer o bot de volta
+          inteiro, sem cooldown - mas deixa de ser a acao sugerida.
+        */}
+        {mostraEspera && tarefa && conversa.pending_task_id && onFecharTarefa ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onFecharTarefa(conversa.pending_task_id!)}
+            loading={fecharLoading}
+          >
+            Concluir tarefa
+          </Button>
+        ) : (
+          <Button
+            variant={mostraEspera ? 'secondary' : 'primary'}
+            size="sm"
+            onClick={() => onResume(conversa.phone)}
+            loading={resumeLoading}
+          >
+            Retomar bot
+          </Button>
+        )}
       </div>
     </li>
   )

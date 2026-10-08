@@ -213,3 +213,69 @@ describe('os quatro estados', () => {
     expect(screen.getByText('Ana Clara')).toBeTruthy()
   })
 })
+
+describe('pendência, tarefa e alerta (PRD 020 fase 3)', () => {
+  it('conversa com tarefa aberta fica na aba da especialista mesmo sem HUMAN_HANDOFF', () => {
+    monta({
+      conversations: [
+        conversa({
+          phone: '5511900000001', name: 'Pendente', state: 'HUMAN_ATTENDANT_ACTIVE',
+          handler: 'HUMAN_PENDING', pending_intent: 'faq_sem_resposta', pending_task_id: 't1',
+        }),
+      ],
+    })
+
+    const itens = screen.getAllByRole('listitem')
+    expect(itens).toHaveLength(1)
+    expect(itens[0].textContent).toContain('Pendente')
+    expect(itens[0].textContent).toContain('tarefa aberta')
+  })
+
+  it('"Concluir tarefa" substitui "Retomar bot" quando há tarefa, e chama com o id', async () => {
+    const onFecharTarefa = vi.fn()
+    monta({
+      conversations: [
+        conversa({ phone: '5511900000001', handler: 'HUMAN_PENDING', pending_task_id: 't1' }),
+      ],
+      onFecharTarefa,
+    })
+
+    expect(screen.queryByRole('button', { name: 'Retomar bot' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Concluir tarefa' }))
+    expect(onFecharTarefa).toHaveBeenCalledWith('t1')
+  })
+
+  it('alerta do cron aparece na fila com o rótulo do servidor', () => {
+    monta({
+      conversations: [
+        conversa({
+          phone: '5511900000001', name: 'Calada', state: '', bot_paused: false,
+          handler: 'COOLDOWN', alerta: 'modelo_disse_nao', alerta_label: 'Não parecia esperar resposta',
+        }),
+      ],
+    })
+
+    const itens = screen.getAllByRole('listitem')
+    expect(itens).toHaveLength(1)
+    expect(itens[0].textContent).toContain('Ficou sem resposta: Não parecia esperar resposta')
+  })
+
+  it('alerta com atendente ativa não entra na fila: alguém já está lá', () => {
+    monta({
+      conversations: [
+        conversa({ phone: '5511900000001', state: 'HUMAN_ATTENDANT_ACTIVE', handler: 'HUMAN_ACTIVE', alerta: 'fecho_social' }),
+      ],
+    })
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+  })
+
+  it('quem está na fila da especialista não aparece de novo em pausadas', async () => {
+    monta({
+      conversations: [
+        conversa({ phone: '5511900000001', state: 'HUMAN_ATTENDANT_ACTIVE', handler: 'HUMAN_PENDING', pending_task_id: 't1' }),
+      ],
+    })
+    await userEvent.click(screen.getByRole('button', { name: /Bot pausado/ }))
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+  })
+})

@@ -44,3 +44,4 @@ infra/src/scripts/tokens/
 # ele carregava um `del` com caminho de outra maquina e tres mensagens de
 # commit antigas viradas regra de permissao. Aqui a regra vale para todo mundo.
 .claude/settings.local.json
+backup-bucket-dev/

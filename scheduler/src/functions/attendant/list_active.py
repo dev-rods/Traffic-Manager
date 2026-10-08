@@ -8,6 +8,7 @@ from boto3.dynamodb.conditions import Key
 from src.utils.http import http_response, require_api_key, extract_path_param
 from src.services import atendimento
 from src.services.bot_policy import CAMPO_DO_MOTIVO, motivo_do_handoff_legivel
+from src.services.retomada import alerta_legivel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -99,6 +100,7 @@ def handler(event, context):
                 "pending_intent": atendimento.bloco(session).get("pending_intent"),
                 "pending_task_id": atendimento.bloco(session).get("pending_task_id"),
                 "alerta": atendimento.bloco(session).get("alerta"),
+                "alerta_label": alerta_legivel(atendimento.bloco(session).get("alerta")),
                 "bot_paused": not responde,
                 # Distingue "alguém pausou" de "a política não cobre esta conversa":
                 # o primeiro se resolve retomando, o segundo é o padrão da clínica.

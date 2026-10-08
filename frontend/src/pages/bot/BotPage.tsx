@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
-import { useActiveConversations, useRecentConversations, useBotMetrics, usePauseBot, useResumeBot, ESPERA_RESPOSTA_RETOMADA_MS } from '@/hooks/useBot'
+import { useActiveConversations, useRecentConversations, useBotMetrics, usePauseBot, useResumeBot, useFecharTarefa, ESPERA_RESPOSTA_RETOMADA_MS } from '@/hooks/useBot'
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton'
 import { Switch } from '@/components/ui/Switch'
 import { Card } from '@/components/ui/Card'
@@ -24,6 +24,7 @@ export function BotPage() {
   const { data: recentData, isLoading: recentLoading } = useRecentConversations()
   const pauseBot = usePauseBot()
   const resumeBot = useResumeBot()
+  const fecharTarefa = useFecharTarefa()
 
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
   const [selectedName, setSelectedName] = useState('')
@@ -113,6 +114,8 @@ export function BotPage() {
         onSelect={(phone, nome) => { setSelectedPhone(phone); setSelectedName(nome) }}
         onResume={(phone) => resumeBot.mutate(phone)}
         resumeLoading={resumeBot.isPending}
+        onFecharTarefa={(tarefaId) => fecharTarefa.mutate(tarefaId)}
+        fecharLoading={fecharTarefa.isPending}
       />
 
       {/* Conversations */}
