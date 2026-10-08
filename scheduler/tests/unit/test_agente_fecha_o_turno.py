@@ -71,7 +71,7 @@ class TestEstourouAsRodadas(unittest.TestCase):
         self.assertEqual(ultima_conversa[-1]["role"], "user")
         self.assertIn("PARE.", str(ultima_conversa[-1]["content"]))
 
-    def test_sem_resposta_no_fechamento_cala_e_entrega_a_uma_pessoa(self):
+    def test_sem_resposta_no_fechamento_avisa_e_entrega_a_uma_pessoa(self):
         anthropic = AnthropicRoteiro(self._roteiro_que_so_consulta(
             usa_tool("get_time_slots")  # insistiu em ferramenta no fechamento
         ))
@@ -80,7 +80,9 @@ class TestEstourouAsRodadas(unittest.TestCase):
         agente.db.execute_query.return_value = [{"id": "tarefa-1"}]
         saida = agente.process_message(CLINIC, mensagem("27/10, perna inteira"))
 
-        self.assertEqual(saida, [], "nada de 'vou confirmar os horários' sozinho")
+        self.assertEqual(len(saida), 1)
+        self.assertIn("especialista", saida[0].content, "a pessoa ouve que alguém vai confirmar")
+        self.assertNotIn("Vou confirmar os horários", saida[0].content, "a narração não sai")
         sessao = agente.sessao_salva
         self.assertEqual(at.estado(sessao), at.HUMAN_ACTIVE, "a pessoa ficou com uma atendente")
         self.assertEqual(sessao[at.CAMPO]["handoff_reason"], MOTIVO_ESGOTOU)

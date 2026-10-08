@@ -731,9 +731,14 @@ class ConversationAgent:
                 # atendente e a fila ve a pendencia.
                 logger.error(
                     f"[Esgotado] {phone}: sem resposta apos {MAX_AGENT_ITERATIONS} rodadas "
-                    f"e o fechamento; bot calado e conversa entregue a uma pessoa"
+                    f"e o fechamento; avisa que uma especialista confirma e entrega"
                 )
-                text_parts = []
+                # Como nos outros bloqueios: a pessoa ouve que alguem vai
+                # confirmar, em vez de silencio ate a recepcao ver a fila.
+                text_parts = [
+                    "Deixa eu confirmar isso certinho com uma especialista "
+                    "para não te passar nada errado. Já te falo 😊"
+                ]
                 pending_buttons = None
                 handoff_requested = True
                 motivo_do_handoff = MOTIVO_ESGOTOU
