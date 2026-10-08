@@ -261,13 +261,18 @@ def pode_iniciar(clinic: Optional[Dict], session: Optional[Dict], phone: str,
 
 # ── Transições ─────────────────────────────────────────────────────────────
 #
-# Cada uma devolve a sessão mutada e sobe `versao`. Quem grava usa
+# Cada uma devolve a sessão mutada. `versao` é a lida do banco; quem grava usa
 # `session_store.grava_atendimento`, condicionado à versão lida, porque duas
 # Lambdas escrevem a mesma sessão (webhook assíncrono e, na fase 3, o cron de
 # vencimento) e um put cego faria COOLDOWN sobrescrever HUMAN_ACTIVE calado.
 
 def _comete(session: Dict, b: Dict) -> Dict:
-    b["versao"] = int(b.get("versao") or 0) + 1
+    # `versao` NAO sobe aqui. Ela conta escritas no banco, nao transicoes em
+    # memoria: quem sobe e `grava_atendimento`, na escrita condicional. Subir
+    # por transicao quebrava qualquer cadeia (alerta + encerra, contexto +
+    # retomada): a segunda transicao esperava uma versao que o banco nunca
+    # teve, e o cron descartou toda retomada em prod em 08/10/2026.
+    b["versao"] = int(b.get("versao") or 0)
     session[CAMPO] = b
     _projeta_no_legado(session, b)
     return session

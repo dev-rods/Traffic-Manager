@@ -160,6 +160,34 @@ class TestEspelhoParaOIndice(unittest.TestCase):
         self.assertIn("#hu", kw["UpdateExpression"].split("REMOVE")[1])
         self.assertEqual(kw["ExpressionAttributeValues"][":h"], at.BOT_ACTIVE)
 
+    def test_condicao_e_a_versao_lida_e_grava_a_seguinte(self):
+        """Duas transições encadeadas, uma escrita: a condição é a versão que
+        foi lida (5), o bloco gravado leva 6, e a sessão em memória também."""
+        from src.services.session_store import grava_atendimento
+        table = mock.MagicMock()
+        table.get_item.return_value = {"Item": {"session": {"x": 1}}}
+        s = {at.CAMPO: {"handler": at.HUMAN_ACTIVE, "human_until": 900, "versao": 5}}
+        at.marca_alerta(s, "fecho_social")
+        at.encerra_atendimento_humano(s, agora=1000)
+
+        self.assertTrue(grava_atendimento(table, "c1", "55", s))
+
+        kw = table.update_item.call_args[1]
+        self.assertEqual(kw["ExpressionAttributeValues"][":v"], 5)
+        self.assertEqual(kw["ExpressionAttributeValues"][":a"]["versao"], 6)
+        self.assertEqual(kw["ExpressionAttributeValues"][":a"]["handler"], at.COOLDOWN)
+        self.assertEqual(s[at.CAMPO]["versao"], 6)
+
+    def test_conflito_quando_o_banco_ja_passou_da_versao_lida(self):
+        from src.services.session_store import grava_atendimento
+        table = mock.MagicMock()
+        table.get_item.return_value = {"Item": {"session": {"x": 1}}}
+        table.update_item.side_effect = type("ConditionalCheckFailedException", (Exception,), {})("x")
+        s = {at.CAMPO: {"handler": at.HUMAN_ACTIVE, "human_until": 900, "versao": 5}}
+        at.encerra_atendimento_humano(s, agora=1000)
+        self.assertFalse(grava_atendimento(table, "c1", "55", s))
+        self.assertEqual(s[at.CAMPO]["versao"], 5, "descartada: a memoria nao finge que gravou")
+
     def test_item_novo_nasce_com_as_copias(self):
         from src.services.session_store import grava_atendimento
         table = mock.MagicMock()

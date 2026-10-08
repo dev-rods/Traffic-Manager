@@ -131,6 +131,52 @@ class TestNadaVencido(unittest.TestCase):
         self.assertNotEqual(final[at.CAMPO]["handler"], at.HUMAN_ACTIVE)
         self.assertEqual(at.estado(final, AGORA + 3600), at.COOLDOWN)
 
+    def test_cala_e_grava_de_verdade_contra_a_condicao_de_versao(self):
+        """Sem mock do grava_atendimento: a tabela falsa aplica a condição de
+        versão como o DynamoDB. Alerta + encerra (duas transições) precisam
+        caber numa escrita só. Em prod (08/10, 17:34 e 19:34 UTC) isto dava
+        'Conflito de versao ... transicao descartada' em todo cala."""
+        from src.functions.atendimento import expira as modulo
+
+        class Tabela:
+            def __init__(self, sessao):
+                self.item = {"pk": "CLINIC#c1", "sk": "PHONE#5511999990000", "clinicId": "c1",
+                             "phone": "5511999990000", "session": dict(sessao),
+                             "handler": at.HUMAN_ACTIVE, "humanUntil": sessao[at.CAMPO]["human_until"]}
+                self.escritas = 0
+            def query(self, **kw):
+                return {"Items": [self.item]} if self.item["handler"] == at.HUMAN_ACTIVE else {"Items": []}
+            def get_item(self, Key):
+                return {"Item": self.item}
+            def update_item(self, Key, UpdateExpression, ConditionExpression, ExpressionAttributeNames, ExpressionAttributeValues):
+                gravada = int(self.item["session"][at.CAMPO]["versao"])
+                if gravada != int(ExpressionAttributeValues[":v"]):
+                    raise type("ConditionalCheckFailedException", (Exception,), {})("versao")
+                bloco = ExpressionAttributeValues[":a"]
+                self.item["session"][at.CAMPO] = bloco
+                self.item["handler"] = ExpressionAttributeValues[":h"]
+                self.item["humanUntil"] = ExpressionAttributeValues.get(":hu")
+                self.escritas += 1
+
+        s = at.entrega_a_humano({}, por=at.POR_ATENDENTE, agora=AGORA - 30 * H)
+        s[at.CAMPO]["versao"] = 4  # como em prod: ja houve escritas antes
+        tabela = Tabela(s)
+        db = mock.MagicMock()
+        db.execute_query.side_effect = lambda sql, params=None: [CLINICA] if "clinics" in sql else [{"n": 0}]
+        tracker = mock.MagicMock()
+        tracker.get_conversation_messages.return_value = [evento("INBOUND", "obrigada!", 30)]
+        with mock.patch.object(modulo, "_tabela", return_value=tabela),              mock.patch("src.services.db.postgres.PostgresService", return_value=db),              mock.patch("src.services.message_tracker.MessageTracker", return_value=tracker),              mock.patch.object(modulo, "_agora", return_value=AGORA):
+            primeiro = modulo.handler({}, None)
+            segundo = modulo.handler({}, None)
+
+        self.assertEqual(primeiro["conflitos"], 0)
+        self.assertEqual(primeiro["calados"], 1)
+        self.assertEqual(tabela.escritas, 1, "duas transicoes, uma escrita")
+        self.assertEqual(tabela.item["handler"], at.COOLDOWN, "o espelho que a GSI le")
+        self.assertEqual(tabela.item["session"][at.CAMPO]["versao"], 5)
+        self.assertEqual(tabela.item["session"][at.CAMPO]["alerta"], retomada.FECHO_SOCIAL)
+        self.assertEqual(segundo["vencidos"], 0, "nao volta no ciclo seguinte")
+
     def test_sem_itens_nao_toca_em_nada(self):
         from src.functions.atendimento import expira as modulo
         tabela = mock.MagicMock(); tabela.query.return_value = {"Items": []}

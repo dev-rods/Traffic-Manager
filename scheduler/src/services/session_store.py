@@ -133,21 +133,23 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
     Duas Lambdas escrevem a mesma sessao - o webhook assincrono e, na fase 3,
     o cron de vencimento. Um put da sessao inteira faria COOLDOWN sobrescrever
     HUMAN_ACTIVE em silencio. Aqui a escrita exige que a versao no banco seja
-    a anterior a transicao (`versao - 1`); conflito e relido uma vez e a
-    transicao e reaplicada pelo chamador... que hoje nao existe: em conflito
-    o log diz, e a proxima mensagem reavalia do zero.
+    a que o chamador LEU (`bloco.versao`) e grava `versao + 1`. A versao conta
+    escritas, nao transicoes: o chamador pode encadear quantas transicoes
+    quiser em memoria antes de gravar. Em conflito o log diz e a transicao e
+    descartada; a proxima mensagem (ou o proximo ciclo do cron) reavalia.
 
     `extras`: outros campos de primeiro nivel da sessao que a mesma acao
     muda (ex.: "Retomar bot" tambem grava bot_enabled). Devolve True se gravou.
     """
     from src.services.atendimento import CAMPO
 
-    bloco = session.get(CAMPO) or {}
+    bloco = dict(session.get(CAMPO) or {})
     versao = int(bloco.get("versao") or 0)
+    bloco["versao"] = versao + 1
     pk, sk = f"CLINIC#{clinic_id}", f"PHONE#{phone}"
 
     nomes = {"#s": "session", "#a": CAMPO}
-    valores = {":a": bloco, ":v": versao - 1,
+    valores = {":a": bloco, ":v": versao,
                ":u": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     sets = ["#s.#a = :a", "updatedAt = :u", "clinicId = :c", "phone = :p"]
     valores[":c"], valores[":p"] = clinic_id, phone
@@ -193,6 +195,7 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
             if ":hu" in valores:
                 novo["humanUntil"] = valores[":hu"]
             table.put_item(Item=novo)
+            session[CAMPO] = bloco
             return True
 
         condicao = (
@@ -206,13 +209,17 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
             ExpressionAttributeNames=nomes,
             ExpressionAttributeValues=valores,
         )
+        # A sessao em memoria passa a refletir o banco: uma segunda escrita
+        # no mesmo fluxo (a retomada grava o contexto, o agente roda, grava
+        # de novo) parte da versao certa.
+        session[CAMPO] = bloco
         return True
     except Exception as e:
         nome = type(e).__name__
         if "ConditionalCheckFailed" in nome or "ConditionalCheckFailed" in str(e):
             logger.error(
                 f"[SessionStore] Conflito de versao ao gravar atendimento de {phone} "
-                f"(esperava {versao - 1}); transicao descartada"
+                f"(esperava {versao}); transicao descartada"
             )
         else:
             logger.error(f"[SessionStore] Falha ao gravar atendimento de {phone}: {e}")
