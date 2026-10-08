@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Cron: atendimentos humanos vencidos. PRD 020 §3.3 e §3.7.
 
-A cada 10 minutos, lê no índice `handler-humanUntil-index` as conversas com
+A cada 60 minutos, lê no índice `handler-humanUntil-index` as conversas com
 `handler = HUMAN_ACTIVE` e `humanUntil <= agora`, e para cada uma decide:
 
   pendente  há pending_intent ou tarefa aberta  -> HUMAN_PENDING (a fila mostra)
@@ -107,6 +107,10 @@ def handler(event, context):
                         atendimento.marca_alerta(sessao, motivo)
                     resultado["calados"] += 1
                     logger.info(f"{prefixo}: cala ({motivo}), vai para cooldown")
+                # Respondeu ou calou, o atendimento humano ACABOU: o bloco (e o
+                # espelho `handler`/`humanUntil` que a GSI le) sai de
+                # HUMAN_ACTIVE. Sem isto a mesma conversa voltava a cada ciclo.
+                atendimento.encerra_atendimento_humano(sessao, agora)
 
             if not grava_atendimento(table, clinic_id, phone, sessao):
                 resultado["conflitos"] += 1
@@ -142,7 +146,7 @@ def _efeitos_depois(db, clinic_id, phone, fala):
 
 
 def _retoma(db, clinic, clinic_id, phone, sessao, eventos, fala, agora, tracker, prefixo):
-    """Classifica, responde uma vez e deixa a conversa em cooldown."""
+    """Classifica e responde uma vez. Quem encerra em cooldown e o handler."""
     from src.providers.whatsapp_provider import get_provider
     from src.services.agent_runner import falar
     from src.services.anthropic_service import AnthropicService
@@ -170,7 +174,6 @@ def _retoma(db, clinic, clinic_id, phone, sessao, eventos, fala, agora, tracker,
     item = _tabela().get_item(Key={"pk": f"CLINIC#{clinic_id}", "sk": f"PHONE#{phone}"}).get("Item") or {}
     sessao.clear(); sessao.update(item.get("session") or {})
     atendimento.limpa_contexto_de_retomada(sessao)
-    atendimento.encerra_atendimento_humano(sessao, agora)
     atendimento.marca_retomada(sessao, agora)
     logger.info(f"{prefixo}: retomada {'enviada' if enviou else 'FALHOU'} ({quantas} msg)")
     return enviou

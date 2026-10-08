@@ -84,7 +84,7 @@ vago.
 |---|---|
 | `scheduler/src/services/atendimento.py` | modificar: `HUMAN_PENDING`, pendência, `avalia_vencimento` |
 | `scheduler/src/services/retomada.py` | **criar**: as seis guardas + classificação fechada |
-| `scheduler/src/functions/atendimento/expira.py` | **criar**: Lambda `ExpiraAtendimentos`, rate(10 minutes) |
+| `scheduler/src/functions/atendimento/expira.py` | **criar**: Lambda `ExpiraAtendimentos`, rate(60 minutes) |
 | `scheduler/sls/functions/atendimento/interface.yml` | criar |
 | `scheduler/sls/resources/dynamodb/conversation-sessions-table.yml` | modificar: GSI `handler-humanUntil-index` |
 | `scheduler/src/scripts/setup_database.py` | modificar: tabela `scheduler.tarefas` |
@@ -365,7 +365,7 @@ O que **fica** para a fase 2 neste arquivo: trocar a conferência de janela por
 
 ### 3.11 `functions/atendimento/expira.py` (fase 3)
 
-Lambda `ExpiraAtendimentos`, `rate(10 minutes)`, mesmo padrão de
+Lambda `ExpiraAtendimentos`, `rate(60 minutes)` (era 10; o André pediu 60 em 08/10/2026: o cron vazio custa centavos e a espera extra é aceitável), mesmo padrão de
 `outbound/processor`:
 
 1. `query` no GSI `handler-humanUntil-index` com `handler = HUMAN_ACTIVE AND
