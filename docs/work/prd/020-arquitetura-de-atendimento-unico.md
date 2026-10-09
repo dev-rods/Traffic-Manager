@@ -129,9 +129,14 @@ hoje é um `state` string vira três campos que não se leem entre si.
 NEW_LEAD            sem agendamento algum
 FIRST_BOOKING       tem agendamento futuro, zero sessões feitas
 ACTIVE_CUSTOMER     >= 1 sessão feita e tem agendamento futuro
-DUE_FOR_NEXT        >= 1 sessão feita, sem agendamento futuro, dentro da janela de retorno
-INACTIVE            >= 1 sessão feita, sem agendamento futuro, fora da janela
+NO_NEXT_BOOKING     >= 1 sessão feita, sem agendamento futuro
 ```
+
+> **Revisão de 09/10/2026 (André):** o desenho original dividia o último estado
+> em `DUE_FOR_NEXT` e `INACTIVE` por uma "janela de retorno" configurável por
+> clínica. Caiu. A distinção não mudava a resposta: quem escreve querendo marcar
+> quer marcar, com 20 ou 90 dias desde a última sessão, e quem está no ciclo é
+> chamada pela campanha mensal, que já existe. Ficam quatro estados.
 
 **Decisão de desenho: derivar de `appointments`, não gravar em coluna.** Um campo
 `commercial_status` seria um cache de algo que o banco já sabe, e cache de estado
@@ -142,8 +147,17 @@ enviada" por acidente histórico (PRD 017 §4.1).
 O custo é uma consulta por mensagem recebida. É uma, indexada por
 `(clinic_id, patient_id)`, no mesmo lugar onde já se consulta `leads` hoje.
 
-A janela de retorno (`DUE_FOR_NEXT` vs `INACTIVE`) é **parâmetro por clínica**,
-não constante: depende do intervalo entre sessões do protocolo.
+**Invariantes que não dependem do estado** (decisão do André, 09/10/2026):
+
+- **Áreas são sempre perguntadas e confirmadas**, em todo estado. O bot nunca
+  deduz as áreas do histórico da paciente, nem "adianta" as da última sessão.
+  Quem já é paciente passa pela mesma confirmação de áreas que a lead nova.
+- **Valor**: quem já fez sessão não ouve o valor ao confirmar o agendamento,
+  só se perguntar. A lead nova ouve.
+- **Cadastro**: quem está cadastrada não é perguntada pelo que o banco já tem.
+
+O estado comercial muda o que o bot *deixa de fazer* (cadastro, valor,
+apresentação da clínica), nunca o que ele *assume* pela pessoa.
 
 ### 3.2 Estado de atendimento — a máquina que precisa existir
 
@@ -396,7 +410,7 @@ Hoje são 8. O desenho pede 13. Mapeamento:
 | `TECHNOLOGY_FAQ` | dentro de `faq` |
 | `PREPARATION` | dentro de `faq` |
 | `AFTERCARE` | dentro de `faq` |
-| `NEXT_SESSION` | não |
+| ~~`NEXT_SESSION`~~ | não é intenção: é `SCHEDULE` × `NO_NEXT_BOOKING` (revisão de 09/10) |
 | `PAYMENT` | não |
 | `COMPLAINT` | não |
 | `MEDICAL_QUESTION` | não |
@@ -407,8 +421,9 @@ intenção separada volta a fundir as dimensões. Fica `SCHEDULE`, e o Router
 escolhe a skill pelo estado comercial.
 
 As quatro novas que importam: `MEDICAL_QUESTION`, `COMPLAINT` e `PAYMENT` são
-gatilhos de nível 3 - precisam existir **para poder transferir**. `NEXT_SESSION`
-é o que permite atender os 140 recorrentes.
+gatilhos de nível 3 - precisam existir **para poder transferir**. Os 140
+recorrentes são atendidos por `SCHEDULE` com o estado comercial dizendo que já
+são pacientes - não por uma intenção própria.
 
 ### 4.3 Níveis de autonomia, e risco vence confiança
 
@@ -476,7 +491,6 @@ Proposta - **três blocos que não se leem entre si**:
   "cliente": {
     "patient_id": "...", "lead_id": "...", "nome": "...",
     "sessoes_feitas": 3, "ultima_sessao": "2026-09-12",
-    "areas_tratadas": ["axila", "virilha"],
     "agendamento_futuro": {"id": "...", "data": "...", "hora": "..."},
     "cadastro_completo": true
   },
@@ -521,15 +535,16 @@ Skills, e qual estado comercial cada uma atende:
 | skill | estados comerciais |
 |---|---|
 | `PrimeiroAgendamento` | `NEW_LEAD` |
-| `Agendamento` | `ACTIVE_CUSTOMER`, `DUE_FOR_NEXT`, `INACTIVE` |
+| `Agendamento` | `ACTIVE_CUSTOMER`, `NO_NEXT_BOOKING` |
 | `Remarcacao` / `Cancelamento` | qualquer com agendamento futuro |
-| `ProximaSessao` | `DUE_FOR_NEXT` |
 | `Preco` / `TecnologiaFAQ` / `Preparo` / `PosSessao` | qualquer |
 | `HandoffHumano` | qualquer |
 
 `PrimeiroAgendamento` e `Agendamento` são skills distintas **porque pedem coisas
-diferentes**: a primeira coleta cadastro, a segunda não. É aí que o bug do §2.2
-se resolve estruturalmente, e não por instrução no prompt.
+diferentes**: a primeira coleta cadastro e diz o valor, a segunda não. É aí que
+o bug do §2.2 se resolve estruturalmente, e não por instrução no prompt. As
+duas **perguntam e confirmam as áreas do mesmo jeito** (§3.1, invariantes):
+não existe skill que parta das áreas da última sessão.
 
 ### 6.1 Determinístico vs LLM
 

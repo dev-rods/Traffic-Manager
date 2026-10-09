@@ -102,7 +102,7 @@ vago.
 | `scheduler/src/services/estado_comercial.py` | **criar** |
 | `scheduler/src/services/roteador.py` | modificar: recebe estado comercial |
 | `scheduler/src/services/conversation_agent.py` | modificar: bloco `cliente` montado por requisição |
-| `scheduler/src/scripts/setup_database.py` | modificar: `clinics.janela_de_retorno_dias`, índice em `appointments` |
+| `scheduler/src/scripts/setup_database.py` | modificar: índice em `appointments` (a coluna `janela_de_retorno_dias` entrou em 09/10 e saiu no mesmo dia, ver §3.15) |
 | `scheduler/tests/unit/test_estado_comercial.py` | criar |
 
 ### Fase 5 — níveis 1/2/3
@@ -464,29 +464,30 @@ consultada; o único check que fica é `assert` em log se `estado() in
 ### 3.15 `services/estado_comercial.py` (fase 4)
 
 ```python
-NEW_LEAD, FIRST_BOOKING, ACTIVE_CUSTOMER, DUE_FOR_NEXT, INACTIVE = ...
+NEW_LEAD, FIRST_BOOKING, ACTIVE_CUSTOMER, NO_NEXT_BOOKING = ...
 
-def deriva(sessoes_feitas, tem_futuro, dias_desde_ultima, janela_dias) -> str   # pura
-def do_paciente(paciente, janela_dias, hoje=None) -> str                         # pura, do dict de identificar()
-def bloco(paciente, estado) -> str          # o QUEM É para o turno da pessoa
-def sem_bloco(history) -> list              # o histórico sem o QUEM É, para gravar
+def deriva(sessoes_feitas, tem_futuro) -> str      # pura
+def do_paciente(paciente) -> str                   # pura, do dict de identificar()
+def bloco(paciente, estado) -> str                 # o QUEM É para o turno da pessoa
+def sem_bloco(history) -> list                     # o histórico sem o QUEM É, para gravar
 ```
 
 > **Como ficou (09/10/2026):** sem segunda consulta. `identificar()` (fase 1) já
 > traz sessões feitas, última sessão e agendamento futuro na sua única consulta,
-> então `do_paciente` recebe esse dict e deriva. A janela vem de uma consulta
-> pequena a `clinics.janela_de_retorno_dias` (`_janela_de_retorno`), que nunca
-> levanta. O log mede a identificação: `[EstadoComercial] {phone}: {estado} |
-> identificacao em {ms}ms`. As travas que leem a conversa (`_turnos_para_trava`)
-> passaram a ler só a fala da pessoa (`fala_da_pessoa`), porque o bloco QUEM É
-> contém a palavra "valor" e a trava de valor a tomava como pergunta dela.
+> então `do_paciente` recebe esse dict e deriva. O log mede a identificação:
+> `[EstadoComercial] {phone}: {estado} | identificacao em {ms}ms`. As travas que
+> leem a conversa (`_turnos_para_trava`) passaram a ler só a fala da pessoa
+> (`fala_da_pessoa`), porque o bloco QUEM É contém a palavra "valor" e a trava
+> de valor a tomava como pergunta dela.
+>
+> **Revisão do André, no mesmo dia:** a janela de retorno e o estado
+> `DUE_FOR_NEXT` caíram (PRD §3.1). A coluna `clinics.janela_de_retorno_dias`
+> foi criada e removida por migration no mesmo dia. O bloco QUEM É diz, para
+> quem já é paciente, que as áreas são perguntadas e confirmadas como sempre.
 
 - "Sessão feita" = `status = 'CONFIRMED' AND appointment_date < CURRENT_DATE`,
   a mesma régua dos PRDs 016/017. `NO_SHOW` e `CANCELLED` não contam.
 - "Futuro" = `CONFIRMED AND appointment_date >= CURRENT_DATE`.
-- `janela_dias` vem de `clinics.janela_de_retorno_dias`. `NULL` -> nunca
-  `DUE_FOR_NEXT`, cai em `INACTIVE`. Falha fechada: `DUE_FOR_NEXT` libera a
-  skill `ProximaSessao`, que é proativa em tom.
 - Sem `patient_id` -> `NEW_LEAD`, sem consulta.
 - Índice: `CREATE INDEX IF NOT EXISTS idx_appointments_estado_comercial ON
   scheduler.appointments (clinic_id, patient_id, status, appointment_date)`.
