@@ -21,6 +21,7 @@ from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
 from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
+from src.services import estado_comercial
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.identificacao_de_paciente import sem_passo_de_cadastro
 from src.services.narracao import narra_a_pessoa
@@ -209,6 +210,20 @@ def _anexa_ao_turno_do_usuario(history, texto):
     history.append({"role": "user", "content": texto})
 
 
+MARCADOR_DA_FALA = "═══ MENSAGEM DA PESSOA ═══"
+
+
+def fala_da_pessoa(conteudo):
+    """So o que a pessoa escreveu, sem os blocos que o agente poe no turno
+    dela (CALENDARIO, QUEM E, DADOS CONSULTADOS). As travas que leem a
+    conversa procuram o que foi DITO: "valor" no bloco QUEM E nao e a pessoa
+    perguntando o valor, e uma area num dado consultado nao e a pessoa
+    pedindo a area."""
+    if isinstance(conteudo, str) and MARCADOR_DA_FALA in conteudo:
+        return conteudo.split(MARCADOR_DA_FALA, 1)[1].lstrip("\n")
+    return conteudo
+
+
 def _turnos_para_trava(history):
     """A conversa achatada em {role, content} de texto.
 
@@ -220,7 +235,7 @@ def _turnos_para_trava(history):
     for turno in history or []:
         conteudo = turno.get("content")
         if isinstance(conteudo, str):
-            texto = conteudo
+            texto = fala_da_pessoa(conteudo) if turno.get("role") == "user" else conteudo
         elif isinstance(conteudo, list):
             texto = " ".join(
                 b.get("text", "") for b in conteudo
@@ -290,8 +305,17 @@ class ConversationAgent:
         # 2b. Quem e a pessoa. Uma consulta por mensagem, antes de tudo: o
         # prompt, as tools e a trava de cadastro leem daqui. Ver
         # identificacao_de_paciente.
+        inicio_identificacao = time.time()
         paciente = self._identifica_paciente(clinic_id, phone)
         cadastrada = bool(paciente.get("cadastro_completo"))
+        # 2c. Estado comercial, derivado do que a identificacao ja trouxe
+        # (PRD 020 §3.1): nenhuma consulta a mais. Medido por mensagem
+        # enquanto a fase 7 nao despacha por ele (PRD §9.4).
+        estado = estado_comercial.do_paciente(paciente, self._janela_de_retorno(clinic_id))
+        logger.info(
+            f"[EstadoComercial] {phone}: {estado} | identificacao em "
+            f"{int((time.time() - inicio_identificacao) * 1000)}ms"
+        )
 
         # 3. Build system prompt
         system_prompt = self._build_system_prompt(clinic_id, phone, session)
@@ -382,6 +406,7 @@ class ConversationAgent:
                     resultado = self.tool_executor.execute(
                         nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone,
                                  "paciente": paciente,
+                                 "estado_comercial": estado,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     dados_consultados.append((nome_tool, resultado))
@@ -414,7 +439,12 @@ class ConversationAgent:
         if datas_da_campanha_aberta:
             respaldo_das_tools.append({"campanha": datas_da_campanha_aberta})
 
-        if dados_consultados or bloco_calendario:
+        # Quem e a pessoa, para esta mensagem. Vai no turno da pessoa pelo
+        # mesmo motivo do calendario (o prefixo cacheado nao muda), e sai do
+        # historico antes de gravar (ver estado_comercial.sem_bloco).
+        bloco_quem_e = estado_comercial.bloco(paciente, estado)
+
+        if dados_consultados or bloco_calendario or bloco_quem_e:
             if dados_consultados:
                 nomes = ", ".join(n for n, _ in dados_consultados)
                 logger.info(f"[PreCarga] {phone}: {nomes}")
@@ -446,6 +476,7 @@ class ConversationAgent:
             ) if dados_consultados else ""
             history[-1] = {"role": "user", "content": (
                 cabecalho_calendario
+                + (bloco_quem_e + "\n\n" if bloco_quem_e else "")
                 + cabecalho_dados
                 + f"═══ MENSAGEM DA PESSOA ═══\n{user_content}"
             )}
@@ -679,6 +710,7 @@ class ConversationAgent:
                         tool_use["input"],
                         context={"clinic_id": clinic_id, "phone": phone,
                                  "paciente": paciente,
+                                 "estado_comercial": estado,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     respaldo_das_tools.append(result)
@@ -750,7 +782,8 @@ class ConversationAgent:
             # que não ajuda ninguém e ainda convida a tentar contra um sistema
             # que vai falhar igual. Agora a conversa vai para uma pessoa.
             try:
-                session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
+                session["agent_history"] = self._truncate_history(
+                    estado_comercial.sem_bloco(limpar_gatilhos(history)))
                 session["mode"] = "agent"
                 entrega_por_instabilidade(session)
                 self._save_session(clinic_id, phone, session)
@@ -930,7 +963,8 @@ class ConversationAgent:
             )
 
         # 8. Save history (truncated)
-        session["agent_history"] = self._truncate_history(limpar_gatilhos(history))
+        session["agent_history"] = self._truncate_history(
+            estado_comercial.sem_bloco(limpar_gatilhos(history)))
         session["mode"] = "agent"
         # Guarda o que a conversa INTEIRA consultou, não só esta rodada: a
         # pessoa negocia data por vários turnos e o bot repete o mesmo fato
@@ -989,6 +1023,24 @@ class ConversationAgent:
                 f"[ForaDoEscopo] não li os termos de {clinic_id}: {e}"
             )
             return {}
+
+    def _janela_de_retorno(self, clinic_id):
+        """`clinics.janela_de_retorno_dias`, ou None. Nunca levanta: sem a
+        janela o estado cai em INACTIVE em vez de DUE_FOR_NEXT (falha fechada,
+        ver estado_comercial)."""
+        db = getattr(self, "db", None)
+        if db is None:
+            return None
+        try:
+            linhas = db.execute_query(
+                "SELECT janela_de_retorno_dias FROM scheduler.clinics "
+                "WHERE clinic_id = %s AND active = TRUE",
+                (clinic_id,),
+            )
+            return estado_comercial.janela_de_retorno(linhas[0] if linhas else {})
+        except Exception as e:
+            logger.warning(f"[EstadoComercial] não li a janela de retorno de {clinic_id}: {e}")
+            return None
 
     def _build_system_prompt(self, clinic_id, phone, session=None):
         """Build the system prompt with clinic context.

@@ -146,6 +146,9 @@ class TestSendComCampanha(unittest.TestCase):
 
 # ── Retomada pelo painel ──────────────────────────────────────────────────
 
+MEIO_DIA = 1791471600  # 2026-10-08 15:00 UTC, meio-dia em Sao Paulo
+
+
 class TestRetomadaPeloPainel(unittest.TestCase):
     def _retoma(self, sessao, clinic=None):
         from src.services import conversation_resume as modulo
@@ -156,10 +159,14 @@ class TestRetomadaPeloPainel(unittest.TestCase):
         db = mock.MagicMock()
         db.execute_query.return_value = [clinic or {"clinic_id": "c1"}]
 
+        # Relogio fixo: a retomada passa por `pode_iniciar` sem `agora`, e com
+        # o relogio real estes testes falhavam entre 22:59 e 04:59.
         with mock.patch("src.services.message_tracker.MessageTracker", return_value=tracker), \
              mock.patch("src.services.db.postgres.PostgresService", return_value=db), \
              mock.patch("src.providers.whatsapp_provider.get_provider"), \
              mock.patch("src.services.session_store.carrega_sessao", return_value=dict(sessao)), \
+             mock.patch("src.services.atendimento._agora",
+                        side_effect=lambda a: MEIO_DIA if a is None else int(a)), \
              mock.patch("src.services.agent_runner.falar", return_value=(True, 1)) as falar:
             falou = modulo.responder_se_ficou_em_aberto("c1", "5511999990000")
         return falou, falar
