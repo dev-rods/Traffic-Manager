@@ -35,7 +35,19 @@ export function Home() {
     setJustAdded(service)
   }
 
-  if (bootstrap.isLoading || singleService) {
+  if (bootstrap.isLoading) {
+    return (
+      <div className="flex justify-center py-24">
+        <Spinner size="lg" />
+      </div>
+    )
+  }
+
+  // Só espera o redirecionamento automático enquanto ele ainda vai acontecer.
+  // Checar só `singleService` travava aqui pra sempre ao voltar da etapa de
+  // agendamento: o carrinho já não está mais vazio, o efeito acima não
+  // dispara de novo, e nada tira a tela do spinner.
+  if (singleService && cart.items.length === 0) {
     return (
       <div className="flex justify-center py-24">
         <Spinner size="lg" />

@@ -14,6 +14,7 @@ import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDateLong, toApiPhone } from '@/utils/format'
 import { buildServiceAreaPairs, cartHasAreas, cartPendingAreaSelection, computeCartTotals } from '@/utils/cartTotals'
 import type { WizardStep } from '@/types'
@@ -30,7 +31,14 @@ export function Booking() {
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const serviceAreas = bootstrap.data?.serviceAreas ?? []
+  const professionals = bootstrap.data?.professionals ?? []
   const { durationMinutes, priceCents } = computeCartTotals(cart.items, serviceAreas)
+
+  // Com um único serviço no catálogo não existe outro pra escolher - o
+  // carrinho não é uma decisão, é um fato. A etapa de revisão (e o botão
+  // "Adicionar outro serviço") não tem o que oferecer, então é pulada: o
+  // fluxo começa direto na próxima etapa de verdade (áreas, ou agendamento).
+  const isSingleService = bootstrap.data?.services.length === 1
 
   const weekIsoDates = weekDates(weekStart).map(toISODate)
   const weekAvailability = useWeekAvailability(clinicId, weekIsoDates, durationMinutes)
@@ -42,22 +50,6 @@ export function Booking() {
     // Só precisa reagir a mudanças no tamanho do carrinho, não a cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart.items.length])
-
-  if (bootstrap.isLoading) {
-    return (
-      <div className="flex justify-center py-24">
-        <Spinner size="lg" />
-      </div>
-    )
-  }
-
-  if (bootstrap.isError || !bootstrap.data) {
-    return <ErrorState message="Não foi possível carregar este salão." onRetry={() => bootstrap.refetch()} />
-  }
-
-  const { professionals } = bootstrap.data
-  const selectedProfessional = professionals.find((p) => p.id === cart.professionalId)
-  const pendingAreas = cartPendingAreaSelection(cart.items, serviceAreas)
 
   function goToAreasOrNext() {
     if (cartPendingAreaSelection(cart.items, serviceAreas).length > 0) {
@@ -76,16 +68,73 @@ export function Booking() {
     setStep('schedule')
   }
 
+  useEffect(() => {
+    if (isSingleService && step === 'cart' && cart.items.length > 0) {
+      goToAreasOrNext()
+    }
+    // Só no momento em que os dados chegam (ou o carrinho passa a ter o item
+    // pré-selecionado) - não a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSingleService, cart.items.length])
+
+  if (bootstrap.isLoading) {
+    return (
+      <div className="flex justify-center py-24">
+        <Spinner size="lg" />
+      </div>
+    )
+  }
+
+  if (bootstrap.isError || !bootstrap.data) {
+    return <ErrorState message="Não foi possível carregar este salão." onRetry={() => bootstrap.refetch()} />
+  }
+
+  const selectedProfessional = professionals.find((p) => p.id === cart.professionalId)
+  const pendingAreas = cartPendingAreaSelection(cart.items, serviceAreas)
+
+  // Sem profissional cadastrado não há quem receber o agendamento - a
+  // AvailabilityEngine nunca abre um horário, e sem isto o cliente veria o
+  // calendário inteiro "fechado" sem entender por quê.
+  if (professionals.length === 0) {
+    return (
+      <EmptyState
+        title="Agendamento online indisponível no momento"
+        description="Este salão ainda não está aceitando agendamentos pela internet. Entre em contato diretamente para marcar seu horário."
+      />
+    )
+  }
+
+  // Frame transitório entre montar com step inicial 'cart' e o efeito acima
+  // pular pra etapa de verdade - sem isto o cliente veria um flash da tela
+  // de revisão (que nem faz sentido existir quando não há o que revisar).
+  if (isSingleService && step === 'cart') {
+    return (
+      <div className="flex justify-center py-24">
+        <Spinner size="lg" />
+      </div>
+    )
+  }
+
+  function goToCartOrHome() {
+    if (isSingleService) {
+      navigate(basePath || '/')
+    } else {
+      setStep('cart')
+    }
+  }
+
   function goBack() {
     if (step === 'cart') {
       navigate(basePath || '/')
     } else if (step === 'areas') {
-      setStep('cart')
+      goToCartOrHome()
     } else if (step === 'professional') {
-      setStep(cartHasAreas(cart.items, serviceAreas) ? 'areas' : 'cart')
+      if (cartHasAreas(cart.items, serviceAreas)) setStep('areas')
+      else goToCartOrHome()
     } else if (step === 'schedule') {
       if (professionals.length > 1) setStep('professional')
-      else setStep(cartHasAreas(cart.items, serviceAreas) ? 'areas' : 'cart')
+      else if (cartHasAreas(cart.items, serviceAreas)) setStep('areas')
+      else goToCartOrHome()
     } else if (step === 'customer') {
       setStep('schedule')
     }
