@@ -4,11 +4,13 @@
 Derivado do que `identificar` já traz em uma consulta; nunca gravado. O bloco
 QUEM É entra no turno da pessoa e sai do histórico antes de gravar: o estado
 de ontem no histórico de hoje seria o cache envelhecido que o PRD proíbe.
+
+Quatro estados. A "janela de retorno" que dividia o último em dois caiu em
+09/10/2026 (André): a distinção não mudava a resposta. E o estado nunca muda
+o que o bot assume pela pessoa: as áreas são sempre perguntadas.
 """
 import os
 import unittest
-from datetime import date
-from unittest import mock
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
@@ -18,9 +20,6 @@ from src.services.roteador import AGENDAMENTO_PROPRIO, tools_obrigatorias
 from tests.unit.dublagem_agente import (
     CLINIC, AnthropicRoteiro, ToolExecutorFalso, mensagem, monta_agente, texto_do_modelo, usa_tool,
 )
-
-HOJE = date(2026, 10, 9)
-
 
 def paciente(sessoes=0, ultima=None, futuro=None, completo=True, nome="Camila"):
     return {"encontrado": True, "patient_id": "p1", "nome": nome, "cadastro_completo": completo,
@@ -32,57 +31,46 @@ class TestDeriva(unittest.TestCase):
 
     def test_tabela(self):
         casos = [
-            ((0, False, None, 45), ec.NEW_LEAD),
-            ((0, True, None, 45), ec.FIRST_BOOKING),
-            ((1, True, 10, 45), ec.ACTIVE_CUSTOMER),
-            ((3, False, 20, 45), ec.DUE_FOR_NEXT),
-            ((3, False, 45, 45), ec.DUE_FOR_NEXT),
-            ((3, False, 46, 45), ec.INACTIVE),
+            ((0, False), ec.NEW_LEAD),
+            ((0, True), ec.FIRST_BOOKING),
+            ((1, True), ec.ACTIVE_CUSTOMER),
+            ((3, False), ec.NO_NEXT_BOOKING),
         ]
         for entrada, esperado in casos:
             with self.subTest(entrada=entrada):
                 self.assertEqual(ec.deriva(*entrada), esperado)
 
-    def test_sem_janela_nunca_e_due_for_next(self):
-        """Falha fechada: DUE_FOR_NEXT libera uma skill proativa em tom."""
-        self.assertEqual(ec.deriva(3, False, 5, None), ec.INACTIVE)
-        self.assertEqual(ec.deriva(3, False, None, 45), ec.INACTIVE)
+    def test_sao_quatro_estados_e_nenhum_depende_de_janela(self):
+        self.assertEqual(ec.ESTADOS, (ec.NEW_LEAD, ec.FIRST_BOOKING, ec.ACTIVE_CUSTOMER, ec.NO_NEXT_BOOKING))
+        self.assertFalse(hasattr(ec, "DUE_FOR_NEXT"))
+        self.assertFalse(hasattr(ec, "janela_de_retorno"))
 
     def test_no_show_e_cancelado_nao_sao_sessao(self):
         """Quem chama ja conta so CONFIRMED passado; aqui zero sessao e lead."""
-        self.assertEqual(ec.deriva(0, False, None, 45), ec.NEW_LEAD)
+        self.assertEqual(ec.deriva(0, False), ec.NEW_LEAD)
 
 
 class TestDoPaciente(unittest.TestCase):
 
     def test_sem_cadastro_e_new_lead_sem_consulta(self):
-        self.assertEqual(ec.do_paciente({"encontrado": False}, 45, HOJE), ec.NEW_LEAD)
-        self.assertEqual(ec.do_paciente(None, 45, HOJE), ec.NEW_LEAD)
+        self.assertEqual(ec.do_paciente({"encontrado": False}), ec.NEW_LEAD)
+        self.assertEqual(ec.do_paciente(None), ec.NEW_LEAD)
 
     def test_ambigua_e_tratada_como_lead(self):
-        self.assertEqual(ec.do_paciente({"encontrado": False, "ambiguo": True}, 45, HOJE), ec.NEW_LEAD)
+        self.assertEqual(ec.do_paciente({"encontrado": False, "ambiguo": True}), ec.NEW_LEAD)
 
-    def test_usa_a_ultima_sessao_e_a_janela_da_clinica(self):
-        p = paciente(sessoes=2, ultima="2026-09-24")  # 15 dias
-        self.assertEqual(ec.do_paciente(p, 45, HOJE), ec.DUE_FOR_NEXT)
-        self.assertEqual(ec.do_paciente(p, 10, HOJE), ec.INACTIVE)
-        self.assertEqual(ec.do_paciente(p, None, HOJE), ec.INACTIVE)
+    def test_ja_fez_sessao_sem_proxima_e_um_estado_so(self):
+        """Com 15 ou 90 dias desde a ultima, o mesmo estado: quem escreve
+        querendo marcar quer marcar."""
+        self.assertEqual(ec.do_paciente(paciente(sessoes=2, ultima="2026-09-24")), ec.NO_NEXT_BOOKING)
+        self.assertEqual(ec.do_paciente(paciente(sessoes=2, ultima="2026-07-01")), ec.NO_NEXT_BOOKING)
+        self.assertEqual(ec.do_paciente(paciente(sessoes=2, ultima=None)), ec.NO_NEXT_BOOKING)
 
     def test_com_futuro(self):
         futuro = {"id": "a1", "data": "2026-10-21", "hora": "16:25"}
-        self.assertEqual(ec.do_paciente(paciente(sessoes=0, futuro=futuro), 45, HOJE), ec.FIRST_BOOKING)
-        self.assertEqual(ec.do_paciente(paciente(sessoes=4, ultima="2026-09-01", futuro=futuro), 45, HOJE),
+        self.assertEqual(ec.do_paciente(paciente(sessoes=0, futuro=futuro)), ec.FIRST_BOOKING)
+        self.assertEqual(ec.do_paciente(paciente(sessoes=4, ultima="2026-09-01", futuro=futuro)),
                          ec.ACTIVE_CUSTOMER)
-
-    def test_data_invalida_nao_derruba(self):
-        self.assertEqual(ec.do_paciente(paciente(sessoes=2, ultima="ontem"), 45, HOJE), ec.INACTIVE)
-
-    def test_janela_da_clinica(self):
-        self.assertEqual(ec.janela_de_retorno({"janela_de_retorno_dias": 45}), 45)
-        self.assertEqual(ec.janela_de_retorno({"janela_de_retorno_dias": "30"}), 30)
-        self.assertIsNone(ec.janela_de_retorno({"janela_de_retorno_dias": None}))
-        self.assertIsNone(ec.janela_de_retorno({}))
-        self.assertIsNone(ec.janela_de_retorno({"janela_de_retorno_dias": "x"}))
 
 
 class TestBloco(unittest.TestCase):
@@ -97,6 +85,7 @@ class TestBloco(unittest.TestCase):
         self.assertIn("2026-10-21 às 16:25", b)
         self.assertIn("Não peça nome, nascimento, CPF nem e-mail", b)
         self.assertIn("não apresente a clínica de novo", b)
+        self.assertIn("pergunta e confirma com ela", b, "paciente nao e dispensada da confirmacao de areas")
 
     def test_lead_nova(self):
         b = ec.bloco({"encontrado": False}, ec.NEW_LEAD)
@@ -104,12 +93,18 @@ class TestBloco(unittest.TestCase):
         self.assertNotIn("Não peça nome", b)
         self.assertNotIn("não apresente a clínica", b)
 
+    def test_nunca_sugere_areas_da_ultima_sessao(self):
+        """O bloco diz o que o bot DEIXA de fazer; nunca lista areas por ela."""
+        b = ec.bloco(paciente(sessoes=5, ultima="2026-09-24"), ec.NO_NEXT_BOOKING)
+        self.assertNotIn("mesmas áreas", b.lower())
+        self.assertIn("pergunta e confirma", b)
+
     def test_ambigua_pede_o_nome(self):
         b = ec.bloco({"encontrado": False, "ambiguo": True, "candidatos": ["A", "B"]}, ec.NEW_LEAD)
         self.assertIn("mais de um cadastro", b)
 
     def test_cadastro_incompleto(self):
-        b = ec.bloco(paciente(sessoes=1, completo=False), ec.INACTIVE)
+        b = ec.bloco(paciente(sessoes=1, completo=False), ec.NO_NEXT_BOOKING)
         self.assertIn("Cadastro incompleto", b)
 
 
@@ -117,7 +112,7 @@ class TestSemBloco(unittest.TestCase):
     """O que vai para o banco não carrega o QUEM É."""
 
     TURNO = ("═══ CALENDÁRIO ═══\nHOJE é sexta.\n\n"
-             + ec.bloco(paciente(sessoes=1), ec.INACTIVE) + "\n\n"
+             + ec.bloco(paciente(sessoes=1), ec.NO_NEXT_BOOKING) + "\n\n"
              "═══ DADOS CONSULTADOS AGORA ═══\n[x]\n{}\n\n"
              "═══ MENSAGEM DA PESSOA ═══\nquero marcar")
 
@@ -171,7 +166,7 @@ class TestNoAgente(unittest.TestCase):
         turno = anthropic.conversas[-1][-1]
         self.assertEqual(turno["role"], "user")
         self.assertIn(ec.CABECALHO, turno["content"])
-        self.assertIn("INACTIVE", turno["content"], "sem janela na clinica do teste, cai em INACTIVE")
+        self.assertIn("NO_NEXT_BOOKING", turno["content"])
         self.assertIn("═══ MENSAGEM DA PESSOA ═══\noi", turno["content"])
         self.assertNotIn(ec.CABECALHO, anthropic.prompts[-1], "o prefixo cacheado não muda por mensagem")
 
@@ -199,7 +194,7 @@ class TestNoAgente(unittest.TestCase):
         agente = monta_agente(anthropic=anthropic, tool_executor=executor, paciente=paciente(sessoes=2))
         agente.process_message(CLINIC, mensagem("o que vocês fazem?"))
         self.assertTrue(executor.contextos)
-        self.assertEqual(executor.contextos[-1].get("estado_comercial"), ec.INACTIVE)
+        self.assertEqual(executor.contextos[-1].get("estado_comercial"), ec.NO_NEXT_BOOKING)
 
     def test_lead_nova_e_new_lead(self):
         anthropic = AnthropicRoteiro([texto_do_modelo("Oi! Quer conhecer?")])
@@ -224,14 +219,15 @@ class TestRoteador(unittest.TestCase):
 
 
 class TestMigracao(unittest.TestCase):
-    def test_coluna_e_indice_nas_migrations_e_na_tabela(self):
+    def test_indice_fica_e_a_coluna_da_janela_sai(self):
         from src.scripts import setup_database as sd
         sql = " ".join(s for s in sd.SQL_STATEMENTS if isinstance(s, str))
-        self.assertIn("ADD COLUMN IF NOT EXISTS janela_de_retorno_dias INTEGER", sql)
         self.assertIn("idx_appointments_estado_comercial", sql)
         self.assertIn("(clinic_id, patient_id, status, appointment_date)", sql)
+        self.assertIn("DROP COLUMN IF EXISTS janela_de_retorno_dias", sql)
+        self.assertNotIn("ADD COLUMN IF NOT EXISTS janela_de_retorno_dias", sql)
         criacao = next(s for s in sd.SQL_STATEMENTS if "CREATE TABLE IF NOT EXISTS scheduler.clinics" in s)
-        self.assertIn("janela_de_retorno_dias INTEGER", criacao, "CREATE TABLE em sincronia com a migration")
+        self.assertNotIn("janela_de_retorno_dias", criacao, "CREATE TABLE em sincronia com a migration")
 
 
 if __name__ == "__main__":

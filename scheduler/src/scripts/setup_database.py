@@ -56,10 +56,6 @@ SQL_STATEMENTS = [
         -- Idade maxima de uma pergunta sem resposta para a retomada automatica
         -- (PRD 020 §3.7). Tem de ser maior que o TTL humano de 24h.
         idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72,
-        -- Janela de retorno (PRD 020 §3.1): dias desde a ultima sessao em que
-        -- a pessoa ainda e DUE_FOR_NEXT e nao INACTIVE. NULL = nunca
-        -- DUE_FOR_NEXT (falha fechada). Depende do intervalo do protocolo.
-        janela_de_retorno_dias INTEGER,
         batch_message_template TEXT,
         active BOOLEAN DEFAULT TRUE,
         logo_url VARCHAR(500),
@@ -654,12 +650,14 @@ SQL_STATEMENTS = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_tarefas_abertas ON scheduler.tarefas (clinic_id) WHERE status = 'OPEN'",
 
-    # PRD 020 §3.1 (fase 4): estado comercial derivado a cada mensagem. A
-    # janela e por clinica; o indice serve as subconsultas de identificar()
-    # (sessoes feitas, ultima, futuro), que filtram por paciente, status e data.
-    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS janela_de_retorno_dias INTEGER",
+    # PRD 020 §3.1 (fase 4): estado comercial derivado a cada mensagem. O
+    # indice serve as subconsultas de identificar() (sessoes feitas, ultima,
+    # futuro), que filtram por paciente, status e data.
     "CREATE INDEX IF NOT EXISTS idx_appointments_estado_comercial "
     "ON scheduler.appointments (clinic_id, patient_id, status, appointment_date)",
+    # A "janela de retorno" (coluna criada em 09/10/2026) caiu no mesmo dia:
+    # a distincao DUE_FOR_NEXT x INACTIVE nao mudava a resposta do bot.
+    "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS janela_de_retorno_dias",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
     "idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72",
 

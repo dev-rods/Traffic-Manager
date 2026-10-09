@@ -311,7 +311,7 @@ class ConversationAgent:
         # 2c. Estado comercial, derivado do que a identificacao ja trouxe
         # (PRD 020 §3.1): nenhuma consulta a mais. Medido por mensagem
         # enquanto a fase 7 nao despacha por ele (PRD §9.4).
-        estado = estado_comercial.do_paciente(paciente, self._janela_de_retorno(clinic_id))
+        estado = estado_comercial.do_paciente(paciente)
         logger.info(
             f"[EstadoComercial] {phone}: {estado} | identificacao em "
             f"{int((time.time() - inicio_identificacao) * 1000)}ms"
@@ -1023,24 +1023,6 @@ class ConversationAgent:
                 f"[ForaDoEscopo] não li os termos de {clinic_id}: {e}"
             )
             return {}
-
-    def _janela_de_retorno(self, clinic_id):
-        """`clinics.janela_de_retorno_dias`, ou None. Nunca levanta: sem a
-        janela o estado cai em INACTIVE em vez de DUE_FOR_NEXT (falha fechada,
-        ver estado_comercial)."""
-        db = getattr(self, "db", None)
-        if db is None:
-            return None
-        try:
-            linhas = db.execute_query(
-                "SELECT janela_de_retorno_dias FROM scheduler.clinics "
-                "WHERE clinic_id = %s AND active = TRUE",
-                (clinic_id,),
-            )
-            return estado_comercial.janela_de_retorno(linhas[0] if linhas else {})
-        except Exception as e:
-            logger.warning(f"[EstadoComercial] não li a janela de retorno de {clinic_id}: {e}")
-            return None
 
     def _build_system_prompt(self, clinic_id, phone, session=None):
         """Build the system prompt with clinic context.
