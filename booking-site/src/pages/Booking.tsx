@@ -14,6 +14,7 @@ import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/ErrorState'
+import { EmptyState } from '@/components/ui/EmptyState'
 import { formatDateLong, toApiPhone } from '@/utils/format'
 import { buildServiceAreaPairs, cartHasAreas, cartPendingAreaSelection, computeCartTotals } from '@/utils/cartTotals'
 import type { WizardStep } from '@/types'
@@ -58,6 +59,18 @@ export function Booking() {
   const { professionals } = bootstrap.data
   const selectedProfessional = professionals.find((p) => p.id === cart.professionalId)
   const pendingAreas = cartPendingAreaSelection(cart.items, serviceAreas)
+
+  // Sem profissional cadastrado não há quem receber o agendamento - a
+  // AvailabilityEngine nunca abre um horário, e sem isto o cliente veria o
+  // calendário inteiro "fechado" sem entender por quê.
+  if (professionals.length === 0) {
+    return (
+      <EmptyState
+        title="Agendamento online indisponível no momento"
+        description="Este salão ainda não está aceitando agendamentos pela internet. Entre em contato diretamente para marcar seu horário."
+      />
+    )
+  }
 
   function goToAreasOrNext() {
     if (cartPendingAreaSelection(cart.items, serviceAreas).length > 0) {
