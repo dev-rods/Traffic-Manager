@@ -18,6 +18,9 @@ from src.services.campanha import MODO_REAGENDAMENTO
 CLINIC = "clinicaessenciaestetica-9668a4"
 FONE = "5511970522647"
 DATAS = ["2026-10-07", "2026-10-14", "2026-10-21"]
+# Relogio fixo ao meio-dia de Sao Paulo. Com o relogio real estes testes
+# falhavam entre 22:59 e 04:59, quando a janela de silencio fecha a porta.
+MEIO_DIA = 1791471600  # 2026-10-08 15:00 UTC
 
 
 def dispara(corpo, envio_ok=True, gravacao_ok=True, use_agent=True):
@@ -42,6 +45,7 @@ def dispara(corpo, envio_ok=True, gravacao_ok=True, use_agent=True):
          mock.patch.object(modulo, "get_provider", return_value=provider), \
          mock.patch.object(modulo, "MessageTracker"), \
          mock.patch.object(modulo, "_tabela_de_sessoes"), \
+         mock.patch.object(modulo, "_agora", return_value=MEIO_DIA), \
          mock.patch.object(modulo, "abre_campanha",
                            return_value=gravacao_ok) as abertura:
         resposta = modulo.handler(evento, None)

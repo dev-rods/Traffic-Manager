@@ -467,8 +467,19 @@ consultada; o único check que fica é `assert` em log se `estado() in
 NEW_LEAD, FIRST_BOOKING, ACTIVE_CUSTOMER, DUE_FOR_NEXT, INACTIVE = ...
 
 def deriva(sessoes_feitas, tem_futuro, dias_desde_ultima, janela_dias) -> str   # pura
-def do_paciente(db, clinic_id, patient_id, clinic) -> str                        # uma consulta
+def do_paciente(paciente, janela_dias, hoje=None) -> str                         # pura, do dict de identificar()
+def bloco(paciente, estado) -> str          # o QUEM É para o turno da pessoa
+def sem_bloco(history) -> list              # o histórico sem o QUEM É, para gravar
 ```
+
+> **Como ficou (09/10/2026):** sem segunda consulta. `identificar()` (fase 1) já
+> traz sessões feitas, última sessão e agendamento futuro na sua única consulta,
+> então `do_paciente` recebe esse dict e deriva. A janela vem de uma consulta
+> pequena a `clinics.janela_de_retorno_dias` (`_janela_de_retorno`), que nunca
+> levanta. O log mede a identificação: `[EstadoComercial] {phone}: {estado} |
+> identificacao em {ms}ms`. As travas que leem a conversa (`_turnos_para_trava`)
+> passaram a ler só a fala da pessoa (`fala_da_pessoa`), porque o bloco QUEM É
+> contém a palavra "valor" e a trava de valor a tomava como pergunta dela.
 
 - "Sessão feita" = `status = 'CONFIRMED' AND appointment_date < CURRENT_DATE`,
   a mesma régua dos PRDs 016/017. `NO_SHOW` e `CANCELLED` não contam.

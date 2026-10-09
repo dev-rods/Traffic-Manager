@@ -143,10 +143,15 @@ def intencoes(mensagem):
     return {nome for nome, padrao in PADROES.items() if re.search(padrao, plano)}
 
 
-def tools_obrigatorias(intencoes_detectadas):
+def tools_obrigatorias(intencoes_detectadas, estado_comercial=None):
     """As tools que precisam ser consultadas antes de responder.
 
     Ordem estável para o contexto ficar reproduzível entre execuções.
+
+    `estado_comercial` (fase 4 do PRD 020) entra aqui para a fase 7 despachar
+    por ele. Hoje não muda a lista: para NEW_LEAD a pré-carga de
+    `identificar_paciente` seria dispensável, mas fica - custa uma consulta e
+    elimina um ramo.
     """
     tools = []
     for nome in sorted(intencoes_detectadas or []):
