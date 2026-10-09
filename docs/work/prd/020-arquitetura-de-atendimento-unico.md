@@ -431,7 +431,7 @@ são pacientes - não por uma intenção própria.
 |---|---|---|---|
 | **1** | preço, área, duração, tecnologia, endereço, horário, agendar, remarcar, cancelar, FAQ | bot | tool + LLM redige |
 | **2** | contraindicação, gravidez, medicamento, pele, preparo, pós-sessão | bot | **texto de policy aprovado**, LLM só escolhe qual - não redige |
-| **3** | reclamação, reembolso, pagamento, problema pós-procedimento, questão médica fora da base, negociação fora da regra, ameaça | **pessoa** | handoff determinístico |
+| **3** | reclamação, reembolso/estorno, problema pós-procedimento, questão médica fora da base, ameaça | **pessoa** | handoff determinístico |
 
 ```python
 # A ordem é a regra. Risco é avaliado ANTES de olhar confiança.
@@ -470,6 +470,13 @@ completar ou suavizar. No nível 2 o item é entregue **literal**, como
    é o modelo que desempata.
 
 A clínica continua dona do texto, pelo painel, sem deploy.
+
+> **Decisões do André (09/10/2026):** (1) **pagamento não é nível 3**: pix,
+> parcelamento, forma de pagamento são respondidos pelo FAQ, no nível que a
+> clínica marcar; só reembolso/estorno (dinheiro que já saiu) vai a pessoa.
+> (2) A lista de termos do nível 3 abaixo segue como está, por enquanto.
+> (3) Nada aqui é proativo: os três níveis decidem quem responde quando a
+> pessoa escreve.
 
 O nível 3 tem de ser determinístico por padrão - uma lista de termos, como
 `fora_do_escopo.PROCEDIMENTOS` - porque depender do modelo para classificar
