@@ -757,5 +757,5 @@ alguém ligar TTL depois, `human_until` e `cooldown_until` desaparecem com o ite
 - [x] Spec gerada: `docs/work/spec/020-arquitetura-de-atendimento-unico.md` (05/10/2026)
 - [x] Fase 1 (correção do cadastro) implementada e em prod em 06/10/2026 (PR #92)
 - [x] Fase 2 (porta de atendimento, cooldown, TTL por inatividade, janela de silêncio) implementada e em prod em 07/10/2026
-- [x] Fase 3 backend (pendência, tarefas, `ExpiraAtendimentos`, retomada sem clique, fala humana rotulada, decisão 9.1) mergeada (PR #106) e em prod em 07/10/2026; tabela `scheduler.tarefas` criada em dev e prod; painel da fila com tarefas no PR #108 (mergeado em 08/10); fase 4 (estado comercial derivado, bloco QUEM É) implementada em 09/10/2026; fases 5-8 pendentes
+- [x] Fase 3 backend (pendência, tarefas, `ExpiraAtendimentos`, retomada sem clique, fala humana rotulada, decisão 9.1) mergeada (PR #106) e em prod em 07/10/2026; tabela `scheduler.tarefas` criada em dev e prod; painel da fila com tarefas no PR #108 (mergeado em 08/10); fase 4 (estado comercial derivado, bloco QUEM É) implementada em 09/10/2026; fase 5 passo 1 (FAQ literal em bolha própria) implementado em 10/10/2026; nível 3 e fases 6-8 pendentes
 - [x] Registrado em `TASKS_LOG.md` (020-fase-1, 020-lembrete, 020-fase-2, 020-fase-3)

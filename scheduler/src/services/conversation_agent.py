@@ -22,6 +22,7 @@ from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services import estado_comercial
+from src.services import policy_do_faq
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.identificacao_de_paciente import sem_passo_de_cadastro
 from src.services.narracao import narra_a_pessoa
@@ -60,6 +61,7 @@ from src.services.bot_policy import (
     MOTIVO_AFIRMOU_MENOR,
     MOTIVO_AGENDA_SEM_RESPALDO,
     MOTIVO_ESGOTOU,
+    MOTIVO_SEM_RESPOSTA,
     MOTIVO_AREAS_EM_LACO,
     MOTIVO_FORA_DO_ESCOPO,
     MOTIVO_INSISTIU_CADASTRO,
@@ -312,6 +314,12 @@ class ConversationAgent:
         # (PRD 020 §3.1): nenhuma consulta a mais. Medido por mensagem
         # enquanto a fase 7 nao despacha por ele (PRD §9.4).
         estado = estado_comercial.do_paciente(paciente)
+        # 2d. O FAQ da clinica, uma consulta por mensagem: monta o `enum` da
+        # tool get_faq_answer e serve o executor. Os itens que o modelo
+        # escolher neste turno vao para `faq_entregues`, e viram bolhas
+        # proprias na saida (policy_do_faq).
+        itens_do_faq = policy_do_faq.itens(getattr(self, "db", None), clinic_id)
+        faq_entregues = []
         logger.info(
             f"[EstadoComercial] {phone}: {estado} | identificacao em "
             f"{int((time.time() - inicio_identificacao) * 1000)}ms"
@@ -407,6 +415,8 @@ class ConversationAgent:
                         nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone,
                                  "paciente": paciente,
                                  "estado_comercial": estado,
+                                 "faq": itens_do_faq,
+                                 "faq_entregues": faq_entregues,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     dados_consultados.append((nome_tool, resultado))
@@ -481,7 +491,7 @@ class ConversationAgent:
                 + f"═══ MENSAGEM DA PESSOA ═══\n{user_content}"
             )}
 
-        tools = get_tool_definitions(format="anthropic")
+        tools = get_tool_definitions(format="anthropic", faq=itens_do_faq)
         pending_buttons = None
         handoff_requested = False
         # O MOTIVO que a tool recebeu. Era descartado, e a conversa chegava à
@@ -711,6 +721,8 @@ class ConversationAgent:
                         context={"clinic_id": clinic_id, "phone": phone,
                                  "paciente": paciente,
                                  "estado_comercial": estado,
+                                 "faq": itens_do_faq,
+                                 "faq_entregues": faq_entregues,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     respaldo_das_tools.append(result)
@@ -926,7 +938,26 @@ class ConversationAgent:
             # resposta segue como estava, que é o comportamento de antes dela.
             logger.error(f"[Proveniencia] Falha ao conferir resposta de {phone}: {e}")
 
-        outgoing = self._build_outgoing(final_text, pending_buttons)
+        # O FAQ escolhido vai em bolha propria, byte a byte; a fala do modelo,
+        # se repete o item, cai. Mais de dois itens num turno e pergunta
+        # confusa: pessoa, sem o modelo desempatar (PRD 020 §4.3).
+        if len(faq_entregues) > policy_do_faq.MAX_ITENS_POR_TURNO:
+            logger.warning(
+                f"[FAQ] {phone}: {len(faq_entregues)} itens num turno "
+                f"({[i['question_key'] for i in faq_entregues]}); pergunta confusa, vai a pessoa"
+            )
+            faq_entregues = []
+            final_text = (
+                "Deixa eu confirmar isso certinho com uma especialista "
+                "para não te passar nada errado. Já te falo 😊"
+            )
+            pending_buttons = None
+            handoff_requested = True
+            entrega_a_humano(session, MOTIVO_SEM_RESPOSTA)
+        elif faq_entregues:
+            final_text = policy_do_faq.fala_sem_o_item(final_text, faq_entregues, phone)
+
+        outgoing = self._build_outgoing(final_text, pending_buttons, faq_entregues)
 
         # O aviso pré-sessão sai daqui, não da boca do modelo: são 15 linhas com
         # contraindicação médica que têm de chegar palavra por palavra. Ver
@@ -1111,11 +1142,14 @@ class ConversationAgent:
         # rodada de latência por dúvida e devolve o sinal: sem tool, sem fato.
         system_prompt += (
             "\n═══ COMO RESPONDER DÚVIDAS ═══\n"
-            "1. Toda dúvida sobre o procedimento começa com get_faq_answer. Você não tem\n"
-            "   a base de conhecimento na memória: ela vem da tool, e só de lá.\n"
-            "2. Responda com o que a tool devolveu. Pode resumir e adaptar o tom, nunca\n"
-            "   acrescentar informação que não veio nela.\n"
-            "3. Se get_faq_answer não devolver resposta, você NÃO SABE. Não complete com\n"
+            "1. Toda dúvida sobre o procedimento é respondida por get_faq_answer. Você não\n"
+            "   tem a base de conhecimento na memória: ela está na lista de itens da tool,\n"
+            "   e só lá. Escolha o item que responde a dúvida.\n"
+            "2. O texto do item vai para a pessoa AUTOMATICAMENTE, como mensagem própria,\n"
+            "   exatamente como a clínica escreveu. NÃO o repita, NÃO o resuma, NÃO o\n"
+            "   reformule na sua resposta. Se ela perguntou outra coisa na mesma mensagem,\n"
+            "   responda só essa outra coisa; se não, não escreva nada.\n"
+            "3. Se nenhum item da lista responde a dúvida, você NÃO SABE. Não complete com\n"
             "   conhecimento geral sobre depilação a laser, por mais seguro que pareça:\n"
             "   diga que vai confirmar com uma especialista e chame request_human_handoff.\n"
             "4. Isso vale mesmo para o que parece óbvio - intervalo entre sessões, número\n"
@@ -1329,9 +1363,16 @@ class ConversationAgent:
             return primeira
         return f"{primeira}\n\n{segunda}"
 
-    def _build_outgoing(self, text, pending_buttons):
-        """Convert agent output into OutgoingMessage list."""
+    def _build_outgoing(self, text, pending_buttons, faq_entregues=None):
+        """Convert agent output into OutgoingMessage list.
+
+        `faq_entregues`: itens do FAQ escolhidos neste turno. Cada um vira
+        uma mensagem propria, com o texto da clinica byte a byte, ANTES da
+        fala do modelo - nunca na mesma bolha (policy_do_faq).
+        """
         messages = []
+        for item in faq_entregues or []:
+            messages.append(OutgoingMessage(message_type="text", content=item["answer"]))
 
         if pending_buttons:
             options = pending_buttons.get("options", [])
