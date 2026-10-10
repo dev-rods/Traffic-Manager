@@ -63,7 +63,8 @@ def handler(event, context):
     if event.get("internal_task") == TAREFA_RETOMADA:
         from src.services.conversation_resume import responder_se_ficou_em_aberto
 
-        return {"replied": responder_se_ficou_em_aberto(event["clinic_id"], event["phone"])}
+        return {"replied": responder_se_ficou_em_aberto(
+            event["clinic_id"], event["phone"], event.get("entregue_em"))}
 
     method = event.get("httpMethod", "").upper()
     path = event.get("path", "")
@@ -126,6 +127,11 @@ def _handle_deactivate(event, context):
     item = _load_session(table, clinic_id, phone)
     session = item.get("session", {})
 
+    # O instante em que o bot entregou a conversa (se entregou): a retomada
+    # precisa dele para nao tomar o aviso "ja chamei uma especialista" como
+    # resposta a pergunta da pessoa. Lido ANTES de retomar, que limpa o bloco.
+    entregue_em = atendimento.bloco(session).get("entregue_em")
+
     # "Retomar bot" limpa tudo, de qualquer estado, sem cooldown: quem clicou
     # decidiu que o bot pode falar (PRD 020 §3.3, "qualquer -> BOT_ACTIVE").
     atendimento.retoma_pelo_painel(session)
@@ -136,11 +142,15 @@ def _handle_deactivate(event, context):
     # política, senão o botão do painel mente para quem clica.
     session["bot_enabled"] = True
 
-    grava_atendimento(table, clinic_id, phone, session,
-                      extras={"state": session["state"], "bot_enabled": True})
+    if not grava_atendimento(table, clinic_id, phone, session,
+                             extras={"state": session["state"], "bot_enabled": True}):
+        # Sem gravar, o botao mentiria para quem clicou: a conversa continuaria
+        # com a pessoa. Foi assim de 06/10 a 10/10/2026 (ver session_store).
+        logger.error(f"[Attendant] Retomar bot NAO gravou para {phone}")
+        return http_response(500, {"status": "ERROR", "message": "Não consegui retomar o bot; tente de novo"})
     logger.info(f"[Attendant] Bot retomado para {phone} na clinica {clinic_id}")
 
-    respondendo = _agendar_retomada(clinic_id, phone, context)
+    respondendo = _agendar_retomada(clinic_id, phone, context, entregue_em)
 
     return http_response(200, {
         "status": "OK",
@@ -149,7 +159,7 @@ def _handle_deactivate(event, context):
     })
 
 
-def _agendar_retomada(clinic_id, phone, context):
+def _agendar_retomada(clinic_id, phone, context, entregue_em=None):
     """Faz o bot responder o que ficou em aberto. Devolve se há o que responder.
 
     O guard roda aqui, e não no agente, por dois motivos: a tela precisa saber na
@@ -170,7 +180,7 @@ def _agendar_retomada(clinic_id, phone, context):
         eventos = MessageTracker().get_conversation_messages(
             clinic_id, phone, limit=EVENTOS_PARA_CONTEXTO
         )
-        if not ha_pergunta_em_aberto(eventos):
+        if not ha_pergunta_em_aberto(eventos, entregue_em):
             logger.info(f"[Attendant] Nada pendente com {phone}, bot só ativado")
             return False
 
@@ -181,6 +191,7 @@ def _agendar_retomada(clinic_id, phone, context):
                 "internal_task": TAREFA_RETOMADA,
                 "clinic_id": clinic_id,
                 "phone": phone,
+                "entregue_em": entregue_em,
             }),
         )
         logger.info(f"[Attendant] Retomada agendada para {phone}")
