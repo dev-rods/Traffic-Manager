@@ -21,6 +21,7 @@ from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
 from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
+from src.services import desambiguacao
 from src.services import estado_comercial
 from src.services import nivel_de_risco
 from src.services import policy_do_faq
@@ -64,6 +65,7 @@ from src.services.bot_policy import (
     MOTIVO_AGENDA_SEM_RESPALDO,
     MOTIVO_ESGOTOU,
     MOTIVO_SEM_RESPOSTA,
+    MOTIVO_INCOMPREENSAO,
     TEXTO_DE_RISCO,
     MOTIVO_AREAS_EM_LACO,
     MOTIVO_FORA_DO_ESCOPO,
@@ -437,6 +439,7 @@ class ConversationAgent:
                                  "estado_comercial": estado,
                                  "faq": itens_do_faq,
                                  "faq_entregues": faq_entregues,
+                                 "session": session,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     dados_consultados.append((nome_tool, resultado))
@@ -539,6 +542,8 @@ class ConversationAgent:
         laco_de_recusa = False
         efeito_cometido = None
         esgotou = False
+        esclarecimento_pedido = False
+        esgotou_esclarecimento = False
         efeito_gravado = {}
         consumo_da_mensagem = {}
         chamadas_ao_modelo = 0
@@ -743,6 +748,7 @@ class ConversationAgent:
                                  "estado_comercial": estado,
                                  "faq": itens_do_faq,
                                  "faq_entregues": faq_entregues,
+                                 "session": session,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     respaldo_das_tools.append(result)
@@ -750,6 +756,17 @@ class ConversationAgent:
                     # Intercept special tools
                     if tool_use["name"] == "present_options" and result.get("presented"):
                         pending_buttons = result
+                    # Fase 6: a pergunta de esclarecimento e botoes com texto
+                    # fixo; o que o modelo escrever junto e descartado. Vinda
+                    # de pedir_esclarecimento ou de um handoff por
+                    # incompreensao convertido em pergunta.
+                    if result.get("esclarecimento"):
+                        pending_buttons = result
+                        esclarecimento_pedido = True
+                    if result.get("handoff_requested") and tool_use["name"] == desambiguacao.NOME_DA_TOOL:
+                        handoff_requested = True
+                        motivo_do_handoff = result.get("reason") or MOTIVO_INCOMPREENSAO
+                        esgotou_esclarecimento = True
 
                     if tool_use["name"] == "request_human_handoff" and result.get("handoff_requested"):
                         handoff_requested = True
@@ -831,6 +848,18 @@ class ConversationAgent:
                     f"erro de API: {save_err}"
                 )
             return []
+
+        # Fase 6: intencao resolvida zera o contador de esclarecimento; a
+        # pergunta sai com o texto fixo, sem a fala do modelo por cima; e
+        # esgotar as tentativas e handoff com um texto que diz o que vem.
+        if efeito_cometido or faq_entregues:
+            desambiguacao.zera(session)
+        if esclarecimento_pedido:
+            if "\n".join(text_parts).strip():
+                logger.info(f"[Desambiguacao] {phone}: descartei a fala do modelo junto da pergunta")
+            text_parts = []
+        if esgotou_esclarecimento and not "\n".join(text_parts).strip():
+            text_parts = [desambiguacao.TEXTO_DE_ESGOTAMENTO]
 
         # 6. Handle handoff
         if handoff_requested:
@@ -1182,6 +1211,18 @@ class ConversationAgent:
         # cadastrou - e vem DEPOIS do bloco de dúvidas de propósito, porque
         # precisa vencer o "toda dúvida começa com get_faq_answer".
         system_prompt += INSTRUCAO_FORA_DO_ESCOPO
+
+        # Fase 6 (PRD 020 §4.1): perguntar antes de desistir. A pergunta e
+        # texto fixo com botoes (desambiguacao); o modelo so escolhe as opcoes.
+        system_prompt += (
+            "\n═══ QUANDO NÃO ENTENDER ═══\n"
+            "1. Se não dá para saber o que ela quer (agendar, remarcar, cancelar ou\n"
+            "   tirar dúvida) e a mensagem não ajuda, chame pedir_esclarecimento com as\n"
+            "   opções plausíveis. A pergunta vai com botões, em texto fixo: não a\n"
+            "   escreva você.\n"
+            "2. Não chame request_human_handoff por não ter entendido: a tool de\n"
+            "   esclarecimento decide quando desistir e chamar uma pessoa.\n"
+        )
 
         system_prompt += (
             "\n═══ FALA DA ATENDENTE ═══\n"

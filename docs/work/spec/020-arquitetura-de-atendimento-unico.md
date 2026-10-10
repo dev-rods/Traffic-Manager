@@ -617,6 +617,20 @@ escreve a resposta e ela vai como está.
 
 ### 3.18 `services/desambiguacao.py` (fase 6)
 
+> **Como ficou (10/10/2026):** medido em prod, zero handoffs por `incompreensao`
+> em 30 dias; a fase entrou como proteção. Quem percebe a ambiguidade é o
+> modelo (ele já pergunta sozinho hoje); o que virou código é a pergunta, as
+> opções e o limite. Tool `pedir_esclarecimento(candidatas)` com `enum`
+> (agendar, remarcar, cancelar, duvida, até 3): o executor registra a
+> tentativa na sessão (`session["conversa"]["tentativas_de_desambiguacao"]`)
+> e devolve a pergunta como `present_options` com texto fixo; a fala do
+> modelo junto dela é descartada. Na terceira seguida devolve handoff
+> `incompreensao`, com texto fixo de esgotamento, e a pendência abre como em
+> todo handoff. `request_human_handoff(reason=incompreensao)` antes de esgotar
+> vira a pergunta - desistir cedo não é permitido. Zera com tool de efeito ou
+> item do FAQ entregue. Não há classificador antes do modelo: o roteador
+> determinístico continua só decidindo as consultas obrigatórias.
+
 ```python
 MAX_TENTATIVAS = 2
 def precisa(intencoes_detectadas, classificacao) -> bool

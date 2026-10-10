@@ -104,10 +104,10 @@ FIXTURES = {
     # proprio no PRD 020 (caso da Yasmin), fora deste corpus.
     "identificar_paciente": {"encontrado": False},
     "lookup_appointments": {"appointments": []},
-    "get_faq_answer": {"answers": [
-        {"question": "Dói?", "answer": "O Soprano Ice tem ponteira de safira com "
-         "resfriamento; a maioria descreve como morno e confortável."},
-    ]},
+    # Fase 5: o item vai a pessoa em bolha propria; o modelo so recebe o aviso.
+    "get_faq_answer": {"delivered": True, "question": "Dói?",
+                       "instruction": "The full text of this FAQ item is being sent to the patient "
+                                      "as its own message. Do NOT repeat it."},
     "get_clinic_info": {"name": "Clínica Essência", "address": "Rua Augusta, 2709"},
     # Maior de idade: o caminho comum. O caso da menor tem teste proprio,
     # em test_menor_de_idade.
@@ -127,6 +127,11 @@ FIXTURES = {
                            "status": "CANCELLED"},
     "sem_consulta_necessaria": {},
     "present_options": {"presented": False},
+    # Fase 6: pergunta de esclarecimento, texto fixo com botoes.
+    "pedir_esclarecimento": {"esclarecimento": True, "presented": True,
+                             "message": "Só para eu te ajudar certinho: o que você quer fazer? 😊",
+                             "options": [{"id": "agendar", "label": "Agendar uma sessão"},
+                                         {"id": "duvida", "label": "Tirar uma dúvida"}]},
     "request_human_handoff": {"handoff_requested": True},
 }
 
