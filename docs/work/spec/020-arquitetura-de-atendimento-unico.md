@@ -650,8 +650,7 @@ A diferença do §2.2 do PRD fica no código, não na instrução.
    de subir o limite.
 4. **Fase 4**: módulo puro, índice, medição de latência, só então o bloco no
    prompt.
-5. **Fase 5**: migração do `nivel` primeiro (reversível), depois a tool, depois
-   `nivel_de_risco`.
+5. **Fase 5**: a tool `responder_com_faq` e as bolhas literais primeiro (sem migration, sem painel), medir um ciclo; depois a guarda do nível 3, que é o que mais tira conversa do bot.
 6. **Fase 6** e **7** juntas no mesmo PR se a 5 estiver estável há uma semana.
 7. **Fase 8** depois de uma semana da 7 sem handoff `incompreensao` acima do
    patamar de hoje.
