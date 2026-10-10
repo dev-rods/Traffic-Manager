@@ -143,6 +143,23 @@ class TestHandlerLevaOInstante(unittest.TestCase):
         payload = json.loads(lambda_client.invoke.call_args.kwargs["Payload"])
         self.assertEqual(payload["entregue_em"], ENTREGA)
 
+    def test_entregue_em_vindo_do_dynamo_como_decimal_vai_no_payload(self):
+        """Em prod (10/10, 23:52 UTC) o agendamento falhou com 'Object of type
+        Decimal is not JSON serializable': o bloco vem do DynamoDB em Decimal."""
+        from decimal import Decimal
+        from src.functions.attendant import handler as modulo
+        evento = {"httpMethod": "POST", "path": "/attendant/deactivate", "headers": {"x-api-key": "k"},
+                  "body": '{"clinic_id": "c1", "phone": "5511999990000"}'}
+        sessao = {at.CAMPO: {"handler": at.HUMAN_ACTIVE, "versao": Decimal(1), "entregue_em": Decimal(ENTREGA)}}
+        with mock.patch.object(modulo, "require_api_key", return_value=("k", None)),              mock.patch.object(modulo, "_get_sessions_table"),              mock.patch.object(modulo, "_load_session", return_value={"session": sessao}),              mock.patch.object(modulo, "grava_atendimento", return_value=True),              mock.patch.object(modulo, "_agendar_retomada", return_value=True) as agenda:
+            resposta = modulo.handler(evento, mock.MagicMock())
+        self.assertEqual(resposta["statusCode"], 200)
+        entregue = agenda.call_args.args[3]
+        self.assertEqual(entregue, ENTREGA)
+        self.assertIsInstance(entregue, int)
+        import json
+        json.dumps({"entregue_em": entregue})  # o payload tem que serializar
+
     def test_retomar_que_nao_grava_devolve_erro(self):
         from src.functions.attendant import handler as modulo
         evento = {"httpMethod": "POST", "path": "/attendant/deactivate", "headers": {"x-api-key": "k"},
