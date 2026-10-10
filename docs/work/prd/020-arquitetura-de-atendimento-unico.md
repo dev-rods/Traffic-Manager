@@ -429,9 +429,9 @@ são pacientes - não por uma intenção própria.
 
 | nível | o que é | quem responde | como |
 |---|---|---|---|
-| **1** | preço, área, duração, tecnologia, endereço, horário, agendar, remarcar, cancelar, FAQ | bot | tool + LLM redige |
-| **2** | contraindicação, gravidez, medicamento, pele, preparo, pós-sessão | bot | **texto de policy aprovado**, LLM só escolhe qual - não redige |
-| **3** | reclamação, reembolso/estorno, problema pós-procedimento, questão médica fora da base, ameaça | **pessoa** | handoff determinístico |
+| **1** | preço, área, duração, horário, agendar, remarcar, cancelar | bot | tool + LLM redige |
+| **2** | qualquer dúvida que a clínica respondeu no FAQ (contraindicação, gravidez, preparo, pós-sessão, pagamento, tecnologia, endereço...) | bot | **o texto do FAQ, palavra por palavra**; o LLM só escolhe qual item, não redige |
+| **3** | reclamação, reembolso/estorno, problema pós-procedimento, questão médica fora do FAQ, ameaça | **pessoa** | handoff determinístico |
 
 ```python
 # A ordem é a regra. Risco é avaliado ANTES de olhar confiança.
@@ -448,26 +448,31 @@ diferença é que o nível 2 deixa o LLM **escolher** a policy, e não redigir a
 resposta.
 
 **As policies já existem: são os itens de `scheduler.faq_items`.** Conferido em
-produção (05/10/2026): a Essência tem 19 itens ativos, e eles cobrem a lista do
-nível 2 - `CONTRAINDICATIONS` (gestante, Roacutan, fotossensibilizante,
-anticoagulante), `PREPARATION`, `SUN_EXPOSURE`, `TANNED_SKIN`, `MENSTRUATION`,
-`SILICONE_IMPLANT`, `AFTER_WAX`, `RAZOR_BETWEEN_SESSIONS`. Não há texto novo a
+produção (05/10/2026): a Essência tem 19 itens ativos. Não há texto novo a
 escrever para a fase 5 começar.
 
-O que muda é **como** o texto chega à pessoa. Hoje `get_faq_answer` devolve o
-item ao modelo e o modelo **redige** a resposta a partir dele - pode resumir,
-completar ou suavizar. No nível 2 o item é entregue **literal**, como
-`orientacoes_pos_sessao` já faz com o aviso pré-sessão:
+**Todo item do FAQ é nível 2** (decisão do André, 10/10/2026). O desenho
+anterior dividia o FAQ em itens "redigíveis" e itens "literais", com uma
+coluna `nivel` e um seletor no painel. Caiu: se a clínica teve o trabalho de
+escrever a resposta, ela escreveu para ser enviada. Reformular só adiciona
+risco (resumir, suavizar, inventar um detalhe) sem ganho. A regra é uma só, e
+não precisa de marcação por item nem por clínica.
 
-1. `faq_items` ganha a coluna `nivel` (`1` redigível, `2` literal). Os oito
-   itens acima nascem `2`.
-2. O LLM escolhe o item por tool com `enum` fechado dos `question_key`
-   ativos, não por texto livre.
-3. A resposta final é o `answer` do item, byte a byte, e a conferência é
-   determinística: texto diferente do item escolhido é bloqueado e vai a
-   handoff, como a proveniência faz com data.
-4. Zero itens casando, ou mais de um, é handoff com `faq_sem_resposta` - não
-   é o modelo que desempata.
+O que muda é **como** o texto chega à pessoa. Hoje `get_faq_answer` devolve o
+item ao modelo e o modelo **redige** a resposta a partir dele. Passa a ser:
+
+1. O LLM escolhe o item por tool com `enum` fechado dos `question_key`
+   ativos da clínica, não por texto livre.
+2. O texto do item vai à pessoa **como mensagem própria no WhatsApp**, byte a
+   byte. O modelo não escreve nada por cima dele.
+3. Se a pessoa perguntou mais de uma coisa ("qual o intervalo e tem horário
+   dia 21?"), o que o modelo tiver a dizer sobre o resto (consultado pelas
+   tools, passando pelas guardas de sempre) vai em **outra** mensagem. Nunca
+   na mesma bolha: texto da clínica não se mistura com texto do modelo.
+4. Zero itens casando é handoff com `faq_sem_resposta` - o modelo não
+   inventa resposta. Mais de um item na mesma pergunta é permitido (cada um
+   em sua bolha, na ordem em que o modelo os escolheu), até dois; além disso
+   é sinal de pergunta confusa e vai a pessoa.
 
 A clínica continua dona do texto, pelo painel, sem deploy.
 

@@ -110,19 +110,15 @@ vago.
 | arquivo | ação |
 |---|---|
 | `scheduler/src/services/nivel_de_risco.py` | **criar**: termos do nível 3, `detecta(texto, clinic)` |
-| `scheduler/src/services/policy_do_faq.py` | **criar**: itens nível 2 da clínica, definição da tool com `enum`, conferência literal |
+| `scheduler/src/services/policy_do_faq.py` | **criar**: itens do FAQ da clínica, definição da tool com `enum`, montagem das bolhas |
 | `scheduler/src/services/bot_policy.py` | modificar: motivos do nível 3 + texto legível; `TEXTO_DE_RISCO` |
-| `scheduler/src/services/ai_tools.py` | modificar: tool `responder_com_policy`; `get_faq_answer` filtra `nivel = 1`; `get_tool_definitions(format, policies=None)` |
-| `scheduler/src/services/conversation_agent.py` | modificar: guarda do nível 3 antes do modelo (ao lado de `fora_do_escopo`); `final_text` literal quando `policy_escolhida` |
-| `scheduler/src/scripts/setup_database.py` | modificar: `faq_items.nivel`, migration marcando `2` nos itens da lista |
-| `scheduler/src/functions/faq/create.py`, `update.py`, `list.py` | modificar: campo `nivel` (validado em {1, 2}) |
-| `frontend/src/types/index.ts`, `services/faq.service.ts`, `pages/faq/FaqPage.tsx` | modificar: campo `nivel` com seletor "Resposta literal" |
+| `scheduler/src/services/ai_tools.py` | modificar: tool `responder_com_faq` substitui `get_faq_answer`; `get_tool_definitions(format, faq=None)` |
+| `scheduler/src/services/conversation_agent.py` | modificar: guarda do nível 3 antes do modelo (ao lado de `fora_do_escopo`); bolhas do FAQ separadas do texto do modelo em `_build_outgoing` |
 | `scheduler/tests/unit/test_nivel_de_risco.py`, `test_policy_do_faq.py`, `test_niveis_no_agente.py` | criar |
-| `frontend/src/pages/faq/FaqPage.test.tsx` | modificar |
 
-Ordem: 1) migration + API + painel (a clínica já pode marcar itens); 2) nível 2
-no agente; 3) nível 3. Cada passo é deployável sozinho: sem item marcado o
-nível 2 não muda nada, e o nível 3 entra por último porque é o que mais tira
+Sem migration, sem mudança no painel: **todo item do FAQ é literal** (decisão
+de 10/10/2026). Ordem: 1) FAQ literal no agente; 2) nível 3. Cada passo é
+deployável sozinho; o nível 3 entra por último porque é o que mais tira
 conversa do bot.
 
 ### Fase 6 — desambiguação com contador
@@ -531,12 +527,12 @@ pendência (como o handoff do bot já faz), responde o texto fixo
 agora 😊") e **não chama o modelo**. Nenhum destes motivos entra em
 `MOTIVOS_DO_MODELO`.
 
-**Regra de colisão:** `gravid` e `medicament` aparecem aqui **e** no FAQ nível
-2. Se a mensagem casa um termo de risco e também casa um item nível 2 da
-clínica com `busca_no_faq` acima do piso, vale o nível 2 (a clínica escreveu a
-resposta): a guarda deixa passar e o modelo escolhe a policy. Se casa só o
-risco, nível 3. Isso exige carregar os itens nível 2 antes do modelo - é a
-mesma consulta que monta o `enum` da tool (3.17), feita uma vez por mensagem.
+**Regra de colisão:** `gravid` e `medicament` aparecem aqui **e** no FAQ. Se a
+mensagem casa um termo de risco e também casa um item do FAQ da clínica com
+`busca_no_faq` acima do piso, vale o FAQ (a clínica escreveu a resposta): a
+guarda deixa passar e o modelo escolhe o item. Se casa só o risco, nível 3.
+Isso exige carregar os itens antes do modelo - é a mesma consulta que monta
+o `enum` da tool (3.17), feita uma vez por mensagem.
 
 Novos motivos em `bot_policy`: `MOTIVO_RECLAMACAO`, `MOTIVO_REEMBOLSO`,
 `MOTIVO_POS_SESSAO`, `MOTIVO_MEDICO`, `MOTIVO_AMEACA`, com texto legível para a
@@ -544,49 +540,55 @@ fila ("Reclamação", "Pediu reembolso", "Problema depois da sessão", "Questão
 médica fora do FAQ", "Ameaçou expor"). A fila já mostra motivo e pendência
 (fase 3); nada novo no painel para o nível 3.
 
-### 3.17 `services/policy_do_faq.py` e a tool `responder_com_policy` (fase 5)
+### 3.17 `services/policy_do_faq.py` e a tool `responder_com_faq` (fase 5)
 
-- `faq_items.nivel SMALLINT NOT NULL DEFAULT 1 CHECK (nivel IN (1, 2))`.
-  Migração idempotente marca `2` nos `question_key` da lista do PRD §4.3
-  (`CONTRAINDICATIONS`, `PREPARATION`, `SUN_EXPOSURE`, `TANNED_SKIN`,
-  `MENSTRUATION`, `SILICONE_IMPLANT`, `AFTER_WAX`, `RAZOR_BETWEEN_SESSIONS`)
-  para todas as clínicas que os tiverem. A clínica muda depois pelo painel.
-- `policy_do_faq.itens_de_policy(db, clinic_id) -> list` (ativos, nível 2;
-  uma consulta por mensagem, reaproveitada pela guarda do nível 3).
+**Todo item do FAQ é literal** (André, 10/10/2026). Não há coluna `nivel`,
+não há seletor no painel, não há lista de chaves no código. A clínica
+escreve a resposta e ela vai como está.
+
+- `policy_do_faq.itens(db, clinic_id) -> list`: os itens ativos da clínica,
+  uma consulta por mensagem (reaproveitada pela guarda do nível 3).
 - `policy_do_faq.definicao_da_tool(itens) -> dict | None`: a tool
-  `responder_com_policy(question_key)` com `enum` dos `question_key` e a
-  descrição listando `question_label` de cada um ("escolha a policy que
-  responde a pergunta; se nenhuma responde, NÃO chame esta tool"). Sem itens
-  nível 2, a tool não existe e nada muda.
-- `get_tool_definitions(format, policies=None)` anexa essa definição. O
-  prefixo cacheado passa a variar por clínica (as tools são parte do prefixo)
-  - aceitável: o cache é por conversa, e dentro da clínica a lista só muda
+  `responder_com_faq(question_key)` com `enum` dos `question_key` e a
+  descrição listando o `question_label` de cada um ("escolha o item que
+  responde a pergunta; se nenhum responde, NÃO chame esta tool - diga que vai
+  confirmar com a equipe"). Sem itens, a tool não existe. **Substitui**
+  `get_faq_answer`: o ranker `busca_no_faq` deixa de ser o caminho do FAQ e
+  fica só como teste de cobertura do catálogo (ou sai na fase 8).
+- `get_tool_definitions(format, faq=None)` anexa essa definição. O prefixo
+  cacheado passa a variar por clínica (as tools são parte do prefixo) -
+  aceitável: o cache é por conversa, e dentro da clínica a lista só muda
   quando ela edita o FAQ.
-- O executor devolve `{"policy": question_key, "texto": answer}` e marca
-  `ctx["policy_escolhida"] = item`. Em `process_message`, depois do laço: se
-  `policy_escolhida`, `final_text` **é** `item["answer"]` byte a byte, não o
-  que o modelo escreveu. O que o modelo escreveu além vai a log `WARNING`
-  (`[Policy] {phone}: descartei {texto!r}`). Sem geração livre, por
-  construção, não por conferência.
-- Mais de uma chamada de `responder_com_policy` no mesmo turno, ou chamada
-  com `question_key` fora do `enum` (o modelo pode inventar): handoff
-  `faq_sem_resposta`. O desempate não é do modelo.
-- `get_faq_answer` deixa de devolver itens nível 2 (filtra `nivel = 1`):
-  perguntas de nível 2 só saem pela tool nova. O ranker continua servindo o
-  nível 1 como hoje.
-- Painel: `FaqPage` ganha o seletor "Resposta literal (nível 2)" por item,
-  com a explicação "o bot entrega este texto exatamente como está escrito,
-  sem reformular". `list` devolve `nivel`; `create`/`update` aceitam e validam.
+- O executor devolve `{"faq": question_key, "entregue": True}` e empilha o
+  item em `ctx["faq_escolhido"]` (lista). O modelo recebe no resultado:
+  "O texto deste item vai à pessoa como mensagem própria; NÃO o repita nem o
+  resuma na sua resposta. Responda só o que sobrou da pergunta, se sobrou."
+- Em `_build_outgoing`: primeiro uma `OutgoingMessage` por item escolhido,
+  com `answer` byte a byte, na ordem das chamadas; depois, se o modelo
+  escreveu algo, a mensagem dele (passando pelas guardas de sempre). Nunca
+  na mesma bolha. Se o texto do modelo repete o item (comparação normalizada,
+  contém >= 60% das frases do item), é descartado com log `WARNING`
+  `[FAQ] {phone}: o modelo repetiu o item {key}; descartei` - a bolha literal
+  basta.
+- Chamada com `question_key` fora do `enum` (o modelo pode inventar): o
+  executor devolve erro e o item não é entregue; se nada mais responder, cai
+  no caminho de "nenhum item": handoff `faq_sem_resposta`.
+- Mais de dois itens no mesmo turno: handoff `faq_sem_resposta` (pergunta
+  confusa; o desempate não é do modelo). Um ou dois: cada um em sua bolha.
+- Painel: nada muda. `faq_items` continua `question_key`, `question_label`,
+  `answer`, `display_order`, `active`.
 
-**Exemplos de conversa (PRD §4.3, revisados com o André em 09/10):**
+**Exemplos de conversa (PRD §4.3, revisados com o André em 09 e 10/10):**
 
 - Nível 1, segue como hoje: "Quanto fica axila e virilha?" -> tools + o modelo
-  redige. "Posso pagar no pix?" / "Dá pra parcelar?" -> FAQ, no nível que a
-  clínica marcar.
-- Nível 2: "Estou grávida de 4 meses, posso fazer?" -> o modelo escolhe
-  `CONTRAINDICATIONS`; a resposta é o texto da Essência, palavra por palavra.
-  "Tenho uma doença de pele rara, pode?" -> nenhum item casa -> pessoa, com
-  `faq_sem_resposta`.
+  redige.
+- Nível 2, qualquer FAQ: "Estou grávida de 4 meses, posso fazer?" -> o modelo
+  escolhe `CONTRAINDICATIONS`; a pessoa recebe o texto da Essência, palavra
+  por palavra, numa bolha. "Posso pagar no pix?" -> idem, com o item de
+  pagamento, se a clínica o escreveu. "Qual o intervalo e tem horário dia
+  21?" -> bolha 1: o item `SESSION_INTERVAL` literal; bolha 2: os horários
+  do dia 21, consultados, redigidos pelo modelo. "Tenho uma doença de pele
+  rara, pode?" -> nenhum item -> pessoa, com `faq_sem_resposta`.
 - Nível 3: "Isso é um absurdo, vou no Procon" -> `reclamacao`, pessoa, o
   modelo não vê. "Quero meu dinheiro de volta" / "fiz o pix e não caiu" ->
   `reembolso`. "A axila ficou queimada, está com bolha" -> `pos_sessao`.
@@ -648,8 +650,7 @@ A diferença do §2.2 do PRD fica no código, não na instrução.
    de subir o limite.
 4. **Fase 4**: módulo puro, índice, medição de latência, só então o bloco no
    prompt.
-5. **Fase 5**: migração do `nivel` primeiro (reversível), depois a tool, depois
-   `nivel_de_risco`.
+5. **Fase 5**: a tool `responder_com_faq` e as bolhas literais primeiro (sem migration, sem painel), medir um ciclo; depois a guarda do nível 3, que é o que mais tira conversa do bot.
 6. **Fase 6** e **7** juntas no mesmo PR se a 5 estiver estável há uma semana.
 7. **Fase 8** depois de uma semana da 7 sem handoff `incompreensao` acima do
    patamar de hoje.
