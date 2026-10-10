@@ -505,6 +505,17 @@ antes dos dados consultados) e **não é gravado** na sessão.
 
 ### 3.16 `services/nivel_de_risco.py` (fase 5)
 
+> **Como ficou (10/10/2026):** a colisão com o FAQ vale **só para o grupo
+> médico**, e a consulta ao FAQ é canônica ("gestante lactante gravidez
+> medicamentos roacutan...", não a frase da pessoa), porque "grávida" não casa
+> "gestante" no ranker. Os outros grupos vão a pessoa sempre: "ficou com
+> ferida" é problema real mesmo que o FAQ de contraindicações cite "feridas".
+> Ordem de precedência quando mais de um grupo casa: ameaça, reclamação,
+> reembolso, pós-sessão, médico. Quem sai antes do modelo (nível 3 e também
+> `fora_do_escopo`) passa a abrir a pendência, como o handoff do bot: a fila
+> vê a tarefa. Coluna `clinics.bot_termos_de_risco` (texto, não regex; vira
+> reclamação). Sem tela no painel por enquanto, como `bot_procedimentos_fora_do_escopo`.
+
 Espelho de `fora_do_escopo.py`: lista `TERMOS` de regex normalizados, com nome
 do motivo; `detecta(texto, clinic) -> motivo | None`; termos extras por clínica
 em `clinics.bot_termos_de_risco` (mesmo padrão de
