@@ -19,7 +19,7 @@ from src.services.bot_policy import (
     MOTIVO_PEDIDO,
     MOTIVO_SEM_RESPOSTA,
 )
-from src.services.busca_no_faq import busca as busca_no_faq
+from src.services import policy_do_faq
 from src.services.calendario import hoje_brt
 from src.services.idade import (
     dias_para_a_maioridade,
@@ -537,19 +537,30 @@ TOOL_DEFINITIONS = [
 # Format conversion helper
 # ──────────────────────────────────────────────
 
-def get_tool_definitions(format="anthropic"):
+def get_tool_definitions(format="anthropic", faq=None):
     """
     Return tool definitions in the requested format.
 
     - "openai": Original OpenAI function calling format
     - "anthropic": Anthropic tool use format
+
+    `faq`: os itens do FAQ da clinica (policy_do_faq.itens). A tool
+    `get_faq_answer` e montada POR CLINICA, com `enum` fechado dos
+    `question_key`: o modelo escolhe o item, nunca descreve a pergunta. Sem
+    itens (lista vazia ou None), a tool nao existe - e o modelo nao tem como
+    responder duvida, que e o certo quando a clinica nao escreveu nada.
     """
+    definicoes = [t for t in TOOL_DEFINITIONS if t["function"]["name"] != policy_do_faq.NOME_DA_TOOL]
+    do_faq = policy_do_faq.definicao_da_tool(faq or [])
+    if do_faq:
+        definicoes.append(do_faq)
+
     if format == "openai":
-        return TOOL_DEFINITIONS
+        return definicoes
 
     # Convert OpenAI format → Anthropic format
     anthropic_tools = []
-    for tool in TOOL_DEFINITIONS:
+    for tool in definicoes:
         func = tool["function"]
         anthropic_tools.append({
             "name": func["name"],
@@ -825,64 +836,54 @@ class ToolExecutor:
         return {"appointments": result}
 
     def _tool_get_faq_answer(self, args, clinic_id, phone, ctx):
-        """A resposta que a clínica escreveu para esta pergunta.
+        """O item do FAQ que o modelo escolheu, entregue palavra por palavra.
 
-        A busca era em SQL, em duas tentativas: a frase inteira como `ILIKE`, e
-        um fallback que quebrava em palavras, juntava com OR e ordenava por
-        `display_order`. O segundo ganhava sempre, e ganhava errado: "pode",
-        "fazer" e "sessão" casam com quase todo item, então vencia quem estava
-        mais no topo da lista.
+        Ate 10/10/2026 esta tool recebia a pergunta em texto livre, buscava
+        por relevancia (busca_no_faq) e devolvia os itens ao modelo, que
+        REDIGIA a resposta a partir deles - podia resumir, suavizar ou
+        completar. Agora o modelo escolhe o `question_key` numa lista fechada
+        (o `enum` da tool, montado por clinica) e o texto do item vai a pessoa
+        como mensagem propria, byte a byte, sem passar pela redacao do modelo.
+        Ver policy_do_faq.
 
-        Em 23/09/2026 isso custou uma conversa. A paciente perguntou se podia
-        fazer a sessão menstruada, o FAQ tinha "Posso fazer menstruada?" com a
-        resposta completa, e a busca devolveu três itens sobre outra coisa -
-        a resposta certa ficava em 6º e o LIMIT 3 a cortava fora.
-
-        Agora a ordenação é por relevância, em memória: o FAQ de uma clínica
-        tem dezenas de itens, não milhares. Ver busca_no_faq.
+        O item escolhido e empilhado em `ctx["faq_entregues"]`; e o agente que
+        monta a bolha. O resultado diz ao modelo para nao repetir o texto.
         """
-        question = args.get("question", "")
-
-        itens = self.db.execute_query(
-            """
-            SELECT question_label, answer, display_order
-            FROM scheduler.faq_items
-            WHERE clinic_id = %s AND active = true
-            ORDER BY display_order
-            """,
-            (clinic_id,),
-        )
-
-        achados = busca_no_faq(question, itens)
-
-        if achados:
-            logger.info(
-                f"[FAQ] {phone}: {question[:50]!r} -> "
-                f"{[a['question_label'] for a in achados]}"
-            )
+        chave = str(args.get("question_key") or "").strip()
+        itens = ctx.get("faq")
+        if itens is None:
+            itens = policy_do_faq.itens(self.db, clinic_id)
+        if not chave:
             return {
-                "answers": [
-                    {"question": a["question_label"], "answer": a["answer"]}
-                    for a in achados
-                ]
+                "error": (
+                    "Choose a question_key from the list in this tool's description. "
+                    "If no item answers the question, do not call this tool: say you "
+                    "will confirm with the team and call request_human_handoff."
+                ),
             }
-
-        # Vazio é uma resposta, e é a resposta certa quando a clínica não
-        # escreveu sobre aquilo.
-        #
-        # A mensagem aqui já mandou "use seu conhecimento sobre depilação a
-        # laser para responder" - a própria tool autorizando a invenção que o
-        # resto do sistema existe para impedir. Cada clínica tem protocolo
-        # próprio: intervalo entre sessões, cuidados e contraindicações não são
-        # conhecimento geral, são política da casa.
-        logger.info(f"[FAQ] {phone}: {question[:50]!r} -> nada acima do piso")
+        item = policy_do_faq.por_chave(itens, chave)
+        if item is None:
+            logger.warning(f"[FAQ] {phone}: o modelo pediu a chave {chave!r}, que nao existe")
+            return {
+                "error": (
+                    f"'{chave}' is not a FAQ item of this clinic. Choose a question_key "
+                    "from the list in this tool's description; if none answers the "
+                    "question, call request_human_handoff with "
+                    f'reason="{MOTIVO_SEM_RESPOSTA}".'
+                ),
+            }
+        entregues = ctx.get("faq_entregues")
+        if isinstance(entregues, list):
+            entregues.append(item)
+        logger.info(f"[FAQ] {phone}: entregue {chave} ({item['question_label'][:50]!r})")
         return {
-            "answers": [],
-            "message": (
-                "Nenhuma resposta encontrada no FAQ desta clínica. Você NÃO SABE a "
-                "resposta. Não use conhecimento geral. Diga que vai confirmar com uma "
-                "especialista e chame request_human_handoff com "
-                f'reason="{MOTIVO_SEM_RESPOSTA}".'
+            "delivered": True,
+            "question": item["question_label"],
+            "instruction": (
+                "The full text of this FAQ item is being sent to the patient as its own "
+                "message, exactly as the clinic wrote it. Do NOT repeat, summarize or "
+                "paraphrase it. If the patient asked something else in the same message, "
+                "answer only that part; otherwise reply with nothing."
             ),
         }
 

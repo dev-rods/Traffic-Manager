@@ -18,8 +18,13 @@ import unittest
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
 
 
+FAQ = [{"question_key": "PAIN", "question_label": "Dói?", "answer": "Não dói."}]
+
+
 def nomes_expostos():
-    return {t["name"] for t in get_tool_definitions(format="anthropic")}
+    # get_faq_answer e montada por clinica, a partir do FAQ dela: sem itens a
+    # tool nao existe (policy_do_faq). Aqui a clinica tem um item.
+    return {t["name"] for t in get_tool_definitions(format="anthropic", faq=FAQ)}
 
 
 class TestToolsExpostasAoModelo(unittest.TestCase):

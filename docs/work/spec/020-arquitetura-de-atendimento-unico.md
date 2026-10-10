@@ -540,7 +540,17 @@ fila ("Reclamação", "Pediu reembolso", "Problema depois da sessão", "Questão
 médica fora do FAQ", "Ameaçou expor"). A fila já mostra motivo e pendência
 (fase 3); nada novo no painel para o nível 3.
 
-### 3.17 `services/policy_do_faq.py` e a tool `responder_com_faq` (fase 5)
+### 3.17 `services/policy_do_faq.py` e a tool do FAQ (fase 5)
+
+> **Como ficou (10/10/2026):** a tool **mantém o nome `get_faq_answer`**, com
+> o contrato novo (`question_key` em `enum`, sem texto livre). Renomear
+> exigiria migrar o `AI_SYSTEM_PROMPT` da Essência e da Nobre Laser no banco,
+> que citam o nome oito vezes cada. O bloco "COMO RESPONDER DÚVIDAS" do código,
+> anexado a todo prompt, passou a mandar não repetir o item; os prompts do
+> banco ainda dizem "responda com o que ela devolver" - o descarte por
+> repetição cobre isso, e o log `[FAQ] ... descartei` mede quanto acontece.
+> `busca_no_faq` deixa de ser o caminho do FAQ e fica para a regra de colisão
+> do nível 3 (§3.16).
 
 **Todo item do FAQ é literal** (André, 10/10/2026). Não há coluna `nivel`,
 não há seletor no painel, não há lista de chaves no código. A clínica
@@ -549,7 +559,7 @@ escreve a resposta e ela vai como está.
 - `policy_do_faq.itens(db, clinic_id) -> list`: os itens ativos da clínica,
   uma consulta por mensagem (reaproveitada pela guarda do nível 3).
 - `policy_do_faq.definicao_da_tool(itens) -> dict | None`: a tool
-  `responder_com_faq(question_key)` com `enum` dos `question_key` e a
+  `get_faq_answer(question_key)` com `enum` dos `question_key` e a
   descrição listando o `question_label` de cada um ("escolha o item que
   responde a pergunta; se nenhum responde, NÃO chame esta tool - diga que vai
   confirmar com a equipe"). Sem itens, a tool não existe. **Substitui**
