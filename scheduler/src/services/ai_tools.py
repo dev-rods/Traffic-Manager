@@ -18,7 +18,9 @@ from src.services.bot_policy import (
     MOTIVOS_LEGIVEIS,
     MOTIVO_PEDIDO,
     MOTIVO_SEM_RESPOSTA,
+    MOTIVO_INCOMPREENSAO,
 )
+from src.services import desambiguacao
 from src.services import policy_do_faq
 from src.services.calendario import hoje_brt
 from src.services.idade import (
@@ -435,8 +437,8 @@ TOOL_DEFINITIONS = [
                             "procedimento_fora_do_escopo: perguntou sobre procedimento "
                             "que não é depilação a laser. faq_sem_resposta: dúvida que "
                             "o FAQ não cobre. pedido_da_paciente: ela pediu para falar "
-                            "com alguém. incompreensao: você não entendeu depois de "
-                            "tentar esclarecer."
+                            "com alguém. incompreensao: você não entendeu mesmo depois de "
+                            "pedir_esclarecimento (prefira essa tool; ela decide quando desistir)."
                         ),
                     },
                 },
@@ -551,6 +553,7 @@ def get_tool_definitions(format="anthropic", faq=None):
     responder duvida, que e o certo quando a clinica nao escreveu nada.
     """
     definicoes = [t for t in TOOL_DEFINITIONS if t["function"]["name"] != policy_do_faq.NOME_DA_TOOL]
+    definicoes.append(desambiguacao.definicao_da_tool())
     do_faq = policy_do_faq.definicao_da_tool(faq or [])
     if do_faq:
         definicoes.append(do_faq)
@@ -1184,7 +1187,22 @@ class ToolExecutor:
                     f"registrando como {MOTIVO_PEDIDO}"
                 )
             reason = MOTIVO_PEDIDO
+        # Desistir por incompreensao antes de perguntar e cedo demais (fase 6):
+        # o codigo converte o pedido na pergunta de esclarecimento, ate as
+        # tentativas acabarem. Ver desambiguacao.
+        session = (ctx or {}).get("session")
+        if reason == MOTIVO_INCOMPREENSAO and session is not None and not desambiguacao.esgotou(session):
+            logger.info(f"[Desambiguacao] {phone}: handoff por incompreensao virou pergunta")
+            return desambiguacao.pede(session, None, phone)
         return {"success": True, "handoff_requested": True, "reason": reason}
+
+    def _tool_pedir_esclarecimento(self, args, clinic_id, phone, ctx):
+        """A pergunta de desambiguacao, com texto fixo e botoes; na terceira
+        vez seguida, pessoa. O contador vive na sessao (ctx["session"])."""
+        session = (ctx or {}).get("session")
+        if session is None:
+            session = {}
+        return desambiguacao.pede(session, args.get("candidatas"), phone)
 
     def _tool_present_options(self, args, clinic_id, phone, ctx):
         return {
