@@ -22,7 +22,9 @@ from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services import estado_comercial
+from src.services import nivel_de_risco
 from src.services import policy_do_faq
+from src.services.busca_no_faq import busca as busca_no_faq
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.identificacao_de_paciente import sem_passo_de_cadastro
 from src.services.narracao import narra_a_pessoa
@@ -62,6 +64,7 @@ from src.services.bot_policy import (
     MOTIVO_AGENDA_SEM_RESPALDO,
     MOTIVO_ESGOTOU,
     MOTIVO_SEM_RESPOSTA,
+    TEXTO_DE_RISCO,
     MOTIVO_AREAS_EM_LACO,
     MOTIVO_FORA_DO_ESCOPO,
     MOTIVO_INSISTIU_CADASTRO,
@@ -385,19 +388,36 @@ class ConversationAgent:
         # modelo, então não há como ele compor resposta a partir de um item de
         # FAQ de laser que casou "sessão" ou "preço". Ver fora_do_escopo.
         if not gatilho:
-            citado = procedimento_fora_do_escopo(
-                user_content, self._config_fora_do_escopo(clinic_id)
-            )
+            config = self._config_fora_do_escopo(clinic_id)
+            citado = procedimento_fora_do_escopo(user_content, config)
             if citado:
                 logger.info(
                     f"[ForaDoEscopo] {phone}: citou {citado} -> especialista, "
                     f"sem passar pelo modelo"
                 )
-                session["agent_history"] = self._truncate_history(history)
-                session["mode"] = "agent"
-                entrega_a_humano(session, MOTIVO_FORA_DO_ESCOPO)
-                self._save_session(clinic_id, phone, session)
-                return self._build_outgoing(TEXTO_FORA_DO_ESCOPO, None)
+                return self._sai_antes_do_modelo(
+                    session, clinic_id, phone, history, MOTIVO_FORA_DO_ESCOPO, TEXTO_FORA_DO_ESCOPO)
+
+            # ── Nível 3: risco vence confiança (PRD 020 §4.3) ─────────────
+            # Reclamação, reembolso, problema depois da sessão, questão
+            # médica, ameaça: pessoa, antes de o modelo ler. Só o grupo
+            # médico tem colisão com o FAQ: se a clínica escreveu sobre o
+            # assunto (contraindicações), vale o FAQ. Ver nivel_de_risco.
+            risco = nivel_de_risco.detecta(user_content, config)
+            if risco:
+                motivo, consulta = risco
+                coberto = bool(consulta and busca_no_faq(consulta, itens_do_faq))
+                if coberto:
+                    logger.info(
+                        f"[Risco] {phone}: {motivo}, mas o FAQ cobre; segue para o modelo"
+                    )
+                else:
+                    logger.info(
+                        f"[Risco] {phone}: {motivo} -> pessoa, sem passar pelo modelo "
+                        f"| {user_content[:80]!r}"
+                    )
+                    return self._sai_antes_do_modelo(
+                        session, clinic_id, phone, history, motivo, TEXTO_DE_RISCO)
 
         # 5. Agent loop
         # ── Pré-carga determinística ────────────────────────────────────
@@ -1032,7 +1052,8 @@ class ConversationAgent:
     # ── System prompt ──
 
     def _config_fora_do_escopo(self, clinic_id):
-        """Só a coluna dos termos extras, não a clínica inteira.
+        """Só as colunas de termos extras (fora do escopo e risco), não a
+        clínica inteira.
 
         Consulta própria porque a guarda roda ANTES do prompt ser montado - é
         justamente o ponto: a mensagem não chega ao modelo. Uma linha por
@@ -1044,8 +1065,8 @@ class ConversationAgent:
         """
         try:
             linhas = self.db.execute_query(
-                "SELECT bot_procedimentos_fora_do_escopo FROM scheduler.clinics "
-                "WHERE clinic_id = %s AND active = TRUE",
+                "SELECT bot_procedimentos_fora_do_escopo, bot_termos_de_risco "
+                "FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
                 (clinic_id,),
             )
             return linhas[0] if linhas else {}
@@ -1438,6 +1459,17 @@ class ConversationAgent:
             )
         except Exception as e:
             logger.error(f"[ConversationAgent] Error saving session for {phone}: {e}")
+
+    def _sai_antes_do_modelo(self, session, clinic_id, phone, history, motivo, texto):
+        """A conversa vai para uma pessoa sem o modelo ler a mensagem: grava
+        o historico, entrega, abre a pendencia (a fila precisa ver) e responde
+        o texto fixo. Usado pelo fora_do_escopo e pelo nivel 3."""
+        session["agent_history"] = self._truncate_history(history)
+        session["mode"] = "agent"
+        entrega_a_humano(session, motivo)
+        self._abre_pendencia(session, clinic_id, phone, motivo)
+        self._save_session(clinic_id, phone, session)
+        return self._build_outgoing(texto, None)
 
     def _abre_pendencia(self, session, clinic_id, phone, motivo):
         """Grava a intencao pendente no bloco e abre a tarefa. Nunca levanta."""

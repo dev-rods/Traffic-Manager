@@ -83,6 +83,18 @@ MOTIVO_AFIRMOU_MENOR = "afirmou_menor_sem_respaldo"
 MOTIVO_INSISTIU_CADASTRO = "insistiu_em_cadastro"
 MOTIVO_INCOMPREENSAO = "incompreensao"
 MOTIVO_ESGOTOU = "esgotou_as_consultas"
+# Nível 3 (PRD 020 §4.3): escritos pelo código ANTES do modelo, por lista de
+# termos (nivel_de_risco). Nenhum entra em MOTIVOS_DO_MODELO.
+MOTIVO_RECLAMACAO = "reclamacao"
+MOTIVO_REEMBOLSO = "reembolso"
+MOTIVO_POS_SESSAO = "problema_pos_sessao"
+MOTIVO_MEDICO = "questao_medica"
+MOTIVO_AMEACA = "ameaca"
+
+# O que a pessoa recebe quando o nível 3 dispara. Promete pessoa, não prazo,
+# e não repete o termo que casou: "sobre a sua reclamação..." numa mensagem
+# automática é a pior combinação possível.
+TEXTO_DE_RISCO = "Vou passar para uma especialista te atender agora 😊"
 
 # Como a recepção lê cada motivo. Fica aqui, e não na tela, porque é a mesma
 # régua de [status_da_conversa]: regra que mora em dois lugares diverge calada.
@@ -97,6 +109,11 @@ MOTIVOS_LEGIVEIS = {
     MOTIVO_INSISTIU_CADASTRO: "O bot insistiu em cadastro",
     MOTIVO_INCOMPREENSAO: "O bot não entendeu",
     MOTIVO_ESGOTOU: "O bot não conseguiu responder (esgotou as consultas)",
+    MOTIVO_RECLAMACAO: "Reclamação",
+    MOTIVO_REEMBOLSO: "Pediu reembolso",
+    MOTIVO_POS_SESSAO: "Problema depois da sessão",
+    MOTIVO_MEDICO: "Questão médica fora do FAQ",
+    MOTIVO_AMEACA: "Ameaçou expor",
 }
 
 # Os que o MODELO pode escolher. Os outros são escritos pelo código quando uma

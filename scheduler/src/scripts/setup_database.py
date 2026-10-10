@@ -50,6 +50,9 @@ SQL_STATEMENTS = [
         -- Procedimentos que o bot NAO atende, alem da lista do codigo.
         -- Ver fora_do_escopo.
         bot_procedimentos_fora_do_escopo TEXT[] NOT NULL DEFAULT '{}',
+        -- Termos que mandam a conversa para uma pessoa antes do modelo
+        -- (PRD 020 §4.3, nivel 3), alem da lista do codigo. Ver nivel_de_risco.
+        bot_termos_de_risco TEXT[] NOT NULL DEFAULT '{}',
         -- Janela em que o bot NAO inicia conversa (PRD 020 §3.5). NULL usa o
         -- padrao do codigo, 22:59-04:59. Formato {"start": "HH:MM", "end": "HH:MM"}.
         janela_de_silencio JSONB,
@@ -655,6 +658,10 @@ SQL_STATEMENTS = [
     # futuro), que filtram por paciente, status e data.
     "CREATE INDEX IF NOT EXISTS idx_appointments_estado_comercial "
     "ON scheduler.appointments (clinic_id, patient_id, status, appointment_date)",
+    # PRD 020 §4.3, nivel 3: termos extras de risco por clinica, mesmo padrao
+    # de bot_procedimentos_fora_do_escopo.
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
+    "bot_termos_de_risco TEXT[] NOT NULL DEFAULT '{}'",
     # A "janela de retorno" (coluna criada em 09/10/2026) caiu no mesmo dia:
     # a distincao DUE_FOR_NEXT x INACTIVE nao mudava a resposta do bot.
     "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS janela_de_retorno_dias",
