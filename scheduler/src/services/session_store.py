@@ -165,7 +165,12 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
         removes_raiz = ["#hu"]
     removes = []
     i = 0
-    for campo in _PROJECAO_LEGADA + tuple((extras or {}).keys()):
+    # Um caminho por campo: `extras` pode repetir um campo da projecao
+    # ("state", no "Retomar bot"), e dois SET no mesmo caminho e
+    # "Two document paths overlap" - o DynamoDB rejeita a escrita inteira.
+    # Foi o que deixou o botao do painel sem efeito de 06/10 a 10/10/2026.
+    campos = list(_PROJECAO_LEGADA) + [c for c in (extras or {}) if c not in _PROJECAO_LEGADA]
+    for campo in campos:
         i += 1
         nomes[f"#f{i}"] = campo
         if campo in (extras or {}):

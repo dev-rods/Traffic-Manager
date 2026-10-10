@@ -23,22 +23,54 @@ GATILHO_RETOMADA = "__RETOMAR_CONVERSA__"
 EVENTOS_PARA_CONTEXTO = 20
 
 
-def ha_pergunta_em_aberto(eventos):
-    """A última fala da conversa é da pessoa?
+# Folga entre o instante da entrega a pessoa e a mensagem do bot que a
+# anunciou ("ja chamei uma especialista"): sao gravados no mesmo turno, com
+# segundos de diferenca, em qualquer ordem.
+_FOLGA_DO_AVISO = 120
+
+
+def _foi_de_pessoa_da_clinica(evento):
+    """OUTBOUND digitado no celular (metadata.autor = HUMANO desde a fase 3;
+    antes, SENT sem providerMessageId). Ver conversation_agent."""
+    if evento.get("direction") != "OUTBOUND":
+        return False
+    if (evento.get("metadata") or {}).get("autor") == "HUMANO":
+        return True
+    return evento.get("status") == "SENT" and not evento.get("providerMessageId")
+
+
+def ha_pergunta_em_aberto(eventos, entregue_em=None):
+    """A última fala HUMANA da conversa é da pessoa?
 
     Se for, ninguém respondeu - é o caso de retomar. Eventos sem texto (webhooks
     de status de entrega) não são fala e não contam.
 
+    `entregue_em`: o instante em que o bot entregou a conversa a uma pessoa
+    (bloco `atendimento`). A mensagem do bot gravada junto da entrega ("já
+    chamei uma especialista...") é aviso, não resposta: a pergunta da pessoa
+    continua em aberto atrás dela. Sem `entregue_em` vale a regra antiga (a
+    última fala com texto decide).
+
     Espera os eventos em ordem cronológica, do mais antigo para o mais recente.
     """
+    from src.services.retomada import _instante
+
     for evento in reversed(eventos or []):
         if not (evento.get("content") or "").strip():
             continue
-        return evento.get("direction") == "INBOUND"
+        if evento.get("direction") == "INBOUND":
+            return True
+        if _foi_de_pessoa_da_clinica(evento):
+            return False
+        if entregue_em:
+            quando = _instante(evento)
+            if quando is not None and quando >= int(entregue_em) - _FOLGA_DO_AVISO:
+                continue  # o aviso de handoff do bot; a pergunta esta atras dele
+        return False
     return False
 
 
-def responder_se_ficou_em_aberto(clinic_id, phone):
+def responder_se_ficou_em_aberto(clinic_id, phone, entregue_em=None):
     """Responde a pergunta pendente da conversa. Devolve True se falou.
 
     Roda fora do request do painel: o agente leva de 3 a 15 segundos e o API
@@ -53,7 +85,7 @@ def responder_se_ficou_em_aberto(clinic_id, phone):
     tracker = MessageTracker()
     eventos = tracker.get_conversation_messages(clinic_id, phone, limit=EVENTOS_PARA_CONTEXTO)
 
-    if not ha_pergunta_em_aberto(eventos):
+    if not ha_pergunta_em_aberto(eventos, entregue_em):
         logger.info(f"[Retomada] Nada pendente com {phone}: bot ativado sem responder")
         return False
 
