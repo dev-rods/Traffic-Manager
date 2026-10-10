@@ -195,7 +195,7 @@ class TestRoteamentoDaExecucaoAssincrona(unittest.TestCase):
         ) as responder:
             resultado = handler(evento_async, FakeContext())
 
-        responder.assert_called_once_with("clinica-x", "5511999999999")
+        responder.assert_called_once_with("clinica-x", "5511999999999", None)
         self.assertEqual(resultado, {"replied": True})
 
     def test_requisicao_http_normal_continua_roteando(self):
