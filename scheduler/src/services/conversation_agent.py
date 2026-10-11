@@ -25,6 +25,7 @@ from src.services import desambiguacao
 from src.services import estado_comercial
 from src.services import nivel_de_risco
 from src.services import policy_do_faq
+from src.services import skills
 from src.services.busca_no_faq import busca as busca_no_faq
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.identificacao_de_paciente import sem_passo_de_cadastro
@@ -329,9 +330,17 @@ class ConversationAgent:
             f"[EstadoComercial] {phone}: {estado} | identificacao em "
             f"{int((time.time() - inicio_identificacao) * 1000)}ms"
         )
+        # 2e. A skill (fase 7): escolhida pelo estado comercial, decide as
+        # tools que o modelo enxerga e o bloco de conduta do prompt. Por
+        # estado e nao por intencao: o prefixo cacheado nao pode mudar a cada
+        # mensagem. Ver skills.
+        skill = skills.despacha(estado)
+        logger.info(f"[Skill] {phone}: {skill.nome}")
 
         # 3. Build system prompt
         system_prompt = self._build_system_prompt(clinic_id, phone, session)
+        if not campanha_viva(session):
+            system_prompt += skill.bloco
         if cadastrada:
             # RETIRADO, nao contradito: o roteiro com texto pronto vence
             # qualquer "nao peca" colado no fim. Ver prompt_da_campanha.
@@ -514,7 +523,7 @@ class ConversationAgent:
                 + f"═══ MENSAGEM DA PESSOA ═══\n{user_content}"
             )}
 
-        tools = get_tool_definitions(format="anthropic", faq=itens_do_faq)
+        tools = skill.filtra(get_tool_definitions(format="anthropic", faq=itens_do_faq))
         pending_buttons = None
         handoff_requested = False
         # O MOTIVO que a tool recebeu. Era descartado, e a conversa chegava à
