@@ -131,6 +131,8 @@ def _handle_deactivate(event, context):
     # precisa dele para nao tomar o aviso "ja chamei uma especialista" como
     # resposta a pergunta da pessoa. Lido ANTES de retomar, que limpa o bloco.
     entregue_em = atendimento.bloco(session).get("entregue_em")
+    # Vem do DynamoDB como Decimal, e o payload assincrono e JSON.
+    entregue_em = int(entregue_em) if entregue_em is not None else None
 
     # "Retomar bot" limpa tudo, de qualquer estado, sem cooldown: quem clicou
     # decidiu que o bot pode falar (PRD 020 §3.3, "qualquer -> BOT_ACTIVE").
