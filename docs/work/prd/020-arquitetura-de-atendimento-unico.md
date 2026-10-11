@@ -544,13 +544,21 @@ webhook
 
 Skills, e qual estado comercial cada uma atende:
 
-| skill | estados comerciais |
-|---|---|
-| `PrimeiroAgendamento` | `NEW_LEAD` |
-| `Agendamento` | `ACTIVE_CUSTOMER`, `NO_NEXT_BOOKING` |
-| `Remarcacao` / `Cancelamento` | qualquer com agendamento futuro |
-| `Preco` / `TecnologiaFAQ` / `Preparo` / `PosSessao` | qualquer |
-| `HandoffHumano` | qualquer |
+| skill | estados comerciais | o que muda em código |
+|---|---|---|
+| `primeiro_agendamento` | `NEW_LEAD` | sem `reschedule`/`cancel`; apresenta a clínica uma vez; valor ao confirmar; cadastro só ao agendar |
+| `paciente_com_horario` | `FIRST_BOOKING`, `ACTIVE_CUSTOMER` | todas as tools; antes de agendar outra, confirma se não é remarcar/cancelar |
+| `paciente_sem_horario` | `NO_NEXT_BOOKING` | sem `reschedule`/`cancel`; começa pelas áreas desta sessão |
+
+> **Revisão de 10/10/2026 (fase 7 implementada):** o desenho original tinha
+> skills por intenção (`Remarcacao`, `Preco`, `Preparo`, `HandoffHumano`...).
+> Caíram. Tools e system prompt são o prefixo cacheado da API: o estado
+> comercial é estável durante a conversa, a intenção muda a cada mensagem, e
+> despachar por intenção invalidaria o cache a cada turno e faria o bot trocar
+> de roteiro no meio da conversa. Dúvidas e risco já têm caminho próprio (FAQ
+> literal e nível 3, §4.3); a pré-carga continua por intenção (roteador). A
+> campanha de reagendamento é uma sobreposição sobre qualquer skill, não uma
+> skill.
 
 `PrimeiroAgendamento` e `Agendamento` são skills distintas **porque pedem coisas
 diferentes**: a primeira coleta cadastro e diz o valor, a segunda não. É aí que
@@ -757,5 +765,5 @@ alguém ligar TTL depois, `human_until` e `cooldown_until` desaparecem com o ite
 - [x] Spec gerada: `docs/work/spec/020-arquitetura-de-atendimento-unico.md` (05/10/2026)
 - [x] Fase 1 (correção do cadastro) implementada e em prod em 06/10/2026 (PR #92)
 - [x] Fase 2 (porta de atendimento, cooldown, TTL por inatividade, janela de silêncio) implementada e em prod em 07/10/2026
-- [x] Fase 3 backend (pendência, tarefas, `ExpiraAtendimentos`, retomada sem clique, fala humana rotulada, decisão 9.1) mergeada (PR #106) e em prod em 07/10/2026; tabela `scheduler.tarefas` criada em dev e prod; painel da fila com tarefas no PR #108 (mergeado em 08/10); fase 4 (estado comercial derivado, bloco QUEM É) implementada em 09/10/2026; fase 5 completa (FAQ literal em bolha própria; nível 3 por lista de termos) e fase 6 (pergunta de esclarecimento com contador) implementadas em 10/10/2026; fases 7-8 pendentes
+- [x] Fase 3 backend (pendência, tarefas, `ExpiraAtendimentos`, retomada sem clique, fala humana rotulada, decisão 9.1) mergeada (PR #106) e em prod em 07/10/2026; tabela `scheduler.tarefas` criada em dev e prod; painel da fila com tarefas no PR #108 (mergeado em 08/10); fase 4 (estado comercial derivado, bloco QUEM É) implementada em 09/10/2026; fase 5 completa (FAQ literal em bolha própria; nível 3 por lista de termos) e fase 6 (pergunta de esclarecimento com contador) e fase 7 (skills por estado comercial, Router despachando) implementadas em 10/10/2026; fase 8 pendente
 - [x] Registrado em `TASKS_LOG.md` (020-fase-1, 020-lembrete, 020-fase-2, 020-fase-3)

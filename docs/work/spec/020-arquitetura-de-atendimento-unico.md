@@ -133,9 +133,10 @@ conversa do bot.
 
 | arquivo | ação |
 |---|---|
-| `scheduler/src/services/skills/__init__.py`, `primeiro_agendamento.py`, `agendamento.py`, `remarcacao.py`, `cancelamento.py`, `proxima_sessao.py`, `duvidas.py`, `handoff.py` | **criar** |
+| `scheduler/src/services/skills/__init__.py` | **criar**: três skills por estado comercial (ver §3.19; a lista por intenção caiu) |
 | `scheduler/src/services/roteador.py` | modificar: `despacha()` |
-| `scheduler/src/services/conversation_agent.py` | modificar: prompt e tools vêm da skill |
+| `scheduler/src/services/conversation_agent.py` | modificar: tools filtradas pela skill; bloco da skill no prompt |
+| `scheduler/tests/unit/test_skills.py` | criar |
 
 ### Fase 8 — apagar o engine legado
 
@@ -646,6 +647,21 @@ resolvida (tool com efeito ou resposta de policy). Na terceira ambiguidade,
 `entrega_a_humano(motivo=MOTIVO_INCOMPREENSAO)`.
 
 ### 3.19 `services/skills/` (fase 7)
+
+> **Como ficou (10/10/2026):** um módulo só, `services/skills/__init__.py`,
+> com três `Skill` (dataclass: `nome`, `estados`, `tools_vetadas`, `bloco`)
+> e `despacha(estado)`. Por estado comercial, não por intenção (ver nota no
+> PRD §6). O que a skill muda em código: `skill.filtra(get_tool_definitions(...))`
+> tira `reschedule_appointment` e `cancel_appointment` de quem não tem sessão
+> marcada, e `skill.bloco` ("QUEM VOCÊ ESTÁ ATENDENDO") entra no system
+> prompt depois dos blocos do código e antes da sobreposição da campanha (que
+> o substitui: duas condutas ao mesmo tempo seria pior que uma). Cadastro e
+> valor continuam decididos pelos fatos da pessoa (`sem_passo_de_cadastro`,
+> `sem_valor_no_roteiro`), não pela skill: a skill não pode "esquecer" o
+> cadastro de uma paciente encontrada com cadastro incompleto. `roteador.despacha`
+> aponta para `skills.despacha`, para o Router ser o único lugar que decide
+> quem executa. Estado desconhecido cai em `primeiro_agendamento`, a mais
+> restrita.
 
 Cada skill é um módulo com três coisas, nada mais:
 

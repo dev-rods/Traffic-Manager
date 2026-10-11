@@ -143,6 +143,14 @@ def intencoes(mensagem):
     return {nome for nome, padrao in PADROES.items() if re.search(padrao, plano)}
 
 
+def despacha(estado_comercial):
+    """A skill da conversa (fase 7). Por estado comercial, nao por intencao:
+    ver skills. Fica aqui para o Router ser o unico lugar que decide quem
+    executa."""
+    from src.services import skills
+    return skills.despacha(estado_comercial)
+
+
 def tools_obrigatorias(intencoes_detectadas, estado_comercial=None):
     """As tools que precisam ser consultadas antes de responder.
 

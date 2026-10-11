@@ -192,9 +192,11 @@ class TestPacienteCadastradaNaoOuvePedidoDeCadastro(unittest.TestCase):
         self.assertIn("nome: Yasmin Alves de Souza Lopes", anthropic.prompts[0])
 
     def test_lead_desconhecida_recebe_o_prompt_intacto(self):
-        """O prefixo cacheado do fluxo de lead não muda um byte."""
+        """O roteiro de lead não muda um byte: o que entra depois dele é só o
+        bloco da skill (fase 7), que é estável para a pessoa e cacheia junto."""
         from tests.unit.test_identificacao_de_paciente import PROMPT_REAL
         from tests.unit.dublagem_agente import AnthropicFalso
+        from src.services import skills
 
         anthropic = AnthropicFalso("ok")
         agente = monta_agente(anthropic, paciente={"encontrado": False})
@@ -202,7 +204,8 @@ class TestPacienteCadastradaNaoOuvePedidoDeCadastro(unittest.TestCase):
 
         agente.process_message(CLINIC, mensagem("confirmo"))
 
-        self.assertEqual(anthropic.prompts[0], PROMPT_REAL)
+        self.assertEqual(anthropic.prompts[0], PROMPT_REAL + skills.PRIMEIRO_AGENDAMENTO.bloco)
+        self.assertIn("CADASTRO", anthropic.prompts[0], "o passo de cadastro continua lá para a lead")
 
     def test_a_identidade_chega_as_tools(self):
         """book_appointment lê o nome do contexto; a tool nova lê de lá também."""
