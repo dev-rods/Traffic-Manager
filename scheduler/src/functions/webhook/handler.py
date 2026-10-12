@@ -10,7 +10,6 @@ from src.utils.http import parse_body, http_response
 from src.utils.phone import normalize_phone, variantes_do_numero
 from src.services.db.postgres import PostgresService
 from src.services.template_service import TemplateService
-from src.services.conversation_engine import ConversationEngine, ConversationState
 from src.services.message_tracker import MessageTracker
 from src.services.lead_service import LeadService, extract_gclid
 from src.services.agregador_de_mensagens import (
@@ -547,30 +546,17 @@ def _executar_engine(db, clinic, clinic_id, provider, tracker, incoming,
         template_service = TemplateService(db)
         availability_engine = _get_availability_engine(db)
         appointment_service = _get_appointment_service(db)
-        use_agent = clinic.get("use_agent", False) or os.environ.get("USE_AGENT_MODE") == "true"
+        from src.services.conversation_agent import ConversationAgent
+        engine = ConversationAgent(
+            db=db,
+            template_service=template_service,
+            availability_engine=availability_engine,
+            appointment_service=appointment_service,
+            provider=provider,
+            message_tracker=tracker,
+        )
 
-        if use_agent:
-            from src.services.conversation_agent import ConversationAgent
-            engine = ConversationAgent(
-                db=db,
-                template_service=template_service,
-                availability_engine=availability_engine,
-                appointment_service=appointment_service,
-                provider=provider,
-                message_tracker=tracker,
-            )
-        else:
-            engine = ConversationEngine(
-                db=db,
-                template_service=template_service,
-                availability_engine=availability_engine,
-                appointment_service=appointment_service,
-                provider=provider,
-                message_tracker=tracker,
-                intent_classifier=_get_intent_classifier(),
-            )
-
-        # 6. Process through conversation engine
+        # 6. Process through the agent
         outgoing_messages = engine.process_message(clinic_id, incoming)
 
         # 6b. A pessoa escreveu enquanto o agente pensava?
@@ -645,19 +631,6 @@ def _executar_engine(db, clinic, clinic_id, provider, tracker, incoming,
         logger.error(f"[Webhook] Erro interno: {e}")
         # Always return 200 to prevent z-api from retrying
         return http_response(200, {"status": "OK", "error": "internal"})
-
-
-def _get_intent_classifier():
-    try:
-        if not os.environ.get("OPENAI_API_KEY"):
-            logger.info("[Webhook] IntentClassifier disabled (no OPENAI_API_KEY)")
-            return None
-        from src.services.intent_classifier import IntentClassifier
-        from src.services.openai_service import OpenAIService
-        return IntentClassifier(OpenAIService())
-    except ImportError:
-        logger.info("[Webhook] IntentClassifier not available")
-        return None
 
 
 def _get_availability_engine(db):

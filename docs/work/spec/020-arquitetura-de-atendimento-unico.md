@@ -680,6 +680,21 @@ A diferença do §2.2 do PRD fica no código, não na instrução.
 
 ### 3.20 Fase 8
 
+> **Como ficou (12/10/2026), fase 8a:** `conversation_engine.py` (2.375
+> linhas, 30 estados), `intent_classifier.py` e `openai_service.py` apagados;
+> `_executar_engine` só monta o `ConversationAgent`; `use_agent` saiu do
+> webhook, do `send` (a campanha não precisa mais checar), do update da
+> clínica e do painel (o interruptor "Agente de IA" não ligava mais nada);
+> `OPENAI_API_KEY` saiu do ambiente. Evidência: zero execuções do engine em
+> prod em 30 dias contra 558 do agente; as duas clínicas com `use_agent`
+> desligado estavam com o bot pausado. Os dois rótulos legados de `state`
+> que o painel ainda lê (`HUMAN_HANDOFF`, `HUMAN_ATTENDANT_ACTIVE`) viraram
+> constantes em `atendimento.py` (`ESTADOS_LEGADOS_COM_PESSOA`), escritas
+> só por `_projeta_no_legado`. A coluna `use_agent` fica no banco até a 8b.
+> **Fase 8b (pendente):** remover a projeção `state` e apontar fila,
+> métricas e `status_da_conversa` para o bloco `atendimento`; só depois que
+> todas as sessões de prod tiverem o bloco (TTL de 30 min garante em horas).
+
 - Confirmar em produção, no dia, que nenhuma clínica ativa tem
   `use_agent = false` com `bot_paused = false`. Se tiver, ligar `use_agent`
   antes do deploy, não depois.

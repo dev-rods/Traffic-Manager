@@ -3,7 +3,6 @@ import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Button } from '@/components/ui/Button'
-import { Switch } from '@/components/ui/Switch'
 import type { UpdateClinicPayload } from '@/types'
 import { buildDefaultMessage } from '@/utils/buildDefaultMessage'
 
@@ -18,7 +17,6 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     pre_session_instructions: clinic.pre_session_instructions ?? '',
     zapi_instance_id: clinic.zapi_instance_id ?? '',
     zapi_instance_token: clinic.zapi_instance_token ?? '',
-    use_agent: clinic.use_agent ?? false,
     batch_message_template: clinic.batch_message_template ?? '',
   }
 }
@@ -140,21 +138,6 @@ export function ConfiguracoesPage() {
           />
           <p className="text-[11px] text-gray-400">Deixe vazio para usar a mensagem padrão com as datas disponíveis.</p>
         </Section>
-
-        <hr className="border-gray-100" />
-
-        {/* AI Agent — inline toggle, no section wrapper */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-gray-800">Agente de IA</p>
-            <p className="text-xs text-gray-400 mt-0.5">Usa inteligência artificial para conduzir conversas no WhatsApp</p>
-          </div>
-          <Switch
-            checked={!!form.use_agent}
-            onChange={(v) => set('use_agent', v)}
-            label="Agente de IA"
-          />
-        </div>
 
         {/* Save */}
         <div className="flex items-center gap-3 pt-2">

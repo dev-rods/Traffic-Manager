@@ -96,7 +96,6 @@ provider:
     BOOKING_SITE_VERCEL_PROJECT_ID: prj_0TsMiEsoApAlYoVMN0YboJs5hmAf
     ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
     ALLOWED_PHONES: ${ssm:/${self:custom.stage}/ALLOWED_PHONES}
-    OPENAI_API_KEY: ${ssm:/${self:custom.stage}/OPENAI_API_KEY}
     ANTHROPIC_API_KEY: ${ssm:/${self:custom.stage}/ANTHROPIC_API_KEY}
 
 functions:

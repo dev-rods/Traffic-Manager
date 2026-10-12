@@ -29,11 +29,9 @@ TABELAS_DO_PRONTUARIO = (
 def _fontes_do_agente():
     import src.services.ai_tools as ai_tools
     import src.services.conversation_agent as agent
-    import src.services.conversation_engine as engine
     return {
         "ai_tools": inspect.getsource(ai_tools),
         "conversation_agent": inspect.getsource(agent),
-        "conversation_engine": inspect.getsource(engine),
     }
 
 

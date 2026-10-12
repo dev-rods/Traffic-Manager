@@ -147,7 +147,7 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 
 ### Key Directories
 - `scheduler/src/functions/` - Lambda handlers by domain (webhook, send, clinic, service, professional, availability, appointment, template, faq, reminder, report, lead)
-- `scheduler/src/services/` - Business logic (conversation_engine, intent_classifier, availability_engine, appointment_service, lead_service, message_tracker, reminder_service, sheets_sync, template_service)
+- `scheduler/src/services/` - Business logic (conversation_agent, ai_tools, skills, atendimento, availability_engine, appointment_service, lead_service, message_tracker, reminder_service, sheets_sync, template_service)
 - `scheduler/src/providers/` - WhatsApp provider abstraction (z-api implementation)
 - `scheduler/src/utils/` - Utilities (http, auth, logging, phone, decimal)
 - `scheduler/sls/functions/` - Serverless function interface files
@@ -162,7 +162,7 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 ### External Integrations
 - z-api (WhatsApp messaging)
 - Google Sheets API (appointment sync)
-- OpenAI API (intent classification fallback via GPT-4o-mini — used only when deterministic input matching fails)
+- Anthropic API (the conversation agent; see `conversation_agent.py`)
 
 ### Database Migrations
 - Schema changes go in the `MIGRATIONS` list in `scheduler/src/scripts/setup_database.py`
