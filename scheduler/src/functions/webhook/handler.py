@@ -20,6 +20,7 @@ from src.services.agregador_de_mensagens import (
     junta_conteudo,
 )
 from src.services import atendimento
+from src.services import retencao
 from src.services.session_store import grava_atendimento, mark_conversation_eligible
 from src.services.autoria_mensagem import foi_enviada_pelo_bot
 from src.services.identidade_whatsapp import chat_lid, deve_vincular_lid, telefone_da_conversa
@@ -694,6 +695,7 @@ def _save_session(table, clinic_id: str, phone: str, session: dict) -> None:
                 "clinicId": clinic_id,
                 "phone": phone,
                 "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+                "ttl": retencao.ttl_da_sessao(now),
             }
         )
     except Exception as e:

@@ -14,6 +14,8 @@ import logging
 import time
 from typing import Optional
 
+from src.services import retencao
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +35,7 @@ def mark_conversation_eligible(table, clinic_id: str, phone: str,
         if lead_id:
             session["lead_id"] = str(lead_id)
 
+        agora = int(time.time())
         table.put_item(
             Item={
                 "pk": pk,
@@ -40,7 +43,8 @@ def mark_conversation_eligible(table, clinic_id: str, phone: str,
                 "session": session,
                 "clinicId": clinic_id,
                 "phone": phone,
-                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(time.time()))),
+                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(agora)),
+                "ttl": retencao.ttl_da_sessao(agora),
             }
         )
         logger.info(f"[SessionStore] Conversa {phone} marcada como elegível")
@@ -81,6 +85,7 @@ def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
         session.pop("respaldo_anterior", None)
         session.pop("efeito_na_ultima_rodada", None)
 
+        agora = int(time.time())
         table.put_item(
             Item={
                 "pk": pk,
@@ -88,7 +93,8 @@ def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
                 "session": session,
                 "clinicId": clinic_id,
                 "phone": phone,
-                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(int(time.time()))),
+                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(agora)),
+                "ttl": retencao.ttl_da_sessao(agora),
             }
         )
         logger.info(f"[SessionStore] Campanha aberta para {phone}")
@@ -140,10 +146,13 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
     bloco["versao"] = versao + 1
     pk, sk = f"CLINIC#{clinic_id}", f"PHONE#{phone}"
 
-    nomes = {"#s": "session", "#a": CAMPO}
+    agora = int(time.time())
+    nomes = {"#s": "session", "#a": CAMPO, "#ttl": "ttl"}
     valores = {":a": bloco, ":v": versao,
-               ":u": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    sets = ["#s.#a = :a", "updatedAt = :u", "clinicId = :c", "phone = :p"]
+               ":u": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(agora)),
+               ":ttl": retencao.ttl_da_sessao(agora)}
+    # Toda escrita renova a vida da sessao (PRD 022): `ttl` e a raiz do item.
+    sets = ["#s.#a = :a", "updatedAt = :u", "clinicId = :c", "phone = :p", "#ttl = :ttl"]
     valores[":c"], valores[":p"] = clinic_id, phone
     # Copias na RAIZ do item, para o indice handler-humanUntil-index: uma GSI
     # nao indexa caminho aninhado. A fonte continua sendo `session.atendimento`.
@@ -177,7 +186,7 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
             novo = {
                 "pk": pk, "sk": sk, "session": session, "clinicId": clinic_id,
                 "phone": phone, "updatedAt": valores[":u"],
-                "handler": valores[":h"],
+                "handler": valores[":h"], "ttl": valores[":ttl"],
             }
             if ":hu" in valores:
                 novo["humanUntil"] = valores[":hu"]
@@ -222,6 +231,10 @@ def vincula_lid(table, clinic_id: str, chat_lid: str, phone: str) -> None:
 
     Vive na tabela de sessões com sk=LID#..., ao lado de PHONE#...: mesma
     partição da clínica, sem tabela nova.
+
+    SEM `ttl`, de propósito (PRD 022): o vínculo é identidade, não conversa.
+    Se vencesse, a resposta da atendente pelo celular voltaria a chegar sem
+    dono até a próxima mensagem normal da pessoa.
     """
     try:
         table.put_item(Item={

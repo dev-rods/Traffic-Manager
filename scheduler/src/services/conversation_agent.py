@@ -26,6 +26,7 @@ from src.services import estado_comercial
 from src.services import nivel_de_risco
 from src.services import policy_do_faq
 from src.services import skills
+from src.services import retencao
 from src.services.busca_no_faq import busca as busca_no_faq
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.identificacao_de_paciente import sem_passo_de_cadastro
@@ -1488,6 +1489,15 @@ class ConversationAgent:
                 session = item.get("session", {})
                 # DynamoDB returns Decimal — convert to native Python types
                 session = self._convert_decimals(session)
+                # PRD 022: conversa parada ha mais de MEMORIA_DO_BOT e conversa
+                # nova. O TTL do DynamoDB apaga o item com ate 48 h de atraso,
+                # entao a regra vale aqui tambem; fica so quem a pessoa e.
+                if retencao.sessao_vencida(item.get("updatedAt")):
+                    logger.info(
+                        f"[Retencao] {phone}: sessao de {item.get('updatedAt')} descartada; "
+                        f"conversa nova"
+                    )
+                    return retencao.so_identidade(session)
                 logger.info(f"[ConversationAgent] Session loaded for {phone}, mode={session.get('mode')}")
                 return session
         except Exception as e:
@@ -1505,6 +1515,7 @@ class ConversationAgent:
                     "clinicId": clinic_id,
                     "phone": phone,
                     "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+                    "ttl": retencao.ttl_da_sessao(now),
                 }
             )
         except Exception as e:
@@ -1558,9 +1569,14 @@ class ConversationAgent:
         return obj
 
     def rebuild_history_from_events(self, clinic_id, phone, limit=20):
-        """Reconstrói o histórico do MessageEvents quando a sessão está vazia."""
+        """Reconstrói o histórico do MessageEvents quando a sessão está vazia.
+
+        Só dentro da memória do bot (PRD 022): eventos mais velhos que 30 dias
+        são conversa de outra época, não desta.
+        """
         try:
-            eventos = self.message_tracker.get_conversation_messages(clinic_id, phone, limit=limit)
+            eventos = self.message_tracker.get_conversation_messages(
+                clinic_id, phone, limit=limit, desde=retencao.inicio_da_memoria())
             history = events_to_history(eventos)
             if history:
                 logger.info(

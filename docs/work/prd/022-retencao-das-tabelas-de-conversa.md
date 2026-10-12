@@ -119,5 +119,5 @@ O que uma sessão carrega, e o que acontece se ela vencer:
 ## Status (preencher após conclusão)
 
 - [x] Spec gerada: `spec/022-retencao-das-tabelas-de-conversa.md`
-- [ ] Implementado em:
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: fase 1 (TTL ligado) em 12/10/2026, PR #129; fase 2 (conversa vence) em 12/10/2026
+- [x] Registrado em `TASKS_LOG.md`
