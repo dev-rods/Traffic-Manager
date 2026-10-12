@@ -266,12 +266,13 @@ Tomadas pelo André em 12/10/2026:
 - **Áreas mudam o valor e a cobrança acompanha:** recalcular, gravar, só
   então cobrar; mudança posterior cancela e recria a cobrança.
 
-Pendentes:
-1. **Proteção do tablet:** código de balcão de 6 dígitos no painel, guardado
-   no tablet por 12 h (recomendado), ou login de STAFF no tablet?
-2. **Vencimento** do Pix e do link de cartão à meia-noite do dia da sessão?
-3. **Troca de áreas no balcão:** a paciente mexe sozinha (como está), ou só
-   confirma e quem mexe é a recepção?
+- **Proteção do tablet:** código de balcão de 6 dígitos no painel, guardado
+  no tablet por 12 h.
+- **Vencimento:** Pix e link de cartão vencem às 23:59 do dia da sessão, no
+  fuso da clínica.
+- **Troca de áreas no balcão:** a paciente mexe sozinha.
+
+Nenhuma pendente. Spec: `spec/023-pagina-de-pagamento-asaas.md`.
 
 ---
 
