@@ -8,6 +8,7 @@ import boto3
 from boto3.dynamodb.conditions import Key
 
 from src.providers.whatsapp_provider import IncomingMessage
+from src.services import retencao
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ class MessageTracker:
             "providerMessageId": provider_message_id,
             "createdAt": timestamp_iso,
             "updatedAt": timestamp_iso,
+            "ttl": retencao.ttl_do_evento(now),
         }
 
         if provider_response:
@@ -96,6 +98,7 @@ class MessageTracker:
             "senderName": incoming_message.sender_name,
             "createdAt": timestamp_iso,
             "updatedAt": timestamp_iso,
+            "ttl": retencao.ttl_do_evento(now),
         }
 
         if incoming_message.button_id:
@@ -146,6 +149,7 @@ class MessageTracker:
             "content": "",
             "createdAt": timestamp_iso,
             "updatedAt": timestamp_iso,
+            "ttl": retencao.ttl_do_evento(event_time),
         }
 
         if raw_payload:
@@ -162,16 +166,27 @@ class MessageTracker:
         return item
 
     def get_conversation_messages(
-        self, clinic_id: str, phone: str, limit: int = 50
+        self, clinic_id: str, phone: str, limit: int = 50, desde: Optional[int] = None
     ) -> List[Dict[str, Any]]:
+        """Os ultimos `limit` eventos da conversa, do mais antigo ao mais novo.
+
+        `desde` (epoch): so mensagens a partir desse instante, na CHAVE e nao
+        em filtro - o Limit do DynamoDB e aplicado antes do filtro, e um filtro
+        devolveria menos do que `limit`. O `sk` das mensagens e `MSG#<iso>#...`,
+        entao o corte por prefixo e exato; os itens STATUS# ficam de fora, e
+        nao fazem falta a quem quer o texto da conversa (PRD 022).
+        """
         try:
             # Descendente e depois invertido: com Limit, ascendente devolveria o
             # COMEÇO da conversa. 39% das conversas passam de 20 eventos, então o
             # agente relia disparos de campanha antigos em vez do que a pessoa
             # acabou de perguntar. O retorno segue cronológico, do mais antigo
             # para o mais recente, que é como quem lê espera.
+            condicao = Key("pk").eq(f"CLINIC#{clinic_id}#PHONE#{phone}")
+            if desde is not None:
+                condicao = condicao & Key("sk").between(f"MSG#{retencao.iso(desde)}", "MSG#~")
             response = self.table.query(
-                KeyConditionExpression=Key("pk").eq(f"CLINIC#{clinic_id}#PHONE#{phone}"),
+                KeyConditionExpression=condicao,
                 ScanIndexForward=False,
                 Limit=limit,
             )

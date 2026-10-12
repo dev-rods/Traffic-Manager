@@ -65,6 +65,19 @@ Nenhum.
 
 ---
 
+> **Como ficou (12/10/2026):** como desenhado, com três ajustes. (1) A sessão
+> vencida que ainda está no banco não é descartada inteira: `_load_session`
+> do agente devolve `retencao.so_identidade(session)`, que mantém `bot_enabled`
+> e `lead_id`; o webhook não precisou mudar a leitura, porque a elegibilidade é
+> identidade e o bloco `atendimento` de 30 dias atrás já é BOT. (2) O corte
+> `desde` do tracker é na chave (`sk BETWEEN MSG#<iso> AND MSG#~`), o que
+> deixa os itens `STATUS#` de fora; nenhum chamador do texto da conversa os
+> usa. Os outros chamadores (`retomada`, `conversation_resume`, `expira`) não
+> passam `desde` e seguem como antes. (3) O `ttl` do `update_status` usa o
+> instante do evento, não o da gravação. O teste de fonte única (`test_retencao`)
+> acha os escritores por AST: todo dict literal com `session` e `sk` carrega
+> `ttl`; `LID#` não.
+
 ## 6. Detalhes por arquivo
 
 ### `src/services/retencao.py`
