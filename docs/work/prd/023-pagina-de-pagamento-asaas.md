@@ -13,14 +13,15 @@ pelo **Asaas**, com o dinheiro na conta da clínica e o agendamento marcado como
 pago sem ninguém conferir extrato. Dois momentos, nesta ordem de prioridade:
 
 1. **No dia, no balcão (fluxo principal).** A paciente agendou pelo WhatsApp
-   e chega na clínica. Num tablet na recepção ela digita o CPF, vê o
-   agendamento de hoje, **confirma as áreas e o valor**, escolhe como pagar, e:
+   e chega na clínica. Num tablet na recepção ela digita o **CPF ou o
+   telefone**, vê o agendamento de hoje, **confirma as áreas e o valor**,
+   escolhe como pagar, e:
    - **Pix:** o tablet mostra o QR Code e a tela vira "pago" quando o Asaas
      confirmar;
-   - **boleto:** o tablet mostra o código de barras e a linha digitável, e o
-     PDF vai pelo WhatsApp;
    - **cartão (crédito ou débito):** o link de pagamento vai pelo WhatsApp do
      número cadastrado da paciente; ela paga no celular, na página do Asaas.
+   - **Boleto fica fora por enquanto** (decisão do André, 12/10/2026): no
+     balcão a pessoa sairia sem pagar. Volta a ser avaliado no fluxo 2.
 2. **No site, na hora de agendar** (`agendar.draclaradourado.com.br`). Menos
    comum; entra depois que o balcão estiver rodando e será lapidado à parte.
 
@@ -71,24 +72,30 @@ descreveu para o balcão.
 **O tablet é uma tela do `booking-site`, em modo balcão.** Rota
 `/:clinicId/balcao` (ou `/balcao` no domínio próprio). Sem login de usuário,
 mas protegida por **código de balcão** da clínica (6 dígitos, no painel),
-digitado uma vez e guardado no tablet. Sem o código, a rota não responde. O
-que o CPF expõe é só o agendamento **de hoje** daquela paciente, nesta
-clínica: nome, áreas e valor. Nada de histórico, telefone ou outros dias.
+digitado uma vez e guardado no tablet por 12 h. Sem o código, a rota não
+responde. (Alternativa: login de STAFF no tablet, que exigiria conta por
+recepcionista e login toda manhã.) O que o CPF ou o telefone expõe é só o
+agendamento **de hoje** daquela paciente, nesta clínica: nome, áreas e
+valor. Nada de histórico, outros dias, nem o telefone em si (a tela mostra o
+número mascarado ao enviar o link).
 
-**Confirmar áreas pode mudar o valor.** No balcão a paciente pode tirar ou
-pôr área. Isso é uma edição do agendamento pelo mesmo caminho que a recepção
-já tem (áreas → duração e preço recalculados pelo motor, desconto da
-paciente mantido). O valor cobrado é sempre o `final_price_cents` gravado
-depois da confirmação, nunca um número vindo da tela.
+**Confirmar áreas muda o valor, e a cobrança acompanha.** A ordem é fixa:
+(1) a tela manda as áreas; (2) o backend recalcula duração e preço pelo motor
+que o bot e a recepção já usam, com o desconto da paciente, e **grava** no
+agendamento; (3) só então a cobrança é criada no Asaas, a partir do valor
+gravado. A tela nunca manda valor. Se as áreas mudarem **depois** de existir
+uma cobrança (a paciente voltou e tirou uma área), a cobrança anterior é
+cancelada no Asaas e outra é criada com o valor novo, na mesma operação do
+nosso lado; o QR ou o link antigos deixam de valer. Invariante: nunca existe
+cobrança aberta com valor diferente do `final_price_cents` do agendamento.
 
 **A conta Asaas é da clínica.** Ela cria, gera a chave de API e cola no
 painel. Sem split, sem subconta, sem repasse. Vale para a Essência e para a
 próxima clínica sem código novo.
 
 **Uma cobrança por agendamento, vida curta.** Pix e cartão vencem no fim do
-dia; boleto em 3 dias (decisão abaixo). Trocar de meio no balcão cancela a
-cobrança anterior no Asaas e cria outra: nunca duas abertas para o mesmo
-agendamento.
+dia. Trocar de meio, ou mudar as áreas, cancela a cobrança anterior no Asaas
+e cria outra: nunca duas abertas para o mesmo agendamento.
 
 **Pago é estado do pagamento, não do agendamento.** `appointments.status`
 continua CONFIRMED/CANCELLED/NO_SHOW. `payments.status` diz se pagou. O
@@ -117,26 +124,27 @@ painel mostra os dois.
   webhook (idempotente por `(asaas_payment_id, evento)`), status derivado.
 - **Endpoints públicos (no roteador `PublicBooking`):**
   - `POST /public/clinics/{clinicId}/balcao/identificar` — código de balcão
-    + CPF → agendamento de hoje (nome, serviços, áreas, valor, status de
-    pagamento). 404 sem agendamento hoje; 401 sem código.
+    + CPF **ou telefone** → agendamento de hoje (nome, serviços, áreas, valor,
+    status de pagamento). 404 sem agendamento hoje; 401 sem código.
   - `PUT /public/clinics/{clinicId}/balcao/appointments/{id}/areas` — confirma
     ou ajusta áreas; devolve valor recalculado.
   - `POST /public/clinics/{clinicId}/balcao/appointments/{id}/payments` —
-    `billingType` → cria (ou troca) a cobrança; Pix devolve QR e copia-e-cola;
-    boleto devolve código de barras, linha digitável e PDF, e manda o PDF
-    pelo WhatsApp; cartão manda o link pelo WhatsApp e devolve "enviado para
-    (11) 9****-1234".
+    `billingType` (`PIX` | `CARTAO`) → cria (ou troca) a cobrança a partir do
+    valor gravado; Pix devolve QR e copia-e-cola; cartão manda o link pelo
+    WhatsApp e devolve "enviado para (11) 9****-1234". Rejeita com 409 se o
+    valor gravado mudou desde a tela (a tela reconfirma e tenta de novo).
   - `GET /public/clinics/{clinicId}/balcao/payments/{paymentId}` — status
     para a tela (polling de 3 s).
   - `POST /public/webhooks/asaas/{clinicId}` — eventos do Asaas; valida
     `asaas-access-token`; responde 200 sempre; sem `x-api-key`.
-- **Tela do balcão no `booking-site`:** código de balcão (uma vez) → CPF →
-  "Olá, Fulana: hoje às 14:00, Axilas + Virilha, R$ 166,50" com as áreas
-  editáveis → "Como você quer pagar?" → tela do meio escolhido → "Pagamento
-  confirmado, obrigada!" e volta ao CPF sozinha em 20 s. Tudo grande, para
-  dedo, sem teclado físico.
-- **WhatsApp:** mensagens fixas (template `PAYMENT_LINK`, `BOLETO_PDF`,
-  `PAYMENT_CONFIRMED`) pelo `Send` existente, no número da paciente.
+- **Tela do balcão no `booking-site`:** código de balcão (uma vez) → CPF ou
+  telefone → "Olá, Fulana: hoje às 14:00, Axilas + Virilha, R$ 166,50" com
+  as áreas editáveis e o valor recalculado a cada mudança → "Como você quer
+  pagar?" (Pix ou cartão) → tela do meio escolhido → "Pagamento confirmado,
+  obrigada!" e volta ao início sozinha em 20 s. Tudo grande, para dedo, sem
+  teclado físico.
+- **WhatsApp:** mensagens fixas (template `PAYMENT_LINK`, `PAYMENT_CONFIRMED`)
+  pelo `Send` existente, no número da paciente.
 - **Painel:** coluna "pagamento" na agenda do dia (aberto / pago / vencido /
   sem cobrança); na ficha do agendamento, a cobrança e o botão "Enviar link de
   pagamento" (mesmo serviço do balcão, para quem esqueceu o celular ou pagou
@@ -174,7 +182,7 @@ painel mostra os dois.
 | `scheduler/src/functions/public_booking/router.py`, `sls/functions/public_booking/interface.yml` | modificar | 5 rotas (≈ 12 recursos; stack 435 → ~447) |
 | `scheduler/src/functions/clinic/update.py`, `get.py`, `asaas_setup.py` | modificar/criar | campos Asaas, código de balcão, testar/registrar |
 | `scheduler/src/functions/appointment/...` | modificar | status de pagamento na listagem da agenda; "enviar link" |
-| `scheduler/src/services/template_service.py` | modificar | `PAYMENT_LINK`, `BOLETO_PDF`, `PAYMENT_CONFIRMED` |
+| `scheduler/src/services/template_service.py` | modificar | `PAYMENT_LINK`, `PAYMENT_CONFIRMED` |
 | `booking-site/src/pages/Balcao.tsx` (+ componentes), `router.tsx`, `services/balcao.service.ts`, `types` | criar/modificar | a tela do tablet |
 | `frontend/src/pages/configuracoes/...`, `frontend/src/pages/agenda/...` | modificar | config e status |
 | testes: `test_pagamentos.py`, `test_asaas_webhook.py`, `test_balcao.py`, `Balcao.test.tsx` | criar | |
@@ -198,8 +206,9 @@ painel mostra os dois.
   - *Fila do webhook pausa após 15 falhas*: handler responde 200 sempre
     (grava o evento cru e loga); alarme.
   - *Entrega duplicada*: idempotência por `(asaas_payment_id, evento)`.
-  - *CPF errado ou paciente sem CPF*: a tela oferece "chamar a recepção"; a
-    recepção cadastra o CPF no painel na hora. Não cadastramos pelo tablet.
+  - *Paciente sem CPF*: o telefone é a alternativa na própria tela (é a
+    identidade que o bot usa). Nem CPF nem telefone conhecidos: "chame a
+    recepção". Não cadastramos pelo tablet.
   - *Duas pacientes com o mesmo CPF* não existe por clínica: `UNIQUE` parcial
     em `(clinic_id, cpf)` onde `cpf IS NOT NULL` entra na migration (hoje
     não há constraint; conferir duplicatas em prod antes).
@@ -207,8 +216,6 @@ painel mostra os dois.
     dados além de nome/áreas/valor; sessão do tablet expira em 12 h.
   - *Valor manipulado*: endpoints nunca aceitam valor; leem do agendamento
     depois da confirmação das áreas.
-  - *Boleto compensa em até 3 dias úteis*: no balcão o boleto é "gerado",
-    não "pago"; o painel mostra "aguardando compensação".
   - *Cancelar agendamento pago* não estorna sozinho: painel mostra "pago e
     cancelado" para a clínica agir no Asaas.
   - *Chave de API*: cifrada, nunca devolvida, nunca logada.
@@ -218,14 +225,15 @@ painel mostra os dois.
 ## 6. Critérios de aceite (fluxo 1, sandbox da Essência em dev)
 
 - [ ] Tablet: código de balcão errado não entra; certo, pede CPF.
-- [ ] CPF de paciente com sessão hoje mostra nome, áreas e valor corretos;
-      sem sessão hoje, mensagem clara; CPF desconhecido, "chame a recepção".
+- [ ] CPF ou telefone de paciente com sessão hoje mostra nome, áreas e valor
+      corretos; sem sessão hoje, mensagem clara; desconhecido, "chame a
+      recepção".
 - [ ] Tirar uma área recalcula o valor e grava no agendamento; o painel
       reflete.
 - [ ] Pix: QR na tela; `PAYMENT_RECEIVED` do sandbox vira "pago" na tela em
       até 5 s sem recarregar; agendamento pago no painel.
-- [ ] Boleto: código de barras e linha digitável na tela; PDF chega no
-      WhatsApp da paciente; evento do sandbox marca pago.
+- [ ] Mudar as áreas depois de gerar o QR cancela a cobrança no Asaas, cria
+      outra com o valor novo e a tela mostra o QR novo.
 - [ ] Cartão: link chega no WhatsApp; pagar na fatura do Asaas marca pago e
       a tela do tablet mostra "confirmado".
 - [ ] Trocar de meio cancela a cobrança anterior no Asaas.
@@ -244,23 +252,25 @@ painel mostra os dois.
 | 0 | contas Asaas (sandbox nossa, produção da Essência), `FERNET_KEY`, tablet, decisões da §8 | André / clínica |
 | 1 | backend: migrations, cifra, `asaas_client` (fixtures gravadas do sandbox), `pagamentos`, 5 rotas, webhook, templates, testes; config Asaas no painel | 0 |
 | 2 | `booking-site`: tela do balcão completa, testes, Vercel | 1 em dev |
-| 3 | painel: pagamento na agenda e "Enviar link"; alarme; piloto na Essência com Pix primeiro, depois boleto e cartão | 2 |
+| 3 | painel: pagamento na agenda e "Enviar link"; alarme; piloto na Essência com Pix primeiro, depois cartão | 2 |
 | 4 | fluxo 2 (site na hora de agendar) | 3 estável |
 | 5 | opcional: cartão na nossa tela com tokenização | liberação do Asaas |
 
 ---
 
-## 8. Decisões pedidas ao André
+## 8. Decisões
 
-1. **Código de balcão** (6 dígitos no painel, guardado no tablet) protege a
-   tela? Ou prefere login de STAFF no tablet?
-2. **Vencimentos:** Pix e link de cartão vencem à meia-noite do dia da
-   sessão; boleto em 3 dias. OK?
-3. **Boleto no balcão** faz sentido mesmo (a pessoa sai sem pagar e paga
-   depois)? Se sim, entra como está; se não, boleto fica só para o fluxo 2.
-4. **Paciente sem CPF no cadastro:** a recepção cadastra na hora pelo painel
-   (proposta), ou o tablet pergunta telefone como alternativa?
-5. **Troca de áreas no balcão**: a paciente pode mexer sozinha, ou só
+Tomadas pelo André em 12/10/2026:
+- **Paciente sem CPF:** o tablet aceita telefone.
+- **Boleto:** fora do balcão por enquanto; reavaliar no fluxo 2.
+- **Áreas mudam o valor e a cobrança acompanha:** recalcular, gravar, só
+  então cobrar; mudança posterior cancela e recria a cobrança.
+
+Pendentes:
+1. **Proteção do tablet:** código de balcão de 6 dígitos no painel, guardado
+   no tablet por 12 h (recomendado), ou login de STAFF no tablet?
+2. **Vencimento** do Pix e do link de cartão à meia-noite do dia da sessão?
+3. **Troca de áreas no balcão:** a paciente mexe sozinha (como está), ou só
    confirma e quem mexe é a recepção?
 
 ---
