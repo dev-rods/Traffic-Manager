@@ -156,7 +156,7 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 - `scheduler/tests/postman/` - Postman collections for API documentation
 
 ### Data Stores
-- **DynamoDB**: ConversationSessions (TTL 30min), MessageEvents (3 GSIs, TTL 90d), ScheduledReminders (1 GSI, TTL 48h)
+- **DynamoDB**: ConversationSessions (TTL em `ttl`: sessão PHONE# 30 dias, LID# sem prazo; PRD 022), MessageEvents (3 GSIs, TTL 60 dias), ScheduledReminders (1 GSI, sem TTL)
 - **PostgreSQL RDS** (shared instance, schema `scheduler`): clinics, services, professionals, availability_rules, availability_exceptions, patients, appointments, leads, message_templates, faq_items
 
 ### External Integrations
