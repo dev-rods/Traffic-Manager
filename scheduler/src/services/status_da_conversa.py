@@ -33,9 +33,6 @@ AGUARDA_HUMANO = "AGUARDA_HUMANO"  # o bot pediu ajuda e ninguém assumiu ainda
 BOT = "BOT"              # o bot está conduzindo
 SEM_CONVERSA = "SEM_CONVERSA"
 
-ESTADOS_DE_ESPERA = {atendimento.ESTADO_LEGADO_ESPERA}
-ESTADOS_DE_ATENDENTE = {atendimento.ESTADO_LEGADO_ATENDENTE}
-
 MAX_POR_LOTE = 100  # limite do BatchGetItem do DynamoDB
 
 
@@ -45,20 +42,13 @@ def status_de_uma_sessao(sessao, agora=None):
         return SEM_CONVERSA
 
     agora = agora or int(time.time())
-    estado = str(sessao.get("state") or "")
 
-    # A fonte e o estado de atendimento derivado (PRD 020 §3.2). Os rotulos
-    # antigos de `state` continuam valendo para sessao gravada antes do TTL
-    # existir: um HUMAN_HANDOFF sem prazo nenhum ainda e alguem esperando.
+    # A fonte e o estado de atendimento derivado do bloco (PRD 020 §3.2).
     if atendimento.esta_com_pessoa(sessao, agora):
         # Tarefa aberta e espera de pessoa, de quem quer que tenha entregue.
         if atendimento.estado(sessao, agora) == atendimento.HUMAN_PENDING:
             return AGUARDA_HUMANO
         return AGUARDA_HUMANO if atendimento.aguarda_especialista(sessao, agora) else HUMANO
-    if estado in ESTADOS_DE_ATENDENTE and not sessao.get("attendant_active_until"):
-        return HUMANO
-    if estado in ESTADOS_DE_ESPERA and not sessao.get("attendant_active_until"):
-        return AGUARDA_HUMANO
     return BOT
 
 

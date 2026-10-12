@@ -78,7 +78,6 @@ def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
         # de 04/09 parados na sessao. Sem TTL na tabela, esse historico fica
         # para sempre - o mes que vem teria a conversa deste mes por baixo.
         session["agent_history"] = []
-        session.pop("state", None)
         session.pop("respaldo_anterior", None)
         session.pop("efeito_na_ultima_rodada", None)
 
@@ -118,17 +117,10 @@ def carrega_sessao(clinic_id: str, phone: str, table=None) -> dict:
         return {}
 
 
-# Os campos antigos que `atendimento` projeta. Gravados junto com o bloco, e
-# so por aqui: o painel os le ate a fase 3.
-_PROJECAO_LEGADA = (
-    "state", "attendant_active_until", "bot_pausado_por", "handoff_reason",
-    "human_handoff_requested_at",
-)
-
 
 def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
                       extras: Optional[dict] = None) -> bool:
-    """Grava SO o bloco `atendimento` (e sua projecao), condicionado a versao.
+    """Grava SO o bloco `atendimento`, condicionado a versao.
 
     Duas Lambdas escrevem a mesma sessao - o webhook assincrono e, na fase 3,
     o cron de vencimento. Um put da sessao inteira faria COOLDOWN sobrescrever
@@ -158,34 +150,24 @@ def grava_atendimento(table, clinic_id: str, phone: str, session: dict,
     nomes["#h"], nomes["#hu"] = "handler", "humanUntil"
     valores[":h"] = bloco.get("handler") or "BOT_ACTIVE"
     sets.append("#h = :h")
+    removes_raiz = []
     if bloco.get("human_until") is not None:
         valores[":hu"] = int(bloco["human_until"])
         sets.append("#hu = :hu")
     else:
         removes_raiz = ["#hu"]
-    removes = []
-    i = 0
-    # Um caminho por campo: `extras` pode repetir um campo da projecao
-    # ("state", no "Retomar bot"), e dois SET no mesmo caminho e
-    # "Two document paths overlap" - o DynamoDB rejeita a escrita inteira.
-    # Foi o que deixou o botao do painel sem efeito de 06/10 a 10/10/2026.
-    campos = list(_PROJECAO_LEGADA) + [c for c in (extras or {}) if c not in _PROJECAO_LEGADA]
-    for campo in campos:
-        i += 1
+    # Um caminho por campo: dois SET no mesmo caminho e "Two document paths
+    # overlap" - o DynamoDB rejeita a escrita inteira. Foi o que deixou o
+    # botao do painel sem efeito de 06/10 a 10/10/2026.
+    for i, (campo, valor) in enumerate(dict(extras or {}).items(), start=1):
+        assert campo != CAMPO, "o bloco vai em :a, nao em extras"
         nomes[f"#f{i}"] = campo
-        if campo in (extras or {}):
-            valores[f":f{i}"] = extras[campo]
-            sets.append(f"#s.#f{i} = :f{i}")
-        elif campo in session:
-            valores[f":f{i}"] = session[campo]
-            sets.append(f"#s.#f{i} = :f{i}")
-        else:
-            removes.append(f"#s.#f{i}")
+        valores[f":f{i}"] = valor
+        sets.append(f"#s.#f{i} = :f{i}")
 
     expressao = "SET " + ", ".join(sets)
-    removes = removes + (locals().get("removes_raiz") or [])
-    if removes:
-        expressao += " REMOVE " + ", ".join(removes)
+    if removes_raiz:
+        expressao += " REMOVE " + ", ".join(removes_raiz)
 
     # Sem `session` no item (sessao nova) o caminho aninhado falha: cria o
     # item inteiro. A condicao de versao so vale quando ja ha bloco.

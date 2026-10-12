@@ -114,10 +114,11 @@ def estado_do_bot():
     item = dynamo.Table(TABELA_SESSOES).get_item(
         Key={"pk": f"CLINIC#{CLINICA}", "sk": f"PHONE#{TELEFONE}"}).get("Item") or {}
     sessao = item.get("session", {})
-    ate = sessao.get("attendant_active_until")
-    pausado = bool(ate and int(ate) > int(time.time()))
+    from src.services import atendimento
+    ate = atendimento.bloco(sessao).get("human_until")
+    pausado = atendimento.esta_com_pessoa(sessao)
     horas = (int(ate) - int(time.time())) / 3600 if ate else 0
-    return pausado, sessao.get("state"), horas
+    return pausado, atendimento.estado(sessao), horas
 
 
 def lid_vinculado():

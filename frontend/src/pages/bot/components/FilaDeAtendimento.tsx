@@ -65,7 +65,7 @@ export function FilaDeAtendimento({
   // trabalho a fazer. Quem já tem atendente fica de fora - aquela conversa não
   // está esperando ninguém.
   const aguardando = conversations
-    .filter((c) => c.state === 'HUMAN_HANDOFF' || temTarefa(c) || temAlerta(c))
+    .filter((c) => c.aguarda_especialista || temTarefa(c) || temAlerta(c))
     .sort((a, b) => (a.handoff_requested_at ?? 0) - (b.handoff_requested_at ?? 0))
 
   const naFila = new Set(aguardando.map((c) => c.phone))

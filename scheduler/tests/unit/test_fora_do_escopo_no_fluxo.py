@@ -24,6 +24,7 @@ from dublagem_agente import (
     mensagem,
     monta_agente,
 )
+from src.services import atendimento as at
 from src.services.bot_policy import (
     CAMPO_DE_PAUSA,
     CAMPO_DO_MOTIVO,
@@ -54,10 +55,10 @@ class OModeloNaoVeAPergunta(unittest.TestCase):
         self.responde("quanto custa o preenchimento labial?")
         sessao = self.agente.sessao_salva
 
-        self.assertEqual(sessao["state"], "HUMAN_HANDOFF")
-        self.assertEqual(sessao[CAMPO_DE_PAUSA], PAUSA_HANDOFF)
-        self.assertEqual(sessao[CAMPO_DO_MOTIVO], MOTIVO_FORA_DO_ESCOPO)
-        self.assertTrue(sessao["human_handoff_requested_at"])
+        self.assertTrue(at.aguarda_especialista(sessao))
+        self.assertEqual(at.bloco(sessao)[CAMPO_DE_PAUSA], PAUSA_HANDOFF)
+        self.assertEqual(at.bloco(sessao)[CAMPO_DO_MOTIVO], MOTIVO_FORA_DO_ESCOPO)
+        self.assertTrue(at.bloco(sessao)["entregue_em"])
 
     def test_o_historico_fica_na_sessao(self):
         # A atendente vai ler a conversa. Entregar sem o turno que motivou a

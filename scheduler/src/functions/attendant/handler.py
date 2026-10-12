@@ -107,7 +107,7 @@ def _handle_activate(event):
     return http_response(200, {
         "status": "OK",
         "message": f"Bot pausado para {phone} por 24h",
-        "attendant_active_until": session["attendant_active_until"],
+        "attendant_active_until": atendimento.bloco(session).get("human_until"),
     })
 
 
@@ -213,15 +213,11 @@ def _handle_status(event):
     item = _load_session(table, clinic_id, phone)
     session = item.get("session", {})
 
-    state = session.get("state", "")
     now = int(time.time())
-    ttl = session.get("attendant_active_until", 0)
+    ttl = int(atendimento.bloco(session).get("human_until") or 0)
 
-    # Fonte unica: o estado de atendimento derivado. Um HUMAN_HANDOFF antigo
-    # sem prazo ainda conta como pessoa esperando.
-    atendente_ativo = atendimento.esta_com_pessoa(session, now) or (
-        state in atendimento.ESTADOS_LEGADOS_COM_PESSOA and not ttl
-    )
+    # Fonte unica: o estado de atendimento derivado do bloco.
+    atendente_ativo = atendimento.esta_com_pessoa(session, now)
 
     # A política da clínica também decide. Sem consultá-la, o painel mostrava
     # "Pausar bot" numa conversa que o bot já não atendia — o botão prometia uma
@@ -239,8 +235,7 @@ def _handle_status(event):
             else "not_eligible" if not responde
             else None
         ),
-        "conversation_state": state,
-        "attendant_active_until": ttl if atendente_ativo else None,
+        "attendant_active_until": ttl if atendente_ativo and ttl else None,
         "ttl_remaining_seconds": max(0, ttl - now) if atendente_ativo and ttl else 0,
     })
 

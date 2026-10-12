@@ -10,6 +10,7 @@ import unittest
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
+from src.services import atendimento as at
 from src.services.bot_policy import should_bot_reply
 
 PILOTO = "5511970521647"
@@ -80,18 +81,18 @@ class TestAtendenteHumano(unittest.TestCase):
     """Se alguém da clínica assumiu a conversa, o bot não fala por cima."""
 
     def test_atendente_ativo_suspende_em_qualquer_politica(self):
-        session = {"attendant_active_until": int(time.time()) + 3600, "bot_enabled": True}
+        session = at.entrega_a_humano({"bot_enabled": True}, por=at.POR_ATENDENTE)
         clinic = {"bot_autoreply_policy": "PILOT", "bot_pilot_phones": [PILOTO]}
 
         self.assertFalse(should_bot_reply(clinic, session, PILOTO))
 
     def test_atendente_ativo_suspende_mesmo_com_policy_all(self):
-        session = {"attendant_active_until": int(time.time()) + 3600}
+        session = at.entrega_a_humano({}, por=at.POR_ATENDENTE)
 
         self.assertFalse(should_bot_reply({"bot_autoreply_policy": "ALL"}, session, PILOTO))
 
     def test_atendente_expirado_nao_bloqueia(self):
-        session = {"attendant_active_until": int(time.time()) - 10}
+        session = at.entrega_a_humano({}, por=at.POR_ATENDENTE, ate=int(time.time()) - 10)
         clinic = {"bot_autoreply_policy": "PILOT", "bot_pilot_phones": [PILOTO]}
 
         self.assertTrue(should_bot_reply(clinic, session, PILOTO))

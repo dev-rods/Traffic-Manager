@@ -76,7 +76,6 @@ class MessageTracker:
         message_id: str,
         conversation_id: str,
         incoming_message: IncomingMessage,
-        conversation_state: str = "",
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         now = int(time.time())
@@ -95,7 +94,6 @@ class MessageTracker:
             "status": "RECEIVED",
             "statusTimestamp": f"RECEIVED#{timestamp_iso}",
             "senderName": incoming_message.sender_name,
-            "conversationState": conversation_state,
             "createdAt": timestamp_iso,
             "updatedAt": timestamp_iso,
         }

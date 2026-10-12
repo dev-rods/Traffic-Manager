@@ -21,7 +21,8 @@ PAUSA_CHAT_ANTERIOR = "CHAT_ANTERIOR"    # já havia conversa antes de nós
 PAUSA_HANDOFF = "HANDOFF"                # o próprio bot pediu ajuda humana
 PAUSA_INSTABILIDADE = "INSTABILIDADE"    # o sistema falhou; ninguém decidiu nada
 
-CAMPO_DE_PAUSA = "bot_pausado_por"
+# Chave DENTRO do bloco `atendimento` (fase 8b): quem calou o bot.
+CAMPO_DE_PAUSA = "pausado_por"
 
 # Quanto tempo uma conversa entregue a uma pessoa fica com ela. Decisão do
 # André em 06/09/2026. A fonte e `atendimento.TTL_HUMANO`; isto e o nome antigo.
@@ -64,13 +65,14 @@ def should_bot_reply(clinic: Optional[Dict], session: Optional[Dict], phone: str
     return atendimento.pode_responder(clinic, session, phone)
 
 
-# O MOTIVO da entrega, em vocabulário fechado. `bot_pausado_por` diz QUEM calou
+# O MOTIVO da entrega, em vocabulário fechado. `pausado_por` diz QUEM calou
 # o bot (HANDOFF, ATENDENTE, INSTABILIDADE); isto diz POR QUÊ, e é o que o
 # painel mostra para a recepção saber o que a conversa precisa antes de abri-la.
 #
 # O `reason` da tool request_human_handoff chegava e era descartado: o executor
 # só devolvia o valor e ninguém gravava. A conversa ia para a fila sem dizer o
 # que a pessoa queria, e a atendente descobria lendo a thread inteira.
+# Chave DENTRO do bloco `atendimento` (fase 8b).
 CAMPO_DO_MOTIVO = "handoff_reason"
 
 MOTIVO_FORA_DO_ESCOPO = "procedimento_fora_do_escopo"
@@ -130,7 +132,7 @@ MOTIVOS_DO_MODELO = (
 
 def motivo_do_handoff_legivel(session: Optional[Dict]) -> str:
     """O motivo em português, ou vazio quando a conversa não foi entregue."""
-    motivo = (session or {}).get(CAMPO_DO_MOTIVO)
+    motivo = atendimento.bloco(session).get(CAMPO_DO_MOTIVO)
     if not motivo:
         return ""
     return MOTIVOS_LEGIVEIS.get(motivo, str(motivo))

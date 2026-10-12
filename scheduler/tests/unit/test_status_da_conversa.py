@@ -11,6 +11,7 @@ Medido: 27 dos 37 leads do site tinham conversa e o painel mostrava 10.
 import time
 import unittest
 
+from src.services import atendimento as at
 from src.services.status_da_conversa import (
     AGUARDA_HUMANO,
     BOT,
@@ -24,46 +25,34 @@ FUTURO = int(time.time()) + 3600
 PASSADO = int(time.time()) - 3600
 
 
+def entregue(por, ate=FUTURO):
+    return at.entrega_a_humano({}, por=por, ate=ate)
+
+
 class TestStatusDeUmaSessao(unittest.TestCase):
     def test_sem_sessao(self):
         self.assertEqual(status_de_uma_sessao(None), SEM_CONVERSA)
         self.assertEqual(status_de_uma_sessao({}), SEM_CONVERSA)
 
     def test_bot_conduzindo(self):
-        for estado in ("WELCOME", "MAIN_MENU", "SELECT_AREAS"):
-            with self.subTest(estado=estado):
-                self.assertEqual(status_de_uma_sessao({"state": estado}), BOT)
+        for sessao in ({"agent_history": []}, {at.CAMPO: {"handler": at.BOT_ACTIVE}}):
+            with self.subTest(sessao=sessao):
+                self.assertEqual(status_de_uma_sessao(sessao), BOT)
 
     def test_atendente_assumiu(self):
         self.assertEqual(
-            status_de_uma_sessao({"state": "HUMAN_ATTENDANT_ACTIVE"}), HUMANO)
-
-    def test_marca_de_atendente_ainda_valida(self):
-        self.assertEqual(
-            status_de_uma_sessao({"state": "MAIN_MENU",
-                                  "attendant_active_until": FUTURO}), HUMANO)
+            status_de_uma_sessao(entregue(at.POR_ATENDENTE)), HUMANO)
 
     def test_marca_de_atendente_vencida_volta_para_o_bot(self):
         """A marca dura 24h. Sem o vencimento, uma conversa atendida uma vez
         ficaria marcada como humana para sempre."""
         self.assertEqual(
-            status_de_uma_sessao({"state": "MAIN_MENU",
-                                  "attendant_active_until": PASSADO}), BOT)
+            status_de_uma_sessao(entregue(at.POR_ATENDENTE, PASSADO)), BOT)
 
     def test_bot_pediu_ajuda_e_ninguem_assumiu(self):
         """Estado diferente de "atendente atuando": é fila, não atendimento."""
-        self.assertEqual(status_de_uma_sessao({"state": "HUMAN_HANDOFF"}),
+        self.assertEqual(status_de_uma_sessao(entregue(at.POR_HANDOFF)),
                          AGUARDA_HUMANO)
-
-    def test_atendente_ativo_vence_o_handoff(self):
-        self.assertEqual(
-            status_de_uma_sessao({"state": "HUMAN_HANDOFF",
-                                  "attendant_active_until": FUTURO}), HUMANO)
-
-    def test_marca_com_lixo_nao_explode(self):
-        self.assertEqual(
-            status_de_uma_sessao({"state": "MAIN_MENU",
-                                  "attendant_active_until": "ontem"}), BOT)
 
 
 def lead(phone, **extra):
@@ -102,7 +91,7 @@ class TestEnriquece(unittest.TestCase):
     def test_sessao_manda_no_status(self):
         saida = enriquece(
             [lead("5511999990000")],
-            {"5511999990000": {"state": "HUMAN_HANDOFF"}},
+            {"5511999990000": entregue(at.POR_HANDOFF)},
             chat("5511999990000"),
         )
 

@@ -29,6 +29,7 @@ from tests.unit.dublagem_agente import (
     texto_do_modelo,
     usa_tool,
 )
+from src.services import atendimento as at
 from src.services.conversation_agent import TOOLS_COM_EFEITO
 
 
@@ -146,7 +147,7 @@ class TestRespaldoAtravessaAConversa(unittest.TestCase):
         saida = agente.process_message(CLINIC, mensagem("qual era o horário mesmo?"))
 
         self.assertIn("18:00", " ".join(m.content for m in saida))
-        self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertFalse(at.aguarda_especialista(agente.sessao_salva))
 
     def test_a_janela_e_limitada(self):
         """Sem teto, a sessão cresce sem parar e estoura o item do DynamoDB."""
@@ -226,7 +227,7 @@ class TestSeCorrigeAntesDeTransferir(unittest.TestCase):
 
         self.assertIn("18:00", enviado)
         self.assertNotIn("13:00", enviado)
-        self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertFalse(at.aguarda_especialista(agente.sessao_salva))
 
     def test_a_correcao_e_explicita_para_o_modelo(self):
         anthropic = AnthropicRoteiro([
@@ -277,8 +278,8 @@ class TestBloqueio(unittest.TestCase):
 
         agente.process_message(CLINIC, mensagem("e horários à tarde?"))
 
-        self.assertEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
-        self.assertTrue(agente.sessao_salva.get("attendant_active_until"))
+        self.assertTrue(at.aguarda_especialista(agente.sessao_salva))
+        self.assertTrue(at.bloco(agente.sessao_salva).get("human_until"))
 
     def test_a_pessoa_recebe_uma_resposta_e_nao_silencio(self):
         agente = monta_agente(AnthropicRoteiro(list(self.ROTEIRO_TEIMOSO)))
@@ -299,7 +300,7 @@ class TestNaoBloqueiaDemais(unittest.TestCase):
         saida = agente.process_message(CLINIC, mensagem("quais horarios tem?"))
 
         self.assertIn("18:00", " ".join(m.content for m in saida))
-        self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertFalse(at.aguarda_especialista(agente.sessao_salva))
 
     def test_conversa_sem_data_nem_horario_passa(self):
         agente = monta_agente(AnthropicFalso("Claro! O laser é praticamente indolor 😊"))
@@ -307,7 +308,7 @@ class TestNaoBloqueiaDemais(unittest.TestCase):
         saida = agente.process_message(CLINIC, mensagem("dói muito?"))
 
         self.assertIn("indolor", " ".join(m.content for m in saida))
-        self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertFalse(at.aguarda_especialista(agente.sessao_salva))
 
     def test_preco_sem_respaldo_registra_mas_nao_bloqueia(self):
         """Preço errado constrange; não faz ninguém perder a tarde."""
@@ -316,7 +317,7 @@ class TestNaoBloqueiaDemais(unittest.TestCase):
         saida = agente.process_message(CLINIC, mensagem("quanto custa?"))
 
         self.assertIn("250", " ".join(m.content for m in saida))
-        self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertFalse(at.aguarda_especialista(agente.sessao_salva))
 
 
 class TestEfeitoJaCometido(unittest.TestCase):
@@ -367,7 +368,7 @@ class TestEfeitoJaCometido(unittest.TestCase):
 
         agente.process_message(CLINIC, mensagem("confirma pra mim"))
 
-        self.assertEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertTrue(at.aguarda_especialista(agente.sessao_salva))
 
     def test_nao_refaz_depois_do_efeito(self):
         """Refazer convidaria o modelo a chamar book_appointment de novo."""

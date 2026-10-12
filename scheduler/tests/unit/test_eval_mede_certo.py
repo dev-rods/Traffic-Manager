@@ -5,7 +5,7 @@ Em 04/09/2026 quatro defeitos de medição no eval custaram ~US$ 16 em rodadas
 descartadas, e nenhum deles apareceu como erro - todos devolveram número
 plausível:
 
-  1. HUMAN_HANDOFF é grudento na sessão: um bloqueio no turno 6 contava como
+  1. O handoff é grudento na sessão: um bloqueio no turno 6 contava como
      bloqueio nos turnos 7 a 11 também. Inflou 1 evento em 6.
   2. Handoff que o modelo pediu com request_human_handoff era contado como
      bloqueio do guardrail - acerto virava custo.
@@ -39,11 +39,11 @@ class TestI3ContaEventoNaoEstado(unittest.TestCase):
     """Defeito 1: estado grudento inflava bloqueio."""
 
     def test_transicao_conta(self):
-        v = avalia_turno("ok", [], [], None, "HUMAN_HANDOFF")
+        v = avalia_turno("ok", [], [], False, True)
         self.assertTrue(v["I3_bloqueio"])
 
     def test_estado_que_ja_era_handoff_nao_conta_de_novo(self):
-        v = avalia_turno("ok", [], [], "HUMAN_HANDOFF", "HUMAN_HANDOFF")
+        v = avalia_turno("ok", [], [], True, True)
         self.assertFalse(v["I3_bloqueio"])
 
 
@@ -52,7 +52,7 @@ class TestI3IgnoraHandoffLegitimo(unittest.TestCase):
 
     def test_handoff_pedido_pelo_modelo_nao_e_bloqueio(self):
         v = avalia_turno("vou te transferir", ["request_human_handoff"],
-                         ["request_human_handoff"], None, "HUMAN_HANDOFF")
+                         ["request_human_handoff"], False, True)
 
         self.assertFalse(v["I3_bloqueio"])
         self.assertTrue(v["handoff_pedido_pelo_modelo"])

@@ -281,78 +281,26 @@ class TestTransicoes(unittest.TestCase):
         self.assertEqual(s[at.CAMPO]["pending_since"], T0)
 
 
-class TestLegado(unittest.TestCase):
-    """Sessão gravada antes deste módulo é lida pela mesma regra de antes."""
-
-    def test_attendant_active_until_no_futuro_e_pessoa(self):
-        s = {"attendant_active_until": T0 + H, "bot_pausado_por": "HANDOFF", "handoff_reason": "x"}
-        self.assertEqual(at.estado(s, T0), at.HUMAN_ACTIVE)
-        self.assertTrue(at.aguarda_especialista(s, T0))
-
-    def test_attendant_active_until_vencido_e_cooldown(self):
-        """Antes voltava direto ao bot; agora passa 24h sem iniciar nada."""
-        s = {"attendant_active_until": T0 - H, "bot_pausado_por": "ATENDENTE"}
-        self.assertEqual(at.estado(s, T0), at.COOLDOWN)
-        self.assertTrue(at.pode_responder(CLINICA, s, PHONE, T0))
-        self.assertFalse(at.pode_iniciar(CLINICA, s, PHONE, T0))
-
-    def test_pausas_de_origem_antigas_sem_prazo_ja_venceram(self):
-        """Decisão 9.1: sessão legada sem data é tratada como vencida há muito.
-        O bot responde se a pessoa escrever; a retomada não a alcança."""
-        for por in ("CONTATO_MANUAL", "CHAT_ANTERIOR"):
-            with self.subTest(por=por):
-                s = {"bot_pausado_por": por}
-                self.assertEqual(at.estado(s, T0), at.BOT_ACTIVE)
-                self.assertTrue(at.pode_responder(CLINICA, s, PHONE, T0))
-
-    def test_pausa_de_origem_antiga_com_prazo_futuro_segura(self):
-        s = {"bot_pausado_por": "CONTATO_MANUAL", "attendant_active_until": T0 + H}
-        self.assertEqual(at.estado(s, T0), at.HUMAN_ACTIVE)
+class TestSemBloco(unittest.TestCase):
+    """Fase 8b: os campos legados da sessão não existem mais. Sessão sem o
+    bloco é do bot, e o que sobrou nos campos antigos é ignorado."""
 
     def test_sem_nada_e_bot(self):
-        self.assertEqual(at.estado({"state": "SELECT_TIME", "agent_history": []}, T0), at.BOT_ACTIVE)
+        self.assertEqual(at.estado({"agent_history": []}, T0), at.BOT_ACTIVE)
+        self.assertTrue(at.pode_responder(CLINICA, {}, PHONE, T0))
 
-    def test_prazo_ilegivel_nao_pausa(self):
-        self.assertEqual(at.estado({"attendant_active_until": "ontem"}, T0), at.BOT_ACTIVE)
+    def test_campos_legados_nao_pausam(self):
+        s = {"attendant_active_until": T0 + 999 * H, "bot_pausado_por": "HANDOFF",
+             "state": "HUMAN_HANDOFF"}
+        self.assertEqual(at.estado(s, T0), at.BOT_ACTIVE)
+        self.assertFalse(at.aguarda_especialista(s, T0))
 
-    def test_bloco_novo_vence_o_legado(self):
-        """Quando o bloco existe, os campos antigos são projeção, não fonte."""
-        s = at.entrega_a_humano({}, por=at.POR_ATENDENTE, agora=T0)
-        s["attendant_active_until"] = T0 + 999 * H  # alguém mexeu no campo antigo
-        self.assertEqual(at.estado(s, T0 + 25 * H), at.COOLDOWN)
-
-
-class TestProjecaoNoLegado(unittest.TestCase):
-    """O painel ainda lê os campos antigos. Só este módulo os escreve."""
-
-    def test_entrega_escreve_os_campos_que_o_painel_le(self):
-        s = at.entrega_a_humano({}, por=at.POR_HANDOFF, motivo="pedido_da_paciente", agora=T0)
-        self.assertEqual(s["state"], "HUMAN_HANDOFF")
-        self.assertEqual(s["bot_pausado_por"], "HANDOFF")
-        self.assertEqual(s["attendant_active_until"], T0 + 24 * H)
-        self.assertEqual(s["handoff_reason"], "pedido_da_paciente")
-        self.assertEqual(s["human_handoff_requested_at"], T0)
-
-    def test_atendente_e_attendant_active(self):
-        s = at.entrega_a_humano({}, por=at.POR_ATENDENTE, agora=T0)
-        self.assertEqual(s["state"], "HUMAN_ATTENDANT_ACTIVE")
-
-    def test_pausa_de_origem_tem_prazo_projetado(self):
-        s = at.entrega_a_humano({}, por=at.POR_CHAT_ANTERIOR, agora=T0)
-        self.assertEqual(s["attendant_active_until"], T0 + 24 * H)
-        self.assertEqual(s["bot_pausado_por"], "CHAT_ANTERIOR")
-
-    def test_retomar_limpa_a_projecao(self):
+    def test_transicao_nao_escreve_campos_legados(self):
         s = at.entrega_a_humano({}, por=at.POR_HANDOFF, motivo="x", agora=T0)
         at.retoma_pelo_painel(s)
-        for campo in ("attendant_active_until", "bot_pausado_por", "handoff_reason", "human_handoff_requested_at"):
+        for campo in ("state", "attendant_active_until", "bot_pausado_por",
+                      "handoff_reason", "human_handoff_requested_at"):
             self.assertNotIn(campo, s)
-        self.assertEqual(s["state"], "")
-
-    def test_retomar_nao_apaga_state_de_fluxo(self):
-        s = {"state": "SELECT_TIME"}
-        at.retoma_pelo_painel(s)
-        self.assertEqual(s["state"], "SELECT_TIME")
 
 
 if __name__ == "__main__":

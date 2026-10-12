@@ -22,7 +22,7 @@ const AGORA = Math.floor(Date.now() / 1000)
 function conversa(over: Partial<ActiveConversation> = {}): ActiveConversation {
   return {
     phone: '5511999990000',
-    state: 'HUMAN_HANDOFF',
+    aguarda_especialista: true,
     bot_paused: true,
     pause_reason: 'attendant',
     attendant_active_until: null,
@@ -90,11 +90,11 @@ describe('separação das abas', () => {
   it('a aba da especialista só mostra quem o bot entregou', () => {
     monta({
       conversations: [
-        conversa({ phone: '5511900000001', name: 'Esperando', state: 'HUMAN_HANDOFF' }),
+        conversa({ phone: '5511900000001', name: 'Esperando', aguarda_especialista: true }),
         conversa({
           phone: '5511900000002',
           name: 'Ja atendida',
-          state: 'HUMAN_ATTENDANT_ACTIVE',
+          aguarda_especialista: false,
         }),
       ],
     })
@@ -107,11 +107,11 @@ describe('separação das abas', () => {
   it('a aba de pausadas mostra o resto', async () => {
     monta({
       conversations: [
-        conversa({ phone: '5511900000001', name: 'Esperando', state: 'HUMAN_HANDOFF' }),
+        conversa({ phone: '5511900000001', name: 'Esperando', aguarda_especialista: true }),
         conversa({
           phone: '5511900000002',
           name: 'Ja atendida',
-          state: 'HUMAN_ATTENDANT_ACTIVE',
+          aguarda_especialista: false,
         }),
       ],
     })
@@ -126,9 +126,9 @@ describe('separação das abas', () => {
   it('a contagem de cada aba conta a própria lista', () => {
     monta({
       conversations: [
-        conversa({ phone: '5511900000001', state: 'HUMAN_HANDOFF' }),
-        conversa({ phone: '5511900000002', state: 'HUMAN_HANDOFF' }),
-        conversa({ phone: '5511900000003', state: 'HUMAN_ATTENDANT_ACTIVE' }),
+        conversa({ phone: '5511900000001', aguarda_especialista: true }),
+        conversa({ phone: '5511900000002', aguarda_especialista: true }),
+        conversa({ phone: '5511900000003', aguarda_especialista: false }),
       ],
     })
 
@@ -215,11 +215,11 @@ describe('os quatro estados', () => {
 })
 
 describe('pendência, tarefa e alerta (PRD 020 fase 3)', () => {
-  it('conversa com tarefa aberta fica na aba da especialista mesmo sem HUMAN_HANDOFF', () => {
+  it('conversa com tarefa aberta fica na aba da especialista mesmo sem aguardar especialista', () => {
     monta({
       conversations: [
         conversa({
-          phone: '5511900000001', name: 'Pendente', state: 'HUMAN_ATTENDANT_ACTIVE',
+          phone: '5511900000001', name: 'Pendente', aguarda_especialista: false,
           handler: 'HUMAN_PENDING', pending_intent: 'faq_sem_resposta', pending_task_id: 't1',
         }),
       ],
@@ -249,7 +249,7 @@ describe('pendência, tarefa e alerta (PRD 020 fase 3)', () => {
     monta({
       conversations: [
         conversa({
-          phone: '5511900000001', name: 'Calada', state: '', bot_paused: false,
+          phone: '5511900000001', name: 'Calada', aguarda_especialista: false, bot_paused: false,
           handler: 'COOLDOWN', alerta: 'modelo_disse_nao', alerta_label: 'Não parecia esperar resposta',
         }),
       ],
@@ -263,7 +263,7 @@ describe('pendência, tarefa e alerta (PRD 020 fase 3)', () => {
   it('alerta com atendente ativa não entra na fila: alguém já está lá', () => {
     monta({
       conversations: [
-        conversa({ phone: '5511900000001', state: 'HUMAN_ATTENDANT_ACTIVE', handler: 'HUMAN_ACTIVE', alerta: 'fecho_social' }),
+        conversa({ phone: '5511900000001', aguarda_especialista: false, handler: 'HUMAN_ACTIVE', alerta: 'fecho_social' }),
       ],
     })
     expect(screen.queryAllByRole('listitem')).toHaveLength(0)
@@ -272,7 +272,7 @@ describe('pendência, tarefa e alerta (PRD 020 fase 3)', () => {
   it('quem está na fila da especialista não aparece de novo em pausadas', async () => {
     monta({
       conversations: [
-        conversa({ phone: '5511900000001', state: 'HUMAN_ATTENDANT_ACTIVE', handler: 'HUMAN_PENDING', pending_task_id: 't1' }),
+        conversa({ phone: '5511900000001', aguarda_especialista: false, handler: 'HUMAN_PENDING', pending_task_id: 't1' }),
       ],
     })
     await userEvent.click(screen.getByRole('button', { name: /Bot pausado/ }))

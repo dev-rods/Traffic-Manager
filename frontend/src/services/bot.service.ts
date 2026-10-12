@@ -48,7 +48,6 @@ interface FecharTarefaResponse {
 interface AttendantStatusResponse {
   status: string
   bot_paused: boolean
-  conversation_state: string
   attendant_active_until: number | null
   ttl_remaining_seconds: number
 }

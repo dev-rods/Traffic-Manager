@@ -101,13 +101,11 @@ class TestPercursoDaCampanha(unittest.TestCase):
 
         sessao = self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]
         sessao["agent_history"] = [{"role": "user", "content": "mes passado"}]
-        sessao["state"] = "WELCOME"
 
         abre_campanha(self.tabela, "clinica-x", FONE, abre(DATAS))
 
         nova = self.tabela.itens[("CLINIC#clinica-x", f"PHONE#{FONE}")]["session"]
         self.assertEqual(nova["agent_history"], [])
-        self.assertNotIn("state", nova)
 
     def test_mas_preserva_o_que_nao_e_conversa(self):
         """Zerar o histórico não pode levar junto quem é a pessoa."""

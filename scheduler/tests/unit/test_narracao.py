@@ -8,6 +8,7 @@ conversa de alguém.
 """
 import unittest
 
+from src.services import atendimento as at
 from src.services.narracao import narra_a_pessoa
 from tests.unit.dublagem_agente import (
     CLINIC,
@@ -70,7 +71,7 @@ class TestNoAgente(unittest.TestCase):
 
         self.assertEqual(len(anthropic.correcoes), 1)
         self.assertEqual(len(saida), 1)
-        self.assertNotEqual(agente.sessao_salva.get("bot_pausado_por"), "HANDOFF")
+        self.assertNotEqual(at.bloco(agente.sessao_salva).get("pausado_por"), "HANDOFF")
 
     def test_resposta_normal_nao_e_tocada(self):
         anthropic = AnthropicRoteiro([texto_do_modelo("Perfeito! Buço e axilas. Qual dia fica melhor?")])

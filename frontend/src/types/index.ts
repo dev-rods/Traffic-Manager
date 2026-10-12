@@ -398,7 +398,8 @@ export type PauseReason = 'attendant' | 'clinic_paused' | 'not_eligible' | null
 
 export interface ActiveConversation {
   phone: string
-  state: string
+  /** O bot entregou (handoff ou instabilidade) e ninguem assumiu: fila da especialista. */
+  aguarda_especialista: boolean
   bot_paused: boolean
   pause_reason: PauseReason
   attendant_active_until: number | null

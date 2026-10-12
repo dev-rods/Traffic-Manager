@@ -254,7 +254,6 @@ class TestWebhookRenovacao(unittest.TestCase):
             wh._activate_attendant_mode("c1", "5511999990000")
 
         self.assertEqual(gravadas[0][at.CAMPO]["human_until"], AGORA + 24 * H)
-        self.assertEqual(gravadas[0]["attendant_active_until"], AGORA + 24 * H)
 
     def test_o_webhook_pergunta_pode_responder_e_nao_pode_iniciar(self):
         """Quem escreveu está esperando: cooldown e madrugada não calam."""
