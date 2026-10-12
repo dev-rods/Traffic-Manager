@@ -1,3 +1,4 @@
+import calendar
 import logging
 import os
 from datetime import datetime, timedelta
@@ -14,6 +15,22 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 MESSAGE_EVENTS_TABLE = os.environ.get("MESSAGE_EVENTS_TABLE", "")
+CONVERSATION_SESSIONS_TABLE = os.environ.get("CONVERSATION_SESSIONS_TABLE", "")
+
+
+def _sessoes_da_clinica(dynamodb, clinic_id):
+    tabela = dynamodb.Table(CONVERSATION_SESSIONS_TABLE)
+    chave = None
+    while True:
+        args = {"KeyConditionExpression": Key("pk").eq(f"CLINIC#{clinic_id}")}
+        if chave:
+            args["ExclusiveStartKey"] = chave
+        pagina = tabela.query(**args)
+        for item in pagina.get("Items", []):
+            yield item
+        chave = pagina.get("LastEvaluatedKey")
+        if not chave:
+            return
 
 
 def handler(event, context):
@@ -71,7 +88,6 @@ def handler(event, context):
             direction = item.get("direction", "")
             phone = item.get("phone", "")
             created = item.get("createdAt", "")
-            state = item.get("conversationState", "")
 
             if direction == "INBOUND":
                 inbound_phones.add(phone)
@@ -81,8 +97,14 @@ def handler(event, context):
             elif direction == "OUTBOUND":
                 outbound_count += 1
 
-            if state in atendimento.ESTADOS_LEGADOS_COM_PESSOA:
-                handoff_phones.add(phone)
+        # Entregas a uma pessoa no periodo: `entregue_em` do bloco
+        # `atendimento`. O campo `conversationState` dos eventos ficou vazio
+        # desde o agente, e esta contagem dava zero (fase 8b).
+        inicio = calendar.timegm(datetime.strptime(start[:19], "%Y-%m-%dT%H:%M:%S").timetuple())
+        for sessao in _sessoes_da_clinica(dynamodb, clinic_id):
+            entregue_em = atendimento.bloco(sessao.get("session") or {}).get("entregue_em")
+            if entregue_em and int(entregue_em) >= inicio:
+                handoff_phones.add(sessao.get("phone", ""))
 
         # 2. Query leads for conversion rate
         db = PostgresService()

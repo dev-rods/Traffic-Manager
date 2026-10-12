@@ -73,17 +73,14 @@ def handler(event, context):
             if "@" in phone or not phone:
                 continue
 
-            state = session.get("state", "")
-            attendant_until = session.get("attendant_active_until")
-            handoff_at = session.get("human_handoff_requested_at")
+            b = atendimento.bloco(session)
+            attendant_until = b.get("human_until")
+            handoff_at = b.get("entregue_em")
             updated_at = item.get("updatedAt", "")
 
             # A conversa esta com uma pessoa (atendente, handoff, pausa no
-            # painel)? Fonte unica: o estado de atendimento derivado.
+            # painel)? Fonte unica: o estado de atendimento derivado do bloco.
             atendente_ativo = atendimento.esta_com_pessoa(session, now)
-            if not atendente_ativo and state in atendimento.ESTADOS_LEGADOS_COM_PESSOA:
-                if handoff_at and now < (handoff_at + 86400):
-                    atendente_ativo = True
 
             # Mesma decisão que o webhook toma ao receber mensagem: é a única
             # forma de o painel não mentir sobre o que vai acontecer.
@@ -91,16 +88,18 @@ def handler(event, context):
 
             conversations.append({
                 "phone": phone,
-                "state": state,
                 # Quem atende agora: BOT_ACTIVE, HUMAN_ACTIVE, HUMAN_PENDING, COOLDOWN.
                 "handler": atendimento.estado(session, now),
+                # O bot entregou (handoff ou instabilidade) e ninguem assumiu:
+                # e a fila da especialista. Era `state == HUMAN_HANDOFF`.
+                "aguarda_especialista": atendimento.aguarda_especialista(session, now),
                 # O que ficou em aberto quando o bot entregou, a tarefa que
                 # carrega isso, e o alerta do cron quando ele decidiu calar
                 # com a ultima fala sendo do cliente (PRD 020 §3.6 e §3.7).
-                "pending_intent": atendimento.bloco(session).get("pending_intent"),
-                "pending_task_id": atendimento.bloco(session).get("pending_task_id"),
-                "alerta": atendimento.bloco(session).get("alerta"),
-                "alerta_label": alerta_legivel(atendimento.bloco(session).get("alerta")),
+                "pending_intent": b.get("pending_intent"),
+                "pending_task_id": b.get("pending_task_id"),
+                "alerta": b.get("alerta"),
+                "alerta_label": alerta_legivel(b.get("alerta")),
                 "bot_paused": not responde,
                 # Distingue "alguém pausou" de "a política não cobre esta conversa":
                 # o primeiro se resolve retomando, o segundo é o padrão da clínica.
@@ -119,7 +118,7 @@ def handler(event, context):
                 "handoff_requested_at": handoff_at,
                 # POR QUE espera. Sem isto a fila é uma lista de telefones, e
                 # descobrir o que cada uma quer custa abrir a thread inteira.
-                "handoff_reason": session.get(CAMPO_DO_MOTIVO) or None,
+                "handoff_reason": b.get(CAMPO_DO_MOTIVO) or None,
                 "handoff_reason_label": motivo_do_handoff_legivel(session),
                 "updated_at": updated_at,
             })

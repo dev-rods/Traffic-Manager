@@ -18,6 +18,7 @@ import unittest
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
+from src.services import atendimento as at
 from src.services.menor_de_idade import (
     TEXTO,
     afirma_restricao,
@@ -100,7 +101,7 @@ class TestNoAgente(unittest.TestCase):
         )
         for t in textos:
             self.assertNotIn("responsável legal", t)
-        self.assertEqual(sessao["state"], "HUMAN_HANDOFF")
+        self.assertTrue(at.aguarda_especialista(sessao))
 
     def test_com_respaldo_da_tool_a_restricao_passa(self):
         """Travar demais seria o outro erro: menor sem aviso nenhum."""
@@ -113,7 +114,7 @@ class TestNoAgente(unittest.TestCase):
     def test_resposta_comum_passa_intacta(self):
         textos, sessao = self._responde("Claro! Qual data prefere?")
         self.assertIn("Claro! Qual data prefere?", textos)
-        self.assertNotEqual(sessao.get("state"), "HUMAN_HANDOFF")
+        self.assertFalse(at.aguarda_especialista(sessao))
 
 
 if __name__ == "__main__":

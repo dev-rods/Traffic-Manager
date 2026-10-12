@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """Quem atende esta conversa agora - e as duas perguntas que saem disso.
 
-Hoje `session["state"]` carrega três coisas numa string: o passo do fluxo, o
-resultado e QUEM responde. Aqui o "quem responde" ganha campo próprio, máquina
-própria e um dono só. PRD 020 §3.2 a §3.5.
+QUEM responde tem campo próprio (`session["atendimento"]`), máquina própria
+e um dono só: este módulo. PRD 020 §3.2 a §3.5.
 
     BOT_ACTIVE ──(pessoa da clínica fala / handoff / pausa no painel)──▶ HUMAN_ACTIVE
         ▲                                                                   │
@@ -28,10 +27,11 @@ Função pura, sem I/O, como `bot_policy`. O estado efetivo é DERIVADO dos
 instantes gravados (`estado()`), nunca lido de um rótulo: o relógio não precisa
 de cron para vencer um prazo.
 
-Durante a fase 2 os campos legados (`state`, `attendant_active_until`,
-`bot_pausado_por`, `handoff_reason`, `human_handoff_requested_at`) continuam
-sendo ESCRITOS, como projeção, porque o painel os lê. Só este módulo os
-escreve. Saem na fase 3, junto com os leitores.
+Os campos legados da sessão (`state`, `attendant_active_until`,
+`bot_pausado_por`, `handoff_reason`, `human_handoff_requested_at`) saíram na
+fase 8b (12/10/2026): ninguém mais os escreve nem os lê. Sessão sem o bloco
+é BOT_ACTIVE - em prod, toda pausa gravada só nos campos antigos já tinha
+vencido quando a projeção foi apagada.
 """
 import time
 from datetime import datetime, timezone
@@ -59,7 +59,7 @@ COOLDOWN_PADRAO = 24 * 60 * 60
 
 # Quem calou o bot. É o mesmo vocabulário de `bot_policy.PAUSA_*`, e os dois
 # têm de concordar porque a projeção legada grava este valor em
-# `bot_pausado_por`.
+# `pausado_por`.
 POR_ATENDENTE = "ATENDENTE"            # alguém da clínica respondeu, ou pausou no painel
 POR_HANDOFF = "HANDOFF"                # o próprio bot pediu ajuda
 POR_INSTABILIDADE = "INSTABILIDADE"    # o sistema falhou
@@ -85,13 +85,6 @@ POLICY_PILOT = "PILOT"
 POLICY_LEADS_ONLY = "LEADS_ONLY"
 POLICY_OFF = "OFF"
 
-# Rótulos legados de `session["state"]`, escritos por `_projeta_no_legado` e
-# lidos pelo painel (fila, métricas, status). Eram valores do enum
-# `ConversationState` do engine apagado na fase 8; somem com a projeção (8b).
-ESTADO_LEGADO_ESPERA = "HUMAN_HANDOFF"             # o bot entregou, ninguém assumiu
-ESTADO_LEGADO_ATENDENTE = "HUMAN_ATTENDANT_ACTIVE"  # alguém da clínica está na conversa
-ESTADOS_LEGADOS_COM_PESSOA = (ESTADO_LEGADO_ESPERA, ESTADO_LEGADO_ATENDENTE)
-
 
 def _agora(agora: Optional[int]) -> int:
     return int(agora if agora is not None else time.time())
@@ -100,36 +93,14 @@ def _agora(agora: Optional[int]) -> int:
 # ── Leitura ────────────────────────────────────────────────────────────────
 
 def bloco(session: Optional[Dict]) -> Dict:
-    """O bloco `atendimento` da sessão, migrado do legado se ainda não existir.
+    """O bloco `atendimento` da sessão. Sem bloco, a conversa é do bot.
 
-    Pura: devolve um dict novo, não grava. Sessão antiga migra quando é lida,
-    e a que nunca mais for lida não importa - sem script em massa.
+    Pura: devolve um dict novo, não grava.
     """
     session = session or {}
     atual = session.get(CAMPO)
     if isinstance(atual, dict) and atual.get("handler"):
         return dict(atual)
-    return migra_do_legado(session)
-
-
-def migra_do_legado(session: Dict) -> Dict:
-    """Traduz os campos antigos (`attendant_active_until`, `bot_pausado_por`)
-    no bloco novo. Mesma regra de `bot_policy.esta_pausado` até aqui."""
-    por = session.get("bot_pausado_por")
-    ate = session.get("attendant_active_until")
-    try:
-        ate = int(ate) if ate else None
-    except (TypeError, ValueError):
-        ate = None
-
-    if por in (POR_CONTATO_MANUAL, POR_CHAT_ANTERIOR) and not ate:
-        # Sem data: venceu há muito (9.1). human_until=0 é "no passado".
-        return _bloco(HUMAN_ACTIVE, por=por, human_until=0,
-                      motivo=session.get("handoff_reason"))
-    if ate:
-        return _bloco(HUMAN_ACTIVE, por=por or POR_ATENDENTE, human_until=ate,
-                      motivo=session.get("handoff_reason"),
-                      entregue_em=session.get("human_handoff_requested_at"))
     return _bloco(BOT_ACTIVE)
 
 
@@ -281,31 +252,7 @@ def _comete(session: Dict, b: Dict) -> Dict:
     # teve, e o cron descartou toda retomada em prod em 08/10/2026.
     b["versao"] = int(b.get("versao") or 0)
     session[CAMPO] = b
-    _projeta_no_legado(session, b)
     return session
-
-
-def _projeta_no_legado(session: Dict, b: Dict) -> None:
-    """Os campos antigos, escritos a partir do bloco - nunca à mão. O painel
-    ainda os lê; somem na fase 8b junto com os leitores."""
-    if b["handler"] in (HUMAN_ACTIVE, HUMAN_PENDING):
-        por = b.get("pausado_por") or POR_ATENDENTE
-        session["state"] = ESTADO_LEGADO_ESPERA if por in ENTREGAS_DO_BOT else ESTADO_LEGADO_ATENDENTE
-        session["bot_pausado_por"] = por
-        if b.get("human_until") is not None:
-            session["attendant_active_until"] = int(b["human_until"])
-        else:
-            session.pop("attendant_active_until", None)
-        if b.get("handoff_reason"):
-            session["handoff_reason"] = b["handoff_reason"]
-        if b.get("entregue_em"):
-            session["human_handoff_requested_at"] = int(b["entregue_em"])
-    else:
-        for campo in ("attendant_active_until", "bot_pausado_por", "handoff_reason",
-                      "human_handoff_requested_at", "_previous_state_before_attendant"):
-            session.pop(campo, None)
-        if session.get("state") in ESTADOS_LEGADOS_COM_PESSOA:
-            session["state"] = ""
 
 
 def entrega_a_humano(session: Optional[Dict], *, por: str, motivo: Optional[str] = None,

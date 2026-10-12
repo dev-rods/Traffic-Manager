@@ -12,6 +12,7 @@ Duas coisas precisam ser verdade juntas, e cada uma sozinha é inútil:
 """
 import unittest
 
+from src.services import atendimento as at
 from tests.unit.dublagem_agente import (
     CLINIC,
     PHONE,
@@ -53,7 +54,7 @@ class TestOLacoQuebra(unittest.TestCase):
             texto_do_modelo("Na virilha, você quer incluir o ânus?"),
         ])
 
-        self.assertNotEqual(self.agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertFalse(at.aguarda_especialista(self.agente.sessao_salva))
         self.assertIn("ânus", saida[0].content)
 
     def test_a_segunda_recusa_igual_entrega_a_uma_pessoa(self):
@@ -67,7 +68,7 @@ class TestOLacoQuebra(unittest.TestCase):
             texto_do_modelo("Confirma que vamos tratar Virilha Completa + Ânus?"),
         ])
 
-        self.assertEqual(self.agente.sessao_salva["state"], "HUMAN_HANDOFF")
+        self.assertTrue(at.aguarda_especialista(self.agente.sessao_salva))
         self.assertEqual(len(saida), 1)
         self.assertIn("especialista", saida[0].content)
 
@@ -137,7 +138,7 @@ class TestConversaSadiaNaoEEntregue(unittest.TestCase):
                 texto_do_modelo("Fica R$ 463,50 😊"),
             ])
 
-        self.assertNotEqual(agente.sessao_salva.get("state"), "HUMAN_HANDOFF")
+        self.assertFalse(at.aguarda_especialista(agente.sessao_salva))
 
 
 if __name__ == "__main__":

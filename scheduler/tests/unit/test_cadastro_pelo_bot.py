@@ -15,6 +15,7 @@ from unittest import mock
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
+from src.services import atendimento as at
 from src.services.ai_tools import ToolExecutor
 
 CLINIC = "clinica-teste-0001"
@@ -154,8 +155,8 @@ class TestPacienteCadastradaNaoOuvePedidoDeCadastro(unittest.TestCase):
         saida = agente.process_message(CLINIC, mensagem("confirmo"))
 
         self.assertNotIn("CPF", saida[0].content)
-        self.assertEqual(agente.sessao_salva.get("bot_pausado_por"), "HANDOFF")
-        self.assertEqual(agente.sessao_salva.get("handoff_reason"), "insistiu_em_cadastro")
+        self.assertEqual(at.bloco(agente.sessao_salva).get("pausado_por"), "HANDOFF")
+        self.assertEqual(at.bloco(agente.sessao_salva).get("handoff_reason"), "insistiu_em_cadastro")
 
     def test_lead_desconhecida_continua_ouvindo_o_pedido(self):
         """O caso positivo: a trava não pode calar o fluxo de quem NÃO tem

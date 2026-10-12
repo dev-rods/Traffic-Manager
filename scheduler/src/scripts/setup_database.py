@@ -42,7 +42,6 @@ SQL_STATEMENTS = [
         booking_conversion_action_id VARCHAR(30),
         welcome_intro_message TEXT,
         display_name VARCHAR(255),
-        use_agent BOOLEAN DEFAULT FALSE,
         bot_paused BOOLEAN DEFAULT FALSE,
         bot_autoreply_policy VARCHAR(20) NOT NULL DEFAULT 'ALL',
         debounce_seconds INTEGER NOT NULL DEFAULT 68,
@@ -560,7 +559,6 @@ SQL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_lead_conversions_lead ON scheduler.lead_conversions(lead_id)",
 
     # Agent mode flag per clinic
-    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS use_agent BOOLEAN DEFAULT FALSE",
 
     # Remove deprecated Google Sheets columns
     "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS google_spreadsheet_id",
@@ -665,6 +663,8 @@ SQL_STATEMENTS = [
     # A "janela de retorno" (coluna criada em 09/10/2026) caiu no mesmo dia:
     # a distincao DUE_FOR_NEXT x INACTIVE nao mudava a resposta do bot.
     "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS janela_de_retorno_dias",
+    # PRD 020 fase 8b: so o agente atende desde a 8a; a coluna nao decidia nada.
+    "ALTER TABLE scheduler.clinics DROP COLUMN IF EXISTS use_agent",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS "
     "idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72",
 

@@ -16,8 +16,8 @@ Nos dois casos o "Retomar bot" libera na hora.
 import time
 import unittest
 
+from src.services import atendimento as at
 from src.services.bot_policy import (
-    CAMPO_DE_PAUSA,
     PAUSA_ATENDENTE,
     PAUSA_CHAT_ANTERIOR,
     PAUSA_CONTATO_MANUAL,
@@ -32,17 +32,24 @@ FUTURO = int(time.time()) + 3600
 PASSADO = int(time.time()) - 3600
 
 
+def entregue(por, ate, **extras):
+    """Uma conversa entregue a `por` até `ate`, como o bloco grava (fase 8b)."""
+    s = at.entrega_a_humano({}, por=por, ate=ate)
+    s.update(extras)
+    return s
+
+
 class TestAtendimentoEmCursoVence(unittest.TestCase):
     """Alguém está na conversa agora - e depois de 24h, provavelmente não está."""
 
     def test_dentro_das_24h_o_bot_cala(self):
-        pausada = {CAMPO_DE_PAUSA: PAUSA_ATENDENTE, "attendant_active_until": FUTURO}
+        pausada = entregue(PAUSA_ATENDENTE, FUTURO)
 
         self.assertTrue(esta_pausado(pausada))
         self.assertFalse(should_bot_reply(CLINICA_ABERTA, pausada, "5511999990000"))
 
     def test_passadas_as_24h_o_bot_volta(self):
-        pausada = {CAMPO_DE_PAUSA: PAUSA_ATENDENTE, "attendant_active_until": PASSADO}
+        pausada = entregue(PAUSA_ATENDENTE, PASSADO)
 
         self.assertFalse(esta_pausado(pausada))
         self.assertTrue(should_bot_reply(CLINICA_ABERTA, pausada, "5511999990000"))
@@ -50,8 +57,7 @@ class TestAtendimentoEmCursoVence(unittest.TestCase):
     def test_handoff_do_bot_tambem_vence(self):
         """O bot pediu ajuda e ninguém veio: melhor ele voltar do que a pessoa
         ficar falando sozinha para sempre."""
-        self.assertFalse(esta_pausado({CAMPO_DE_PAUSA: PAUSA_HANDOFF,
-                                       "attendant_active_until": PASSADO}))
+        self.assertFalse(esta_pausado(entregue(PAUSA_HANDOFF, PASSADO)))
 
     def test_sem_pausa_o_bot_fala(self):
         self.assertFalse(esta_pausado({}))
@@ -69,42 +75,19 @@ class TestAsPausasDeOrigemVencem(unittest.TestCase):
     """
 
     def test_ja_iniciada_no_painel_segura_enquanto_o_prazo_corre(self):
-        marcada = {CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL,
-                   "attendant_active_until": FUTURO, "bot_enabled": True}
+        marcada = entregue(PAUSA_CONTATO_MANUAL, FUTURO, bot_enabled=True)
         self.assertTrue(esta_pausado(marcada))
         self.assertFalse(should_bot_reply(CLINICA_LEADS, marcada, "5511999990000"))
 
     def test_ja_iniciada_vencida_libera_a_resposta(self):
-        marcada = {CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL,
-                   "attendant_active_until": PASSADO, "bot_enabled": True}
+        marcada = entregue(PAUSA_CONTATO_MANUAL, PASSADO, bot_enabled=True)
         self.assertFalse(esta_pausado(marcada))
         self.assertTrue(should_bot_reply(CLINICA_LEADS, marcada, "5511999990000"))
-
-    def test_sem_prazo_nenhum_ja_venceram(self):
-        """Sessão legada sem data: vencida há muito. Responde, não inicia."""
-        for motivo in (PAUSA_CONTATO_MANUAL, PAUSA_CHAT_ANTERIOR):
-            with self.subTest(motivo=motivo):
-                self.assertFalse(esta_pausado({CAMPO_DE_PAUSA: motivo}))
-
-
-class TestCompatibilidade(unittest.TestCase):
-    def test_pausas_antigas_continuam_valendo(self):
-        """Sessões que já estavam pausadas quando isto subiu só têm o prazo.
-        Ignorá-lo soltaria o bot em conversas humanas no instante do deploy."""
-        antiga = {"attendant_active_until": FUTURO}
-
-        self.assertTrue(esta_pausado(antiga))
-        self.assertFalse(should_bot_reply(CLINICA_ABERTA, antiga, "5511999990000"))
-
-    def test_prazo_antigo_vencido_nao_pausa(self):
-        """Sem o campo novo, o prazo vencido é o que sempre foi: liberado."""
-        self.assertFalse(esta_pausado({"attendant_active_until": PASSADO}))
 
 
 class TestPausaVenceQualquerPolitica(unittest.TestCase):
     def test_em_toda_politica(self):
-        pausada = {CAMPO_DE_PAUSA: PAUSA_ATENDENTE,
-                   "attendant_active_until": FUTURO, "bot_enabled": True}
+        pausada = entregue(PAUSA_ATENDENTE, FUTURO, bot_enabled=True)
         for clinic in (CLINICA_ABERTA, CLINICA_LEADS,
                        {"bot_autoreply_policy": "PILOT",
                         "bot_pilot_phones": ["5511999990000"]}):
@@ -128,8 +111,7 @@ class TestLeadsOnly(unittest.TestCase):
         decisão 9.1 governa pelo prazo de 24h, como qualquer atendimento."""
         self.assertFalse(should_bot_reply(
             CLINICA_LEADS,
-            {"bot_enabled": True, CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL,
-             "attendant_active_until": FUTURO},
+            entregue(PAUSA_CONTATO_MANUAL, FUTURO, bot_enabled=True),
             "5511999990000"))
 
 

@@ -60,6 +60,7 @@ os.environ.setdefault("MESSAGE_EVENTS_TABLE", "eval-sem-dynamo")
 
 from tests.evaluation.corpus_conversas import carrega  # noqa: E402
 from src.providers.whatsapp_provider import IncomingMessage  # noqa: E402
+from src.services import atendimento  # noqa: E402
 from src.services.conversation_agent import RESPALDO_GUARDADO, ConversationAgent  # noqa: E402
 from src.services.menor_de_idade import afirmacao_sem_respaldo as restricao_sem_respaldo  # noqa: E402
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem, fatos_sensiveis  # noqa: E402
@@ -299,10 +300,10 @@ def monta_agente(anthropic, tools, prompt):
 HANDOFF_PEDIDO = "request_human_handoff"
 
 
-def avalia_turno(texto, tools_da_rodada, tools_da_conversa, estado_antes, estado_depois):
+def avalia_turno(texto, tools_da_rodada, tools_da_conversa, entregue_antes, entregue_depois):
     """Os quatro invariantes, para uma resposta.
 
-    I3 conta a TRANSICAO para HUMAN_HANDOFF, nao o estado: o estado fica na
+    I3 conta a TRANSICAO para "aguardando especialista", nao o estado: ele fica na
     sessao, e medir o estado marcaria como bloqueio todos os turnos seguintes
     ao primeiro. Na primeira versao uma conversa com um bloqueio no turno 6
     contava 6 violacoes.
@@ -319,7 +320,7 @@ def avalia_turno(texto, tools_da_rodada, tools_da_conversa, estado_antes, estado
 
     consultou = [t for t in tools_da_rodada if t != SEM_CONSULTA]
     afirmou_fato = bool(fatos_sensiveis(texto))
-    virou_handoff = estado_antes != "HUMAN_HANDOFF" and estado_depois == "HUMAN_HANDOFF"
+    virou_handoff = not entregue_antes and bool(entregue_depois)
 
     return {
         "I1_agenda_sem_respaldo": sorted(fatos_de_agenda(sem_origem)),
@@ -348,7 +349,7 @@ def roda(conversas, verboso, prompt):
 
         for n, texto_usuario in enumerate(c["turnos"]):
             antes = len(tools.chamadas)
-            estado_antes = agente.sessao.get("state")
+            entregue_antes = atendimento.aguarda_especialista(agente.sessao)
             entrada = IncomingMessage(
                 message_id=f"{c['id']}-{n}", phone="5511900000000",
                 sender_name="Eval", timestamp=0, message_type="TEXT",
@@ -363,7 +364,7 @@ def roda(conversas, verboso, prompt):
 
             resposta = " ".join(m.content for m in saida)
             v = avalia_turno(resposta, tools.chamadas[antes:], tools.chamadas,
-                             estado_antes, agente.sessao.get("state"))
+                             entregue_antes, atendimento.aguarda_especialista(agente.sessao))
             if v["handoff_pedido_pelo_modelo"]:
                 tipos["handoff_pedido_pelo_modelo"] += 1
 
@@ -377,7 +378,7 @@ def roda(conversas, verboso, prompt):
             tipos["turnos"] += 1
             tipos["tools_chamadas"] += len(v["tools"])
 
-            if agente.sessao.get("state") == "HUMAN_HANDOFF":
+            if atendimento.aguarda_especialista(agente.sessao):
                 # Em producao o atendente assume aqui e o bot para de responder.
                 break
 

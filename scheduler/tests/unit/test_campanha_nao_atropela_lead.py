@@ -11,8 +11,8 @@ bot simplesmente não responde, ou responde quem não devia, com a suíte verde.
 import time
 import unittest
 
+from src.services import atendimento as at
 from src.services.bot_policy import (
-    CAMPO_DE_PAUSA,
     PAUSA_ATENDENTE,
     PAUSA_CONTATO_MANUAL,
     POLICY_ALL,
@@ -64,16 +64,15 @@ class TestCampanhaNaoAtropelaOLead(unittest.TestCase):
         Disparar campanha para quem está sendo atendida no momento não pode
         colocar o bot na frente da pessoa. Só o 'Retomar bot' libera.
         """
-        s = com_campanha(**{CAMPO_DE_PAUSA: PAUSA_ATENDENTE,
-                            "attendant_active_until": AGORA + 3600})
+        s = com_campanha(**at.entrega_a_humano({}, por=at.POR_ATENDENTE, ate=AGORA + 3600))
         self.assertFalse(should_bot_reply(LEADS_ONLY, s, FONE))
 
     def test_campanha_nao_vence_pausa_de_origem_em_curso(self):
         """'Já iniciada' no painel manda enquanto o prazo dela corre (24h,
         decisão 9.1)."""
         import time as _t
-        s = com_campanha(**{CAMPO_DE_PAUSA: PAUSA_CONTATO_MANUAL,
-                            "attendant_active_until": int(_t.time()) + 3600})
+        s = com_campanha(**at.entrega_a_humano({}, por=at.POR_CONTATO_MANUAL,
+                                               ate=int(_t.time()) + 3600))
         self.assertFalse(should_bot_reply(LEADS_ONLY, s, FONE))
 
     def test_campanha_nao_fura_o_off(self):

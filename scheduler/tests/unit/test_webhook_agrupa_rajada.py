@@ -13,6 +13,7 @@ from unittest import mock
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 os.environ.setdefault("SCHEDULER_API_KEY", "chave-de-teste")
 
+from src.services import atendimento as at
 from src.functions.webhook import handler as wh
 
 CLINIC = "clinica-teste-0001"
@@ -123,7 +124,7 @@ class TestOAgenteMarcaOEfeito(unittest.TestCase):
         )
 
         self.assertTrue(sessao.get("efeito_na_ultima_rodada"))
-        self.assertEqual(sessao.get("bot_pausado_por"), "HANDOFF")
+        self.assertEqual(at.bloco(sessao).get("pausado_por"), "HANDOFF")
 
 
 if __name__ == "__main__":

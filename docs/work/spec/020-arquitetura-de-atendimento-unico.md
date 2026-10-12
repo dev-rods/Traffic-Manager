@@ -691,9 +691,21 @@ A diferença do §2.2 do PRD fica no código, não na instrução.
 > que o painel ainda lê (`HUMAN_HANDOFF`, `HUMAN_ATTENDANT_ACTIVE`) viraram
 > constantes em `atendimento.py` (`ESTADOS_LEGADOS_COM_PESSOA`), escritas
 > só por `_projeta_no_legado`. A coluna `use_agent` fica no banco até a 8b.
-> **Fase 8b (pendente):** remover a projeção `state` e apontar fila,
-> métricas e `status_da_conversa` para o bloco `atendimento`; só depois que
-> todas as sessões de prod tiverem o bloco (TTL de 30 min garante em horas).
+> **Como ficou (12/10/2026), fase 8b:** `_projeta_no_legado` e
+> `migra_do_legado` apagados; `session["state"]`, `attendant_active_until`,
+> `bot_pausado_por`, `handoff_reason` e `human_handoff_requested_at` não são
+> mais escritos nem lidos. `grava_atendimento` grava só o bloco (e `extras`).
+> Sessão sem bloco é BOT_ACTIVE. Fila, status do lead, handler da atendente e
+> métricas leem o bloco; a fila expõe `aguarda_especialista` no lugar de
+> `state == HUMAN_HANDOFF`, e o painel filtra por ele. A contagem de handoffs
+> das métricas passou a vir de `entregue_em` das sessões (o campo
+> `conversationState` dos eventos ficou vazio desde o agente e contava zero).
+> O eval mede I3 pelo bloco. Coluna `use_agent` removida por migration.
+> Evidência que dispensou migração de dados: das 4.417 sessões de prod sem
+> bloco, 232 tinham `state` humano (todas de 06-07/10, a queda de crédito) e
+> 312 tinham campos de pausa, todos vencidos; o webhook já as tratava como
+> bot, só o painel divergia. A tabela de sessões segue sem TTL (dívida à
+> parte).
 
 - Confirmar em produção, no dia, que nenhuma clínica ativa tem
   `use_agent = false` com `bot_paused = false`. Se tiver, ligar `use_agent`

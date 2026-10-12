@@ -87,12 +87,12 @@ class TestMarcacao(unittest.TestCase):
         """Marcar elegível não pode reativar o bot numa conversa assumida por humano."""
         table = FakeTable({
             "pk": "CLINIC#c", "sk": "PHONE#p",
-            "session": {"attendant_active_until": 9999999999},
+            "session": {"qualquer_campo": 9999999999},
         })
 
         mark_conversation_eligible(table, "clinica-x", "5511999999999")
 
-        self.assertEqual(table.gravado["session"]["attendant_active_until"], 9999999999)
+        self.assertEqual(table.gravado["session"]["qualquer_campo"], 9999999999)
 
 
 class TestFalha(unittest.TestCase):

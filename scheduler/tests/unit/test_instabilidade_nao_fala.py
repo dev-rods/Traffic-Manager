@@ -17,6 +17,7 @@ import unittest
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
+from src.services import atendimento as at
 from src.services.anthropic_service import AnthropicError
 from src.services.bot_policy import (
     CAMPO_DE_PAUSA,
@@ -54,8 +55,8 @@ class TestOAgenteCala(unittest.TestCase):
         agente = monta_agente(AnthropicQuebrado())
         agente.process_message(CLINIC, mensagem("quero agendar axilas"))
         sessao = agente.sessao_salva
-        self.assertEqual(sessao[CAMPO_DE_PAUSA], PAUSA_INSTABILIDADE)
-        self.assertEqual(sessao["state"], "HUMAN_HANDOFF")
+        self.assertEqual(at.bloco(sessao)[CAMPO_DE_PAUSA], PAUSA_INSTABILIDADE)
+        self.assertTrue(at.aguarda_especialista(sessao))
         self.assertTrue(esta_pausado(sessao))
 
     def test_a_mensagem_dela_nao_se_perde(self):
@@ -78,8 +79,8 @@ class TestOMotivoEProprio(unittest.TestCase):
     def test_marca_a_sessao_e_pausa(self):
         agora = int(time.time())
         sessao = entrega_por_instabilidade({}, agora=agora)
-        self.assertEqual(sessao[CAMPO_DE_PAUSA], PAUSA_INSTABILIDADE)
-        self.assertEqual(sessao["attendant_active_until"], agora + 24 * 60 * 60)
+        self.assertEqual(at.bloco(sessao)[CAMPO_DE_PAUSA], PAUSA_INSTABILIDADE)
+        self.assertEqual(at.bloco(sessao)["human_until"], agora + 24 * 60 * 60)
         self.assertTrue(esta_pausado(sessao))
 
     def test_vence_como_qualquer_atendimento(self):

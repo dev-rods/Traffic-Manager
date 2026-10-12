@@ -20,6 +20,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(__file__))
 
 from faq_real import FAQ_ESSENCIA
+from src.services import atendimento as at
 from src.services.bot_policy import (
     CAMPO_DE_PAUSA,
     CAMPO_DO_MOTIVO,
@@ -164,11 +165,11 @@ class EntregaAHumano(unittest.TestCase):
     def test_grava_os_quatro_campos_e_o_motivo(self):
         session = {}
         entrega_a_humano(session, MOTIVO_FORA_DO_ESCOPO, agora=1_000)
-        self.assertEqual(session["state"], "HUMAN_HANDOFF")
-        self.assertEqual(session["human_handoff_requested_at"], 1_000)
-        self.assertEqual(session["attendant_active_until"], 1_000 + TTL_DO_ATENDIMENTO)
-        self.assertEqual(session[CAMPO_DE_PAUSA], PAUSA_HANDOFF)
-        self.assertEqual(session[CAMPO_DO_MOTIVO], MOTIVO_FORA_DO_ESCOPO)
+        self.assertTrue(at.aguarda_especialista(session, 1_000))
+        self.assertEqual(at.bloco(session)["entregue_em"], 1_000)
+        self.assertEqual(at.bloco(session)["human_until"], 1_000 + TTL_DO_ATENDIMENTO)
+        self.assertEqual(at.bloco(session)[CAMPO_DE_PAUSA], PAUSA_HANDOFF)
+        self.assertEqual(at.bloco(session)[CAMPO_DO_MOTIVO], MOTIVO_FORA_DO_ESCOPO)
 
     def test_preserva_o_resto_da_sessao(self):
         # A conversa não pode perder o histórico ao ser entregue: é justamente
@@ -179,17 +180,16 @@ class EntregaAHumano(unittest.TestCase):
         self.assertEqual(session["lead_id"], "7")
 
     def test_sessao_nula_devolve_dict(self):
-        self.assertEqual(entrega_a_humano(None, MOTIVO_FORA_DO_ESCOPO)["state"],
-                         "HUMAN_HANDOFF")
+        self.assertTrue(at.aguarda_especialista(entrega_a_humano(None, MOTIVO_FORA_DO_ESCOPO)))
 
     def test_instabilidade_tem_pausa_e_motivo_proprios(self):
         # Separadas de propósito: HANDOFF é o bot pedindo ajuda, INSTABILIDADE é
         # ele não ter conseguido decidir nada. Só assim dá para medir quanto da
         # transferência é falha nossa.
         session = entrega_por_instabilidade({}, agora=500)
-        self.assertEqual(session[CAMPO_DE_PAUSA], PAUSA_INSTABILIDADE)
-        self.assertEqual(session[CAMPO_DO_MOTIVO], MOTIVO_INSTABILIDADE)
-        self.assertEqual(session["attendant_active_until"], 500 + TTL_DO_ATENDIMENTO)
+        self.assertEqual(at.bloco(session)[CAMPO_DE_PAUSA], PAUSA_INSTABILIDADE)
+        self.assertEqual(at.bloco(session)[CAMPO_DO_MOTIVO], MOTIVO_INSTABILIDADE)
+        self.assertEqual(at.bloco(session)["human_until"], 500 + TTL_DO_ATENDIMENTO)
 
 
 class MotivosLegiveis(unittest.TestCase):
@@ -220,7 +220,8 @@ class MotivosLegiveis(unittest.TestCase):
         # Não inventa rótulo bonito para o que não está na régua, e também não
         # some com a informação: a atendente vê o valor cru e sabe que há algo
         # para arrumar aqui.
-        self.assertEqual(motivo_do_handoff_legivel({CAMPO_DO_MOTIVO: "xpto"}), "xpto")
+        sessao = {at.CAMPO: {"handler": at.HUMAN_ACTIVE, CAMPO_DO_MOTIVO: "xpto"}}
+        self.assertEqual(motivo_do_handoff_legivel(sessao), "xpto")
 
 
 if __name__ == "__main__":
