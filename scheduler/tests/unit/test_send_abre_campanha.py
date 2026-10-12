@@ -107,21 +107,6 @@ class TestOrdem(unittest.TestCase):
         self.assertNotEqual(resposta["statusCode"], 200)
 
 
-class TestExigeOAgente(unittest.TestCase):
-    def test_clinica_na_engine_antiga_nao_abre_campanha(self):
-        """O bloco de modo só existe no ConversationAgent. Na engine antiga a
-        paciente receberia o fluxo de lead: boas-vindas e pedido de CPF."""
-        resposta, abertura = dispara({**BASE, "campanha": {"datas": DATAS}},
-                                     use_agent=False)
-
-        self.assertEqual(resposta["statusCode"], 400)
-        abertura.assert_not_called()
-
-    def test_mensagem_manual_segue_funcionando_na_engine_antiga(self):
-        resposta, _ = dispara(dict(BASE), use_agent=False)
-        self.assertEqual(resposta["statusCode"], 200)
-
-
 class TestValidacao(unittest.TestCase):
     def test_campanha_sem_datas_e_400(self):
         for ruim in ({"datas": []}, {}, "sim", {"dias": 7}):

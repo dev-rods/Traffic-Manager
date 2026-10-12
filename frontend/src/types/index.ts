@@ -14,7 +14,6 @@ export interface Clinic {
   pre_session_instructions: string | null
   zapi_instance_id: string | null
   zapi_instance_token: string | null
-  use_agent: boolean
   bot_paused: boolean
   batch_message_template: string | null
   active: boolean
@@ -42,7 +41,6 @@ export interface UpdateClinicPayload {
   pre_session_instructions?: string
   zapi_instance_id?: string
   zapi_instance_token?: string
-  use_agent?: boolean
   bot_paused?: boolean
   batch_message_template?: string
   logo_url?: string

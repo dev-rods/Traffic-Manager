@@ -81,7 +81,7 @@ def handler(event, context):
             # A conversa esta com uma pessoa (atendente, handoff, pausa no
             # painel)? Fonte unica: o estado de atendimento derivado.
             atendente_ativo = atendimento.esta_com_pessoa(session, now)
-            if not atendente_ativo and state in ("HUMAN_ATTENDANT_ACTIVE", "HUMAN_HANDOFF"):
+            if not atendente_ativo and state in atendimento.ESTADOS_LEGADOS_COM_PESSOA:
                 if handoff_at and now < (handoff_at + 86400):
                     atendente_ativo = True
 

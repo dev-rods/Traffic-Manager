@@ -153,11 +153,6 @@ def handler(event, context):
 
         clinic = clinics[0]
 
-        # A campanha so existe no ConversationAgent: o bloco de modo e montado
-        # la. Numa clinica que ainda roda a ConversationEngine antiga o disparo
-        # sairia, a campanha seria gravada, e a paciente receberia o fluxo de
-        # lead - boas-vindas e pedido de CPF de quem ja e cadastrada. Barrado
-        # aqui, na origem, em vez de virar log que ninguem le.
         # Com campanha o BOT vai conduzir a conversa a partir deste disparo:
         # e ele falando primeiro, entao passa pela pergunta proativa. Sem
         # campanha e a atendente mandando mensagem a mao - nada barra.
@@ -172,12 +167,6 @@ def handler(event, context):
                     "message": f"o bot nao pode iniciar esta conversa agora ({motivo})",
                     "motivo": motivo,
                 })
-
-        if campanha_pedida is not None and not clinic.get("use_agent"):
-            return http_response(400, {
-                "status": "ERROR",
-                "message": "campanha exige a clinica com use_agent ativo",
-            })
 
         # 5. Instanciar provider
         provider = get_provider(clinic)

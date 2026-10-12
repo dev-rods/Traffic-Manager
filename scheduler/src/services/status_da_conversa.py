@@ -33,8 +33,8 @@ AGUARDA_HUMANO = "AGUARDA_HUMANO"  # o bot pediu ajuda e ninguém assumiu ainda
 BOT = "BOT"              # o bot está conduzindo
 SEM_CONVERSA = "SEM_CONVERSA"
 
-ESTADOS_DE_ESPERA = {"HUMAN_HANDOFF"}
-ESTADOS_DE_ATENDENTE = {"HUMAN_ATTENDANT_ACTIVE"}
+ESTADOS_DE_ESPERA = {atendimento.ESTADO_LEGADO_ESPERA}
+ESTADOS_DE_ATENDENTE = {atendimento.ESTADO_LEGADO_ATENDENTE}
 
 MAX_POR_LOTE = 100  # limite do BatchGetItem do DynamoDB
 

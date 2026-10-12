@@ -6,7 +6,6 @@ import time
 import boto3
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_query_param
-from src.services.conversation_engine import ConversationState
 from src.services import atendimento
 from src.services.session_store import grava_atendimento
 
@@ -137,7 +136,6 @@ def _handle_deactivate(event, context):
     # "Retomar bot" limpa tudo, de qualquer estado, sem cooldown: quem clicou
     # decidiu que o bot pode falar (PRD 020 §3.3, "qualquer -> BOT_ACTIVE").
     atendimento.retoma_pelo_painel(session)
-    session["state"] = ConversationState.WELCOME.value
     # Marca a conversa como elegível. Sem isso, retomar o bot não teria efeito nas
     # clínicas com política LEADS_ONLY: limpar o modo atendente libera a conversa,
     # mas o bot só responde quem está marcado. Retomar tem que valer em qualquer
@@ -145,7 +143,7 @@ def _handle_deactivate(event, context):
     session["bot_enabled"] = True
 
     if not grava_atendimento(table, clinic_id, phone, session,
-                             extras={"state": session["state"], "bot_enabled": True}):
+                             extras={"bot_enabled": True}):
         # Sem gravar, o botao mentiria para quem clicou: a conversa continuaria
         # com a pessoa. Foi assim de 06/10 a 10/10/2026 (ver session_store).
         logger.error(f"[Attendant] Retomar bot NAO gravou para {phone}")
@@ -222,9 +220,7 @@ def _handle_status(event):
     # Fonte unica: o estado de atendimento derivado. Um HUMAN_HANDOFF antigo
     # sem prazo ainda conta como pessoa esperando.
     atendente_ativo = atendimento.esta_com_pessoa(session, now) or (
-        state in (ConversationState.HUMAN_ATTENDANT_ACTIVE.value,
-                  ConversationState.HUMAN_HANDOFF.value)
-        and not ttl
+        state in atendimento.ESTADOS_LEGADOS_COM_PESSOA and not ttl
     )
 
     # A política da clínica também decide. Sem consultá-la, o painel mostrava

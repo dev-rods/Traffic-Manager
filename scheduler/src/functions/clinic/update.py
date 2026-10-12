@@ -23,7 +23,6 @@ ALLOWED_FIELDS = {
     "zapi_instance_id",
     "zapi_instance_token",
     "owner_email",
-    "use_agent",
     "max_future_dates",
     "active",
     "display_name",

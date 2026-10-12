@@ -8,6 +8,7 @@ from boto3.dynamodb.conditions import Key
 
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
+from src.services import atendimento
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -80,7 +81,7 @@ def handler(event, context):
             elif direction == "OUTBOUND":
                 outbound_count += 1
 
-            if state in ("HUMAN_HANDOFF", "HUMAN_ATTENDANT_ACTIVE"):
+            if state in atendimento.ESTADOS_LEGADOS_COM_PESSOA:
                 handoff_phones.add(phone)
 
         # 2. Query leads for conversion rate

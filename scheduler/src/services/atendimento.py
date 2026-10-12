@@ -85,6 +85,13 @@ POLICY_PILOT = "PILOT"
 POLICY_LEADS_ONLY = "LEADS_ONLY"
 POLICY_OFF = "OFF"
 
+# Rótulos legados de `session["state"]`, escritos por `_projeta_no_legado` e
+# lidos pelo painel (fila, métricas, status). Eram valores do enum
+# `ConversationState` do engine apagado na fase 8; somem com a projeção (8b).
+ESTADO_LEGADO_ESPERA = "HUMAN_HANDOFF"             # o bot entregou, ninguém assumiu
+ESTADO_LEGADO_ATENDENTE = "HUMAN_ATTENDANT_ACTIVE"  # alguém da clínica está na conversa
+ESTADOS_LEGADOS_COM_PESSOA = (ESTADO_LEGADO_ESPERA, ESTADO_LEGADO_ATENDENTE)
+
 
 def _agora(agora: Optional[int]) -> int:
     return int(agora if agora is not None else time.time())
@@ -280,10 +287,10 @@ def _comete(session: Dict, b: Dict) -> Dict:
 
 def _projeta_no_legado(session: Dict, b: Dict) -> None:
     """Os campos antigos, escritos a partir do bloco - nunca à mão. O painel
-    ainda os lê (fase 2); somem na fase 3 junto com os leitores."""
+    ainda os lê; somem na fase 8b junto com os leitores."""
     if b["handler"] in (HUMAN_ACTIVE, HUMAN_PENDING):
         por = b.get("pausado_por") or POR_ATENDENTE
-        session["state"] = "HUMAN_HANDOFF" if por in ENTREGAS_DO_BOT else "HUMAN_ATTENDANT_ACTIVE"
+        session["state"] = ESTADO_LEGADO_ESPERA if por in ENTREGAS_DO_BOT else ESTADO_LEGADO_ATENDENTE
         session["bot_pausado_por"] = por
         if b.get("human_until") is not None:
             session["attendant_active_until"] = int(b["human_until"])
@@ -297,7 +304,7 @@ def _projeta_no_legado(session: Dict, b: Dict) -> None:
         for campo in ("attendant_active_until", "bot_pausado_por", "handoff_reason",
                       "human_handoff_requested_at", "_previous_state_before_attendant"):
             session.pop(campo, None)
-        if session.get("state") in ("HUMAN_HANDOFF", "HUMAN_ATTENDANT_ACTIVE"):
+        if session.get("state") in ESTADOS_LEGADOS_COM_PESSOA:
             session["state"] = ""
 
 

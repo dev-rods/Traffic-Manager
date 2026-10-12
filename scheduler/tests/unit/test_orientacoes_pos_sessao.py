@@ -71,30 +71,5 @@ class TestQuandoSai(unittest.TestCase):
         self.assertNotIn("cancel_appointment", TOOLS_QUE_MARCAM_SESSAO)
 
 
-class TestOFluxoDeterministico(unittest.TestCase):
-    """A clinica antiga, sem agente, fecha agendamento pelo mesmo aviso."""
-
-    def test_booked_anexa_o_aviso(self):
-        from src.services.conversation_engine import ConversationEngine
-
-        engine = object.__new__(ConversationEngine)
-        engine.db = None
-        engine.appointment_service = None
-        engine.template_service = TemplateFake(conteudo="")
-        engine._format_date_br = lambda d: "23/09/2026"
-        engine._format_price_with_discount = lambda s: "R$ 175,00"
-        engine._get_clinic = lambda c: {}
-
-        sessao = {"appointment_id": "a-1", "selected_date": "2026-09-23",
-                  "selected_time": "14:00", "total_duration_minutes": 10}
-        _, conteudo = engine._on_enter_booked("c1", "5511999999999", sessao)
-
-        self.assertIn(TEXTO, conteudo)
-        self.assertEqual(
-            [b["id"] for b in sessao["dynamic_buttons"]],
-            ["confirm_read", "human"],
-        )
-
-
 if __name__ == "__main__":
     unittest.main()

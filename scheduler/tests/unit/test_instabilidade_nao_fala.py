@@ -92,40 +92,6 @@ class TestOMotivoEProprio(unittest.TestCase):
         self.assertEqual(len(sessao["agent_history"]), 1)
 
 
-class TestOFluxoDeterministico(unittest.TestCase):
-    """A clínica sem agente tinha a mesma mensagem, com outras palavras."""
-
-    def _engine(self):
-        from src.services.conversation_engine import ConversationEngine
-
-        engine = object.__new__(ConversationEngine)
-        # db=None faz o handler de estado estourar de verdade dentro do
-        # `_on_enter` - é a falha que o except real captura.
-        engine.db = None
-        engine.template_service = None
-        engine.appointment_service = None
-        engine.availability_engine = None
-        return engine
-
-    def test_on_enter_que_falha_entrega_e_cala(self):
-        from src.services.conversation_engine import ConversationEngine, ConversationState
-
-        engine = self._engine()
-        sessao = {"state": ConversationState.PRICE_TABLE.value}
-
-        _, _, override = engine._on_enter(
-            ConversationState.PRICE_TABLE, CLINIC, PHONE, sessao
-        )
-
-        # Nada de texto de erro para a paciente...
-        self.assertIsNone(override)
-        # ...e a conversa foi entregue a uma pessoa.
-        self.assertTrue(sessao["_falha_de_sistema"])
-        self.assertEqual(sessao[CAMPO_DE_PAUSA], PAUSA_INSTABILIDADE)
-        self.assertTrue(esta_pausado(sessao))
-        self.assertIsNotNone(ConversationEngine)
-
-
 class TestOPrazoTemUmaFonteSo(unittest.TestCase):
     """O mesmo 24h estava escrito em cinco arquivos.
 

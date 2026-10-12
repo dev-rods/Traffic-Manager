@@ -152,7 +152,7 @@ class AppointmentService:
 
         # A duracao que uma PESSOA fixou vale sobre o calculo - e so ela.
         # `total_duration_minutes` acima continua valendo zero: quem passa aquele
-        # campo e o bot (ai_tools e conversation_engine), e foi ele que pediu
+        # campo e o bot (ai_tools), e foi ele que pediu
         # horario para uma sessao de 4 minutos. Sao dois campos com significados
         # diferentes de proposito. Ver duracao_manual.
         manual = valida_duracao_manual(manual_duration_minutes)
