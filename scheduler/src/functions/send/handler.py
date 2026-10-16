@@ -42,8 +42,16 @@ def _agora():
     return int(time.time())
 
 
-def _por_que_nao_inicia(clinic, sessao, phone, agora):
-    """O motivo, para a tela dizer algo melhor do que 'erro'."""
+def _motivo_para_nao_iniciar(clinic, sessao, agora):
+    """Por que o bot NAO pode assumir esta conversa agora; None se pode.
+
+    Olha so o ESTADO da conversa. A politica da clinica (ALL, PILOT,
+    LEADS_ONLY) fica de fora de proposito: quem decide que o bot assume este
+    disparo e o operador, na tela, e e o proprio disparo que abre a campanha
+    que a politica exigiria. Consulta-la aqui recusou 89 pacientes da Essencia
+    em 15/10/2026 com o motivo generico "politica" - em LEADS_ONLY, nenhuma
+    sessao nova tem campanha viva ANTES de a campanha ser aberta.
+    """
     from datetime import timezone as _tz
 
     from src.services.business_hours import em_silencio
@@ -56,7 +64,7 @@ def _por_que_nao_inicia(clinic, sessao, phone, agora):
         return "cooldown"
     if em_silencio(clinic, datetime.fromtimestamp(agora, tz=_tz.utc)):
         return "janela_de_silencio"
-    return "politica"
+    return None
 
 
 def handler(event, context):
@@ -153,14 +161,15 @@ def handler(event, context):
 
         clinic = clinics[0]
 
-        # Com campanha o BOT vai conduzir a conversa a partir deste disparo:
-        # e ele falando primeiro, entao passa pela pergunta proativa. Sem
-        # campanha e a atendente mandando mensagem a mao - nada barra.
+        # Com campanha o BOT vai conduzir a conversa a partir deste disparo.
+        # O operador decidiu isso na tela, entao a politica da clinica nao
+        # entra; so o estado da conversa pode barrar. Sem campanha e a
+        # atendente mandando mensagem a mao - nada barra.
         if campanha_pedida is not None:
             sessao = _sessao(clinic_id, phone)
             agora = _agora()
-            if not atendimento.pode_iniciar(clinic, sessao, phone, agora):
-                motivo = _por_que_nao_inicia(clinic, sessao, phone, agora)
+            motivo = _motivo_para_nao_iniciar(clinic, sessao, agora)
+            if motivo:
                 logger.info(f"[Send] Campanha para {phone} recusada: {motivo}")
                 return http_response(409, {
                     "status": "ERROR",
