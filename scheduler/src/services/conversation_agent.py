@@ -261,6 +261,25 @@ def _turnos_para_trava(history):
     return turnos
 
 
+def _normaliza_fala(texto):
+    """Para comparar falas: sem marcação do WhatsApp, pontuação, emoji,
+    maiúsculas ou espaços repetidos."""
+    import re as _re
+    t = (texto or "").lower()
+    t = _re.sub(r"[*_~`]", "", t)
+    t = _re.sub(r"[^\w\s]", " ", t)
+    return " ".join(t.split())
+
+
+def _chama_para_as_opcoes(texto):
+    """A fala termina pedindo a escolha - pergunta ou dois-pontos que
+    introduzem a lista - ignorando emoji e espaço no fim."""
+    import re as _re
+    t = _re.sub(r"[\s*_~`]+$", "", texto or "")
+    t = _re.sub(r"[\U0001F300-\U0001FAFF☀-➿\s]+$", "", t)
+    return t.endswith("?") or t.endswith(":")
+
+
 class ConversationAgent:
     """
     LLM-based conversation agent that replaces the state machine.
@@ -1433,7 +1452,7 @@ class ConversationAgent:
 
     @staticmethod
     def _junta_texto(mensagem_das_opcoes, texto_final):
-        """As duas falas do modelo quando ele oferece opções, sem perder nenhuma.
+        """As duas falas do modelo quando ele oferece opções, sem repetir nenhuma.
 
         Era `texto_final or mensagem_das_opcoes`: escrevendo os dois, o texto
         final ganhava e a mensagem das opções sumia. Quase sempre dava no mesmo
@@ -1443,19 +1462,32 @@ class ConversationAgent:
             opções: "Amanhã (05/09) não temos horário. As próximas datas são:"
             final:  "Alguma dessas fica boa pra você?"
 
-        A paciente recebia só a segunda. O padrão "responde e então oferece" era
-        impossível de entregar.
+        A paciente recebia só a segunda. O padrão "responde e então oferece"
+        continua saindo inteiro.
+
+        O oposto também acontecia, e saiu nas conversas de 13 e 16/10/2026:
+        as duas falas eram a MESMA chamada para a lista, em palavras um pouco
+        diferentes ("Qual tipo de virilha você prefere?" + "Perfeito, vamos
+        agendar! Só preciso saber: qual tipo de virilha você prefere?"; ou a
+        mesma frase com e sem negrito). A paciente lia a pergunta duas vezes na
+        mesma bolha. Duas chamadas para as opções (as duas terminam pedindo a
+        escolha, em "?" ou ":") viram uma: fica a final, que o modelo escreveu
+        depois de ver o resultado da tool e que carrega o reconhecimento da
+        resposta dela ("Perfeito, vamos agendar!").
         """
         primeira = (mensagem_das_opcoes or "").strip()
         segunda = (texto_final or "").strip()
         if not primeira or not segunda:
             return primeira or segunda
-        # Repetiu a mesma frase nos dois lugares: manda a mais completa, não as
-        # duas coladas.
-        if primeira in segunda:
+        # Repetiu a mesma frase nos dois lugares, talvez com negrito ou
+        # pontuação diferente: manda a mais completa, não as duas coladas.
+        p, q = _normaliza_fala(primeira), _normaliza_fala(segunda)
+        if p in q:
             return segunda
-        if segunda in primeira:
+        if q in p:
             return primeira
+        if _chama_para_as_opcoes(primeira) and _chama_para_as_opcoes(segunda):
+            return segunda
         return f"{primeira}\n\n{segunda}"
 
     def _build_outgoing(self, text, pending_buttons, faq_entregues=None):
