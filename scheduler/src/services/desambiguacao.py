@@ -1,12 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Fase 6 (PRD 020 §4.1): perguntar antes de desistir, e desistir depois de duas.
+"""Fase 6 (PRD 020 §4.1): perguntar antes de desistir, e desistir na segunda.
 
 Quando o modelo não consegue saber o que a pessoa quer ("quero marcar aquele
 negócio"), ele chama `pedir_esclarecimento` com as intenções plausíveis. A
 pergunta é TEXTO FIXO com botões; o modelo escolhe as opções, não redige a
 pergunta. Um contador na sessão sobe a cada pergunta e zera quando uma
-intenção se resolve (tool com efeito, ou item do FAQ entregue). Na terceira
+intenção se resolve (tool com efeito, ou item do FAQ entregue). Na segunda
 ambiguidade seguida a conversa vai a uma pessoa com `incompreensao`.
+
+Era na terceira. Em 16/10/2026 uma lead respondeu certo quatro vezes, ouviu
+"o que você quer fazer?" duas, e parou de escrever - e como a entrega só
+viria na TERCEIRA pergunta, ninguém foi avisado: sem handoff, sem tarefa,
+seis horas em silêncio até uma atendente notar por acaso. Duas perguntas
+iguais seguidas já dizem que a conversa não está andando; esperar uma
+terceira mensagem que pode nunca vir é largar a pessoa. Decisão do André em
+16/10/2026 (ver opcoes_numeradas, que tirou a causa daquele caso).
 
 Sem o contador uma pessoa confusa entra em laço; o repositório já tem a
 cicatriz disso em `recusas_de_area`. E se o modelo pedir handoff por
@@ -22,7 +30,9 @@ from typing import Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
-MAX_TENTATIVAS = 2
+# Quantas vezes perguntar antes de entregar. Uma: a segunda ambiguidade
+# seguida já vai a pessoa, com aviso.
+MAX_TENTATIVAS = 1
 CAMPO = "conversa"
 CHAVE = "tentativas_de_desambiguacao"
 

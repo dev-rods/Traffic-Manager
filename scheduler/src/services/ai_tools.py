@@ -450,7 +450,15 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "present_options",
-            "description": "Present structured options to the patient as WhatsApp buttons. ALWAYS use this when showing choices (services, areas, dates, times).",
+            "description": (
+                "Present structured options to the patient. ALWAYS use this when showing choices "
+                "(services, areas, dates, times). Up to 3 options go out as WhatsApp buttons; a tap "
+                "comes back to you as the option's label. More than 3 go out as a numbered text list "
+                "(1. label, 2. label, ...); if the patient answers with the number, it reaches you "
+                "already converted to that option's label. Either way, the next message is her choice - "
+                "do not treat it as unclear. `message` is the whole lead-in to the options; do not "
+                "repeat or rephrase it in your reply text."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
