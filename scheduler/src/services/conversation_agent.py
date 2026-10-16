@@ -16,6 +16,7 @@ from src.services.consumo import soma as soma_consumo
 from src.services.ai_tools import ToolExecutor, get_tool_definitions
 from src.services.bot_policy import entrega_por_instabilidade
 from src.services.campanha import datas_da_campanha, esta_viva as campanha_viva
+from src.services import opcoes_numeradas
 from src.services.fora_do_escopo import INSTRUCAO_DO_PROMPT as INSTRUCAO_FORA_DO_ESCOPO
 from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
 from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
@@ -48,6 +49,9 @@ from src.services.recusa_repetida import CAMPO as CAMPO_DE_RECUSAS
 from src.services.recusa_repetida import e_laco as recusa_em_laco
 from src.services.roteador import exige_consulta, intencoes, tools_obrigatorias
 from src.services.template_service import TemplateService
+
+# Botões inline do WhatsApp. Acima disso a lista sai numerada (opcoes_numeradas).
+LIMITE_DE_BOTOES = 3
 
 logger = logging.getLogger(__name__)
 
@@ -393,6 +397,15 @@ class ConversationAgent:
         contexto_de_retomada = (session.get("atendimento") or {}).get("retomada_contexto")
         if gatilho and contexto_de_retomada:
             user_content = f"{contexto_de_retomada}\n═══ GATILHO ═══\n{user_content}"
+        # A pessoa respondeu "1" à lista numerada que o bot acabou de mandar.
+        # O modelo nunca viu os números; o dígito vira o rótulo aqui, como o
+        # toque no botão já vira. Ver opcoes_numeradas.
+        escolha = opcoes_numeradas.resolve(session, user_content)
+        if escolha:
+            logger.info(
+                f"[OpcoesNumeradas] {phone}: {user_content.strip()!r} -> {escolha['label']!r}"
+            )
+            user_content = escolha["label"]
         history.append({"role": "user", "content": user_content})
 
         # ── Procedimento que o bot não atende ───────────────────────────
@@ -1017,6 +1030,12 @@ class ConversationAgent:
             final_text = policy_do_faq.fala_sem_o_item(final_text, faq_entregues, phone)
 
         outgoing = self._build_outgoing(final_text, pending_buttons, faq_entregues)
+        # O que ficou na tela com números é o que um dígito da pessoa aponta
+        # na próxima mensagem. Qualquer outra fala do bot apaga a lista.
+        if pending_buttons and len(pending_buttons.get("options", [])) > LIMITE_DE_BOTOES:
+            opcoes_numeradas.guarda(session, pending_buttons["options"])
+        else:
+            opcoes_numeradas.limpa(session)
 
         # O aviso pré-sessão sai daqui, não da boca do modelo: são 15 linhas com
         # contraindicação médica que têm de chegar palavra por palavra. Ver
@@ -1232,6 +1251,10 @@ class ConversationAgent:
             "   escreva você.\n"
             "2. Não chame request_human_handoff por não ter entendido: a tool de\n"
             "   esclarecimento decide quando desistir e chamar uma pessoa.\n"
+            "3. Resposta curta a uma pergunta SUA não é incompreensão. Se você ofereceu\n"
+            "   opções e ela respondeu uma delas (o rótulo, parte dele, ou a posição),\n"
+            "   é essa a escolha: siga. Com mais de 3 opções ela recebe uma lista\n"
+            "   numerada, e um número que ela mande já chega a você como o rótulo.\n"
         )
 
         system_prompt += (
@@ -1451,7 +1474,7 @@ class ConversationAgent:
             button_message = pending_buttons.get("message", "")
             display_text = self._junta_texto(button_message, text)
 
-            if len(options) <= 3:
+            if len(options) <= LIMITE_DE_BOTOES:
                 # WhatsApp supports up to 3 inline buttons
                 buttons = [{"id": opt["id"], "label": opt["label"][:24]} for opt in options]
                 messages.append(OutgoingMessage(
@@ -1460,10 +1483,10 @@ class ConversationAgent:
                     buttons=buttons,
                 ))
             else:
-                # Too many for buttons — format as numbered list in text
-                numbered = "\n".join(
-                    f"{i+1}. {opt['label']}" for i, opt in enumerate(options)
-                )
+                # Too many for buttons — format as numbered list in text.
+                # A numeração é a de opcoes_numeradas.resolve: a pessoa
+                # responde "2" e o código devolve a 2ª daqui.
+                numbered = opcoes_numeradas.numerada(options)
                 full_text = f"{display_text}\n\n{numbered}" if display_text else numbered
                 messages.append(OutgoingMessage(
                     message_type="text",

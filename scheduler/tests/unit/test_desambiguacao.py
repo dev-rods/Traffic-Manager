@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Fase 6: perguntar antes de desistir, e desistir depois de duas (PRD 020 §4.1).
+"""Fase 6: perguntar antes de desistir, e desistir na segunda (PRD 020 §4.1).
 
 A pergunta é texto fixo com botões; o modelo só escolhe as opções. O contador
-vive na sessão, zera quando uma intenção se resolve, e na terceira
-ambiguidade seguida a conversa vai a pessoa com `incompreensao`.
+vive na sessão, zera quando uma intenção se resolve, e na segunda
+ambiguidade seguida a conversa vai a pessoa com `incompreensao` (era na
+terceira até 16/10/2026; ver test_opcoes_numeradas).
 """
 import os
 import unittest
@@ -59,19 +60,17 @@ class TestContador(unittest.TestCase):
         for rotulo in ds.OPCOES.values():
             self.assertLessEqual(len(rotulo), 24)
 
-    def test_pede_pergunta_e_depois_desiste(self):
+    def test_pede_pergunta_uma_vez_e_na_segunda_desiste(self):
         s = {}
         r1 = ds.pede(s, ["agendar", "duvida"])
         self.assertTrue(r1["esclarecimento"])
         self.assertEqual(r1["message"], ds.TEXTO)
         self.assertEqual([o["id"] for o in r1["options"]], ["agendar", "duvida"])
         r2 = ds.pede(s, None)
-        self.assertTrue(r2["esclarecimento"])
-        r3 = ds.pede(s, None)
-        self.assertFalse(r3["esclarecimento"])
-        self.assertTrue(r3["handoff_requested"])
-        self.assertEqual(r3["reason"], MOTIVO_INCOMPREENSAO)
-        self.assertEqual(ds.tentativas(s), 2, "a terceira não conta: já foi a pessoa")
+        self.assertFalse(r2["esclarecimento"])
+        self.assertTrue(r2["handoff_requested"])
+        self.assertEqual(r2["reason"], MOTIVO_INCOMPREENSAO)
+        self.assertEqual(ds.tentativas(s), 1, "a segunda não conta: já foi a pessoa")
 
 
 class TestTool(unittest.TestCase):
@@ -99,7 +98,7 @@ class TestTool(unittest.TestCase):
 
     def test_handoff_por_incompreensao_passa_quando_esgotou(self):
         ex = object.__new__(ToolExecutor)
-        sessao = {ds.CAMPO: {ds.CHAVE: 2}}
+        sessao = {ds.CAMPO: {ds.CHAVE: 1}}
         r = ex._tool_request_human_handoff({"reason": MOTIVO_INCOMPREENSAO}, CLINIC, "55", {"session": sessao})
         self.assertTrue(r["handoff_requested"])
         self.assertEqual(r["reason"], MOTIVO_INCOMPREENSAO)
@@ -154,9 +153,9 @@ class TestNoAgente(unittest.TestCase):
         self.assertEqual(ds.tentativas(agente.sessao_salva), 1, "o contador fica na sessão gravada")
         self.assertNotEqual(at.estado(agente.sessao_salva), at.HUMAN_ACTIVE)
 
-    def test_terceira_vez_vai_a_pessoa(self):
+    def test_segunda_vez_vai_a_pessoa(self):
         agente, _ = self._agente([pede(["agendar"]), texto_do_modelo("")],
-                                 sessao={ds.CAMPO: {ds.CHAVE: 2}})
+                                 sessao={ds.CAMPO: {ds.CHAVE: 1}})
         saida = agente.process_message(CLINIC, mensagem("aquilo"))
         self.assertEqual([m.content for m in saida], [ds.TEXTO_DE_ESGOTAMENTO])
         sessao = agente.sessao_salva
