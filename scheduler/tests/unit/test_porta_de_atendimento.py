@@ -93,14 +93,15 @@ class TestFilaDeAbordagem(unittest.TestCase):
 # ── /send com campanha ────────────────────────────────────────────────────
 
 class TestSendComCampanha(unittest.TestCase):
-    def _dispara(self, corpo, sessao, agora=AGORA):
+    def _dispara(self, corpo, sessao, agora=AGORA, clinica=None):
         from src.functions.send import handler as modulo
 
         envio = mock.MagicMock(success=True, provider_message_id="p1", raw_response={})
         provider = mock.MagicMock()
         provider.send_text.return_value = envio
         db = mock.MagicMock()
-        db.execute_query.return_value = [{"clinic_id": "c1", "name": "X", "use_agent": True}]
+        db.execute_query.return_value = [{"clinic_id": "c1", "name": "X", "use_agent": True,
+                                          **(clinica or {})}]
         evento = {"headers": {"x-api-key": "k"}, "body": json.dumps(corpo)}
 
         with mock.patch.object(modulo, "require_api_key", return_value=("k", None)), \
@@ -135,6 +136,39 @@ class TestSendComCampanha(unittest.TestCase):
         resposta, provider = self._dispara({**self.BASE, "campanha": {"datas": ["2026-10-07"]}}, {})
         self.assertEqual(resposta["statusCode"], 200)
         provider.send_text.assert_called_once()
+
+    CAMPANHA = {"campanha": {"datas": ["2026-10-07"]}}
+
+    def test_leads_only_com_sessao_nova_envia(self):
+        """O caso de 15/10/2026: 89 pacientes da Essencia recusados com
+        "politica". Em LEADS_ONLY a sessao nova nao tem campanha viva porque e
+        ESTE disparo que a abre. O operador mandou o bot assumir; a politica da
+        clinica nao opina."""
+        resposta, provider = self._dispara(
+            {**self.BASE, **self.CAMPANHA}, {},
+            clinica={"bot_autoreply_policy": "LEADS_ONLY"})
+        self.assertEqual(resposta["statusCode"], 200, resposta["body"])
+        provider.send_text.assert_called_once()
+
+    def test_pilot_com_telefone_fora_da_lista_envia(self):
+        resposta, provider = self._dispara(
+            {**self.BASE, **self.CAMPANHA}, {},
+            clinica={"bot_autoreply_policy": "PILOT", "bot_pilot_phones": ["5511900000000"]})
+        self.assertEqual(resposta["statusCode"], 200, resposta["body"])
+        provider.send_text.assert_called_once()
+
+    def test_off_tambem_envia(self):
+        """OFF e politica, nao estado: quem desliga o bot da clinica e bot_paused."""
+        resposta, _ = self._dispara({**self.BASE, **self.CAMPANHA}, {},
+                                    clinica={"bot_autoreply_policy": "OFF"})
+        self.assertEqual(resposta["statusCode"], 200, resposta["body"])
+
+    def test_bot_da_clinica_pausado_e_409(self):
+        resposta, provider = self._dispara({**self.BASE, **self.CAMPANHA}, {},
+                                           clinica={"bot_paused": True})
+        self.assertEqual(resposta["statusCode"], 409)
+        self.assertEqual(json.loads(resposta["body"])["motivo"], "bot_da_clinica_pausado")
+        provider.send_text.assert_not_called()
 
     def test_mensagem_manual_nao_passa_pela_porta(self):
         """Sem campanha é a atendente falando: cooldown, pessoa e madrugada
