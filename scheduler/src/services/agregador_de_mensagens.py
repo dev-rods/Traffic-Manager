@@ -116,6 +116,47 @@ def drena(table, clinic_id, phone, tentativas=3):
     return [], 0
 
 
+def edita(table, clinic_id, phone, message_id, content, tentativas=3):
+    """A pessoa editou uma mensagem que ainda está no balde: troca o texto.
+
+    Devolve True se trocou. False se a mensagem não está mais no balde - já foi
+    drenada e respondida, ou nunca passou por aqui - e aí quem chama decide o
+    que fazer com a correção.
+
+    Em 10/10/2026 uma paciente escreveu "virilha completa + perianal", editou
+    15s depois para "... + axilas", e o webhook jogou a edição fora como
+    duplicata. A janela de 68s ainda estava aberta: bastava trocar o texto no
+    balde e o bot leria a versão certa. Condicionado à versão, pelo mesmo
+    motivo de `drena`: uma mensagem que entra no meio não pode se perder.
+    """
+    for tentativa in range(tentativas):
+        item = (table.get_item(Key=_chave(clinic_id, phone)).get("Item")) or {}
+        mensagens = item.get("mensagens") or []
+        indice = next(
+            (i for i, m in enumerate(mensagens) if (m or {}).get("message_id") == message_id),
+            None,
+        )
+        if indice is None:
+            return False
+        versao = int(item.get("versao") or 0)
+        try:
+            table.update_item(
+                Key=_chave(clinic_id, phone),
+                UpdateExpression=f"SET mensagens[{indice}].content = :c ADD versao :um",
+                ConditionExpression="versao = :v",
+                ExpressionAttributeValues={":c": content, ":v": versao, ":um": 1},
+            )
+            logger.info(f"[Agregador] edição de {phone} aplicada no balde (msg {message_id})")
+            return True
+        except table.meta.client.exceptions.ConditionalCheckFailedException:
+            logger.info(
+                f"[Agregador] balde de {phone} mudou durante a edição, "
+                f"relendo (tentativa {tentativa + 1}/{tentativas})"
+            )
+    logger.error(f"[Agregador] não consegui aplicar a edição de {phone} em {tentativas} tentativas")
+    return False
+
+
 def chegou_mensagem_nova(table, clinic_id, phone):
     """Alguém escreveu depois de a gente ter drenado?
 

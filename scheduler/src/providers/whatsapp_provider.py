@@ -28,6 +28,11 @@ class IncomingMessage:
     button_id: Optional[str] = None
     button_text: Optional[str] = None
     reference_message_id: Optional[str] = None
+    # A pessoa editou uma mensagem já enviada. `message_id` continua sendo o
+    # da ORIGINAL (é assim que a z-api manda), e `content` é o texto novo;
+    # `edit_message_id` identifica a edição em si.
+    is_edit: bool = False
+    edit_message_id: Optional[str] = None
     raw_payload: Dict[str, Any] = field(default_factory=dict)
 
 

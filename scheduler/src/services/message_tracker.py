@@ -71,6 +71,42 @@ class MessageTracker:
 
         return item
 
+    def aplica_edicao(self, clinic_id: str, phone: str, message_id: str, content: str) -> bool:
+        """A pessoa editou uma mensagem: o evento original passa a ter o texto
+        novo, guardando o anterior. É o que o painel mostra - e o que uma
+        investigação lê. Devolve False se o original não está na tabela.
+
+        O sk leva o instante do recebimento, que a edição não traz, então a
+        busca é pela partição filtrando por messageId."""
+        pk = f"CLINIC#{clinic_id}#PHONE#{phone}"
+        try:
+            resposta = self.table.query(
+                KeyConditionExpression=Key("pk").eq(pk),
+                FilterExpression="messageId = :m AND direction = :d",
+                ExpressionAttributeValues={":m": message_id, ":d": "INBOUND"},
+            )
+            itens = resposta.get("Items") or []
+            if not itens:
+                logger.warning(f"[MessageTracker] Edição de {message_id} sem original para {phone}")
+                return False
+            agora = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            original = itens[0]
+            self.table.update_item(
+                Key={"pk": original["pk"], "sk": original["sk"]},
+                UpdateExpression=(
+                    "SET content = :c, conteudoAnterior = if_not_exists(conteudoAnterior, :a), "
+                    "editadoEm = :t, updatedAt = :t"
+                ),
+                ExpressionAttributeValues={
+                    ":c": content, ":a": original.get("content", ""), ":t": agora,
+                },
+            )
+            logger.info(f"[MessageTracker] Edição aplicada | phone={phone} msgId={message_id}")
+            return True
+        except Exception as e:
+            logger.error(f"[MessageTracker] Falha ao aplicar edição de {message_id}: {e}")
+            return False
+
     def track_inbound(
         self,
         clinic_id: str,

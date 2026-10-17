@@ -172,6 +172,10 @@ class ZApiProvider(WhatsAppProvider):
             button_id=button_id,
             button_text=button_text,
             reference_message_id=reference_message_id,
+            # Edição: `isEdit` true, `messageId` da original e `editMessageId`
+            # da edição; o texto novo vem em `text.message` como numa mensagem.
+            is_edit=bool(raw_payload.get("isEdit")),
+            edit_message_id=raw_payload.get("editMessageId") or None,
             raw_payload=raw_payload,
         )
 
