@@ -4,7 +4,7 @@ Router unico para os endpoints publicos de agendamento (public_booking/*).
 A stack do scheduler ja tem ~65 Lambdas e bateu no limite de 500 recursos por
 stack do CloudFormation (cada função Lambda custa ~7-8 recursos: Function,
 Version, Role, LogGroup, Permission, Method, Resource). Em vez de 1 função por
-endpoint (7 novas = ~35+ recursos), esta única Lambda atende as 7 rotas
+endpoint (~7 recursos cada), esta única Lambda atende todas as rotas
 públicas via `event['resource']`, delegando para os handlers originais — que
 continuam intactos, testáveis e importáveis individualmente.
 """
@@ -17,6 +17,7 @@ from src.functions.public_booking import (
     confirm_otp,
     create_appointment,
     list_appointments,
+    quote,
     resolve_domain,
     send_otp,
     slots,
@@ -32,6 +33,7 @@ ROUTES = {
     ("GET", "public/clinics/{clinicId}/availability"): availability.handler,
     ("POST", "public/clinics/{clinicId}/verify/send"): send_otp.handler,
     ("POST", "public/clinics/{clinicId}/verify/confirm"): confirm_otp.handler,
+    ("POST", "public/clinics/{clinicId}/quote"): quote.handler,
     ("POST", "public/clinics/{clinicId}/appointments"): create_appointment.handler,
     ("GET", "public/clinics/{clinicId}/my-appointments"): list_appointments.handler,
     ("POST", "public/clinics/{clinicId}/appointments/{appointmentId}/cancel"): cancel_appointment.handler,

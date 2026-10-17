@@ -1,23 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useClinicBootstrap, useCreateAppointment, useWeekAvailability } from '@/hooks/useBooking'
+import { useClinicBootstrap, useCreateAppointment, useMonthAvailability, useQuote } from '@/hooks/useBooking'
 import { useClinicId } from '@/hooks/useClinicId'
 import { useCart } from '@/store/useCart'
-import { ProfessionalPicker } from '@/components/ProfessionalPicker'
 import { AreaPicker } from '@/components/AreaPicker'
-import { WeekPicker } from '@/components/WeekPicker'
-import { startOfWeekMonday, startOfToday, toISODate, weekDates } from '@/utils/weekDates'
+import { DayList } from '@/components/DayList'
 import { TimeSlotGrid } from '@/components/TimeSlotGrid'
 import { CartSummary } from '@/components/CartSummary'
+import { PriceBreakdown } from '@/components/PriceBreakdown'
 import { CustomerInfoForm } from '@/components/CustomerInfoForm'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { formatDateLong, toApiPhone } from '@/utils/format'
-import { buildServiceAreaPairs, cartHasAreas, cartPendingAreaSelection, computeCartTotals } from '@/utils/cartTotals'
+import { IconCheckCircle, IconChevronLeft } from '@/components/ui/icons'
+import { ApiError } from '@/services/api'
+import { formatCurrencyBRL, formatDateLong, formatPhoneDisplay, toApiPhone } from '@/utils/format'
+import { cartHasAreas, cartPendingAreaSelection, toCartPayload } from '@/utils/cartTotals'
+import { datesBetween, monthWindow } from '@/utils/monthWindow'
+import { startOfToday } from '@/utils/dates'
 import type { WizardStep } from '@/types'
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
 
 export function Booking() {
   const { clinicId, basePath } = useClinicId()
@@ -27,21 +34,43 @@ export function Booking() {
   const createAppointment = useCreateAppointment(clinicId)
 
   const [step, setStep] = useState<WizardStep>('cart')
-  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(startOfToday()))
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // Telefone usado na cotação: com ele entram primeira sessão e desconto
+  // personalizado, antes de o cliente confirmar.
+  const [quotePhone, setQuotePhone] = useState<string | undefined>(undefined)
+  // Datas perguntadas ao backend: de hoje até o fim do mês. Quem decide o que
+  // é agendável é o backend (no fuso da clínica); isto só limita a pergunta.
+  const [monthDates, setMonthDates] = useState(() => monthWindow(startOfToday()))
+  const slotsRef = useRef<HTMLDivElement>(null)
 
   const serviceAreas = bootstrap.data?.serviceAreas ?? []
   const professionals = bootstrap.data?.professionals ?? []
-  const { durationMinutes, priceCents } = computeCartTotals(cart.items, serviceAreas)
+  const pendingAreas = cartPendingAreaSelection(cart.items, serviceAreas)
+  const cartReady = bootstrap.isSuccess && cart.items.length > 0 && pendingAreas.length === 0
+  const cartPayload = toCartPayload(cart.items, serviceAreas)
+
+  const availability = useMonthAvailability(clinicId, monthDates, cartPayload, cartReady)
+  const quote = useQuote(clinicId, cartPayload, quotePhone, cartReady)
+
+  // O "hoje" do navegador pode não ser o da clínica (outro fuso, ou a aba
+  // aberta desde o mês passado): perguntadas as datas erradas, todas voltariam
+  // fechadas. Quando a janela da resposta não bate com o que foi pedido, a
+  // pergunta passa a ser a janela; ao bater, para.
+  const bookingWindow = availability.data?.window
+  useEffect(() => {
+    if (!bookingWindow) return
+    const windowDates = datesBetween(bookingWindow.start, bookingWindow.end)
+    if (windowDates.length === 0) return
+    setMonthDates((current) =>
+      current.length === windowDates.length && current.every((d, i) => d === windowDates[i]) ? current : windowDates
+    )
+  }, [bookingWindow])
 
   // Com um único serviço no catálogo não existe outro pra escolher - o
   // carrinho não é uma decisão, é um fato. A etapa de revisão (e o botão
   // "Adicionar outro serviço") não tem o que oferecer, então é pulada: o
   // fluxo começa direto na próxima etapa de verdade (áreas, ou agendamento).
   const isSingleService = bootstrap.data?.services.length === 1
-
-  const weekIsoDates = weekDates(weekStart).map(toISODate)
-  const weekAvailability = useWeekAvailability(clinicId, weekIsoDates, durationMinutes)
 
   useEffect(() => {
     if (cart.items.length === 0 && step !== 'success') {
@@ -51,26 +80,26 @@ export function Booking() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart.items.length])
 
-  function goToAreasOrNext() {
-    if (cartPendingAreaSelection(cart.items, serviceAreas).length > 0) {
-      setStep('areas')
-    } else {
-      goToScheduleOrProfessional()
-    }
-  }
+  // Ao escolher o dia, os horários aparecem abaixo da lista — no celular,
+  // fora da tela. Leva o cliente até eles.
+  useEffect(() => {
+    if (step !== 'schedule' || !cart.date) return
+    slotsRef.current?.scrollIntoView?.({
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      block: 'nearest',
+    })
+  }, [cart.date, step])
 
-  function goToScheduleOrProfessional() {
-    if (professionals.length > 1) {
-      setStep('professional')
-      return
-    }
-    if (professionals.length === 1) cart.setProfessionalId(professionals[0].id)
-    setStep('schedule')
+  // Profissional não é escolhido pelo cliente: o backend atribui (o conflito
+  // de horário é checado na clínica inteira, então a escolha não reservava a
+  // agenda de ninguém).
+  function goToAreasOrSchedule() {
+    setStep(pendingAreas.length > 0 ? 'areas' : 'schedule')
   }
 
   useEffect(() => {
     if (isSingleService && step === 'cart' && cart.items.length > 0) {
-      goToAreasOrNext()
+      goToAreasOrSchedule()
     }
     // Só no momento em que os dados chegam (ou o carrinho passa a ter o item
     // pré-selecionado) - não a cada render.
@@ -88,9 +117,6 @@ export function Booking() {
   if (bootstrap.isError || !bootstrap.data) {
     return <ErrorState message="Não foi possível carregar este salão." onRetry={() => bootstrap.refetch()} />
   }
-
-  const selectedProfessional = professionals.find((p) => p.id === cart.professionalId)
-  const pendingAreas = cartPendingAreaSelection(cart.items, serviceAreas)
 
   // Sem profissional cadastrado não há quem receber o agendamento - a
   // AvailabilityEngine nunca abre um horário, e sem isto o cliente veria o
@@ -115,6 +141,8 @@ export function Booking() {
     )
   }
 
+  const { clinic } = bootstrap.data
+
   function goToCartOrHome() {
     if (isSingleService) {
       navigate(basePath || '/')
@@ -128,12 +156,8 @@ export function Booking() {
       navigate(basePath || '/')
     } else if (step === 'areas') {
       goToCartOrHome()
-    } else if (step === 'professional') {
-      if (cartHasAreas(cart.items, serviceAreas)) setStep('areas')
-      else goToCartOrHome()
     } else if (step === 'schedule') {
-      if (professionals.length > 1) setStep('professional')
-      else if (cartHasAreas(cart.items, serviceAreas)) setStep('areas')
+      if (cartHasAreas(cart.items, serviceAreas)) setStep('areas')
       else goToCartOrHome()
     } else if (step === 'customer') {
       setStep('schedule')
@@ -149,20 +173,8 @@ export function Booking() {
     cart.setItemAreas(serviceId, next)
   }
 
-  function handleSelectDate(iso: string) {
-    cart.setDate(iso)
-  }
-
-  function handlePrevWeek() {
-    const prev = new Date(weekStart)
-    prev.setDate(prev.getDate() - 7)
-    setWeekStart(prev)
-  }
-
-  function handleNextWeek() {
-    const next = new Date(weekStart)
-    next.setDate(next.getDate() + 7)
-    setWeekStart(next)
+  function handlePhoneChange(phone: string | null) {
+    setQuotePhone(phone ? toApiPhone(phone) : undefined)
   }
 
   function handleCustomerSubmit(data: CustomerInfoFormData) {
@@ -172,39 +184,42 @@ export function Booking() {
 
     if (!cart.date || !cart.time) return
 
-    const serviceAreaPairs = buildServiceAreaPairs(cart.items, serviceAreas)
-
     createAppointment.mutate(
-      {
-        phone,
-        fullName: data.fullName,
-        serviceIds: cart.items.map((i) => i.service.id),
-        date: cart.date,
-        time: cart.time,
-        professionalId: cart.professionalId ?? undefined,
-        serviceAreaPairs: serviceAreaPairs.length > 0 ? serviceAreaPairs : undefined,
-      },
+      { ...cartPayload, phone, fullName: data.fullName, date: cart.date, time: cart.time },
       {
         onSuccess: () => setStep('success'),
-        onError: (err) => setSubmitError((err as Error).message),
+        onError: (err) => {
+          // O horário foi ocupado enquanto o cliente preenchia os dados. A
+          // grade já foi invalidada (useCreateAppointment); volta para ela.
+          if (err instanceof ApiError && err.status === 409) {
+            cart.clearSchedule()
+            setStep('schedule')
+            setSubmitError('Esse horário acabou de ser ocupado. Escolha outro, por favor.')
+            return
+          }
+          setSubmitError(err.message)
+        },
       }
     )
   }
 
   if (step === 'success') {
+    const finalPrice = createAppointment.data?.final_price_cents
     return (
       <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <span className="text-4xl" aria-hidden>
-          ✓
-        </span>
+        <IconCheckCircle className="h-12 w-12 text-success-500" />
         <h1 className="font-display text-2xl text-ink-900">Agendamento confirmado!</h1>
         {cart.date && cart.time ? (
           <p className="text-ink-600">
             {formatDateLong(cart.date)}, {cart.time}
           </p>
         ) : null}
+        {finalPrice != null ? (
+          <p className="tabular-nums text-ink-600">Valor: {formatCurrencyBRL(finalPrice)}</p>
+        ) : null}
         <p className="max-w-sm text-sm text-ink-500">
-          Enviamos a confirmação por WhatsApp para {cart.customerPhone}.
+          Enviamos a confirmação e as orientações para a sessão por WhatsApp para{' '}
+          {formatPhoneDisplay(cart.customerPhone)}.
         </p>
         <Button
           onClick={() => {
@@ -218,14 +233,22 @@ export function Booking() {
     )
   }
 
+  const price =
+    pendingAreas.length > 0 ? (
+      <p className="text-sm text-ink-500">Escolha as áreas para ver o valor.</p>
+    ) : (
+      <PriceBreakdown quote={quote.data} isLoading={quote.isLoading} isError={quote.isError} />
+    )
+
   return (
     <div className="flex flex-col gap-8">
       <button
         type="button"
         onClick={goBack}
-        className="inline-flex w-fit cursor-pointer items-center gap-1 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
+        className="-ml-2 inline-flex h-11 w-fit cursor-pointer items-center gap-1 rounded-lg px-2 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
       >
-        <span aria-hidden>‹</span> Voltar
+        <IconChevronLeft />
+        Voltar
       </button>
 
       <div>
@@ -236,11 +259,9 @@ export function Booking() {
           items={cart.items}
           serviceAreas={serviceAreas}
           onRemove={step === 'cart' ? cart.removeItem : undefined}
-          professionalName={selectedProfessional?.name}
           date={step === 'customer' ? cart.date : undefined}
           time={step === 'customer' ? cart.time : undefined}
-          totalDurationMinutes={durationMinutes}
-          totalPriceCents={priceCents}
+          price={price}
         />
       </div>
 
@@ -252,7 +273,7 @@ export function Booking() {
           >
             Adicionar outro serviço
           </Link>
-          <Button onClick={goToAreasOrNext}>Continuar</Button>
+          <Button onClick={goToAreasOrSchedule}>Continuar</Button>
         </div>
       ) : null}
 
@@ -263,25 +284,7 @@ export function Booking() {
           </h2>
           <AreaPicker items={cart.items} serviceAreas={serviceAreas} onToggleArea={handleToggleArea} />
           <div className="mt-6 flex justify-end">
-            <Button disabled={pendingAreas.length > 0} onClick={goToScheduleOrProfessional}>
-              Continuar
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {step === 'professional' ? (
-        <div>
-          <h2 className="mb-4 text-center text-sm font-semibold uppercase tracking-wide text-ink-500">
-            Selecione o profissional
-          </h2>
-          <ProfessionalPicker
-            professionals={professionals}
-            selectedId={cart.professionalId}
-            onSelect={cart.setProfessionalId}
-          />
-          <div className="mt-6 flex justify-center">
-            <Button disabled={!cart.professionalId} onClick={() => setStep('schedule')}>
+            <Button disabled={pendingAreas.length > 0} onClick={() => setStep('schedule')}>
               Continuar
             </Button>
           </div>
@@ -290,31 +293,46 @@ export function Booking() {
 
       {step === 'schedule' ? (
         <div className="flex flex-col gap-6">
-          <WeekPicker
-            weekStart={weekStart}
-            onPrevWeek={handlePrevWeek}
-            onNextWeek={handleNextWeek}
-            days={weekAvailability.data}
-            isLoading={weekAvailability.isLoading}
-            selectedDate={cart.date}
-            onSelectDate={handleSelectDate}
-          />
+          {submitError ? (
+            <p role="alert" className="rounded-lg bg-danger-100 px-4 py-3 text-sm text-danger-500">
+              {submitError}
+            </p>
+          ) : null}
+          <div>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-500">Escolha o dia</h2>
+            <DayList
+              days={availability.data?.days}
+              bookingWindow={availability.data?.window}
+              isLoading={availability.isLoading}
+              isError={availability.isError}
+              onRetry={() => availability.refetch()}
+              selectedDate={cart.date}
+              onSelectDate={cart.setDate}
+              clinicPhone={clinic.phone}
+            />
+          </div>
           {cart.date ? (
-            <div>
+            <div ref={slotsRef} className="scroll-mt-4">
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-500">
                 Selecione o horário de início
               </h2>
               <TimeSlotGrid
-                slots={weekAvailability.data?.[cart.date]?.slots}
-                isLoading={weekAvailability.isLoading}
-                isError={weekAvailability.isError}
+                slots={availability.data?.days[cart.date]?.slots}
+                isLoading={availability.isLoading}
+                isError={availability.isError}
                 selectedTime={cart.time}
                 onSelect={(time) => cart.setSchedule(cart.date as string, time)}
               />
             </div>
           ) : null}
           <div className="flex justify-end">
-            <Button disabled={!cart.date || !cart.time} onClick={() => setStep('customer')}>
+            <Button
+              disabled={!cart.date || !cart.time}
+              onClick={() => {
+                setSubmitError(null)
+                setStep('customer')
+              }}
+            >
               Continuar
             </Button>
           </div>
@@ -323,15 +341,19 @@ export function Booking() {
 
       {step === 'customer' ? (
         <div>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-            Informações do usuário
-          </h2>
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Seus dados</h2>
           <CustomerInfoForm
             defaultValues={{ fullName: cart.customerName }}
             onSubmit={handleCustomerSubmit}
+            onPhoneChange={handlePhoneChange}
             submitting={createAppointment.isPending}
+            submitLabel="Confirmar agendamento"
           />
-          {submitError ? <p className="mt-3 text-sm text-danger-500">{submitError}</p> : null}
+          {submitError ? (
+            <p role="alert" className="mt-3 text-sm text-danger-500">
+              {submitError}
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

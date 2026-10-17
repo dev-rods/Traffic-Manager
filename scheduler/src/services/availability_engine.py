@@ -194,60 +194,68 @@ class AvailabilityEngine:
             logger.error(f"[AvailabilityEngine] Erro ao conferir {hora} em {target_date}: {e}")
             return False
 
+    def _regras_do_dia(self, clinic_id: str, target_date: str) -> Optional[list]:
+        """Os intervalos de atendimento do dia, ou None quando a clinica nao abre.
+
+        Regras recorrentes e de data fixa (a fixa vence), depois as excecoes:
+        BLOCKED fecha o dia, SPECIAL_HOURS troca o horario. E a parte da agenda
+        que distingue "fechado" de "lotado" - por isso separada das janelas.
+        """
+        dt = datetime.strptime(target_date, "%Y-%m-%d").date()
+        day_of_week = dt.isoweekday() % 7
+
+        rules = self.db.execute_query(
+            """
+            SELECT start_time, end_time, rule_date FROM scheduler.availability_rules
+            WHERE clinic_id = %s AND active = TRUE
+              AND (day_of_week = %s OR rule_date = %s)
+            """,
+            (clinic_id, day_of_week, target_date),
+        )
+        if not rules:
+            return None
+
+        # Fixed-date rules take priority over recurring day_of_week rules
+        fixed_rules = [r for r in rules if r.get("rule_date")]
+        if fixed_rules:
+            rules = fixed_rules
+
+        exceptions = self.db.execute_query(
+            """
+            SELECT exception_type, start_time, end_time FROM scheduler.availability_exceptions
+            WHERE clinic_id = %s AND exception_date = %s
+            """,
+            (clinic_id, target_date),
+        )
+
+        for exc in exceptions:
+            if exc["exception_type"] == "BLOCKED":
+                return None
+            elif exc["exception_type"] == "SPECIAL_HOURS":
+                rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
+
+        return rules
+
+    def _janelas_das_regras(self, clinic_id: str, target_date: str, rules: list, buffer_minutes: int) -> List[tuple]:
+        """Os intervalos do dia menos os agendamentos confirmados."""
+        appointments = self.db.execute_query(
+            """
+            SELECT start_time, end_time FROM scheduler.appointments
+            WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
+            """,
+            (clinic_id, target_date),
+        )
+        return self._calculate_free_windows(rules, appointments, buffer_minutes)
+
     def janelas_livres(self, clinic_id: str, target_date: str):
         """(janelas livres em minutos, buffer) do dia: regras menos excecoes
         menos agendamentos confirmados. Lista vazia quando o dia esta fechado."""
         try:
-            # 1. Fetch clinic buffer
             buffer_minutes = self._get_buffer_minutes(clinic_id)
-
-            # 2. Parse date and get day_of_week
-            dt = datetime.strptime(target_date, "%Y-%m-%d").date()
-            day_of_week = dt.isoweekday() % 7
-
-            # 3. Fetch availability rules for this day (recurring + fixed-date)
-            rules = self.db.execute_query(
-                """
-                SELECT start_time, end_time, rule_date FROM scheduler.availability_rules
-                WHERE clinic_id = %s AND active = TRUE
-                  AND (day_of_week = %s OR rule_date = %s)
-                """,
-                (clinic_id, day_of_week, target_date),
-            )
-            if not rules:
+            rules = self._regras_do_dia(clinic_id, target_date)
+            if rules is None:
                 return [], buffer_minutes
-
-            # Fixed-date rules take priority over recurring day_of_week rules
-            fixed_rules = [r for r in rules if r.get("rule_date")]
-            if fixed_rules:
-                rules = fixed_rules
-
-            # 4. Check availability exceptions
-            exceptions = self.db.execute_query(
-                """
-                SELECT exception_type, start_time, end_time FROM scheduler.availability_exceptions
-                WHERE clinic_id = %s AND exception_date = %s
-                """,
-                (clinic_id, target_date),
-            )
-
-            for exc in exceptions:
-                if exc["exception_type"] == "BLOCKED":
-                    return [], buffer_minutes
-                elif exc["exception_type"] == "SPECIAL_HOURS":
-                    rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
-
-            # 5. Fetch existing confirmed appointments for this date
-            appointments = self.db.execute_query(
-                """
-                SELECT start_time, end_time FROM scheduler.appointments
-                WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
-                """,
-                (clinic_id, target_date),
-            )
-
-            # 6. Calculate free windows
-            return self._calculate_free_windows(rules, appointments, buffer_minutes), buffer_minutes
+            return self._janelas_das_regras(clinic_id, target_date, rules, buffer_minutes), buffer_minutes
 
         except Exception as e:
             logger.error(f"[AvailabilityEngine] Erro ao calcular janelas livres: {e}")
@@ -274,74 +282,35 @@ class AvailabilityEngine:
             logger.error(f"[AvailabilityEngine] Erro ao buscar dias disponiveis multi: {e}")
             return []
 
-    def get_days_status(self, clinic_id: str, dates: List[str], duration_minutes: int) -> Dict[str, dict]:
+    def get_days_status(self, clinic_id: str, dates: List[str], duration_minutes: int,
+                        a_partir_de: Optional[Dict[str, int]] = None) -> Dict[str, dict]:
         """Status por dia (CLOSED | FULL | AVAILABLE) + horários livres, para uma lista de datas.
 
-        Mesma lógica de `get_available_slots_multi`, rodada por várias datas de uma vez,
-        mas sem descartar o motivo de "sem horário": distingue clínica fechada nesse dia
-        (sem regra / bloqueada) de clínica aberta mas com a agenda cheia — usado pelo
-        seletor de semana do booking-site. O bot de WhatsApp usa `get_available_days*`
-        (que só filtra os dias com vaga); esta função reaproveita as mesmas queries e
-        helpers, só que preservando os três estados para exibição.
+        A mesma agenda de `janelas_livres` (e portanto de `get_available_slots_multi`,
+        que o bot usa), sem descartar o motivo de "sem horário": distingue clínica
+        fechada nesse dia (sem regra / bloqueada) de clínica aberta com a agenda
+        cheia - usado pelo site público. Era uma cópia das mesmas queries; agora
+        chama as mesmas funções, e uma mudança na regra de agenda vale para os dois.
+
+        `a_partir_de` ({data: minutos do dia}) corta os horários que já passaram:
+        hoje às 14h, 9h não é horário disponível.
         """
-        clinics = self.db.execute_query(
-            "SELECT buffer_minutes FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
-            (clinic_id,),
-        )
-        buffer_minutes = clinics[0]["buffer_minutes"] if clinics else 10
+        buffer_minutes = self._get_buffer_minutes(clinic_id)
+        corte = a_partir_de or {}
 
         result: Dict[str, dict] = {}
         for target_date in dates:
-            dt = datetime.strptime(target_date, "%Y-%m-%d").date()
-            day_of_week = dt.isoweekday() % 7
-
-            rules = self.db.execute_query(
-                """
-                SELECT start_time, end_time, rule_date FROM scheduler.availability_rules
-                WHERE clinic_id = %s AND active = TRUE
-                  AND (day_of_week = %s OR rule_date = %s)
-                """,
-                (clinic_id, day_of_week, target_date),
-            )
-            if not rules:
+            rules = self._regras_do_dia(clinic_id, target_date)
+            if rules is None:
                 result[target_date] = {"status": "CLOSED", "slots": []}
                 continue
 
-            fixed_rules = [r for r in rules if r.get("rule_date")]
-            if fixed_rules:
-                rules = fixed_rules
-
-            exceptions = self.db.execute_query(
-                """
-                SELECT exception_type, start_time, end_time FROM scheduler.availability_exceptions
-                WHERE clinic_id = %s AND exception_date = %s
-                """,
-                (clinic_id, target_date),
-            )
-
-            blocked = False
-            for exc in exceptions:
-                if exc["exception_type"] == "BLOCKED":
-                    blocked = True
-                    break
-                elif exc["exception_type"] == "SPECIAL_HOURS":
-                    rules = [{"start_time": exc["start_time"], "end_time": exc["end_time"]}]
-
-            if blocked:
-                result[target_date] = {"status": "CLOSED", "slots": []}
-                continue
-
-            appointments = self.db.execute_query(
-                """
-                SELECT start_time, end_time FROM scheduler.appointments
-                WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
-                """,
-                (clinic_id, target_date),
-            )
-
-            free_windows = self._calculate_free_windows(rules, appointments, buffer_minutes)
+            free_windows = self._janelas_das_regras(clinic_id, target_date, rules, buffer_minutes)
             slot_minutes = self._generate_slots_in_windows(free_windows, duration_minutes, buffer_minutes)
-            slots = [_minutes_to_time_str(s) for s in slot_minutes]
+            minimo = corte.get(target_date)
+            if minimo is not None:
+                slot_minutes = [m for m in slot_minutes if m >= minimo]
+            slots = [_minutes_to_time_str(m) for m in slot_minutes]
 
             result[target_date] = {
                 "status": "AVAILABLE" if slots else "FULL",

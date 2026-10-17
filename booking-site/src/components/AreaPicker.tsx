@@ -1,5 +1,5 @@
 import type { CartItem, ServiceArea } from '@/types'
-import { formatCurrencyBRL, formatDuration } from '@/utils/format'
+import { formatCurrencyBRL, hasPrice } from '@/utils/format'
 import { getAreasForService } from '@/utils/cartTotals'
 import { cx } from '@/utils/cx'
 
@@ -28,7 +28,7 @@ export function AreaPicker({ items, serviceAreas, onToggleArea }: AreaPickerProp
                 <label
                   key={area.area_id}
                   className={cx(
-                    'flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm transition-colors',
+                    'flex min-h-12 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm transition-colors',
                     checked ? 'bg-accent-50' : 'hover:bg-ink-50'
                   )}
                 >
@@ -37,14 +37,13 @@ export function AreaPicker({ items, serviceAreas, onToggleArea }: AreaPickerProp
                       type="checkbox"
                       checked={checked}
                       onChange={() => onToggleArea(item.service.id, area.area_id)}
-                      className="h-4 w-4 accent-accent-600"
+                      className="h-5 w-5 shrink-0 accent-accent-600"
                     />
                     <span className="text-ink-800">{area.area_name}</span>
                   </span>
-                  <span className="shrink-0 text-ink-500">
-                    {formatDuration(area.duration_minutes)}
-                    {area.price_cents != null ? ` · ${formatCurrencyBRL(area.price_cents)}` : ''}
-                  </span>
+                  {hasPrice(area.price_cents) ? (
+                    <span className="shrink-0 tabular-nums text-ink-500">{formatCurrencyBRL(area.price_cents)}</span>
+                  ) : null}
                 </label>
               )
             })}

@@ -29,4 +29,23 @@ describe('CustomerInfoForm', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
     expect(onSubmit.mock.calls[0][0]).toEqual({ fullName: 'Maria Silva', phone: '(11) 98765-4321' })
   })
+
+  it('avisa quando o celular fica válido (para refazer a cotação) e quando deixa de ser', async () => {
+    const onPhoneChange = vi.fn()
+    render(<CustomerInfoForm onSubmit={vi.fn()} submitting={false} onPhoneChange={onPhoneChange} />)
+
+    await userEvent.type(screen.getByLabelText(/celular/i), '1198765432')
+    expect(onPhoneChange).toHaveBeenLastCalledWith('(11) 98765-432')
+
+    await userEvent.type(screen.getByLabelText(/celular/i), '1')
+    expect(onPhoneChange).toHaveBeenLastCalledWith('(11) 98765-4321')
+
+    await userEvent.type(screen.getByLabelText(/celular/i), '{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}')
+    expect(onPhoneChange).toHaveBeenLastCalledWith(null)
+  })
+
+  it('usa o rótulo de envio recebido', () => {
+    render(<CustomerInfoForm onSubmit={vi.fn()} submitting={false} submitLabel="Confirmar agendamento" />)
+    expect(screen.getByRole('button', { name: 'Confirmar agendamento' })).toBeInTheDocument()
+  })
 })

@@ -15,6 +15,7 @@ from src.services.duration_rules import (
     arredonda_para_passo,
     calcula_duracao,
     duracao_da_sessao,
+    duracao_do_carrinho,
     soma_das_areas,
 )
 
@@ -185,6 +186,30 @@ class TestCalculaDuracao(unittest.TestCase):
         db = DbFalso(total=0)
 
         self.assertEqual(calcula_duracao(db, "clinica", []), 10)
+
+
+class TestDuracaoDoCarrinho(unittest.TestCase):
+    PAR = [{"service_id": "laser", "area_id": "axilas"}]
+    SERVICOS = [{"id": "laser", "duration_minutes": 20}, {"id": "limpeza", "duration_minutes": 30}]
+
+    def test_servico_sem_par_soma_as_areas_antes_dos_limites(self):
+        """Axilas 8 + limpeza 30 = 38: o passo leva a 40, uma vez só sobre o total."""
+        db = DbFalso(total=8)
+
+        self.assertEqual(duracao_do_carrinho(db, "clinica", ["laser", "limpeza"], self.PAR, servicos=self.SERVICOS), 40)
+
+    def test_servico_coberto_por_par_nao_entra_de_novo(self):
+        db = DbFalso(total=8)
+
+        self.assertEqual(duracao_do_carrinho(db, "clinica", ["laser"], self.PAR, servicos=self.SERVICOS), 10)
+
+    def test_sem_pares_sao_os_servicos(self):
+        self.assertEqual(duracao_do_carrinho(DbFalso(), "clinica", ["limpeza"], [], servicos=self.SERVICOS), 30)
+
+    def test_teto_vale_sobre_o_total(self):
+        db = DbFalso(total=40)
+
+        self.assertEqual(duracao_do_carrinho(db, "clinica", ["laser", "limpeza"], self.PAR, servicos=self.SERVICOS), 50)
 
 
 class TestPadrao(unittest.TestCase):

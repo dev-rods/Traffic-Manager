@@ -7,8 +7,6 @@ export interface CartContextValue {
   removeItem: (serviceId: string) => void
   setItemAreas: (serviceId: string, areaIds: string[]) => void
   clearCart: () => void
-  professionalId: string | null
-  setProfessionalId: (id: string | null) => void
   date: string | null
   time: string | null
   setDate: (date: string) => void

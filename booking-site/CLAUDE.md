@@ -26,9 +26,16 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
 - **Carrinho = serviços do mesmo atendimento.** Diferente do site de
   referência (onde cada item do carrinho podia ter data/profissional
   próprios), aqui o carrinho define **quais serviços** entram numa única
-  visita; data, horário e profissional são escolhidos uma vez para o
-  carrinho inteiro (a duração somada define os horários oferecidos). Isso
-  reflete o que `AppointmentService.create_appointment` do backend suporta.
+  visita; data e horário são escolhidos uma vez para o carrinho inteiro.
+  Isso reflete o que `AppointmentService.create_appointment` do backend
+  suporta. Profissional **não** é escolhido pelo cliente: o backend atribui.
+- **Preço, desconto e duração nunca são calculados no front.** O carrinho vai
+  para o backend (`toCartPayload`), que responde com as mesmas funções do bot
+  de WhatsApp: `/availability` (duração → horários) e `/quote` (total,
+  desconto, valor final). Calcular no navegador já fez o site cobrar diferente
+  do WhatsApp e oferecer horário que a criação recusava (PRD 023).
+- **Agenda só do mês vigente**, no fuso da clínica — a regra mora no backend
+  (`scheduler/src/services/mes_vigente.py`); o front só exibe `window`.
 - Multi-tenant por `clinic_id` na URL: `/:clinicId` (lista de serviços) e
   `/:clinicId/agendar` (wizard).
 

@@ -20,10 +20,13 @@ total" não existe sozinha; "Mão ou Pé + Dedos" também não. E só troca quan
 combo custa igual ou menos que a soma - combo mais caro que as partes seria a
 clínica cobrando a mais, e isso não é decisão do bot.
 """
+import logging
 import re
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from src.services.confirmacao_de_areas import _alternativas
+
+logger = logging.getLogger(__name__)
 
 
 def _conjuntos(nome: str) -> List[frozenset]:
@@ -108,3 +111,46 @@ def aplica(pares: Sequence[Dict], areas: Iterable[Dict],
             restantes = [p for i, p in enumerate(restantes) if i == primeiro or i not in indices]
             break  # os indices mudaram; um combo por servico por chamada basta
     return restantes, trocas
+
+
+def troca_no_catalogo(db, clinic_id: str, pares: Sequence[Dict]) -> Tuple[List[Dict], List[Dict]]:
+    """`aplica` contra o catalogo desta clinica no banco: (pares, trocas).
+
+    Morava no `ToolExecutor` do agente; saiu para ca quando o site publico
+    passou a precisar da mesma troca. Sem ela o site somava as partes e cobrava
+    mais caro que o WhatsApp pelo mesmo pedido - o caso da Aline, de novo.
+
+    Nunca levanta: sem catalogo, sem preco ou com o banco fora, os pares seguem
+    como vieram. Combo e economia para a paciente, nao requisito para agendar.
+    """
+    pares = list(pares or [])
+    if len(pares) < 2:
+        return pares, []
+    try:
+        areas = db.execute_query(
+            "SELECT id, name FROM scheduler.areas WHERE clinic_id = %s AND active = true",
+            (clinic_id,),
+        ) or []
+
+        def preco_de(service_id, area_id):
+            rows = db.execute_query(
+                """
+                SELECT COALESCE(sa.price_cents, s.price_cents) as price_cents
+                FROM scheduler.service_areas sa
+                JOIN scheduler.services s ON s.id = sa.service_id
+                WHERE sa.service_id = %s AND sa.area_id = %s AND sa.active = TRUE
+                """,
+                (service_id, area_id),
+            )
+            return rows[0].get("price_cents") if rows else None
+
+        novos, trocas = aplica(pares, areas, preco_de)
+        if trocas:
+            logger.info(
+                f"[Combos] {clinic_id}: "
+                + "; ".join(f"{' + '.join(t['de'])} -> {t['para']}" for t in trocas)
+            )
+        return novos, trocas
+    except Exception as e:
+        logger.error(f"[Combos] Falha ao conferir combos em {clinic_id}: {e}")
+        return pares, []

@@ -11,7 +11,7 @@ from src.services.confirmacao_de_areas import (
     separa,
 )
 from src.services.areas_ambiguas import pendencias as ambiguidades_pendentes
-from src.services.combos import aplica as aplica_combos
+from src.services.combos import troca_no_catalogo as troca_combos_no_catalogo
 from src.services.areas_ambiguas import recado_de_recusa as recado_de_ambiguidade
 from src.services.bot_policy import (
     MOTIVOS_DO_MODELO,
@@ -31,9 +31,9 @@ from src.services.idade import (
     para_data,
 )
 from src.services.desconto_personalizado import aplica as aplica_desconto
-from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita
+from src.services.politica_de_desconto import decide as decide_desconto
 from src.services.duration_rules import calcula_duracao
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 
@@ -1033,38 +1033,11 @@ class ToolExecutor:
         - os tres leem `service_area_pairs`. Ver combos.py. Nunca levanta: sem
         catalogo ou sem preco, os pares seguem como vieram.
         """
-        pares = args.get("service_area_pairs") or []
-        if len(pares) < 2:
-            return []
-        try:
-            areas = self.db.execute_query(
-                "SELECT id, name FROM scheduler.areas WHERE clinic_id = %s AND active = true",
-                (clinic_id,),
-            ) or []
-
-            def preco_de(service_id, area_id):
-                rows = self.db.execute_query(
-                    """
-                    SELECT COALESCE(sa.price_cents, s.price_cents) as price_cents
-                    FROM scheduler.service_areas sa
-                    JOIN scheduler.services s ON s.id = sa.service_id
-                    WHERE sa.service_id = %s AND sa.area_id = %s AND sa.active = TRUE
-                    """,
-                    (service_id, area_id),
-                )
-                return rows[0].get("price_cents") if rows else None
-
-            novos, trocas = aplica_combos(pares, areas, preco_de)
-            if trocas:
-                args["service_area_pairs"] = novos
-                logger.info(
-                    f"[Combos] {clinic_id}: "
-                    + "; ".join(f"{' + '.join(t['de'])} -> {t['para']}" for t in trocas)
-                )
-            return trocas
-        except Exception as e:
-            logger.error(f"[Combos] Falha ao conferir combos em {clinic_id}: {e}")
-            return []
+        novos, trocas = troca_combos_no_catalogo(
+            self.db, clinic_id, args.get("service_area_pairs") or [])
+        if trocas:
+            args["service_area_pairs"] = novos
+        return trocas
 
     def _agenda(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:
@@ -1291,22 +1264,15 @@ class ToolExecutor:
                 "price_display": "Valor a consultar",
             }
 
-        # Combinado com a paciente vence a politica. E o ponto do campo: um
-        # percentual acertado com ela vale em todo agendamento, no lugar de
-        # primeira sessao e faixas de areas.
-        personalizado = desconto_do_paciente(self.db, clinic_id, phone)
-        if personalizado is not None:
-            return self._resultado_de_desconto(
-                total_price_cents, personalizado, RAZAO_PERSONALIZADA)
-
-        # Fetch discount rules
-        rules_rows = self.db.execute_query(
-            "SELECT * FROM scheduler.discount_rules WHERE clinic_id = %s AND is_active = TRUE",
-            (clinic_id,),
+        # A decisao mora em politica_de_desconto, a mesma que o site publico
+        # chama. As consultas que dependem da pessoa vao daqui para os testes
+        # que fazem patch delas neste modulo continuarem valendo.
+        decisao = decide_desconto(
+            self.db, clinic_id, phone, len(service_area_pairs),
+            e_primeira=e_primeira_visita, personalizado_de=desconto_do_paciente,
         )
-        rules = rules_rows[0] if rules_rows else None
 
-        if not rules:
+        if decisao.sem_politica:
             return {
                 "discount_pct": 0,
                 "discount_reason": None,
@@ -1315,36 +1281,6 @@ class ToolExecutor:
                 "price_display": f"R$ {total_price_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."),
             }
 
-        # A MESMA funcao que marca a estreia na agenda. Eram duas contas
-        # separadas para a mesma pergunta, e campo gravado que nasce de contas
-        # diferentes diverge em silencio.
-        is_first = e_primeira_visita(self.db, clinic_id, phone)
-
-        # Evaluate every applicable rule and pick the best (highest pct) for the patient.
-        # Discounts are mutually exclusive — only the winner is applied.
-        candidates = []
-
-        first_pct = int(rules.get("first_session_discount_pct") or 0)
-        if is_first and first_pct > 0:
-            candidates.append((first_pct, "first_session"))
-
-        area_count = len(service_area_pairs)
-        t2_min = int(rules.get("tier_2_min_areas") or 0)
-        t3_min = int(rules.get("tier_3_min_areas") or 0)
-        t2_pct = int(rules.get("tier_2_discount_pct") or 0)
-        t3_pct = int(rules.get("tier_3_discount_pct") or 0)
-
-        if t3_min and area_count >= t3_min and t3_pct > 0:
-            candidates.append((t3_pct, "tier_3"))
-        elif t2_min and area_count >= t2_min and t2_pct > 0:
-            candidates.append((t2_pct, "tier_2"))
-
-        if candidates:
-            discount_pct, discount_reason = max(candidates, key=lambda c: c[0])
-        else:
-            discount_pct = 0
-            discount_reason = None
-
         return self._resultado_de_desconto(
-            total_price_cents, discount_pct, discount_reason, is_first)
+            total_price_cents, decisao.pct, decisao.razao, decisao.is_first)
 

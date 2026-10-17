@@ -147,6 +147,55 @@ def calcula_duracao(db, clinic_id: str, service_area_pairs: List[Dict]) -> int:
     return duracao_da_sessao(soma_das_areas(db, service_area_pairs), rules)
 
 
+def duracao_do_carrinho(db, clinic_id: str, service_ids: List[str],
+                        service_area_pairs: Optional[List[Dict]],
+                        servicos: Optional[List[Dict]] = None) -> int:
+    """A duração de uma sessão com estes serviços e áreas - a que a agenda grava.
+
+    A soma bruta é a das áreas escolhidas mais a duração dos serviços que
+    nenhum par cobre (o carrinho misto: laser com áreas + limpeza de pele), e
+    passa uma vez só pelos piso, teto e passo da clínica. Sem pares, são as
+    durações dos próprios serviços.
+
+    Morava dentro de `AppointmentService.create_appointment`, e o site público
+    pedia horários com a soma crua calculada no navegador: a grade oferecida
+    não era a grade gravável. Quem pergunta por horário e quem grava chamam
+    esta função - a mesma duração dos dois lados.
+
+    `servicos` são as linhas de `scheduler.services` que o chamador já leu
+    (id, duration_minutes); sem elas, a função lê.
+    """
+    pares = normaliza_pares(service_area_pairs)
+    if not pares:
+        bruto = _duracao_dos_servicos(db, servicos_sem_par(service_ids, pares), servicos)
+        return duracao_da_sessao(bruto, get_duration_rules(db, clinic_id))
+
+    rules = get_duration_rules(db, clinic_id)
+    bruto = soma_das_areas(db, pares)
+    bruto += _duracao_dos_servicos(db, servicos_sem_par(service_ids, pares), servicos)
+    return duracao_da_sessao(bruto, rules)
+
+
+def servicos_sem_par(service_ids: Optional[List[str]], pares: List[Dict]) -> List[str]:
+    """Os `service_ids` que nenhum par de área cobre - entram pelo valor do serviço."""
+    cobertos = {str(p["service_id"]) for p in pares}
+    return list(dict.fromkeys(str(s) for s in (service_ids or []) if s and str(s) not in cobertos))
+
+
+def _duracao_dos_servicos(db, ids: List[str], servicos: Optional[List[Dict]]) -> int:
+    if not ids:
+        return 0
+    if servicos is not None:
+        por_id = {str(r["id"]): r for r in servicos}
+        return sum(int(por_id[i].get("duration_minutes") or 0) for i in ids if i in por_id)
+    placeholders = ", ".join(["%s"] * len(ids))
+    rows = db.execute_query(
+        f"SELECT duration_minutes FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
+        tuple(ids),
+    ) or []
+    return sum(int(r.get("duration_minutes") or 0) for r in rows)
+
+
 def get_duration_rules(db, clinic_id: str) -> Dict:
     """Regras da clínica, ou o padrão do código se não houver nenhuma.
 

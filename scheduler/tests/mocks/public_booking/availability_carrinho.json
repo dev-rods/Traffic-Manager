@@ -1,0 +1,15 @@
+{
+  "httpMethod": "GET",
+  "resource": "/public/clinics/{clinicId}/availability",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123"
+  },
+  "headers": {
+    "x-api-key": "test-api-key"
+  },
+  "queryStringParameters": {
+    "dates": "2026-10-20,2026-10-21,2026-10-22",
+    "serviceIds": "00000000-0000-4000-8000-000000000001",
+    "serviceAreaPairs": "00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-00000000a003"
+  }
+}

@@ -1,5 +1,12 @@
 import { api } from './api'
-import type { Appointment, BootstrapResponse, CreateAppointmentPayload, DayAvailability } from '@/types'
+import type {
+  Appointment,
+  AvailabilityResponse,
+  BootstrapResponse,
+  CartPayload,
+  CreateAppointmentPayload,
+  Quote,
+} from '@/types'
 
 export const bookingService = {
   bootstrap: (clinicId: string) =>
@@ -11,15 +18,25 @@ export const bookingService = {
     api.get<{ clinicId: string }>('/public/resolve-domain', { params: { host } }).then((r) => r.data.clinicId),
 
   // Status (CLOSED | FULL | AVAILABLE) + horários livres para uma lista de datas —
-  // mesma AvailabilityEngine do bot de WhatsApp (get_days_status). Uma chamada só
-  // já traz tudo que o seletor de semana precisa (dias abertos/lotados) e os
-  // horários da data selecionada, sem endpoint separado de slots.
-  weekAvailability: (clinicId: string, dates: string[], totalDuration: number) =>
+  // mesma AvailabilityEngine do bot de WhatsApp. A duração da sessão é calculada
+  // pelo backend a partir do carrinho (a mesma que a criação grava), nunca aqui.
+  availability: (clinicId: string, dates: string[], cart: CartPayload) =>
     api
-      .get<{ days: Record<string, DayAvailability> }>(`/public/clinics/${clinicId}/availability`, {
-        params: { dates: dates.join(','), totalDuration },
+      .get<AvailabilityResponse>(`/public/clinics/${clinicId}/availability`, {
+        params: {
+          dates: dates.join(','),
+          serviceIds: cart.serviceIds.join(','),
+          serviceAreaPairs: cart.serviceAreaPairs.map((p) => `${p.serviceId}:${p.areaId}`).join(',') || undefined,
+        },
       })
-      .then((r) => r.data.days),
+      .then((r) => ({ days: r.data.days, window: r.data.window })),
+
+  // Total, desconto e valor final — com o telefone, também primeira sessão e
+  // desconto personalizado. POST para o telefone não ir na URL.
+  quote: (clinicId: string, cart: CartPayload, phone?: string) =>
+    api
+      .post<{ quote: Quote }>(`/public/clinics/${clinicId}/quote`, { ...cart, phone })
+      .then((r) => r.data.quote),
 
   sendOtp: (clinicId: string, phone: string) =>
     api.post<{ status: string }>(`/public/clinics/${clinicId}/verify/send`, { phone }).then((r) => r.data),

@@ -23,16 +23,28 @@ por `clinic_id` (via path, ou via domínio próprio — ver §3).
 
 1. Abre o link da clínica (`booking-site-neon.vercel.app/<clinic_id>`, ou o
    domínio próprio dela — ver §3).
-2. Escolhe o(s) serviço(s). Se a clínica só tem **um** serviço no catálogo,
-   essa escolha é pulada: o serviço já chega pré-selecionado.
+2. Escolhe o(s) serviço(s), vendo só o preço "a partir de" — **duração não
+   aparece** em nenhuma tela (é conta interna da agenda). Se a clínica só tem
+   **um** serviço no catálogo, essa escolha é pulada: o serviço já chega
+   pré-selecionado.
 3. Se o serviço tiver áreas de tratamento configuradas, escolhe quais.
-4. Escolhe o profissional — pulado se a clínica só tem **um** cadastrado;
-   bloqueado com aviso se não tem **nenhum** (não há quem atender).
-5. Escolhe data e horário, numa grade semanal com os mesmos dias
-   disponíveis/lotados que o bot de WhatsApp calcularia.
-6. Informa nome e celular.
+4. **Não escolhe profissional** — o backend atribui. Se a clínica não tem
+   **nenhum** cadastrado, o fluxo é bloqueado com aviso (não há quem atender).
+5. Escolhe o dia numa lista que mostra **só os dias com horário**, de hoje até
+   o fim do mês vigente (fuso da clínica), e depois o horário. Sem vaga no
+   resto do mês, a tela diz quando o próximo mês abre e oferece o WhatsApp da
+   clínica.
+6. Informa nome e celular. Ao digitar o celular, o resumo é recalculado:
+   **Total**, **Desconto** (percentual) e **Valor final** aparecem antes de
+   confirmar. Com celular a cotação não diz o motivo do desconto — a rota é
+   pública e sem verificação, e o motivo revelaria a quem digitasse um número
+   qualquer se ele já foi paciente ou tem desconto combinado. Sem celular o
+   motivo aparece (só a faixa por quantidade de áreas é possível). O motivo
+   continua gravado no agendamento e vai na confirmação por WhatsApp, que só
+   o dono do número recebe.
 7. Agendamento é criado na hora — **sem verificação prévia do número**. A
-   confirmação chega por WhatsApp (mesmo template `BOOKED` que o bot usa).
+   confirmação chega por WhatsApp (mesmo template `BOOKED` que o bot usa, com
+   o valor já com desconto), seguida das orientações pré-sessão da clínica.
 8. "Meus agendamentos" (botão no header): consulta ou cancela agendamentos
    existentes pelo celular — **esse caminho exige confirmar o número por
    código enviado via WhatsApp** (único lugar do site com essa verificação).
@@ -70,9 +82,12 @@ porta de entrada para o **mesmo** motor que o bot usa:
 
 | Peça | Classe/arquivo | Papel |
 |---|---|---|
-| Disponibilidade | `AvailabilityEngine.get_days_status` | Mesmo cálculo de dias abertos/lotados/fechados que o bot usa pra oferecer horário |
+| Disponibilidade | `AvailabilityEngine.get_days_status` | Chama `janelas_livres`, a mesma agenda do bot; só preserva o motivo de "sem horário" (fechado × lotado) |
+| Carrinho | `carrinho.py` | Combos (`combos.troca_no_catalogo`) → duração (`duration_rules.duracao_do_carrinho`) → preço (`politica_de_desconto.preco_de_tabela`) → desconto (`politica_de_desconto.decide`), na ordem do agente. Cotação, disponibilidade e criação chamam este módulo |
+| Desconto | `politica_de_desconto.decide` | A mesma decisão que a tool `calculate_discount` do agente: personalizado > maior entre primeira sessão e faixa de áreas |
+| Janela | `mes_vigente.py` | Hoje até o fim do mês, no fuso da clínica — **só o site** usa |
 | Criação/cancelamento | `AppointmentService.completo(db)` | Mesma regra de negócio, inclusive a conversão de gclid pro Google Ads (por isso é sempre `.completo()`, nunca o construtor cru) |
-| Confirmação | `TemplateService` + template `BOOKED` | A mensagem que chega no WhatsApp do cliente é a mesma customizável por clínica que o bot manda |
+| Confirmação | `TemplateService` + template `BOOKED` + `orientacoes_pos_sessao` | A mensagem que chega no WhatsApp do cliente é a mesma customizável por clínica que o bot manda, e as orientações pré-sessão vão logo depois, como no agente |
 | Envio | `ZApiProvider` | Mesmo provedor de WhatsApp, mesmo allowlist de telefones em dev |
 
 Todas as rotas públicas (`public/clinics/{clinicId}/*` e
@@ -90,10 +105,11 @@ entrar ali, não como função própria.
 |---|---|---|
 | GET | `/public/clinics/{clinicId}/bootstrap` | Clínica, serviços, profissionais, áreas — carregado uma vez no boot de cada página |
 | GET | `/public/resolve-domain?host=` | Domínio próprio → `clinic_id` (só no `CustomDomainLayout`) |
-| GET | `/public/clinics/{clinicId}/availability?dates=&totalDuration=` | Status por dia (`CLOSED\|FULL\|AVAILABLE`) + horários livres da semana visível |
+| GET | `/public/clinics/{clinicId}/availability?dates=&serviceIds=&serviceAreaPairs=` | Status por dia (`CLOSED\|FULL\|AVAILABLE`) + horários livres do mês, com a duração calculada **no backend** pelo carrinho; `window` traz o fim da janela e quando o próximo mês abre. `totalDuration` (legado) ainda é aceito e logado |
+| POST | `/public/clinics/{clinicId}/quote` | Total, desconto e valor final do carrinho (com `phone`, também primeira sessão e personalizado, mas `discountReason` vem null) — o mesmo que a criação grava |
 | POST | `/public/clinics/{clinicId}/verify/send` | Envia código por WhatsApp — só usado por "Meus agendamentos" |
 | POST | `/public/clinics/{clinicId}/verify/confirm` | Confirma o código, devolve token de sessão — idem |
-| POST | `/public/clinics/{clinicId}/appointments` | Cria o agendamento (sem token/verificação) |
+| POST | `/public/clinics/{clinicId}/appointments` | Cria o agendamento (sem token/verificação), com desconto da política e pares pós-combo; recusa data fora do mês vigente e horário que já passou |
 | GET | `/public/clinics/{clinicId}/my-appointments?phone=&token=` | Lista agendamentos do cliente (exige token) |
 | POST | `/public/clinics/{clinicId}/appointments/{id}/cancel` | Cancela (exige token) |
 
@@ -113,21 +129,22 @@ booking-site/src/
 │   └── BookingChrome.tsx       # header + favicon + modal, compartilhado pelos dois
 ├── pages/
 │   ├── Home.tsx                # lista de serviços (ou auto-skip, se só há um)
-│   └── Booking.tsx             # o wizard: áreas → profissional → agenda → dados → sucesso
+│   └── Booking.tsx             # o wizard: carrinho → áreas → agenda → dados → sucesso
 ├── components/
 │   ├── ServiceCard, CartAddedModal, CartSummary
-│   ├── AreaPicker, ProfessionalPicker
-│   ├── WeekPicker, TimeSlotGrid
+│   ├── AreaPicker, PriceBreakdown
+│   ├── DayList, TimeSlotGrid
 │   ├── CustomerInfoForm, OtpCodeForm, MyAppointmentsModal
 │   └── ui/                     # primitivos (Button, Modal, Spinner, EmptyState, ErrorState...)
-├── hooks/useBooking.ts          # TanStack Query — bootstrap, disponibilidade, mutations
+├── hooks/useBooking.ts          # TanStack Query — bootstrap, disponibilidade do mês, cotação, mutations
 ├── hooks/useClinicId.ts         # lê o contexto de clinicId/basePath (nunca useParams direto)
 ├── store/                       # CartProvider — carrinho em memória, por clinicId
 ├── services/booking.service.ts  # camada HTTP, um método por endpoint (§5)
 ├── utils/
-│   ├── cartTotals.ts            # duração/preço do carrinho, considerando overrides de área
+│   ├── cartTotals.ts            # helpers de área + toCartPayload (duração/preço NÃO são calculados no front)
 │   ├── domain.ts                 # isDefaultDomain
-│   ├── format.ts, weekDates.ts
+│   ├── monthWindow.ts, discountLabel.ts
+│   ├── format.ts, dates.ts
 └── types/index.ts               # Clinic, Service, Professional, ServiceArea, Appointment, CartItem
 ```
 
@@ -139,18 +156,22 @@ que diverge do painel autenticado.
 
 ## 7. Features atuais
 
-- Catálogo de serviços com duração e preço ("a partir de"); agrupamento por
-  categoria **não** foi implementado (o original tinha; decidido não entrar).
-- Áreas de tratamento por serviço, com duração/preço podendo sobrescrever o
-  valor base do serviço (`ServiceArea`).
-- Skip automático de etapas sem decisão real: serviço único (catálogo com 1
-  item) e profissional único — nos dois casos o item é pré-selecionado e a
-  tela correspondente nem aparece.
+- Catálogo de serviços com preço ("a partir de"), sem duração; agrupamento
+  por categoria **não** foi implementado (o original tinha; decidido não entrar).
+- Áreas de tratamento por serviço, com preço de tabela por área (`ServiceArea`).
+- Preço, desconto e duração **sempre do backend**, pelas mesmas funções do
+  agente de WhatsApp: combos do cadastro, regras de duração (piso, teto,
+  passo) e política de desconto. O resumo mostra Total, Desconto (motivo só sem celular) e
+  Valor final, e o valor final é o que fica gravado.
+- Skip automático da etapa de serviço quando o catálogo tem 1 item.
+- Profissional atribuído pelo backend (o conflito de horário é da clínica
+  inteira, então a escolha não reservava a agenda de ninguém).
 - Aviso bloqueante quando a clínica não tem **nenhum** profissional
   cadastrado (sem isso, o calendário apareceria todo fechado sem explicação).
-- Disponibilidade real por semana (não é agenda fake): mesma engine do bot,
-  distinguindo "fechado" (sem regra de agenda) de "lotado" (tem regra, sem
-  vaga) de "disponível".
+- Agenda do mês vigente: só os dias com horário aparecem; horários que já
+  passaram hoje não são oferecidos; a criação recusa data fora da janela.
+- Horário ocupado enquanto o cliente preenchia (409): volta para a agenda com
+  aviso e grade atualizada.
 - Carrinho multi-serviço no mesmo atendimento (não é "um agendamento por
   serviço" — é uma visita só, com duração somada).
 - Criação de agendamento sem verificação prévia de telefone; confirmação via
@@ -161,13 +182,13 @@ que diverge do painel autenticado.
 - Domínio próprio por clínica (painel → mesma página — ver §3).
 - Botão "Voltar" sempre presente, no topo, em toda etapa do wizard.
 
-### Limitação conhecida
+### Carrinho misto
 
-Carrinho **misto** — alguns serviços com área configurada e outros sem —
-não tem a duração/preço somados corretamente pelo
-`AppointmentService.create_appointment` do backend (pré-existente à criação
-do booking-site, não específico dele). `utils/cartTotals.ts` documenta o
-cálculo do lado do front; o lado do backend não foi revisitado.
+Carrinho **misto** — alguns serviços com área configurada e outros sem — soma
+as áreas escolhidas **e** a duração/preço próprios dos serviços que nenhum par
+cobre (`duracao_do_carrinho`, `preco_de_tabela`). A duração passa uma vez só
+por piso/teto/passo sobre o total; a faixa de desconto continua contando só as
+áreas. Grade, cotação e criação (site e painel) usam a mesma conta.
 
 ---
 
@@ -188,6 +209,18 @@ Da feature de domínio customizado (`prd/021-...`):
 - **Registro do domínio em si** — compra/DNS continuam manuais, por fora do
   sistema; o painel só orienta (mostra o registro a criar) e confirma a
   verificação.
+
+### Decisões que mudaram no PRD 023 (reunião de outubro/2026)
+
+- **Profissional:** deixou de ser escolhido pelo cliente, em todas as clínicas.
+- **Duração:** deixou de ser exibida.
+- **Calendário:** de grade semanal com dias desabilitados para lista dos dias
+  com horário, só no mês vigente. O mês seguinte abre na virada — e no fim do
+  mês, sem vaga, o cliente fica sem dia (a tela explica e oferece contato).
+  A regra mora inteira em `scheduler/src/services/mes_vigente.py`.
+- **Preço:** deixou de ser calculado no navegador. Antes o site cobrava sem
+  primeira sessão, sem faixas e sem combos — mais caro que o WhatsApp para o
+  mesmo pedido — e pedia horário com uma duração diferente da gravada.
 
 ### Decisão que já mudou desde o PRD original
 
@@ -226,5 +259,6 @@ vercel deploy --prod --yes --project booking-site   # produção
 - `docs/work/prd/009-site-agendamento-publico.md` + `spec/009-...` — origem do produto, mapeamento do site de referência
 - `docs/work/prd/013-limite-do-cloudformation.md` — por que as rotas públicas vivem numa Lambda só
 - `docs/work/prd/021-dominio-customizado-booking-site.md` + `spec/021-...` — domínio próprio por clínica
+- `docs/work/prd/023-booking-site-preco-fluxo-calendario.md` + `spec/023-...` — preço/desconto do agente, sem profissional, mês vigente
 - `TASKS_LOG.md` — entradas `021-dominio-customizado` e `fix-booking-site-servico-unico` (bugs encontrados testando em produção)
 - `../CLAUDE.md` — padrões de código, comandos, diferenças em relação ao `frontend/`

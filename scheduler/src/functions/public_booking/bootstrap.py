@@ -22,9 +22,10 @@ def handler(event, context):
     """
     GET /public/clinics/{clinicId}/bootstrap
 
-    Dados públicos de bootstrap do booking-site: clínica (nome/logo/timezone),
-    serviços ativos e profissionais ativos. Sem preço/agenda por profissional
-    aqui — isso vem de /available-slots.
+    Dados públicos de bootstrap do booking-site: clínica (nome/logo/timezone/
+    telefone de contato), serviços ativos, profissionais ativos e áreas. Preço
+    de tabela por item vem daqui; o total com desconto vem de /quote e a agenda
+    de /availability.
     """
     try:
         api_key, error_response = require_booking_intake_api_key(event)
@@ -39,7 +40,7 @@ def handler(event, context):
 
         clinics = db.execute_query(
             """
-            SELECT clinic_id, name, display_name, logo_url, favicon_url, timezone
+            SELECT clinic_id, name, display_name, logo_url, favicon_url, timezone, phone
             FROM scheduler.clinics
             WHERE clinic_id = %s AND active = TRUE
             """,

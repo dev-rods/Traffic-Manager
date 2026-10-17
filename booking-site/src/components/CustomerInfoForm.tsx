@@ -17,9 +17,22 @@ interface CustomerInfoFormProps {
   defaultValues?: Partial<CustomerInfoFormData>
   onSubmit: (data: CustomerInfoFormData) => void
   submitting: boolean
+  submitLabel?: string
+  /**
+   * Chamado com o celular formatado sempre que ele fica válido (e com `null`
+   * quando deixa de ser) — a cotação é refeita com ele para mostrar primeira
+   * sessão / desconto personalizado ANTES do clique em confirmar.
+   */
+  onPhoneChange?: (phone: string | null) => void
 }
 
-export function CustomerInfoForm({ defaultValues, onSubmit, submitting }: CustomerInfoFormProps) {
+export function CustomerInfoForm({
+  defaultValues,
+  onSubmit,
+  submitting,
+  submitLabel = 'Finalizar',
+  onPhoneChange,
+}: CustomerInfoFormProps) {
   // Campo de telefone é controlado localmente (não via watch()) — react-hook-form's
   // watch() não é memoizável e quebra o React Compiler nesse componente.
   const [phoneDisplay, setPhoneDisplay] = useState(defaultValues?.phone ?? '')
@@ -52,10 +65,11 @@ export function CustomerInfoForm({ defaultValues, onSubmit, submitting }: Custom
           const formatted = formatPhoneInput(e.target.value)
           setPhoneDisplay(formatted)
           setValue('phone', formatted, { shouldValidate: true })
+          onPhoneChange?.(isValidBrPhone(formatted) ? formatted : null)
         }}
       />
       <Button type="submit" loading={submitting} className="mt-2">
-        Finalizar
+        {submitLabel}
       </Button>
     </form>
   )

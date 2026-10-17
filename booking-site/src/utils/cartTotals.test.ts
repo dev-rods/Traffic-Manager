@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildServiceAreaPairs, cartHasAreas, cartPendingAreaSelection, computeCartTotals } from './cartTotals'
+import { buildServiceAreaPairs, cartHasAreas, cartPendingAreaSelection, toCartPayload } from './cartTotals'
 import type { CartItem, ServiceArea } from '@/types'
 
 const serviceNoAreas = { id: 'svc-1', name: 'Limpeza de pele', duration_minutes: 60, price_cents: 10000, description: null }
@@ -9,31 +9,6 @@ const serviceAreas: ServiceArea[] = [
   { service_area_id: 'sa-1', service_id: 'svc-2', area_id: 'area-1', area_name: 'Axilas', display_order: 1, duration_minutes: 5, price_cents: 9500 },
   { service_area_id: 'sa-2', service_id: 'svc-2', area_id: 'area-2', area_name: 'Buço', display_order: 2, duration_minutes: 2, price_cents: 6500 },
 ]
-
-describe('computeCartTotals', () => {
-  it('usa a duração/preço base do serviço quando ele não tem áreas', () => {
-    const items: CartItem[] = [{ service: serviceNoAreas, areaIds: [] }]
-    expect(computeCartTotals(items, serviceAreas)).toEqual({ durationMinutes: 60, priceCents: 10000 })
-  })
-
-  it('usa a duração/preço base quando o serviço tem áreas mas nenhuma foi escolhida', () => {
-    const items: CartItem[] = [{ service: serviceWithAreas, areaIds: [] }]
-    expect(computeCartTotals(items, serviceAreas)).toEqual({ durationMinutes: 20, priceCents: 15000 })
-  })
-
-  it('soma a duração/preço das áreas selecionadas em vez do valor base', () => {
-    const items: CartItem[] = [{ service: serviceWithAreas, areaIds: ['area-1', 'area-2'] }]
-    expect(computeCartTotals(items, serviceAreas)).toEqual({ durationMinutes: 7, priceCents: 16000 })
-  })
-
-  it('soma corretamente um carrinho misto (serviço sem área + serviço com áreas)', () => {
-    const items: CartItem[] = [
-      { service: serviceNoAreas, areaIds: [] },
-      { service: serviceWithAreas, areaIds: ['area-1'] },
-    ]
-    expect(computeCartTotals(items, serviceAreas)).toEqual({ durationMinutes: 65, priceCents: 19500 })
-  })
-})
 
 describe('cartHasAreas / cartPendingAreaSelection', () => {
   it('detecta que o carrinho tem um serviço com áreas configuradas', () => {
@@ -66,5 +41,18 @@ describe('buildServiceAreaPairs', () => {
       { serviceId: 'svc-2', areaId: 'area-1' },
       { serviceId: 'svc-2', areaId: 'area-2' },
     ])
+  })
+})
+
+describe('toCartPayload', () => {
+  it('manda serviços na ordem do carrinho e só os pares escolhidos — duração e preço são do backend', () => {
+    const items: CartItem[] = [
+      { service: serviceNoAreas, areaIds: [] },
+      { service: serviceWithAreas, areaIds: ['area-2'] },
+    ]
+    expect(toCartPayload(items, serviceAreas)).toEqual({
+      serviceIds: ['svc-1', 'svc-2'],
+      serviceAreaPairs: [{ serviceId: 'svc-2', areaId: 'area-2' }],
+    })
   })
 })
