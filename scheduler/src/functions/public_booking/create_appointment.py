@@ -187,6 +187,10 @@ def handler(event, context):
             f"razao={cotacao.desconto.razao} pct={cotacao.desconto.pct}"
         )
 
+        professional_id = carrinho.profissional_da_clinica(db, clinic_id, body.get("professionalId"))
+        if body.get("professionalId") and not professional_id:
+            logger.warning(f"[PublicBooking][create] {clinic_id} professionalId legado ignorado")
+
         service = AppointmentService.completo(db)
 
         try:
@@ -198,7 +202,7 @@ def handler(event, context):
                 time=appt_time,
                 # Front antigo em cache ainda manda; ausente, o serviço escolhe
                 # (o conflito de horário é checado na clínica inteira).
-                professional_id=body.get("professionalId"),
+                professional_id=professional_id,
                 service_ids=service_ids,
                 service_area_pairs=cotacao.pares or None,
                 discount_pct=cotacao.desconto.pct,

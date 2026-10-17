@@ -32,8 +32,15 @@ def handler(event, context):
     POST e não GET: o carrinho pode ter dezenas de pares, e o telefone não deve
     ir para a URL (nem para log de acesso).
 
-    Não devolve duração (o site não a exibe) nem o histórico da pessoa: o motivo
-    do desconto é só a categoria ("personalizado"), nunca o porquê.
+    Não devolve duração (o site não a exibe). Com telefone, `discountReason`
+    vem sempre null: a rota é pública e não pede OTP, e o motivo diria a quem
+    digitasse um número qualquer se ele já foi paciente ("first_session" ou
+    não) e se tem desconto combinado ("personalizado"). Valor original,
+    percentual e valor final continuam vindo - o valor ainda cai -, então o
+    vazamento fica reduzido, não eliminado. Sem telefone o motivo vem, porque
+    só a faixa por quantidade de áreas é possível. A criação grava o motivo
+    normalmente e a confirmação por WhatsApp o mostra: vai para o próprio dono
+    do número.
     """
     try:
         api_key, error_response = require_booking_intake_api_key(event)
@@ -78,7 +85,7 @@ def handler(event, context):
             "quote": {
                 "originalPriceCents": cotacao.original_cents,
                 "discountPct": float(cotacao.desconto.pct or 0),
-                "discountReason": cotacao.desconto.razao,
+                "discountReason": None if phone else cotacao.desconto.razao,
                 "finalPriceCents": cotacao.final_cents,
                 "areaCount": cotacao.qtd_areas,
                 "combos": [

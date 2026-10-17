@@ -63,7 +63,9 @@ const NO_DISCOUNT: Quote = {
   areaCount: 0,
   combos: [],
 }
-const FIRST_SESSION: Quote = { ...NO_DISCOUNT, discountPct: 50, discountReason: 'first_session', finalPriceCents: 7500 }
+// Com telefone o backend não diz o motivo (não revela se o número já foi
+// paciente): só o percentual e o valor final.
+const PHONE_DISCOUNT: Quote = { ...NO_DISCOUNT, discountPct: 50, discountReason: null, finalPriceCents: 7500 }
 
 // Monta o carrinho já com o serviço antes do Booking montar - igual ao Home
 // faz antes de navegar pra /agendar.
@@ -145,6 +147,27 @@ describe('Booking - serviço único', () => {
     expect(cart).toEqual({ serviceIds: ['svc-1'], serviceAreaPairs: [] })
   })
 
+  it('pergunta de novo pela janela do backend quando o "hoje" do navegador não é o da clínica', async () => {
+    // Navegador ainda no mês passado; na clínica já é dia 1º do mês seguinte.
+    const now = new Date()
+    const clinicToday = toISODate(new Date(now.getFullYear(), now.getMonth() + 1, 1))
+    vi.mocked(bookingService.availability).mockImplementation(async (_c, dates) => ({
+      days: Object.fromEntries(
+        dates.map((d) => [d, d === clinicToday ? { status: 'AVAILABLE', slots: ['10:00'] } : { status: 'CLOSED', slots: [] }])
+      ),
+      window: { start: clinicToday, end: clinicToday, nextOpensOn: clinicToday },
+    }))
+    renderBooking()
+
+    expect(await screen.findByRole('button', { name: / 1 de / })).toBeInTheDocument()
+    const requested = vi.mocked(bookingService.availability).mock.calls.map((c) => c[1])
+    expect(requested[0][0]).toBe(toISODate(now))
+    expect(requested[requested.length - 1]).toEqual([clinicToday])
+    const calls = vi.mocked(bookingService.availability).mock.calls.length
+    await new Promise((r) => setTimeout(r, 50))
+    expect(vi.mocked(bookingService.availability).mock.calls.length).toBe(calls)
+  })
+
   it('não mostra duração em nenhum lugar', async () => {
     renderBooking()
     await screen.findByText('Escolha o dia')
@@ -192,19 +215,19 @@ describe('Booking - preço e desconto', () => {
     vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap())
     vi.mocked(bookingService.availability).mockResolvedValue(availability())
     vi.mocked(bookingService.quote).mockImplementation(async (_c, _cart, phone) =>
-      phone ? FIRST_SESSION : NO_DISCOUNT
+      phone ? PHONE_DISCOUNT : NO_DISCOUNT
     )
   })
 
-  it('o desconto de primeira sessão aparece ao digitar o celular, antes de confirmar', async () => {
+  it('o desconto do celular aparece ao digitá-lo, antes de confirmar, sem dizer o motivo', async () => {
     renderBooking()
     await screen.findByText('Escolha o dia')
-    expect(screen.queryByText(/Primeira sessão/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Desconto/)).not.toBeInTheDocument()
 
     await chooseSlotAndContinue()
     await fillCustomer()
 
-    expect(await screen.findByText(/Desconto · Primeira sessão/)).toBeInTheDocument()
+    expect(await screen.findByText('Desconto (50%)')).toBeInTheDocument()
     expect(screen.getByText('Valor final')).toBeInTheDocument()
     expect(bookingService.quote).toHaveBeenLastCalledWith(
       'c1',

@@ -18,7 +18,7 @@ import { IconCheckCircle, IconChevronLeft } from '@/components/ui/icons'
 import { ApiError } from '@/services/api'
 import { formatCurrencyBRL, formatDateLong, formatPhoneDisplay, toApiPhone } from '@/utils/format'
 import { cartHasAreas, cartPendingAreaSelection, toCartPayload } from '@/utils/cartTotals'
-import { monthWindow } from '@/utils/monthWindow'
+import { datesBetween, monthWindow } from '@/utils/monthWindow'
 import { startOfToday } from '@/utils/dates'
 import type { WizardStep } from '@/types'
 
@@ -40,7 +40,7 @@ export function Booking() {
   const [quotePhone, setQuotePhone] = useState<string | undefined>(undefined)
   // Datas perguntadas ao backend: de hoje até o fim do mês. Quem decide o que
   // é agendável é o backend (no fuso da clínica); isto só limita a pergunta.
-  const [monthDates] = useState(() => monthWindow(startOfToday()))
+  const [monthDates, setMonthDates] = useState(() => monthWindow(startOfToday()))
   const slotsRef = useRef<HTMLDivElement>(null)
 
   const serviceAreas = bootstrap.data?.serviceAreas ?? []
@@ -51,6 +51,20 @@ export function Booking() {
 
   const availability = useMonthAvailability(clinicId, monthDates, cartPayload, cartReady)
   const quote = useQuote(clinicId, cartPayload, quotePhone, cartReady)
+
+  // O "hoje" do navegador pode não ser o da clínica (outro fuso, ou a aba
+  // aberta desde o mês passado): perguntadas as datas erradas, todas voltariam
+  // fechadas. Quando a janela da resposta não bate com o que foi pedido, a
+  // pergunta passa a ser a janela; ao bater, para.
+  const bookingWindow = availability.data?.window
+  useEffect(() => {
+    if (!bookingWindow) return
+    const windowDates = datesBetween(bookingWindow.start, bookingWindow.end)
+    if (windowDates.length === 0) return
+    setMonthDates((current) =>
+      current.length === windowDates.length && current.every((d, i) => d === windowDates[i]) ? current : windowDates
+    )
+  }, [bookingWindow])
 
   // Com um único serviço no catálogo não existe outro pra escolher - o
   // carrinho não é uma decisão, é um fato. A etapa de revisão (e o botão

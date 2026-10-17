@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { monthWindow } from './monthWindow'
+import { datesBetween, monthWindow } from './monthWindow'
 
 describe('monthWindow', () => {
   it('vai de hoje até o último dia do mês', () => {
@@ -17,5 +17,19 @@ describe('monthWindow', () => {
 
   it('nunca passa de 31 datas (limite da API)', () => {
     expect(monthWindow(new Date(2026, 0, 1))).toHaveLength(31)
+  })
+})
+
+describe('datesBetween', () => {
+  it('vai de start até end, inclusive, virando o mês', () => {
+    expect(datesBetween('2026-10-30', '2026-11-01')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01'])
+  })
+
+  it('end antes de start não dá nenhuma data', () => {
+    expect(datesBetween('2026-11-01', '2026-10-31')).toEqual([])
+  })
+
+  it('nunca passa de 31 datas (limite da API)', () => {
+    expect(datesBetween('2026-01-01', '2026-03-31')).toHaveLength(31)
   })
 })

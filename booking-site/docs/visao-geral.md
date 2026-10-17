@@ -35,8 +35,13 @@ por `clinic_id` (via path, ou via domínio próprio — ver §3).
    resto do mês, a tela diz quando o próximo mês abre e oferece o WhatsApp da
    clínica.
 6. Informa nome e celular. Ao digitar o celular, o resumo é recalculado:
-   **Total**, **Desconto** (com o motivo: primeira sessão, quantidade de
-   áreas, desconto especial) e **Valor final** aparecem antes de confirmar.
+   **Total**, **Desconto** (percentual) e **Valor final** aparecem antes de
+   confirmar. Com celular a cotação não diz o motivo do desconto — a rota é
+   pública e sem verificação, e o motivo revelaria a quem digitasse um número
+   qualquer se ele já foi paciente ou tem desconto combinado. Sem celular o
+   motivo aparece (só a faixa por quantidade de áreas é possível). O motivo
+   continua gravado no agendamento e vai na confirmação por WhatsApp, que só
+   o dono do número recebe.
 7. Agendamento é criado na hora — **sem verificação prévia do número**. A
    confirmação chega por WhatsApp (mesmo template `BOOKED` que o bot usa, com
    o valor já com desconto), seguida das orientações pré-sessão da clínica.
@@ -101,7 +106,7 @@ entrar ali, não como função própria.
 | GET | `/public/clinics/{clinicId}/bootstrap` | Clínica, serviços, profissionais, áreas — carregado uma vez no boot de cada página |
 | GET | `/public/resolve-domain?host=` | Domínio próprio → `clinic_id` (só no `CustomDomainLayout`) |
 | GET | `/public/clinics/{clinicId}/availability?dates=&serviceIds=&serviceAreaPairs=` | Status por dia (`CLOSED\|FULL\|AVAILABLE`) + horários livres do mês, com a duração calculada **no backend** pelo carrinho; `window` traz o fim da janela e quando o próximo mês abre. `totalDuration` (legado) ainda é aceito e logado |
-| POST | `/public/clinics/{clinicId}/quote` | Total, desconto e valor final do carrinho (com `phone`, também primeira sessão e personalizado) — o mesmo que a criação grava |
+| POST | `/public/clinics/{clinicId}/quote` | Total, desconto e valor final do carrinho (com `phone`, também primeira sessão e personalizado, mas `discountReason` vem null) — o mesmo que a criação grava |
 | POST | `/public/clinics/{clinicId}/verify/send` | Envia código por WhatsApp — só usado por "Meus agendamentos" |
 | POST | `/public/clinics/{clinicId}/verify/confirm` | Confirma o código, devolve token de sessão — idem |
 | POST | `/public/clinics/{clinicId}/appointments` | Cria o agendamento (sem token/verificação), com desconto da política e pares pós-combo; recusa data fora do mês vigente e horário que já passou |
@@ -156,7 +161,7 @@ que diverge do painel autenticado.
 - Áreas de tratamento por serviço, com preço de tabela por área (`ServiceArea`).
 - Preço, desconto e duração **sempre do backend**, pelas mesmas funções do
   agente de WhatsApp: combos do cadastro, regras de duração (piso, teto,
-  passo) e política de desconto. O resumo mostra Total, Desconto (motivo) e
+  passo) e política de desconto. O resumo mostra Total, Desconto (motivo só sem celular) e
   Valor final, e o valor final é o que fica gravado.
 - Skip automático da etapa de serviço quando o catálogo tem 1 item.
 - Profissional atribuído pelo backend (o conflito de horário é da clínica

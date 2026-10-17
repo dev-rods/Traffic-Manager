@@ -16,3 +16,20 @@ export function monthWindow(today: Date): string[] {
   }
   return dates
 }
+
+/**
+ * As datas de `start` até `end` (YYYY-MM-DD, inclusive), no máximo 31 — para
+ * perguntar exatamente a janela que o backend devolveu em `window`.
+ */
+export function datesBetween(start: string, end: string): string[] {
+  const [y, m, d] = start.split('-').map(Number)
+  const current = new Date(y, m - 1, d)
+  const dates: string[] = []
+  while (dates.length < 31) {
+    const iso = toISODate(current)
+    if (iso > end) break
+    dates.push(iso)
+    current.setDate(current.getDate() + 1)
+  }
+  return dates
+}

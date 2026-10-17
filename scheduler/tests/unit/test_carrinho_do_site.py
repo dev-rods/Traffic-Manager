@@ -36,6 +36,7 @@ PERIANAL = "aaaaaaaa-0000-0000-0000-000000000002"
 COMBO = "aaaaaaaa-0000-0000-0000-000000000003"
 AXILAS = "aaaaaaaa-0000-0000-0000-000000000004"
 INATIVA = "aaaaaaaa-0000-0000-0000-000000000005"
+PROFISSIONAL = "bbbbbbbb-0000-0000-0000-000000000001"
 
 AREAS = [
     {"id": VIRILHA, "name": "Virilha Completa"},
@@ -88,6 +89,8 @@ class Db:
             return [DURACAO_REGRAS]
         if "discount_rules" in sql:
             return [REGRAS]
+        if "FROM scheduler.professionals" in sql:
+            return [{"id": params[0]}] if params[0] == PROFISSIONAL and params[1] == CLINIC else []
         if "custom_discount_pct" in sql:
             return [{"custom_discount_pct": self.personalizado}]
         if "FROM scheduler.services" in sql:
@@ -249,10 +252,22 @@ class TestQuote(_Handler):
         q = corpo(r)["quote"]
         self.assertEqual(q["originalPriceCents"], 26000)
         self.assertEqual(q["finalPriceCents"], 23400)
-        self.assertEqual((q["discountPct"], q["discountReason"], q["areaCount"]), (10, "tier_2", 2))
+        self.assertEqual((q["discountPct"], q["discountReason"], q["areaCount"]), (10, None, 2))
         self.assertEqual(q["combos"], [{"from": ["Virilha Completa", "Perianal/ânus"],
                                         "to": "Virilha Completa + ânus", "savingsCents": 7500}])
         self.assertNotIn("duration", json.dumps(q).lower())
+
+    def test_sem_telefone_o_motivo_vem(self):
+        q = corpo(self.chama({"serviceIds": [SVC], "serviceAreaPairs": [
+            {"serviceId": SVC, "areaId": VIRILHA}, {"serviceId": SVC, "areaId": AXILAS}]}))["quote"]
+        self.assertEqual((q["discountPct"], q["discountReason"]), (10, "tier_2"))
+
+    def test_com_telefone_o_motivo_nao_vem_mas_o_valor_cai(self):
+        with mock.patch("src.services.politica_de_desconto.e_primeira_visita", return_value=True):
+            q = corpo(self.chama({"serviceIds": [SVC], "serviceAreaPairs": [
+                {"serviceId": SVC, "areaId": AXILAS}], "phone": FONE}))["quote"]
+        self.assertEqual((q["originalPriceCents"], q["discountPct"], q["finalPriceCents"]), (6500, 50, 3250))
+        self.assertIsNone(q["discountReason"])
 
     def test_telefone_invalido(self):
         self.assertEqual(self.chama({"serviceIds": [SVC], "phone": "123"})["statusCode"], 400)
@@ -386,8 +401,15 @@ class TestCreate(_Handler):
         self.service.create_appointment.assert_not_called()
 
     def test_profissional_do_front_antigo_continua_aceito(self):
-        self.chama(professionalId="p1")
-        self.assertEqual(self.service.create_appointment.call_args.kwargs["professional_id"], "p1")
+        self.chama(professionalId=PROFISSIONAL)
+        self.assertEqual(self.service.create_appointment.call_args.kwargs["professional_id"], PROFISSIONAL)
+
+    def test_profissional_de_outra_clinica_ou_inativo_e_ignorado(self):
+        for pid in ("p1", "bbbbbbbb-0000-0000-0000-000000000002"):
+            with self.subTest(pid=pid):
+                r = self.chama(professionalId=pid)
+                self.assertEqual(r["statusCode"], 201)
+                self.assertIsNone(self.service.create_appointment.call_args.kwargs["professional_id"])
 
     def test_conflito_vira_409_e_deixa_rastro(self):
         from src.services.appointment_service import ConflictError

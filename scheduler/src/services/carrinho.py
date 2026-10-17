@@ -118,6 +118,22 @@ def valida_carrinho(db, clinic_id: str, service_ids, service_area_pairs: List[Di
     return ids
 
 
+def profissional_da_clinica(db, clinic_id: str, professional_id) -> Optional[str]:
+    """O `professionalId` legado só vale se for um profissional ativo desta clínica.
+
+    Inválido não é erro: o front em cache ainda manda, e sem ele o serviço de
+    agendamento escolhe o profissional sozinho.
+    """
+    pid = str(professional_id or "").strip()
+    if not _UUID.match(pid):
+        return None
+    linhas = db.execute_query(
+        "SELECT id FROM scheduler.professionals WHERE id = %s::uuid AND clinic_id = %s AND active = TRUE",
+        (pid, clinic_id),
+    )
+    return pid if linhas else None
+
+
 def duracao(db, clinic_id: str, service_ids: List[str], service_area_pairs: List[Dict]) -> int:
     """A duração que a agenda vai gravar para este carrinho (já com combos)."""
     pares, _ = troca_no_catalogo(db, clinic_id, service_area_pairs)

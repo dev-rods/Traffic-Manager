@@ -176,7 +176,7 @@
             "quote"
           ]
         },
-        "description": "Número sem agendamento confirmado: primeira sessão entra se for o maior desconto aplicável.",
+        "description": "Número sem agendamento confirmado: primeira sessão entra se for o maior desconto aplicável. Com telefone, discountReason vem sempre null (não revela se o número já foi paciente nem se tem desconto combinado).",
         "body": {
           "mode": "raw",
           "raw": "{\"serviceIds\": [\"{{serviceId}}\"], \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}], \"phone\": \"{{telefoneNovo}}\"}"
@@ -190,6 +190,7 @@
             "exec": [
               "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
               "var q = pm.response.json().quote;",
+              "pm.test(\"Com telefone, o motivo do desconto não vem\", function () { pm.expect(q.discountReason).to.eql(null); });",
               "pm.test(\"Valor final = original com o percentual truncado\", function () {",
               "    pm.expect(q.finalPriceCents).to.eql(Math.floor(q.originalPriceCents * (100 - q.discountPct) / 100));",
               "});",
