@@ -7,8 +7,9 @@ from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
+from src.services.politica_de_desconto import preco_de_tabela
 from src.services.duration_rules import (
-    calcula_duracao, duracao_da_sessao, get_duration_rules)
+    calcula_duracao, duracao_da_sessao, duracao_do_carrinho, get_duration_rules)
 from src.services.duracao_manual import efetiva as duracao_efetiva
 from src.services.duracao_manual import valida as valida_duracao_manual
 
@@ -135,14 +136,10 @@ class AppointmentService:
         # total_duration_minutes continua na assinatura para não quebrar quem
         # chama, mas não decide nada: o agente já pediu horário para uma sessão
         # de 4 minutos com ele. Ver duration_rules.py.
-        if service_area_pairs:
-            duration_minutes = calcula_duracao(self.db, clinic_id, service_area_pairs)
-        else:
-            # Serviço sem área detalhada: a soma bruta são as durações dos
-            # próprios serviços, e passa pelos mesmos piso, teto e passo.
-            bruto = sum(int(svc_lookup[sid]["duration_minutes"] or 0)
-                        for sid in all_service_ids if sid in svc_lookup)
-            duration_minutes = duracao_da_sessao(bruto, get_duration_rules(self.db, clinic_id))
+        # A mesma conta que o site público usa para pedir horário - ver
+        # duracao_do_carrinho.
+        duration_minutes = duracao_do_carrinho(
+            self.db, clinic_id, all_service_ids, service_area_pairs, servicos=services)
 
         if total_duration_minutes and int(total_duration_minutes) != duration_minutes:
             logger.info(
@@ -182,21 +179,9 @@ class AppointmentService:
 
         # 2b. Auto-calculate prices when not provided by caller
         if original_price_cents is None:
-            if service_area_pairs:
-                values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
-                price_params = ()
-                for pair in service_area_pairs:
-                    price_params += (pair["service_id"], pair["area_id"])
-                price_rows = self.db.execute_query(
-                    f"""SELECT SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price
-                    FROM (VALUES {values_clause}) AS pairs(service_id, area_id)
-                    JOIN scheduler.services s ON s.id = pairs.service_id AND s.active = TRUE
-                    LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
-                    price_params,
-                )
-                original_price_cents = int(price_rows[0]["total_price"]) if price_rows and price_rows[0]["total_price"] else None
-            else:
-                original_price_cents = sum(s.get("price_cents") or 0 for s in services) or None
+            # A mesma conta que a cotação do site mostra antes de confirmar.
+            original_price_cents = preco_de_tabela(
+                self.db, all_service_ids, service_area_pairs, servicos=services)
 
             if original_price_cents is not None:
                 final_price_cents = aplica_desconto(original_price_cents, discount_pct)

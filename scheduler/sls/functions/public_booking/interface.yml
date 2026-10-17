@@ -39,6 +39,10 @@ PublicBooking:
         method: post
         cors: true
     - http:
+        path: public/clinics/{clinicId}/quote
+        method: post
+        cors: true
+    - http:
         path: public/clinics/{clinicId}/appointments
         method: post
         cors: true

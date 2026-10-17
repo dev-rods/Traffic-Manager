@@ -147,6 +147,40 @@ def calcula_duracao(db, clinic_id: str, service_area_pairs: List[Dict]) -> int:
     return duracao_da_sessao(soma_das_areas(db, service_area_pairs), rules)
 
 
+def duracao_do_carrinho(db, clinic_id: str, service_ids: List[str],
+                        service_area_pairs: Optional[List[Dict]],
+                        servicos: Optional[List[Dict]] = None) -> int:
+    """A duração de uma sessão com estes serviços e áreas - a que a agenda grava.
+
+    Com áreas, é `calcula_duracao`. Sem áreas detalhadas, a soma bruta são as
+    durações dos próprios serviços, e passa pelos mesmos piso, teto e passo.
+
+    Morava dentro de `AppointmentService.create_appointment`, e o site público
+    pedia horários com a soma crua calculada no navegador: a grade oferecida
+    não era a grade gravável. Quem pergunta por horário e quem grava chamam
+    esta função - a mesma duração dos dois lados.
+
+    `servicos` são as linhas de `scheduler.services` que o chamador já leu
+    (id, duration_minutes); sem elas, a função lê.
+    """
+    if normaliza_pares(service_area_pairs):
+        return calcula_duracao(db, clinic_id, service_area_pairs)
+
+    ids = [str(s) for s in (service_ids or []) if s]
+    bruto = 0
+    if servicos is not None:
+        por_id = {str(r["id"]): r for r in servicos}
+        bruto = sum(int(por_id[i].get("duration_minutes") or 0) for i in ids if i in por_id)
+    elif ids:
+        placeholders = ", ".join(["%s"] * len(ids))
+        rows = db.execute_query(
+            f"SELECT duration_minutes FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
+            tuple(ids),
+        ) or []
+        bruto = sum(int(r.get("duration_minutes") or 0) for r in rows)
+    return duracao_da_sessao(bruto, get_duration_rules(db, clinic_id))
+
+
 def get_duration_rules(db, clinic_id: str) -> Dict:
     """Regras da clínica, ou o padrão do código se não houver nenhuma.
 

@@ -114,10 +114,19 @@ class TestFonteUnica(unittest.TestCase):
         sessão que a agenda não marca como estreia."""
         import inspect
         from src.services.ai_tools import ToolExecutor
+        from src.services import politica_de_desconto
 
-        fonte = inspect.getsource(ToolExecutor._calcula_desconto)
-        self.assertIn("e_primeira_visita(", fonte)
-        self.assertNotIn("SELECT COUNT(*) as cnt FROM scheduler.appointments", fonte)
+        # A decisão saiu do agente para politica_de_desconto (o site público
+        # chama a mesma). O agente entrega a função; a política a usa.
+        agente = inspect.getsource(ToolExecutor._calcula_desconto)
+        self.assertIn("e_primeira=e_primeira_visita", agente)
+        self.assertNotIn("SELECT COUNT(*) as cnt FROM scheduler.appointments", agente)
+
+        politica = inspect.getsource(politica_de_desconto.decide)
+        self.assertIn("e_primeira or e_primeira_visita", politica)
+        self.assertIs(politica_de_desconto.e_primeira_visita, e_primeira_visita)
+        self.assertIn("e_primeira(", politica)
+        self.assertNotIn("SELECT COUNT(*) as cnt FROM scheduler.appointments", politica)
 
 
 class DbRoteado:
