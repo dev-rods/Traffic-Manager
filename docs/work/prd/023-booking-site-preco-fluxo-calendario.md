@@ -219,5 +219,5 @@ horário para evitar redundância".
 - [x] PRD gerado (2026-10-17)
 - Renumerado de 022 para 023 em 2026-10-17: a `022-retencao-das-tabelas-de-conversa` (André) entrou na `main` antes. A branch e as mensagens de commit continuam com `022` no nome.
 - [x] Spec gerada: `spec/023-booking-site-preco-fluxo-calendario.md` (2026-10-17)
-- [x] Implementado em: 2026-10-17 (branch `feat/022-booking-site-preco-fluxo-calendario`; validado em dev; PR #135; em produção desde 2026-10-17)
+- [x] Implementado em: 2026-10-17 (branch `feat/022-booking-site-preco-fluxo-calendario`; validado em dev; PR #135; em produção desde 2026-10-17, com `create-deployment` manual no stage `prod` do API Gateway e smoke test ok — detalhes no `TASKS_LOG.md`)
 - [x] Registrado em `TASKS_LOG.md`
