@@ -16,6 +16,7 @@ from src.services.agregador_de_mensagens import (
     JANELA_PADRAO_SEGUNDOS,
     chegou_mensagem_nova,
     drena,
+    edita,
     enfileira,
     junta_conteudo,
 )
@@ -44,6 +45,36 @@ TAREFA_PROCESSAR = "processar_mensagem"
 JANELA_MAXIMA_SEGUNDOS = 90
 
 
+PREFIXO_DE_CORRECAO = "Corrigi minha mensagem anterior:"
+
+
+def _trata_edicao(tracker, tabela_de_sessoes, clinic_id, incoming):
+    """A pessoa editou uma mensagem. Devolve True se a edição já foi absorvida
+    e o webhook pode parar; False se ela deve seguir como mensagem nova.
+
+    Sempre: o evento original no MessageEvents passa a ter o texto novo (é o
+    que o painel mostra). Depois, dois caminhos:
+
+    - A original ainda está no balde (janela de rajada aberta): troca o texto
+      lá e para. Quem drenar vai ler a versão corrigida, e nada mais a fazer.
+    - Já foi drenada e respondida: a correção vira uma fala nova, com um
+      prefixo que diz ao agente que ela corrige algo dito antes. Sem o prefixo
+      ele leria "virilha completa + perianal + axilas" como um pedido novo
+      somado ao que já cotou.
+    """
+    tracker.aplica_edicao(clinic_id, incoming.phone, incoming.message_id, incoming.content)
+    if not incoming.content:
+        # Edição sem texto (mídia, por exemplo): nada para o bot reler.
+        logger.info(f"[Webhook] Edição sem texto de {incoming.phone}; só o registro foi atualizado")
+        return True
+    if edita(tabela_de_sessoes, clinic_id, incoming.phone, incoming.message_id, incoming.content):
+        logger.info(f"[Webhook] Edição de {incoming.phone} entrou na janela aberta")
+        return True
+    logger.info(f"[Webhook] Edição de {incoming.phone} depois da resposta; segue como correção")
+    incoming.content = f"{PREFIXO_DE_CORRECAO} {incoming.content}"
+    return False
+
+
 def handler(event, context):
     """
     Webhook handler for incoming WhatsApp messages via z-api.
@@ -68,7 +99,11 @@ def handler(event, context):
         if not body:
             return http_response(200, {"status": "OK"})
 
-        logger.info(f"[Webhook] Payload recebido: {json.dumps(body)[:500]}")
+        # Os 500 primeiros caracteres param antes do corpo da mensagem. Numa
+        # edição, ou quando o conteúdo vem vazio, o corpo É a investigação
+        # (10/10/2026: a edição com "+ axilas" ficou irrecuperável no log).
+        completo = body.get("isEdit") or not any(k in body for k in ("text", "image", "audio", "video", "document", "buttonsResponseMessage", "listResponseMessage"))
+        logger.info(f"[Webhook] Payload recebido: {json.dumps(body)[:4000 if completo else 500]}")
 
         # 1. Validate callback type
         if body.get("isGroup", False):
@@ -228,29 +263,38 @@ def handler(event, context):
                 logger.error(f"[Webhook] Erro ao salvar lead: {e}")
 
         # 5. Dedup: skip if this message_id was already processed (z-api can send duplicate webhooks)
+        # Uma EDIÇÃO chega com o messageId da original e um editMessageId
+        # próprio. Com a chave na original, toda correção da pessoa era lida
+        # como reentrega e jogada fora - em 10/10/2026 foi o "+ axilas" que o
+        # bot nunca viu. A chave é o id da edição, e a edição segue seu caminho.
         conversation_id = f"{clinic_id}#{incoming.phone}"
+        chave_de_dedupe = incoming.edit_message_id or incoming.message_id
         dedup_table = boto3.resource("dynamodb").Table(os.environ.get("CONVERSATION_SESSIONS_TABLE", ""))
         try:
             dedup_table.put_item(
                 Item={
                     "pk": f"DEDUP#{clinic_id}",
-                    "sk": f"MSG#{incoming.message_id}",
+                    "sk": f"MSG#{chave_de_dedupe}",
                     "ttl": int(time.time()) + 300,  # 5 min TTL
                 },
                 ConditionExpression="attribute_not_exists(pk)",
             )
         except dedup_table.meta.client.exceptions.ConditionalCheckFailedException:
-            logger.info(f"[Webhook] Duplicate message {incoming.message_id}, skipping")
+            logger.info(f"[Webhook] Duplicate message {chave_de_dedupe}, skipping")
             return http_response(200, {"status": "OK", "duplicate": True})
 
         # 5b. Track inbound
-        tracker.track_inbound(
-            clinic_id=clinic_id,
-            phone=incoming.phone,
-            message_id=incoming.message_id,
-            conversation_id=conversation_id,
-            incoming_message=incoming,
-        )
+        if incoming.is_edit:
+            if _trata_edicao(tracker, _get_sessions_table(), clinic_id, incoming):
+                return http_response(200, {"status": "OK", "editada": True})
+        else:
+            tracker.track_inbound(
+                clinic_id=clinic_id,
+                phone=incoming.phone,
+                message_id=incoming.message_id,
+                conversation_id=conversation_id,
+                incoming_message=incoming,
+            )
 
         # 5b-bis. Marcar que o lead respondeu. COALESCE com o filtro IS NULL garante
         # que só a primeira resposta conta e que reprocessar o webhook não sobrescreve
