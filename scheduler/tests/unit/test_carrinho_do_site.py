@@ -157,6 +157,23 @@ class TestParidadeComOAgente(unittest.TestCase):
         c = carrinho.cota(Db(), CLINIC, [SVC_SEM_AREA], [], None)
         self.assertEqual((c.duracao_minutos, c.original_cents, c.final_cents), (30, 8000, 8000))
 
+    def test_carrinho_misto_soma_o_servico_sem_area(self):
+        """Laser com axilas (5 min, R$ 65) + limpeza de pele (30 min, R$ 80):
+        35 minutos e R$ 145. Antes a limpeza sumia da duração e do preço."""
+        c = carrinho.cota(Db(), CLINIC, [SVC, SVC_SEM_AREA], [par(AXILAS)], None)
+        self.assertEqual((c.duracao_minutos, c.original_cents, c.final_cents), (35, 14500, 14500))
+        self.assertEqual(c.qtd_areas, 1)
+
+    def test_carrinho_misto_mesma_duracao_e_preco_na_grade_e_na_criacao(self):
+        from src.services.duration_rules import duracao_do_carrinho
+        from src.services.politica_de_desconto import preco_de_tabela
+        ids, pares = [SVC, SVC_SEM_AREA], [par(AXILAS)]
+        linhas = [SERVICOS[SVC], SERVICOS[SVC_SEM_AREA]]
+        self.assertEqual(duracao_do_carrinho(Db(), CLINIC, ids, pares, servicos=linhas),
+                         carrinho.duracao(Db(), CLINIC, ids, pares))
+        self.assertEqual(preco_de_tabela(Db(), ids, pares, servicos=linhas),
+                         carrinho.cota(Db(), CLINIC, ids, pares).original_cents)
+
     def test_sem_telefone_so_a_faixa(self):
         with mock.patch("src.services.politica_de_desconto.e_primeira_visita", return_value=True) as primeira:
             c = carrinho.cota(Db(personalizado=Decimal("30")), CLINIC, [SVC], [par(AXILAS)], None)
@@ -307,6 +324,12 @@ class TestAvailability(_Handler):
         self.assertEqual(dias["2026-11-02"]["status"], "CLOSED")
         self.assertEqual(dias["2026-10-31"]["status"], "AVAILABLE")
         self.assertEqual(corpo(r)["window"], {"start": "2026-10-20", "end": "2026-10-31", "nextOpensOn": "2026-11-01"})
+
+    def test_carrinho_misto_pede_horario_com_o_servico_sem_area(self):
+        r, engine = self.chama({"dates": "2026-10-21", "serviceIds": f"{SVC},{SVC_SEM_AREA}",
+                                "serviceAreaPairs": f"{SVC}:{AXILAS}"})
+        self.assertEqual(r["statusCode"], 200)
+        self.assertEqual(engine.get_days_status.call_args[0][2], 35)
 
     def test_total_duration_legado_continua_aceito(self):
         r, engine = self.chama({"dates": "2026-10-21", "totalDuration": "40"})

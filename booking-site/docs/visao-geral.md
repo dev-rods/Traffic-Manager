@@ -182,13 +182,13 @@ que diverge do painel autenticado.
 - Domínio próprio por clínica (painel → mesma página — ver §3).
 - Botão "Voltar" sempre presente, no topo, em toda etapa do wizard.
 
-### Limitação conhecida
+### Carrinho misto
 
-Carrinho **misto** — alguns serviços com área configurada e outros sem —
-não tem a duração/preço somados corretamente pelo backend: com pares, só as
-áreas entram na conta (`duracao_do_carrinho`, `preco_de_tabela`). É
-pré-existente ao booking-site; agora a cotação e a criação erram **igual**, então
-o cliente ao menos vê o valor que vai ser gravado.
+Carrinho **misto** — alguns serviços com área configurada e outros sem — soma
+as áreas escolhidas **e** a duração/preço próprios dos serviços que nenhum par
+cobre (`duracao_do_carrinho`, `preco_de_tabela`). A duração passa uma vez só
+por piso/teto/passo sobre o total; a faixa de desconto continua contando só as
+áreas. Grade, cotação e criação (site e painel) usam a mesma conta.
 
 ---
 

@@ -31,6 +31,7 @@ from typing import Callable, Dict, List, NamedTuple, Optional, Union
 from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
+from src.services.duration_rules import normaliza_pares, servicos_sem_par
 from src.services.primeira_visita import e_primeira_visita
 
 logger = logging.getLogger(__name__)
@@ -129,16 +130,19 @@ def preco_de_tabela(db, service_ids: List[str], service_area_pairs: Optional[Lis
     MESMA: o valor que o cliente ve antes de confirmar tem de ser o gravado.
 
     Com pares, soma o preco da area (ou o do servico, quando a area nao tem
-    preco proprio); sem pares, soma o preco dos servicos. `None` quando nao ha
-    preco nenhum - "a consultar", nunca R$ 0.
+    preco proprio) mais o preco dos servicos que nenhum par cobre (o carrinho
+    misto); sem pares, soma o preco dos servicos. `None` quando nao ha preco
+    nenhum - "a consultar", nunca R$ 0.
 
-    `servicos` sao as linhas de `scheduler.services` (com `price_cents`) que o
-    chamador ja leu; sem elas, a funcao le.
+    `servicos` sao as linhas de `scheduler.services` (com `id` e `price_cents`)
+    que o chamador ja leu; sem elas, a funcao le.
     """
-    if service_area_pairs:
-        values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
+    pares = normaliza_pares(service_area_pairs)
+    total = 0
+    if pares:
+        values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(pares))
         params: tuple = ()
-        for pair in service_area_pairs:
+        for pair in pares:
             params += (pair["service_id"], pair["area_id"])
         rows = db.execute_query(
             f"""SELECT SUM(COALESCE(sa.price_cents, s.price_cents)) as total_price
@@ -147,18 +151,22 @@ def preco_de_tabela(db, service_ids: List[str], service_area_pairs: Optional[Lis
             LEFT JOIN scheduler.service_areas sa ON sa.service_id = pairs.service_id AND sa.area_id = pairs.area_id AND sa.active = TRUE""",
             params,
         )
-        return int(rows[0]["total_price"]) if rows and rows[0]["total_price"] else None
+        total = int(rows[0]["total_price"]) if rows and rows[0]["total_price"] else 0
 
+    ids = servicos_sem_par(service_ids, pares)
+    if not ids:
+        return total or None
     if servicos is not None:
-        return sum(r.get("price_cents") or 0 for r in servicos) or None
-    if not service_ids:
-        return None
-    placeholders = ", ".join(["%s"] * len(service_ids))
+        por_id = {str(r["id"]): r for r in servicos}
+        total += sum(int(por_id[i].get("price_cents") or 0) for i in ids if i in por_id)
+        return total or None
+    placeholders = ", ".join(["%s"] * len(ids))
     rows = db.execute_query(
         f"SELECT price_cents FROM scheduler.services WHERE id::text IN ({placeholders}) AND active = TRUE",
-        tuple(service_ids),
+        tuple(ids),
     )
-    return sum(r.get("price_cents") or 0 for r in rows or []) or None
+    total += sum(int(r.get("price_cents") or 0) for r in rows or [])
+    return total or None
 
 
 def _reais(centavos: int) -> str:
