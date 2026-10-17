@@ -32,7 +32,11 @@ export function BookingChrome() {
   return (
     <div className="min-h-screen bg-ink-50">
       <header className="flex items-center justify-between border-b border-ink-100 bg-white px-6 py-4 sm:px-10">
-        <Link to={basePath || '/'} className="flex items-center transition-opacity hover:opacity-70">
+        <Link
+          to={basePath || '/'}
+          aria-label="Início"
+          className="-m-1 flex min-h-11 min-w-11 items-center p-1 transition-opacity hover:opacity-70"
+        >
           {clinic?.logo_url ? (
             <img
               src={clinic.logo_url}
@@ -43,7 +47,7 @@ export function BookingChrome() {
             <span className="font-display text-lg tracking-wide text-ink-900">Agende online</span>
           )}
         </Link>
-        <Button variant="muted" size="sm" onClick={() => setMyAppointmentsOpen(true)}>
+        <Button variant="muted" size="sm" className="h-11" onClick={() => setMyAppointmentsOpen(true)}>
           Meus agendamentos
         </Button>
       </header>

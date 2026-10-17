@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { CartItem, ServiceArea } from '@/types'
-import { formatCurrencyBRL, formatDateLong } from '@/utils/format'
+import { formatCurrencyBRL, formatDateLong, hasPrice } from '@/utils/format'
 import { getAreasForService } from '@/utils/cartTotals'
 
 interface CartSummaryProps {
@@ -24,42 +24,46 @@ export function CartSummary({ items, serviceAreas, onRemove, date, time, price }
 
   return (
     <div className="rounded-2xl border border-ink-200 bg-white p-5">
-      {items.map((item) => {
-        const availableAreas = getAreasForService(serviceAreas, item.service.id)
-        const selected = availableAreas.filter((a) => item.areaIds.includes(a.area_id))
-        const itemPrice = selected.length
-          ? selected.reduce((sum, a) => sum + (a.price_cents ?? 0), 0)
-          : item.service.price_cents
+      {/* Itens num grupo próprio: `last:` só pega o último ITEM, sem borda
+          dupla em cima da data/total que vêm depois. */}
+      <div>
+        {items.map((item) => {
+          const availableAreas = getAreasForService(serviceAreas, item.service.id)
+          const selected = availableAreas.filter((a) => item.areaIds.includes(a.area_id))
+          const itemPrice = selected.length
+            ? selected.reduce((sum, a) => sum + (a.price_cents ?? 0), 0)
+            : item.service.price_cents
 
-        return (
-          <div
-            key={item.service.id}
-            className="flex items-center justify-between gap-3 border-b border-ink-100 py-3 first:pt-0 last:border-0 last:pb-0"
-          >
-            <div className="min-w-0">
-              <p className="font-medium text-ink-900">{item.service.name}</p>
-              {selected.length > 0 ? (
-                <p className="text-sm text-ink-500">{selected.map((a) => a.area_name).join(', ')}</p>
-              ) : null}
-              {itemPrice != null ? (
-                <p className="text-sm tabular-nums text-ink-500">
-                  {selected.length > 0 ? formatCurrencyBRL(itemPrice) : `a partir de ${formatCurrencyBRL(itemPrice)}`}
-                </p>
+          return (
+            <div
+              key={item.service.id}
+              className="flex items-center justify-between gap-3 border-b border-ink-100 py-3 first:pt-0 last:border-0 last:pb-0"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-ink-900">{item.service.name}</p>
+                {selected.length > 0 ? (
+                  <p className="text-sm text-ink-500">{selected.map((a) => a.area_name).join(', ')}</p>
+                ) : null}
+                {hasPrice(itemPrice) ? (
+                  <p className="text-sm tabular-nums text-ink-500">
+                    {selected.length > 0 ? formatCurrencyBRL(itemPrice) : `a partir de ${formatCurrencyBRL(itemPrice)}`}
+                  </p>
+                ) : null}
+              </div>
+              {onRemove ? (
+                <button
+                  type="button"
+                  onClick={() => onRemove(item.service.id)}
+                  aria-label={`Remover ${item.service.name}`}
+                  className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-danger-100 hover:text-danger-500"
+                >
+                  <span aria-hidden>✕</span>
+                </button>
               ) : null}
             </div>
-            {onRemove ? (
-              <button
-                type="button"
-                onClick={() => onRemove(item.service.id)}
-                aria-label={`Remover ${item.service.name}`}
-                className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-danger-100 hover:text-danger-500"
-              >
-                <span aria-hidden>✕</span>
-              </button>
-            ) : null}
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
 
       {date && time ? (
         <p className="mt-3 border-t border-ink-100 pt-3 text-sm text-ink-600">

@@ -1,3 +1,8 @@
+/** Preço que vale mostrar: zero ou ausente é "a consultar", nunca "R$ 0,00". */
+export function hasPrice(cents: number | null | undefined): cents is number {
+  return cents != null && cents > 0
+}
+
 export function formatCurrencyBRL(cents: number | null | undefined): string {
   if (cents == null) return ''
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })

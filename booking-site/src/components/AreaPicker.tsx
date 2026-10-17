@@ -1,5 +1,5 @@
 import type { CartItem, ServiceArea } from '@/types'
-import { formatCurrencyBRL } from '@/utils/format'
+import { formatCurrencyBRL, hasPrice } from '@/utils/format'
 import { getAreasForService } from '@/utils/cartTotals'
 import { cx } from '@/utils/cx'
 
@@ -41,7 +41,7 @@ export function AreaPicker({ items, serviceAreas, onToggleArea }: AreaPickerProp
                     />
                     <span className="text-ink-800">{area.area_name}</span>
                   </span>
-                  {area.price_cents != null ? (
+                  {hasPrice(area.price_cents) ? (
                     <span className="shrink-0 tabular-nums text-ink-500">{formatCurrencyBRL(area.price_cents)}</span>
                   ) : null}
                 </label>

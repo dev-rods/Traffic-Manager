@@ -3,6 +3,7 @@ import {
   formatCurrencyBRL,
   formatDateBR,
   formatPhoneDisplay,
+  hasPrice,
   formatPhoneInput,
   isValidBrPhone,
   normalizePhoneDigits,
@@ -56,5 +57,14 @@ describe('formatPhoneDisplay', () => {
 
   it('funciona com número já sem DDI', () => {
     expect(formatPhoneDisplay('1133334444')).toBe('(11) 3333-4444')
+  })
+})
+
+describe('hasPrice', () => {
+  it('zero ou ausente não é preço para mostrar', () => {
+    expect(hasPrice(0)).toBe(false)
+    expect(hasPrice(null)).toBe(false)
+    expect(hasPrice(undefined)).toBe(false)
+    expect(hasPrice(1)).toBe(true)
   })
 })
