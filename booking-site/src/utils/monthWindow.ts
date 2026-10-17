@@ -1,4 +1,4 @@
-import { toISODate } from './weekDates'
+import { toISODate } from './dates'
 
 /**
  * As datas de `today` até o último dia do mês — as que o site pergunta ao

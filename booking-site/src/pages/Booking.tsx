@@ -19,7 +19,7 @@ import { ApiError } from '@/services/api'
 import { formatCurrencyBRL, formatDateLong, formatPhoneDisplay, toApiPhone } from '@/utils/format'
 import { cartHasAreas, cartPendingAreaSelection, toCartPayload } from '@/utils/cartTotals'
 import { monthWindow } from '@/utils/monthWindow'
-import { startOfToday } from '@/utils/weekDates'
+import { startOfToday } from '@/utils/dates'
 import type { WizardStep } from '@/types'
 
 function prefersReducedMotion(): boolean {

@@ -10,7 +10,7 @@ import { useCart } from '@/store/useCart'
 import { ClinicIdContext } from '@/store/clinicIdContext'
 import { bookingService } from '@/services/booking.service'
 import { ApiError } from '@/services/api'
-import { toISODate } from '@/utils/weekDates'
+import { toISODate } from '@/utils/dates'
 import type { Appointment, AvailabilityResponse, BootstrapResponse, Quote, Service } from '@/types'
 
 vi.mock('@/services/booking.service')
