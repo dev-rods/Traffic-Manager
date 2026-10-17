@@ -9,7 +9,9 @@ import { CartProvider } from '@/store/CartProvider'
 import { useCart } from '@/store/useCart'
 import { ClinicIdContext } from '@/store/clinicIdContext'
 import { bookingService } from '@/services/booking.service'
-import type { BootstrapResponse, Service } from '@/types'
+import { ApiError } from '@/services/api'
+import { toISODate } from '@/utils/weekDates'
+import type { Appointment, AvailabilityResponse, BootstrapResponse, Quote, Service } from '@/types'
 
 vi.mock('@/services/booking.service')
 
@@ -21,15 +23,47 @@ const SERVICE: Service = {
   description: null,
 }
 
-function bootstrapSingleServiceSingleProfessional(): BootstrapResponse {
+function bootstrap(professionals = 1): BootstrapResponse {
   return {
     status: 'SUCCESS',
-    clinic: { clinic_id: 'c1', name: 'Clínica X', display_name: null, logo_url: null, favicon_url: null, timezone: 'America/Sao_Paulo' },
+    clinic: {
+      clinic_id: 'c1',
+      name: 'Clínica X',
+      display_name: null,
+      logo_url: null,
+      favicon_url: null,
+      timezone: 'America/Sao_Paulo',
+      phone: '11999990000',
+    },
     services: [SERVICE],
-    professionals: [{ id: 'p1', name: 'Prof', role: null, photo_url: null }],
+    professionals: Array.from({ length: professionals }, (_, i) => ({
+      id: `p${i + 1}`,
+      name: `Prof ${i + 1}`,
+      role: null,
+      photo_url: null,
+    })),
     serviceAreas: [],
   }
 }
+
+const TODAY = toISODate(new Date())
+
+function availability(): AvailabilityResponse {
+  return {
+    days: { [TODAY]: { status: 'AVAILABLE', slots: ['23:59'] } },
+    window: { start: TODAY, end: TODAY, nextOpensOn: TODAY },
+  }
+}
+
+const NO_DISCOUNT: Quote = {
+  originalPriceCents: 15000,
+  discountPct: 0,
+  discountReason: null,
+  finalPriceCents: 15000,
+  areaCount: 0,
+  combos: [],
+}
+const FIRST_SESSION: Quote = { ...NO_DISCOUNT, discountPct: 50, discountReason: 'first_session', finalPriceCents: 7500 }
 
 // Monta o carrinho já com o serviço antes do Booking montar - igual ao Home
 // faz antes de navegar pra /agendar.
@@ -64,16 +98,28 @@ function renderBooking() {
   )
 }
 
+async function chooseSlotAndContinue() {
+  await userEvent.click(await screen.findByRole('button', { name: new RegExp(`${Number(TODAY.slice(8))} de`) }))
+  await userEvent.click(await screen.findByRole('button', { name: '23:59' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+}
+
+async function fillCustomer() {
+  await userEvent.type(screen.getByLabelText(/nome/i), 'Maria Silva')
+  await userEvent.type(screen.getByLabelText(/celular/i), '11987654321')
+}
+
 describe('Booking - serviço único', () => {
   beforeEach(() => {
-    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrapSingleServiceSingleProfessional())
-    vi.mocked(bookingService.weekAvailability).mockResolvedValue({})
+    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap())
+    vi.mocked(bookingService.availability).mockResolvedValue(availability())
+    vi.mocked(bookingService.quote).mockResolvedValue(NO_DISCOUNT)
   })
 
   it('pula a etapa de revisão do carrinho e vai direto pro agendamento', async () => {
     renderBooking()
 
-    await waitFor(() => expect(screen.getByLabelText('Semana anterior')).toBeInTheDocument())
+    expect(await screen.findByText('Escolha o dia')).toBeInTheDocument()
 
     // Não existe "outro serviço" pra escolher - a etapa de revisão do
     // carrinho (e o botão) nem aparecem, o fluxo já começa no agendamento.
@@ -83,10 +129,100 @@ describe('Booking - serviço único', () => {
   it('"Voltar" a partir do agendamento sai direto pro início, sem passar pela revisão', async () => {
     renderBooking()
 
-    await waitFor(() => expect(screen.getByLabelText('Semana anterior')).toBeInTheDocument())
+    expect(await screen.findByText('Escolha o dia')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
 
     expect(await screen.findByText('Home mockada')).toBeInTheDocument()
+  })
+
+  it('pede a agenda pelo carrinho - a duração é calculada pelo backend', async () => {
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    const [clinicId, dates, cart] = vi.mocked(bookingService.availability).mock.calls[0]
+    expect(clinicId).toBe('c1')
+    expect(dates[0]).toBe(TODAY)
+    expect(cart).toEqual({ serviceIds: ['svc-1'], serviceAreaPairs: [] })
+  })
+
+  it('não mostra duração em nenhum lugar', async () => {
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    expect(screen.queryByText(/\d+\s?min\b/)).not.toBeInTheDocument()
+  })
+})
+
+describe('Booking - profissional', () => {
+  beforeEach(() => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap(2))
+    vi.mocked(bookingService.availability).mockResolvedValue(availability())
+    vi.mocked(bookingService.quote).mockResolvedValue(NO_DISCOUNT)
+    vi.mocked(bookingService.createAppointment).mockResolvedValue({
+      final_price_cents: 15000,
+    } as Appointment)
+  })
+
+  it('com vários profissionais não pede pra escolher - o backend atribui', async () => {
+    renderBooking()
+    expect(await screen.findByText('Escolha o dia')).toBeInTheDocument()
+    expect(screen.queryByText(/profissional/i)).not.toBeInTheDocument()
+
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+
+    await waitFor(() => expect(bookingService.createAppointment).toHaveBeenCalled())
+    const payload = vi.mocked(bookingService.createAppointment).mock.calls[0][1]
+    expect(payload).not.toHaveProperty('professionalId')
+    expect(payload).toEqual({
+      serviceIds: ['svc-1'],
+      serviceAreaPairs: [],
+      phone: '5511987654321',
+      fullName: 'Maria Silva',
+      date: TODAY,
+      time: '23:59',
+    })
+    expect(await screen.findByText('Agendamento confirmado!')).toBeInTheDocument()
+    expect(screen.getByText(/\(11\) 98765-4321/)).toBeInTheDocument()
+  })
+})
+
+describe('Booking - preço e desconto', () => {
+  beforeEach(() => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap())
+    vi.mocked(bookingService.availability).mockResolvedValue(availability())
+    vi.mocked(bookingService.quote).mockImplementation(async (_c, _cart, phone) =>
+      phone ? FIRST_SESSION : NO_DISCOUNT
+    )
+  })
+
+  it('o desconto de primeira sessão aparece ao digitar o celular, antes de confirmar', async () => {
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    expect(screen.queryByText(/Primeira sessão/)).not.toBeInTheDocument()
+
+    await chooseSlotAndContinue()
+    await fillCustomer()
+
+    expect(await screen.findByText(/Desconto · Primeira sessão/)).toBeInTheDocument()
+    expect(screen.getByText('Valor final')).toBeInTheDocument()
+    expect(bookingService.quote).toHaveBeenLastCalledWith(
+      'c1',
+      { serviceIds: ['svc-1'], serviceAreaPairs: [] },
+      '5511987654321'
+    )
+  })
+
+  it('horário ocupado no meio do caminho (409) volta pra agenda com aviso', async () => {
+    vi.mocked(bookingService.createAppointment).mockRejectedValue(new ApiError('Conflito de horário', 409))
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Esse horário acabou de ser ocupado')
+    expect(screen.getByText('Escolha o dia')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '23:59' })).not.toBeInTheDocument()
   })
 })

@@ -3,13 +3,6 @@ export function formatCurrencyBRL(cents: number | null | undefined): string {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
-export function formatDuration(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h === 0) return `${m}min`
-  return `${h}h:${String(m).padStart(2, '0')}min`
-}
-
 export function formatDateBR(isoDate: string): string {
   const [y, m, d] = isoDate.split('-')
   return `${d}/${m}/${y}`
@@ -42,4 +35,12 @@ export function isValidBrPhone(value: string): boolean {
 export function toApiPhone(value: string): string {
   const digits = normalizePhoneDigits(value)
   return digits.startsWith('55') ? digits : `55${digits}`
+}
+
+/** Número no formato da API (`5511999990000`) para leitura: `(11) 99999-0000`. */
+export function formatPhoneDisplay(apiPhone: string): string {
+  const digits = normalizePhoneDigits(apiPhone)
+  const local = digits.length > 11 && digits.startsWith('55') ? digits.slice(2) : digits
+  if (local.length === 10) return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`
+  return formatPhoneInput(local)
 }

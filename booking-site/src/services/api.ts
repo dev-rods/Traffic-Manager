@@ -12,21 +12,35 @@ export const api = axios.create({
   timeout: 15000,
 })
 
+/** Erro da API com a mensagem já normalizada e o status HTTP (quando houve resposta). */
+export class ApiError extends Error {
+  readonly status: number | undefined
+
+  constructor(message: string, status: number | undefined) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
 // ── Response interceptor — normaliza mensagens de erro da API ─────
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError<{ message?: string }>) => {
+    const status = error.response?.status
     const apiMessage = error.response?.data?.message
     if (apiMessage) {
-      return Promise.reject(new Error(apiMessage))
+      return Promise.reject(new ApiError(apiMessage, status))
     }
-    if (error.response && error.response.status >= 500) {
-      return Promise.reject(new Error('Erro interno do servidor. Tente novamente em instantes.'))
+    if (status !== undefined && status >= 500) {
+      return Promise.reject(new ApiError('Erro interno do servidor. Tente novamente em instantes.', status))
     }
     if (!error.response) {
-      return Promise.reject(new Error('Não foi possível conectar. Verifique sua internet e tente novamente.'))
+      return Promise.reject(
+        new ApiError('Não foi possível conectar. Verifique sua internet e tente novamente.', undefined)
+      )
     }
-    return Promise.reject(error)
+    return Promise.reject(new ApiError(error.message, status))
   }
 )
 

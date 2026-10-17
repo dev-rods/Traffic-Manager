@@ -5,6 +5,9 @@ export interface Clinic {
   logo_url: string | null
   favicon_url: string | null
   timezone: string
+  // Contato da clínica (só dígitos, com DDI) — botão de WhatsApp quando não
+  // há mais horário no mês.
+  phone: string | null
 }
 
 export interface Service {
@@ -59,14 +62,42 @@ export interface Appointment {
   status: string
 }
 
-export interface CreateAppointmentPayload {
+export interface ServiceAreaPair {
+  serviceId: string
+  areaId: string
+}
+
+// O carrinho como o backend o recebe — duração, preço e desconto são sempre
+// calculados lá, a partir disto (mesma conta do bot de WhatsApp).
+export interface CartPayload {
+  serviceIds: string[]
+  serviceAreaPairs: ServiceAreaPair[]
+}
+
+// Profissional não é escolhido pelo cliente: o backend atribui.
+export interface CreateAppointmentPayload extends CartPayload {
   phone: string
   fullName: string
-  serviceIds: string[]
   date: string
   time: string
-  professionalId?: string
-  serviceAreaPairs?: { serviceId: string; areaId: string }[]
+}
+
+export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'personalizado'
+
+export interface ComboApplied {
+  from: string[]
+  to: string
+  savingsCents: number
+}
+
+// Resposta de POST /quote — o mesmo valor que a criação vai gravar.
+export interface Quote {
+  originalPriceCents: number | null
+  discountPct: number
+  discountReason: DiscountReason | null
+  finalPriceCents: number | null
+  areaCount: number
+  combos: ComboApplied[]
 }
 
 // Status de um dia no seletor de semana — mesma lógica da AvailabilityEngine
@@ -79,6 +110,19 @@ export interface DayAvailability {
   slots: string[]
 }
 
+// Janela do site (hoje até o fim do mês, no fuso da clínica) — a regra mora no
+// backend; o front só a exibe.
+export interface AvailabilityWindow {
+  start: string
+  end: string
+  nextOpensOn: string
+}
+
+export interface AvailabilityResponse {
+  days: Record<string, DayAvailability>
+  window: AvailabilityWindow
+}
+
 // Item do carrinho: um serviço + as áreas escolhidas (vazio se o serviço não
 // tem áreas configuradas, ou se ainda não foram escolhidas).
 export interface CartItem {
@@ -86,4 +130,4 @@ export interface CartItem {
   areaIds: string[]
 }
 
-export type WizardStep = 'cart' | 'areas' | 'professional' | 'schedule' | 'customer' | 'success'
+export type WizardStep = 'cart' | 'areas' | 'schedule' | 'customer' | 'success'

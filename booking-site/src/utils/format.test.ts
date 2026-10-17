@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   formatCurrencyBRL,
   formatDateBR,
-  formatDuration,
+  formatPhoneDisplay,
   formatPhoneInput,
   isValidBrPhone,
   normalizePhoneDigits,
@@ -17,20 +17,6 @@ describe('formatCurrencyBRL', () => {
   it('retorna string vazia para valores nulos', () => {
     expect(formatCurrencyBRL(null)).toBe('')
     expect(formatCurrencyBRL(undefined)).toBe('')
-  })
-})
-
-describe('formatDuration', () => {
-  it('formata minutos puros', () => {
-    expect(formatDuration(30)).toBe('30min')
-  })
-
-  it('formata horas cheias', () => {
-    expect(formatDuration(60)).toBe('1h:00min')
-  })
-
-  it('formata horas com minutos', () => {
-    expect(formatDuration(90)).toBe('1h:30min')
   })
 })
 
@@ -60,5 +46,15 @@ describe('phone helpers', () => {
   it('adiciona código do país 55 quando ausente', () => {
     expect(toApiPhone('(11) 98765-4321')).toBe('5511987654321')
     expect(toApiPhone('5511987654321')).toBe('5511987654321')
+  })
+})
+
+describe('formatPhoneDisplay', () => {
+  it('tira o DDI e formata o número salvo pela API', () => {
+    expect(formatPhoneDisplay('5511999990000')).toBe('(11) 99999-0000')
+  })
+
+  it('funciona com número já sem DDI', () => {
+    expect(formatPhoneDisplay('1133334444')).toBe('(11) 3333-4444')
   })
 })
