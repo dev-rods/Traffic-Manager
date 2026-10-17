@@ -6,7 +6,7 @@ mês vigente, e o mês seguinte abre na virada. A clínica monta a agenda mês a
 mês, e oferecer novembro em meados de outubro é oferecer horário que ainda vai
 mudar.
 
-O custo conhecido está no PRD 022: no fim do mês, com a agenda cheia, o cliente
+O custo conhecido está no PRD 023: no fim do mês, com a agenda cheia, o cliente
 fica sem nenhum dia. A tela trata esse caso dizendo quando o próximo mês abre,
 e a janela mora inteira aqui, para mudar a regra num lugar só se a decisão
 mudar.

@@ -210,7 +210,7 @@ Da feature de domínio customizado (`prd/021-...`):
   sistema; o painel só orienta (mostra o registro a criar) e confirma a
   verificação.
 
-### Decisões que mudaram no PRD 022 (reunião de outubro/2026)
+### Decisões que mudaram no PRD 023 (reunião de outubro/2026)
 
 - **Profissional:** deixou de ser escolhido pelo cliente, em todas as clínicas.
 - **Duração:** deixou de ser exibida.
@@ -259,6 +259,6 @@ vercel deploy --prod --yes --project booking-site   # produção
 - `docs/work/prd/009-site-agendamento-publico.md` + `spec/009-...` — origem do produto, mapeamento do site de referência
 - `docs/work/prd/013-limite-do-cloudformation.md` — por que as rotas públicas vivem numa Lambda só
 - `docs/work/prd/021-dominio-customizado-booking-site.md` + `spec/021-...` — domínio próprio por clínica
-- `docs/work/prd/022-booking-site-preco-fluxo-calendario.md` + `spec/022-...` — preço/desconto do agente, sem profissional, mês vigente
+- `docs/work/prd/023-booking-site-preco-fluxo-calendario.md` + `spec/023-...` — preço/desconto do agente, sem profissional, mês vigente
 - `TASKS_LOG.md` — entradas `021-dominio-customizado` e `fix-booking-site-servico-unico` (bugs encontrados testando em produção)
 - `../CLAUDE.md` — padrões de código, comandos, diferenças em relação ao `frontend/`

@@ -1,7 +1,7 @@
-# Testes de integração — 022 Booking-site: preço certo, fluxo enxuto e calendário do mês
+# Testes de integração — 023 Booking-site: preço certo, fluxo enxuto e calendário do mês
 
-PRD: `docs/work/prd/022-booking-site-preco-fluxo-calendario.md` ·
-Spec: `docs/work/spec/022-booking-site-preco-fluxo-calendario.md`
+PRD: `docs/work/prd/023-booking-site-preco-fluxo-calendario.md` ·
+Spec: `docs/work/spec/023-booking-site-preco-fluxo-calendario.md`
 
 Rotas públicas da Lambda `PublicBooking`. Autenticação pela chave do
 booking-site (`x-api-key`, a mesma de `VITE_BOOKING_API_KEY`), nunca copiada

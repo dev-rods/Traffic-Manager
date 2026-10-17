@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Clinic Scheduler - Booking-site 022 (preço, fluxo, calendário)",
-    "description": "PRD/Spec 022. O site público passa a cobrar, descontar e reservar com as mesmas funções do agente de WhatsApp (combos, duration_rules, política de desconto), e só aceita datas do mês vigente da clínica.\n\nRode na ordem: cotações e disponibilidade preenchem as variáveis usadas na criação. Antes, preencha clinicId, serviceId, areaId, comboParteA/B (duas áreas que formam um combo do cadastro), telefoneNovo (do allowlist de dev, sem agendamento), hoje, amanha e mesQueVem (YYYY-MM-DD).",
+    "name": "Clinic Scheduler - Booking-site 023 (preço, fluxo, calendário)",
+    "description": "PRD/Spec 023. O site público passa a cobrar, descontar e reservar com as mesmas funções do agente de WhatsApp (combos, duration_rules, política de desconto), e só aceita datas do mês vigente da clínica.\n\nRode na ordem: cotações e disponibilidade preenchem as variáveis usadas na criação. Antes, preencha clinicId, serviceId, areaId, comboParteA/B (duas áreas que formam um combo do cadastro), telefoneNovo (do allowlist de dev, sem agendamento), hoje, amanha e mesQueVem (YYYY-MM-DD).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -444,7 +444,7 @@
         "description": "Profissional atribuído pelo backend. Desconto gravado = o da cotação com o mesmo telefone. Confirmação + orientações por WhatsApp.",
         "body": {
           "mode": "raw",
-          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 022\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 023\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
         }
       },
       "event": [
@@ -497,7 +497,7 @@
         "description": "Mesmo horário do anterior. 409 e log [PublicBooking][create] 409 no CloudWatch.",
         "body": {
           "mode": "raw",
-          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 022\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 023\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
         }
       },
       "event": [
@@ -544,7 +544,7 @@
         "description": "A janela vale também no backend, não só na tela.",
         "body": {
           "mode": "raw",
-          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 022\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{mesQueVem}}\", \"time\": \"10:00\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 023\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{mesQueVem}}\", \"time\": \"10:00\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
         }
       },
       "event": [

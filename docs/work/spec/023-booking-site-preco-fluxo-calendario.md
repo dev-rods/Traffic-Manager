@@ -1,8 +1,8 @@
-# Spec — 022 Booking-site: preço certo, fluxo enxuto e calendário do mês
+# Spec — 023 Booking-site: preço certo, fluxo enxuto e calendário do mês
 
 > Gerado na fase **Spec**. Use como input para a fase Code (implementação).
 
-- **PRD de origem:** `prd/022-booking-site-preco-fluxo-calendario.md`
+- **PRD de origem:** `prd/023-booking-site-preco-fluxo-calendario.md`
 - **Branch:** `feat/022-booking-site-preco-fluxo-calendario`
 
 ---
@@ -37,8 +37,8 @@ junto.
 | `scheduler/tests/unit/test_mes_vigente.py` | Bordas da janela (último dia, virada, fuso) |
 | `scheduler/tests/unit/test_days_status_reaproveita_janelas.py` | `get_days_status` = `janelas_livres` + grade; filtra horário passado |
 | `scheduler/tests/mocks/public_booking/{quote,availability,create_appointment}.json` | Mocks de invoke local |
-| `scheduler/tests/integration/022-booking-site-preco-fluxo-calendario.md` | Casos de teste manuais (curl) |
-| `scheduler/tests/postman/022-booking-site-preco-fluxo-calendario.postman_requests.json` | Requests no padrão de `tests/postman/CLAUDE.md` |
+| `scheduler/tests/integration/023-booking-site-preco-fluxo-calendario.md` | Casos de teste manuais (curl) |
+| `scheduler/tests/postman/023-booking-site-preco-fluxo-calendario.postman_requests.json` | Requests no padrão de `tests/postman/CLAUDE.md` |
 | `booking-site/src/components/DayList.tsx` (+ `.test.tsx`) | Lista dos dias disponíveis do mês (substitui `WeekPicker`) |
 | `booking-site/src/components/PriceBreakdown.tsx` (+ `.test.tsx`) | Total / Desconto / Valor final + combos aplicados |
 | `booking-site/src/utils/discountLabel.ts` (+ `.test.ts`) | `discountReason` → texto legível |
@@ -73,7 +73,7 @@ junto.
 | `booking-site/src/pages/Booking.test.tsx` | Fluxo sem profissional; resumo com desconto; mês sem vaga |
 | `booking-site/docs/visao-geral.md` | §2, §5, §7 atualizados; nova "Decisão que já mudou" (profissional, mês) |
 | `booking-site/CLAUDE.md` | Remover menção a profissional por carrinho; "preço e duração vêm do backend" |
-| `docs/work/prd/022-...md`, `TASKS_LOG.md` | Status e registro |
+| `docs/work/prd/023-...md`, `TASKS_LOG.md` | Status e registro |
 
 ---
 
@@ -489,7 +489,7 @@ curl -s "$BASE/public/clinics/$C/availability?dates=2026-10-20,2026-10-21&servic
 # criação fora do mês → 400
 ```
 
-Casos completos em `tests/integration/022-...md`. Os nomes das variáveis de
+Casos completos em `tests/integration/023-...md`. Os nomes das variáveis de
 `.env` devem ser conferidos no arquivo, sem nunca copiar valores.
 
 ---

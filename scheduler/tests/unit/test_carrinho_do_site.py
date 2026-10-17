@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O site público cobra, desconta e reserva o mesmo que o agente de WhatsApp.
 
-Antes do PRD 022 o site calculava duração no navegador (sem piso, teto, passo
+Antes do PRD 023 o site calculava duração no navegador (sem piso, teto, passo
 nem combos), não passava pela política de desconto e criava o agendamento com
 o que sobrava. Três sintomas: preço maior que o do WhatsApp para o mesmo
 pedido; horário oferecido que a criação recusava (409); confirmação sem as

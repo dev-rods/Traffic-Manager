@@ -1,4 +1,4 @@
-# PRD — 022 Booking-site: preço certo, fluxo enxuto e calendário do mês
+# PRD — 023 Booking-site: preço certo, fluxo enxuto e calendário do mês
 
 > Gerado na fase **Research**. Use como input para a fase Spec.
 > Origem: reunião Rodrigo + André sobre melhorias do agendamento (out/2026).
@@ -217,6 +217,7 @@ horário para evitar redundância".
 ## Status (preencher após conclusão)
 
 - [x] PRD gerado (2026-10-17)
-- [x] Spec gerada: `spec/022-booking-site-preco-fluxo-calendario.md` (2026-10-17)
+- Renumerado de 022 para 023 em 2026-10-17: a `022-retencao-das-tabelas-de-conversa` (André) entrou na `main` antes. A branch e as mensagens de commit continuam com `022` no nome.
+- [x] Spec gerada: `spec/023-booking-site-preco-fluxo-calendario.md` (2026-10-17)
 - [x] Implementado em: 2026-10-17 (branch `feat/022-booking-site-preco-fluxo-calendario`; validado em dev; prod pendente)
 - [x] Registrado em `TASKS_LOG.md`
