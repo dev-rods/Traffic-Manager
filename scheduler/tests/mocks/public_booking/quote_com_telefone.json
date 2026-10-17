@@ -1,0 +1,11 @@
+{
+  "httpMethod": "POST",
+  "resource": "/public/clinics/{clinicId}/quote",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123"
+  },
+  "headers": {
+    "x-api-key": "test-api-key"
+  },
+  "body": "{\"serviceIds\": [\"00000000-0000-4000-8000-000000000001\"], \"serviceAreaPairs\": [{\"serviceId\": \"00000000-0000-4000-8000-000000000001\", \"areaId\": \"00000000-0000-4000-8000-00000000a003\"}], \"phone\": \"5511999990000\"}"
+}

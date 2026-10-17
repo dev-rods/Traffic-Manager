@@ -1,0 +1,11 @@
+{
+  "httpMethod": "POST",
+  "resource": "/public/clinics/{clinicId}/appointments",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123"
+  },
+  "headers": {
+    "x-api-key": "test-api-key"
+  },
+  "body": "{\"phone\": \"5511999990000\", \"fullName\": \"Maria Silva\", \"serviceIds\": [\"00000000-0000-4000-8000-000000000001\"], \"date\": \"2026-11-05\", \"time\": \"15:00\"}"
+}

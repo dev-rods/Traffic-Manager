@@ -1,0 +1,562 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Booking-site 022 (preço, fluxo, calendário)",
+    "description": "PRD/Spec 022. O site público passa a cobrar, descontar e reservar com as mesmas funções do agente de WhatsApp (combos, duration_rules, política de desconto), e só aceita datas do mês vigente da clínica.\n\nRode na ordem: cotações e disponibilidade preenchem as variáveis usadas na criação. Antes, preencha clinicId, serviceId, areaId, comboParteA/B (duas áreas que formam um combo do cadastro), telefoneNovo (do allowlist de dev, sem agendamento), hoje, amanha e mesQueVem (YYYY-MM-DD).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "BOOKING_API_KEY",
+      "value": "YOUR_BOOKING_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "areaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "comboParteA",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "comboParteB",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "telefoneNovo",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "hoje",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "amanha",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "mesQueVem",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "finalCotado",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "dataLivre",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "horaLivre",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Cotação sem telefone (só faixa de áreas)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "quote"
+          ]
+        },
+        "description": "Antes do celular, só a faixa por quantidade de áreas pode valer. As duas partes de um combo viram o combo.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"serviceIds\": [\"{{serviceId}}\"], \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{comboParteA}}\"}, {\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{comboParteB}}\"}, {\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var q = pm.response.json().quote;",
+              "pm.test(\"Estrutura da cotação\", function () {",
+              "    pm.expect(pm.response.json().status).to.eql(\"SUCCESS\");",
+              "    pm.expect(q).to.have.keys([\"originalPriceCents\",\"discountPct\",\"discountReason\",\"finalPriceCents\",\"areaCount\",\"combos\"]);",
+              "});",
+              "pm.test(\"Combo aplicado conta como uma área\", function () {",
+              "    pm.expect(q.combos.length).to.eql(1);",
+              "    pm.expect(q.areaCount).to.eql(2);",
+              "});",
+              "pm.test(\"Sem telefone, nada de primeira sessão nem personalizado\", function () {",
+              "    pm.expect([\"first_session\",\"personalizado\"]).to.not.include(q.discountReason);",
+              "});",
+              "pm.test(\"Não expõe duração\", function () { pm.expect(JSON.stringify(q).toLowerCase()).to.not.include(\"duration\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cotação com telefone de paciente nova (primeira sessão)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "quote"
+          ]
+        },
+        "description": "Número sem agendamento confirmado: primeira sessão entra se for o maior desconto aplicável.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"serviceIds\": [\"{{serviceId}}\"], \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}], \"phone\": \"{{telefoneNovo}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var q = pm.response.json().quote;",
+              "pm.test(\"Valor final = original com o percentual truncado\", function () {",
+              "    pm.expect(q.finalPriceCents).to.eql(Math.floor(q.originalPriceCents * (100 - q.discountPct) / 100));",
+              "});",
+              "pm.collectionVariables.set(\"finalCotado\", q.finalPriceCents);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cotação com telefone inválido",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "quote"
+          ]
+        },
+        "description": "400.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"serviceIds\": [\"{{serviceId}}\"], \"phone\": \"123\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });",
+              "pm.test(\"status ERROR\", function () { pm.expect(pm.response.json().status).to.eql(\"ERROR\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cotação com serviço que não é da clínica",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "quote"
+          ]
+        },
+        "description": "400 - serviço de outra clínica nunca entra no carrinho.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"serviceIds\": [\"00000000-0000-4000-8000-000000000000\"]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Disponibilidade pelo carrinho (mês vigente)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/availability?dates={{hoje}},{{amanha}},{{mesQueVem}}&serviceIds={{serviceId}}&serviceAreaPairs={{serviceId}}:{{areaId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "availability"
+          ],
+          "query": [
+            {
+              "key": "dates",
+              "value": "{{hoje}},{{amanha}},{{mesQueVem}}"
+            },
+            {
+              "key": "serviceIds",
+              "value": "{{serviceId}}"
+            },
+            {
+              "key": "serviceAreaPairs",
+              "value": "{{serviceId}}:{{areaId}}"
+            }
+          ]
+        },
+        "description": "Duração calculada no backend a partir do carrinho, a mesma da criação. Datas fora do mês voltam CLOSED."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var r = pm.response.json();",
+              "pm.test(\"Tem window\", function () { pm.expect(r.window).to.have.keys([\"start\",\"end\",\"nextOpensOn\"]); });",
+              "pm.test(\"Mês seguinte fechado\", function () {",
+              "    pm.expect(r.days[pm.collectionVariables.get(\"mesQueVem\")].status).to.eql(\"CLOSED\");",
+              "});",
+              "var livre = Object.keys(r.days).find(function (d) { return r.days[d].status === \"AVAILABLE\"; });",
+              "if (livre) { pm.collectionVariables.set(\"dataLivre\", livre); pm.collectionVariables.set(\"horaLivre\", r.days[livre].slots[0]); }"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Disponibilidade legada (totalDuration)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/availability?dates={{hoje}},{{amanha}}&totalDuration=30",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "availability"
+          ],
+          "query": [
+            {
+              "key": "dates",
+              "value": "{{hoje}},{{amanha}}"
+            },
+            {
+              "key": "totalDuration",
+              "value": "30"
+            }
+          ]
+        },
+        "description": "Front antigo em cache durante o deploy. Continua aceito e logado como legado."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criar agendamento (sem profissional)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "description": "Profissional atribuído pelo backend. Desconto gravado = o da cotação com o mesmo telefone. Confirmação + orientações por WhatsApp.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 022\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "var a = pm.response.json().appointment;",
+              "pm.test(\"Profissional atribuído\", function () { pm.expect(a.professional_id).to.be.a(\"string\"); });",
+              "pm.test(\"Valor gravado = valor cotado\", function () {",
+              "    pm.expect(a.final_price_cents).to.eql(pm.collectionVariables.get(\"finalCotado\"));",
+              "});",
+              "pm.collectionVariables.set(\"appointmentId\", a.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criar no mesmo horário (409)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "description": "Mesmo horário do anterior. 409 e log [PublicBooking][create] 409 no CloudWatch.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 022\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 409\", function () { pm.response.to.have.status(409); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criar fora do mês vigente (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "description": "A janela vale também no backend, não só na tela.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{telefoneNovo}}\", \"fullName\": \"Teste 022\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{mesQueVem}}\", \"time\": \"10:00\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

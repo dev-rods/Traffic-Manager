@@ -218,5 +218,5 @@ horário para evitar redundância".
 
 - [x] PRD gerado (2026-10-17)
 - [x] Spec gerada: `spec/022-booking-site-preco-fluxo-calendario.md` (2026-10-17)
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 2026-10-17 (branch `feat/022-booking-site-preco-fluxo-calendario`; deploy pendente)
+- [x] Registrado em `TASKS_LOG.md`
