@@ -27,6 +27,7 @@ function bootstrapWith(services: Service[]): BootstrapResponse {
     services,
     professionals: [{ id: 'p1', name: 'Prof', role: null, photo_url: null }],
     serviceAreas: [],
+    discountTiers: [],
   }
 }
 

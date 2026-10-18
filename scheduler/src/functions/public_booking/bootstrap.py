@@ -3,6 +3,7 @@ from datetime import datetime, date, time
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
+from src.services.politica_de_desconto import faixas_de_desconto
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -25,7 +26,8 @@ def handler(event, context):
     Dados públicos de bootstrap do booking-site: clínica (nome/logo/timezone/
     telefone de contato), serviços ativos, profissionais ativos e áreas. Preço
     de tabela por item vem daqui; o total com desconto vem de /quote e a agenda
-    de /availability.
+    de /availability. `discountTiers` são as faixas por quantidade de áreas,
+    para o site anunciá-las na escolha das áreas.
     """
     try:
         api_key, error_response = require_booking_intake_api_key(event)
@@ -87,12 +89,18 @@ def handler(event, context):
             (clinic_id,),
         )
 
+        regras = db.execute_query(
+            "SELECT * FROM scheduler.discount_rules WHERE clinic_id = %s AND is_active = TRUE",
+            (clinic_id,),
+        )
+
         return http_response(200, {
             "status": "SUCCESS",
             "clinic": _serialize_row(clinics[0]),
             "services": [_serialize_row(r) for r in services],
             "professionals": [_serialize_row(r) for r in professionals],
             "serviceAreas": [_serialize_row(r) for r in service_areas],
+            "discountTiers": faixas_de_desconto(regras[0] if regras else None),
         })
 
     except Exception as e:

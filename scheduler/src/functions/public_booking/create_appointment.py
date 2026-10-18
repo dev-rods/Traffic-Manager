@@ -38,6 +38,9 @@ def _format_date_br(iso_date: str) -> str:
 _HORA = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
+HAS_FUTURE_APPOINTMENT = "HAS_FUTURE_APPOINTMENT"
+
+
 def _final_do_telefone(phone):
     return f"***{str(phone)[-4:]}" if phone else "-"
 
@@ -67,6 +70,9 @@ def _send_confirmation_whatsapp(db: PostgresService, clinic: dict, phone: str, a
         duration_str = f"{hours}h{mins:02d}min" if hours else f"{duration_minutes}min"
 
         variables = {
+            # O nome digitado NESTE agendamento, não o do cadastro: o mesmo
+            # telefone pode agendar para mais de uma pessoa.
+            "full_name": appointment.get("full_name") or "",
             "date": _format_date_br(str(appointment.get("appointment_date", ""))[:10]),
             "time": str(appointment.get("start_time", ""))[:5],
             "duration": duration_str,
@@ -109,8 +115,16 @@ def handler(event, context):
         "professionalId": "uuid",     // opcional
         "serviceAreaPairs": [          // opcional — quando os serviços têm áreas
             {"serviceId": "uuid", "areaId": "uuid"}
-        ]
+        ],
+        "confirmDuplicate": false      // true = já avisado do agendamento futuro
     }
+
+    Número que já tem agendamento futuro confirmado recebe 409 com
+    `code: HAS_FUTURE_APPOINTMENT` e a contagem, e o site pergunta se a pessoa
+    quer manter os dois. Não bloqueia: com `confirmDuplicate: true` cria. A
+    resposta não diz data, serviço nem nome, porque criar não exige código e
+    qualquer um pode digitar o número de outra pessoa. Quem quiser ver o que
+    já tem usa "Meus agendamentos", que exige.
 
     Sem verificação por código: o agendamento é criado direto e a confirmação
     chega pelo próprio WhatsApp (mesmo template "BOOKED" do bot) — a posse do
@@ -192,6 +206,20 @@ def handler(event, context):
             logger.warning(f"[PublicBooking][create] {clinic_id} professionalId legado ignorado")
 
         service = AppointmentService.completo(db)
+
+        if body.get("confirmDuplicate") is not True:
+            existentes = service.get_active_appointments_by_phone(clinic_id, phone)
+            if existentes:
+                logger.info(
+                    f"[PublicBooking][create] {clinic_id} tel={_final_do_telefone(phone)} "
+                    f"já tem {len(existentes)} agendamento(s) futuro(s), pedindo confirmação"
+                )
+                return http_response(409, {
+                    "status": "ERROR",
+                    "code": HAS_FUTURE_APPOINTMENT,
+                    "existingCount": len(existentes),
+                    "message": "Este número já tem agendamento futuro nesta clínica.",
+                })
 
         try:
             result = service.create_appointment(

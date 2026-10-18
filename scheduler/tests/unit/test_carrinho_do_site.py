@@ -349,14 +349,15 @@ class TestAvailability(_Handler):
         self.assertEqual(r["statusCode"], 400)
 
 
-class TestCreate(_Handler):
+class _Criacao(_Handler):
     modulo = "src.functions.public_booking.create_appointment"
 
     def setUp(self):
         super().setUp()
         self.service = mock.MagicMock()
+        self.service.get_active_appointments_by_phone.return_value = []
         self.service.create_appointment.return_value = {
-            "id": "ap1", "appointment_date": "2026-10-22", "start_time": "15:00:00",
+            "id": "ap1", "full_name": "Maria Silva", "appointment_date": "2026-10-22", "start_time": "15:00:00",
             "total_duration_minutes": 25, "original_price_cents": 26000,
             "final_price_cents": 23400, "discount_pct": Decimal("10"), "discount_reason": "tier_2",
         }
@@ -364,6 +365,7 @@ class TestCreate(_Handler):
         self.provider.send_text.return_value = mock.MagicMock(success=True)
         self.template = mock.MagicMock()
         self.template.get_and_render.side_effect = lambda c, k, v=None: f"BOOKED {v['price']}"
+        self.renderizado = lambda: self.template.get_and_render.call_args[0][2]
         for p in (
             mock.patch(f"{self.modulo}.AppointmentService.completo", return_value=self.service),
             mock.patch(f"{self.modulo}.ZApiProvider", return_value=self.provider),
@@ -384,6 +386,8 @@ class TestCreate(_Handler):
         body.update(extra)
         return handler(evento(body), None)
 
+
+class TestCreate(_Criacao):
     def test_grava_com_combo_e_desconto_da_politica(self):
         r = self.chama()
         self.assertEqual(r["statusCode"], 201)
@@ -442,6 +446,105 @@ class TestCreate(_Handler):
         self.assertEqual(r["statusCode"], 409)
         self.assertIn("409", "\n".join(logs.output))
         self.provider.send_text.assert_not_called()
+
+    def test_confirmacao_leva_o_nome_deste_agendamento(self):
+        self.chama()
+        self.assertEqual(self.renderizado()["full_name"], "Maria Silva")
+
+
+class TestAvisoDeAgendamentoRepetido(_Criacao):
+    """Número com agendamento futuro: o site pergunta antes de criar outro.
+    Pede confirmação, não bloqueia."""
+
+    def setUp(self):
+        super().setUp()
+        self.service.get_active_appointments_by_phone.return_value = [
+            {"id": "x1", "appointment_date": "2026-10-25", "start_time": "10:00:00", "full_name": "Ana"},
+            {"id": "x2", "appointment_date": "2026-10-28", "start_time": "11:00:00", "full_name": "Ana"},
+        ]
+
+    def test_sem_confirmacao_responde_409_com_a_contagem(self):
+        r = self.chama()
+        self.assertEqual(r["statusCode"], 409)
+        corpo = json.loads(r["body"])
+        self.assertEqual((corpo["code"], corpo["existingCount"]), ("HAS_FUTURE_APPOINTMENT", 2))
+        self.service.create_appointment.assert_not_called()
+        self.provider.send_text.assert_not_called()
+        self.assertEqual(self.service.get_active_appointments_by_phone.call_args[0], (CLINIC, FONE))
+
+    def test_resposta_nao_entrega_a_agenda_de_ninguem(self):
+        """Criar não exige código: quem digita o número de outra pessoa não
+        pode descobrir quando, nem quem, ela agendou."""
+        corpo = self.chama()["body"]
+        for vazamento in ("2026-10-25", "10:00", "Ana", "x1"):
+            self.assertNotIn(vazamento, corpo)
+
+    def test_confirmado_cria(self):
+        r = self.chama(confirmDuplicate=True)
+        self.assertEqual(r["statusCode"], 201)
+        self.service.create_appointment.assert_called_once()
+
+    def test_so_true_conta_como_confirmacao(self):
+        for valor in ("true", 1, "sim"):
+            with self.subTest(valor=valor):
+                self.assertEqual(self.chama(confirmDuplicate=valor)["statusCode"], 409)
+
+
+class TestFaixasDeDesconto(unittest.TestCase):
+    """As faixas que o site anuncia na escolha das áreas são as que `decide`
+    cobra, não o que está gravado em `tier_2_max_areas`."""
+
+    def faixas(self, **regras):
+        from src.services.politica_de_desconto import faixas_de_desconto
+        return faixas_de_desconto(dict(REGRAS, **regras))
+
+    def test_padrao(self):
+        self.assertEqual(self.faixas(), [
+            {"minAreas": 2, "maxAreas": 3, "pct": 10},
+            {"minAreas": 4, "maxAreas": None, "pct": 20},
+        ])
+
+    def test_teto_gravado_diferente_nao_muda_o_anuncio(self):
+        self.assertEqual(self.faixas(tier_2_max_areas=2)[0]["maxAreas"], 3)
+
+    def test_so_a_faixa_2_nao_tem_teto(self):
+        self.assertEqual(self.faixas(tier_3_discount_pct=0), [{"minAreas": 2, "maxAreas": None, "pct": 10}])
+
+    def test_so_a_faixa_3(self):
+        self.assertEqual(self.faixas(tier_2_discount_pct=0), [{"minAreas": 4, "maxAreas": None, "pct": 20}])
+
+    def test_faixa_3_que_engole_a_2(self):
+        self.assertEqual(self.faixas(tier_3_min_areas=2), [{"minAreas": 2, "maxAreas": None, "pct": 20}])
+
+    def test_sem_regra(self):
+        from src.services.politica_de_desconto import faixas_de_desconto
+        self.assertEqual(faixas_de_desconto(None), [])
+
+    def test_anuncio_bate_com_a_cobranca(self):
+        from src.services import politica_de_desconto as politica
+        faixas = self.faixas()
+        for qtd in range(1, 9):
+            with self.subTest(qtd=qtd):
+                anunciada = next((f["pct"] for f in faixas if qtd >= f["minAreas"]
+                                  and (f["maxAreas"] is None or qtd <= f["maxAreas"])), 0)
+                self.assertEqual(politica.decide(Db(), CLINIC, None, qtd).pct, anunciada)
+
+
+class TestBootstrapAnunciaAsFaixas(_Handler):
+    modulo = "src.functions.public_booking.bootstrap"
+
+    def chama(self):
+        from src.functions.public_booking.bootstrap import handler
+        return handler({"pathParameters": {"clinicId": CLINIC}, "headers": {}}, None)
+
+    def test_com_regra(self):
+        corpo = json.loads(self.chama()["body"])
+        self.assertEqual([f["pct"] for f in corpo["discountTiers"]], [10, 20])
+
+    def test_sem_regra(self):
+        self.db.execute_query = lambda sql, params=None: (
+            [] if "discount_rules" in sql else Db().execute_query(sql, params))
+        self.assertEqual(json.loads(self.chama()["body"])["discountTiers"], [])
 
 
 class TestRotaPublica(unittest.TestCase):

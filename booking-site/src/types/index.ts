@@ -37,12 +37,21 @@ export interface ServiceArea {
   price_cents: number | null
 }
 
+// Faixa de desconto por quantidade de áreas, como o backend a cobra. Só para
+// anunciar: o desconto do carrinho continua vindo de /quote.
+export interface DiscountTier {
+  minAreas: number
+  maxAreas: number | null
+  pct: number
+}
+
 export interface BootstrapResponse {
   status: 'SUCCESS'
   clinic: Clinic
   services: Service[]
   professionals: Professional[]
   serviceAreas: ServiceArea[]
+  discountTiers: DiscountTier[]
 }
 
 export interface Appointment {
@@ -80,6 +89,9 @@ export interface CreateAppointmentPayload extends CartPayload {
   fullName: string
   date: string
   time: string
+  // O número já tem agendamento futuro e a pessoa confirmou que quer manter
+  // os dois. Sem isto, a criação responde 409 HAS_FUTURE_APPOINTMENT.
+  confirmDuplicate?: boolean
 }
 
 export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'personalizado'

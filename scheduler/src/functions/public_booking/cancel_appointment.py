@@ -3,7 +3,7 @@ from datetime import datetime, date, time
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
 from src.utils.booking_verification import verify_token
-from src.utils.phone import normalize_phone
+from src.utils.phone import variantes_do_numero
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, NotFoundError
 
@@ -51,13 +51,15 @@ def handler(event, context):
 
         db = PostgresService()
 
+        # As mesmas variantes da listagem: o que "Meus agendamentos" mostra,
+        # a pessoa consegue cancelar.
         owned = db.execute_query(
             """
             SELECT a.id FROM scheduler.appointments a
             JOIN scheduler.patients p ON p.id = a.patient_id
-            WHERE a.id = %s::uuid AND a.clinic_id = %s AND p.phone = %s AND a.status = 'CONFIRMED'
+            WHERE a.id = %s::uuid AND a.clinic_id = %s AND p.phone = ANY(%s) AND a.status = 'CONFIRMED'
             """,
-            (appointment_id, clinic_id, normalize_phone(phone)),
+            (appointment_id, clinic_id, sorted(variantes_do_numero(phone))),
         )
         if not owned:
             return http_response(404, {"status": "ERROR", "message": "Agendamento não encontrado para este telefone"})

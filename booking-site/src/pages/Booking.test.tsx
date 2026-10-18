@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -43,6 +43,7 @@ function bootstrap(professionals = 1): BootstrapResponse {
       photo_url: null,
     })),
     serviceAreas: [],
+    discountTiers: [],
   }
 }
 
@@ -247,5 +248,101 @@ describe('Booking - preço e desconto', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Esse horário acabou de ser ocupado')
     expect(screen.getByText('Escolha o dia')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '23:59' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Booking - agendamento futuro no mesmo número', () => {
+  const duplicate = new ApiError('Este número já tem agendamento futuro nesta clínica.', 409, {
+    code: 'HAS_FUTURE_APPOINTMENT',
+    existingCount: 1,
+  })
+
+  beforeEach(() => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap())
+    vi.mocked(bookingService.availability).mockResolvedValue(availability())
+    vi.mocked(bookingService.quote).mockResolvedValue(NO_DISCOUNT)
+    vi.mocked(bookingService.createAppointment)
+      .mockReset()
+      .mockRejectedValueOnce(duplicate)
+      .mockResolvedValue({ final_price_cents: 15000 } as Appointment)
+  })
+
+  async function submit() {
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    return screen.findByRole('dialog', { name: 'Você já tem agendamento' })
+  }
+
+  it('avisa e, confirmando, cria com confirmDuplicate', async () => {
+    const dialog = await submit()
+    expect(dialog).toHaveTextContent('Este número já tem um agendamento futuro')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Manter os dois' }))
+
+    expect(await screen.findByText('Agendamento confirmado!')).toBeInTheDocument()
+    const calls = vi.mocked(bookingService.createAppointment).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls[0][1]).not.toHaveProperty('confirmDuplicate')
+    expect(calls[1][1]).toEqual({ ...calls[0][1], confirmDuplicate: true })
+  })
+
+  it('"Voltar" fecha o aviso sem criar nada e mantém os dados', async () => {
+    const dialog = await submit()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Voltar' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Seus dados')).toBeInTheDocument()
+    expect(bookingService.createAppointment).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Booking - desconto progressivo', () => {
+  const AREAS = ['Axilas', 'Buço', 'Perna'].map((name, i) => ({
+    service_area_id: `sa${i}`,
+    service_id: 'svc-1',
+    area_id: `a${i}`,
+    area_name: name,
+    display_order: i,
+    duration_minutes: 10,
+    price_cents: 10000,
+  }))
+
+  beforeEach(() => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue({
+      ...bootstrap(),
+      serviceAreas: AREAS,
+      discountTiers: [
+        { minAreas: 2, maxAreas: 3, pct: 10 },
+        { minAreas: 4, maxAreas: null, pct: 20 },
+      ],
+    })
+    vi.mocked(bookingService.availability).mockResolvedValue(availability())
+    vi.mocked(bookingService.quote).mockImplementation(async (_c, cart) => ({
+      ...NO_DISCOUNT,
+      areaCount: cart.serviceAreaPairs.length,
+    }))
+  })
+
+  it('anuncia as faixas antes da escolha e diz quanto falta para a próxima', async () => {
+    renderBooking()
+    expect(await screen.findByText(/2 a 3 áreas: 10% off · 4 ou mais áreas: 20% off/)).toBeInTheDocument()
+    expect(screen.queryByText(/Falta/)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByLabelText(/Axilas/))
+    expect(await screen.findByText('Falta 1 área para 10% de desconto')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByLabelText(/Buço/))
+    expect(await screen.findByText('Faltam 2 áreas para 20% de desconto')).toBeInTheDocument()
+  })
+
+  it('clínica sem faixas não anuncia nada', async () => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue({ ...bootstrap(), serviceAreas: AREAS })
+    renderBooking()
+    await screen.findByText('Selecione as áreas de tratamento')
+    expect(screen.queryByText(/Desconto progressivo/)).not.toBeInTheDocument()
   })
 })

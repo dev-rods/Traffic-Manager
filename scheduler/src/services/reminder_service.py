@@ -63,7 +63,9 @@ class ReminderService:
         send_at_iso = send_at_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         # Get patient info
         phone = appointment.get("patient_phone", "")
-        patient_name = appointment.get("patient_name", "")
+        # O nome digitado neste agendamento: o mesmo telefone pode agendar
+        # para mais de uma pessoa, e o cadastro guarda um nome so.
+        patient_name = appointment.get("full_name") or appointment.get("patient_name") or ""
 
         # If patient info not in appointment dict, try from nested data
         if not phone:

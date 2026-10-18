@@ -12,25 +12,40 @@ export const api = axios.create({
   timeout: 15000,
 })
 
-/** Erro da API com a mensagem já normalizada e o status HTTP (quando houve resposta). */
+interface ApiErrorBody {
+  message?: string
+  code?: string
+  existingCount?: number
+}
+
+/**
+ * Erro da API com a mensagem já normalizada, o status HTTP (quando houve
+ * resposta) e o `code` que alguns erros trazem para o front distinguir casos
+ * de mesmo status (ex.: os dois 409 da criação).
+ */
 export class ApiError extends Error {
   readonly status: number | undefined
+  readonly code: string | undefined
+  readonly body: ApiErrorBody | undefined
 
-  constructor(message: string, status: number | undefined) {
+  constructor(message: string, status: number | undefined, body?: ApiErrorBody) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = body?.code
+    this.body = body
   }
 }
 
 // ── Response interceptor — normaliza mensagens de erro da API ─────
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ message?: string }>) => {
+  (error: AxiosError<ApiErrorBody>) => {
     const status = error.response?.status
-    const apiMessage = error.response?.data?.message
+    const body = error.response?.data
+    const apiMessage = body?.message
     if (apiMessage) {
-      return Promise.reject(new ApiError(apiMessage, status))
+      return Promise.reject(new ApiError(apiMessage, status, body))
     }
     if (status !== undefined && status >= 500) {
       return Promise.reject(new ApiError('Erro interno do servidor. Tente novamente em instantes.', status))

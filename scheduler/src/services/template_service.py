@@ -20,7 +20,7 @@ DEFAULT_TEMPLATES = {
     "CONFIRM_AREAS": "Áreas selecionadas:\n{{selected_areas}}\n\nDeseja confirmar?",
     "ASK_FULL_NAME": "Ótimo! Para finalizar, por favor me informe seu *nome completo*:\n\n_Digite \"voltar\" para retornar ou \"menu\" para o início._",
     "CONFIRM_BOOKING": "Confirme seu agendamento:\n*{{full_name}}*\n{{date}} às {{time}}\n{{service}}\nÁreas: {{areas}}\nDuração prevista: {{duration}}\n*Valor: {{price}}*\n{{clinic_name}} - {{address}}",
-    "BOOKED": "Agendamento confirmado!\nTe esperamos no dia {{date}} às {{time}}.\nDuração prevista: {{duration}}\n*Valor: {{price}}*",
+    "BOOKED": "Agendamento confirmado para *{{full_name}}*!\nTe esperamos no dia {{date}} às {{time}}.\nDuração prevista: {{duration}}\n*Valor: {{price}}*",
     "RESCHEDULE_FOUND": "Encontramos seu agendamento:\n{{date}} às {{time}}\n{{service}}\n\nPara qual dia deseja remarcar?",
     "RESCHEDULE_NOT_FOUND": "Não encontramos um agendamento ativo para este número.",
     "RESCHEDULED": "Agendamento remarcado com sucesso!\nNova data: {{date}} às {{time}}",

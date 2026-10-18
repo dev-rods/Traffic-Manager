@@ -8,7 +8,7 @@ import { ErrorState } from './ui/ErrorState'
 import { Spinner } from './ui/Spinner'
 import { OtpCodeForm } from './OtpCodeForm'
 import { useCancelAppointment, useMyAppointments } from '@/hooks/useBooking'
-import { formatCurrencyBRL, formatDateLong, formatPhoneInput, isValidBrPhone } from '@/utils/format'
+import { formatCurrencyBRL, formatDateLong, formatPhoneInput, isValidBrPhone, toApiPhone } from '@/utils/format'
 
 type Step = 'phone' | 'otp' | 'list'
 
@@ -24,7 +24,10 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
   const [token, setToken] = useState<string | null>(null)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
 
-  const myAppointments = useMyAppointments(clinicId, phone, step === 'list' ? token : null)
+  // O campo mostra `(11) 99999-0000`; a API recebe `5511999990000`. Mandar o
+  // formatado deixou a lista vazia para quem tinha acabado de agendar.
+  const apiPhone = toApiPhone(phone)
+  const myAppointments = useMyAppointments(clinicId, apiPhone, step === 'list' ? token : null)
   const cancelAppointment = useCancelAppointment(clinicId)
 
   function handleClose() {
@@ -48,7 +51,7 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
   function handleCancel(appointmentId: string) {
     if (!token) return
     cancelAppointment.mutate(
-      { appointmentId, phone, token },
+      { appointmentId, phone: apiPhone, token },
       { onSuccess: () => setCancelingId(null) }
     )
   }
@@ -93,6 +96,8 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
             myAppointments.data.map((appt) => (
               <div key={appt.id} className="rounded-2xl border border-ink-200 p-4">
                 <p className="font-medium text-ink-900">{appt.service_name ?? 'Agendamento'}</p>
+                {/* O mesmo telefone pode agendar para mais de uma pessoa. */}
+                {appt.full_name ? <p className="text-sm text-ink-700">{appt.full_name}</p> : null}
                 <p className="mt-1 text-sm text-ink-500">
                   {formatDateLong(appt.appointment_date)}, {appt.start_time.slice(0, 5)}
                   {appt.final_price_cents != null ? ` · ${formatCurrencyBRL(appt.final_price_cents)}` : ''}

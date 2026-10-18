@@ -43,7 +43,7 @@ RAZAO_FAIXA_3 = "tier_3"
 Percentual = Union[int, Decimal]
 
 __all__ = [
-    "Decisao", "decide", "preco_de_tabela", "texto_do_preco", "aplica_desconto",
+    "Decisao", "decide", "faixas_de_desconto", "preco_de_tabela", "texto_do_preco", "aplica_desconto",
     "RAZAO_PERSONALIZADA", "RAZAO_PRIMEIRA_SESSAO", "RAZAO_FAIXA_2", "RAZAO_FAIXA_3",
 ]
 
@@ -109,9 +109,9 @@ def decide(
     t2_pct = int(rules.get("tier_2_discount_pct") or 0)
     t3_pct = int(rules.get("tier_3_discount_pct") or 0)
 
-    if t3_min and qtd_areas >= t3_min and t3_pct > 0:
+    if _faixa_vale(t3_min, t3_pct) and qtd_areas >= t3_min:
         candidatos.append((t3_pct, RAZAO_FAIXA_3))
-    elif t2_min and qtd_areas >= t2_min and t2_pct > 0:
+    elif _faixa_vale(t2_min, t2_pct) and qtd_areas >= t2_min:
         candidatos.append((t2_pct, RAZAO_FAIXA_2))
 
     if not candidatos:
@@ -119,6 +119,39 @@ def decide(
 
     pct, razao = max(candidatos, key=lambda c: c[0])
     return Decisao(pct, razao, is_first)
+
+
+def _faixa_vale(minimo: int, pct: int) -> bool:
+    return bool(minimo) and pct > 0
+
+
+def faixas_de_desconto(regras: Optional[Dict]) -> List[Dict]:
+    """As faixas por quantidade de areas, como `decide` as aplica, para o site
+    anunciar antes de a pessoa escolher.
+
+    `maxAreas` sai da conta de `decide`, nao de `tier_2_max_areas`: `decide`
+    testa a faixa 3 primeiro e cai na 2 para qualquer quantidade a partir do
+    minimo dela. Com a faixa 3 valendo, a 2 termina um antes do minimo da 3;
+    sem ela, a 2 nao tem teto. Anunciar o teto gravado prometeria uma regra
+    que a cobranca nao segue.
+
+    Primeira sessao e personalizado ficam de fora porque dependem de quem e
+    a pessoa.
+    """
+    if not regras:
+        return []
+    t2_min = int(regras.get("tier_2_min_areas") or 0)
+    t3_min = int(regras.get("tier_3_min_areas") or 0)
+    t2_pct = int(regras.get("tier_2_discount_pct") or 0)
+    t3_pct = int(regras.get("tier_3_discount_pct") or 0)
+
+    faixas = []
+    t3_vale = _faixa_vale(t3_min, t3_pct)
+    if _faixa_vale(t2_min, t2_pct) and not (t3_vale and t3_min <= t2_min):
+        faixas.append({"minAreas": t2_min, "maxAreas": t3_min - 1 if t3_vale else None, "pct": t2_pct})
+    if t3_vale:
+        faixas.append({"minAreas": t3_min, "maxAreas": None, "pct": t3_pct})
+    return faixas
 
 
 def preco_de_tabela(db, service_ids: List[str], service_area_pairs: Optional[List[Dict]],
