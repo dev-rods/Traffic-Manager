@@ -114,3 +114,38 @@ export function IconCheckCircle({ className = 'h-4 w-4' }: IconProps) {
     </svg>
   )
 }
+
+export function IconClock({ className = 'h-4 w-4' }: IconProps) {
+  return (
+    <svg
+      className={cx(BASE, className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  )
+}
+
+export function IconTrash({ className = 'h-4 w-4' }: IconProps) {
+  return (
+    <svg
+      className={cx(BASE, className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 002 2h6a2 2 0 002-2l1-12M9 7V4h6v3" />
+    </svg>
+  )
+}

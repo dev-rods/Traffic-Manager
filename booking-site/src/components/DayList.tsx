@@ -16,7 +16,6 @@ interface DayListProps {
 }
 
 const WEEKDAY_SHORT = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB']
-const MONTH_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const MONTH_LONG = [
   'janeiro',
   'fevereiro',
@@ -59,9 +58,9 @@ export function DayList({
 }: DayListProps) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7" aria-label="Carregando datas">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="h-[4.5rem] animate-pulse rounded-xl bg-ink-100" />
+      <div className="flex justify-center gap-2" aria-label="Carregando datas">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="h-16 w-14 animate-pulse rounded-lg bg-ink-100" />
         ))}
       </div>
     )
@@ -79,7 +78,7 @@ export function DayList({
 
   if (available.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-2 rounded-2xl border border-ink-200 bg-white px-5 py-8 text-center">
+      <div className="flex flex-col items-center gap-2 rounded-2xl border border-ink-200 bg-surface px-5 py-8 text-center">
         <p className="font-display text-lg text-ink-800">Não há mais horários disponíveis em {month}.</p>
         <p className="max-w-sm text-sm text-ink-500">
           A agenda de {nextMonth} abre em {formatDayMonth(bookingWindow.nextOpensOn)}.
@@ -100,38 +99,41 @@ export function DayList({
   }
 
   return (
-    <div>
-      <p className="mb-3 text-sm font-medium capitalize text-ink-600">
+    <div className="flex flex-col gap-3">
+      <p className="text-center font-medium capitalize text-ink-800">
         {month} {parseISO(bookingWindow.start).getFullYear()}
       </p>
-      <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-        {available.map((iso) => {
-          const d = parseISO(iso)
-          const isSelected = iso === selectedDate
-          return (
-            <button
-              key={iso}
-              type="button"
-              onClick={() => onSelectDate(iso)}
-              aria-pressed={isSelected}
-              aria-label={`${WEEKDAY_SHORT[d.getDay()]} ${d.getDate()} de ${MONTH_LONG[d.getMonth()]}`}
-              className={cx(
-                'flex min-h-[4.5rem] cursor-pointer flex-col items-center justify-center gap-0.5 rounded-xl border text-sm transition-colors',
-                isSelected
-                  ? 'border-accent-500 bg-accent-50 font-semibold text-accent-700'
-                  : 'border-ink-200 bg-white text-ink-700 hover:border-ink-400'
-              )}
-            >
-              <span className={cx('text-xs', isSelected ? 'text-accent-600' : 'text-ink-400')}>
-                {WEEKDAY_SHORT[d.getDay()]}
-              </span>
-              <span className="text-base tabular-nums">{d.getDate()}</span>
-              <span className={cx('text-xs', isSelected ? 'text-accent-600' : 'text-ink-400')}>
-                {MONTH_SHORT[d.getMonth()]}
-              </span>
-            </button>
-          )
-        })}
+      {/* Faixa compacta como a da referência: rola na horizontal quando não
+          cabe e fica centralizada quando cabe. O mês fica no título, não em
+          cada dia (PRD 025, V4). */}
+      <div className="-mx-5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">
+        <div className="mx-auto flex w-max snap-x gap-2">
+          {available.map((iso) => {
+            const d = parseISO(iso)
+            const isSelected = iso === selectedDate
+            return (
+              <button
+                key={iso}
+                type="button"
+                onClick={() => onSelectDate(iso)}
+                aria-pressed={isSelected}
+                aria-label={`${WEEKDAY_SHORT[d.getDay()]} ${d.getDate()} de ${MONTH_LONG[d.getMonth()]}`}
+                className={cx(
+                  'relative flex h-16 w-14 shrink-0 cursor-pointer snap-start flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg transition-colors duration-150',
+                  isSelected ? 'bg-accent-100 text-ink-900' : 'bg-ink-100 text-ink-700 hover:bg-ink-200'
+                )}
+              >
+                <span className={cx('text-xs font-semibold', isSelected ? 'text-accent-700' : 'text-ink-500')}>
+                  {WEEKDAY_SHORT[d.getDay()]}
+                </span>
+                <span className={cx('text-xl tabular-nums', isSelected ? 'font-bold' : 'font-medium')}>
+                  {d.getDate()}
+                </span>
+                {isSelected ? <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-accent-400" /> : null}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

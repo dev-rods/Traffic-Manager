@@ -21,7 +21,7 @@ export function AreaPicker({ items, serviceAreas, onToggleArea }: AreaPickerProp
           {itemsWithAreas.length > 1 ? (
             <h3 className="mb-2 font-semibold text-ink-900">{item.service.name}</h3>
           ) : null}
-          <div className="flex flex-col divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white">
+          <div className="flex flex-col divide-y divide-ink-100 rounded-2xl border border-ink-100 bg-surface shadow-card">
             {areas.map((area) => {
               const checked = item.areaIds.includes(area.area_id)
               return (

@@ -18,12 +18,12 @@ export function DiscountTiersNote({ tiers, areaCount }: DiscountTiersNoteProps) 
   const hint = areaCount === undefined ? null : nextTierHint(tiers, areaCount)
 
   return (
-    <div className="mb-4 rounded-2xl bg-accent-50 px-4 py-3 text-sm">
+    <div className="mb-4 rounded-2xl border border-accent-200 bg-accent-50 px-4 py-3 text-sm">
       <p className="text-ink-700">
         <span className="font-semibold text-ink-900">Desconto progressivo</span> · {summary}
       </p>
       {hint ? (
-        <p className="mt-1 font-medium text-accent-600" aria-live="polite">
+        <p className="mt-1 font-semibold text-accent-700" aria-live="polite">
           {hint}
         </p>
       ) : null}

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { CartItem, ServiceArea } from '@/types'
 import { formatCurrencyBRL, formatDateLong, hasPrice } from '@/utils/format'
 import { getAreasForService } from '@/utils/cartTotals'
+import { IconClock, IconMoney, IconTrash } from './ui/icons'
 
 interface CartSummaryProps {
   items: CartItem[]
@@ -23,7 +24,7 @@ export function CartSummary({ items, serviceAreas, onRemove, date, time, price }
   if (items.length === 0) return null
 
   return (
-    <div className="rounded-2xl border border-ink-200 bg-white p-5">
+    <div className="rounded-2xl border border-ink-100 bg-surface p-5 shadow-card">
       {/* Itens num grupo próprio: `last:` só pega o último ITEM, sem borda
           dupla em cima da data/total que vêm depois. */}
       <div>
@@ -39,13 +40,14 @@ export function CartSummary({ items, serviceAreas, onRemove, date, time, price }
               key={item.service.id}
               className="flex items-center justify-between gap-3 border-b border-ink-100 py-3 first:pt-0 last:border-0 last:pb-0"
             >
-              <div className="min-w-0">
-                <p className="font-medium text-ink-900">{item.service.name}</p>
+              <div className="flex min-w-0 flex-col gap-1">
+                <p className="font-display text-lg font-bold text-ink-900">{item.service.name}</p>
                 {selected.length > 0 ? (
-                  <p className="text-sm text-ink-500">{selected.map((a) => a.area_name).join(', ')}</p>
+                  <p className="text-sm text-ink-600">{selected.map((a) => a.area_name).join(', ')}</p>
                 ) : null}
                 {hasPrice(itemPrice) ? (
-                  <p className="text-sm tabular-nums text-ink-500">
+                  <p className="inline-flex items-center gap-2 text-sm tabular-nums text-ink-600">
+                    <IconMoney />
                     {selected.length > 0 ? formatCurrencyBRL(itemPrice) : `a partir de ${formatCurrencyBRL(itemPrice)}`}
                   </p>
                 ) : null}
@@ -55,9 +57,9 @@ export function CartSummary({ items, serviceAreas, onRemove, date, time, price }
                   type="button"
                   onClick={() => onRemove(item.service.id)}
                   aria-label={`Remover ${item.service.name}`}
-                  className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-400 transition-colors hover:bg-danger-100 hover:text-danger-500"
+                  className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-danger-100 text-danger-500 transition-colors hover:bg-danger-500 hover:text-surface"
                 >
-                  <span aria-hidden>✕</span>
+                  <IconTrash className="h-5 w-5" />
                 </button>
               ) : null}
             </div>
@@ -66,7 +68,8 @@ export function CartSummary({ items, serviceAreas, onRemove, date, time, price }
       </div>
 
       {date && time ? (
-        <p className="mt-3 border-t border-ink-100 pt-3 text-sm text-ink-600">
+        <p className="mt-3 inline-flex w-full items-center gap-2 border-t border-ink-100 pt-3 font-medium text-ink-800">
+          <IconClock className="h-5 w-5 text-ink-600" />
           {formatDateLong(date)}, {time}
         </p>
       ) : null}

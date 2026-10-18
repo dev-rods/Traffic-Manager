@@ -10,6 +10,8 @@ import { CartSummary } from '@/components/CartSummary'
 import { PriceBreakdown } from '@/components/PriceBreakdown'
 import { CustomerInfoForm } from '@/components/CustomerInfoForm'
 import { DiscountTiersNote } from '@/components/DiscountTiersNote'
+import { ClinicWelcome } from '@/components/ClinicWelcome'
+import { SectionTitle } from '@/components/ui/SectionTitle'
 import { DuplicateBookingDialog } from '@/components/DuplicateBookingDialog'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
@@ -263,20 +265,23 @@ export function Booking() {
     )
 
   return (
-    <div className="flex flex-col gap-8">
-      <button
-        type="button"
-        onClick={goBack}
-        className="-ml-2 inline-flex h-11 w-fit cursor-pointer items-center gap-1 rounded-lg px-2 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
-      >
-        <IconChevronLeft />
-        Voltar
-      </button>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 border-b border-ink-200 pb-6">
+        <button
+          type="button"
+          onClick={goBack}
+          className="-ml-2 inline-flex h-11 w-fit cursor-pointer items-center gap-1 rounded-lg px-2 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
+        >
+          <IconChevronLeft />
+          Voltar
+        </button>
+        <ClinicWelcome clinic={clinic} />
+      </div>
 
       <div>
-        <p className="mb-3 text-sm text-ink-500">
+        <SectionTitle>
           {cart.items.length === 1 ? 'Serviço selecionado' : `${cart.items.length} serviços selecionados`}
-        </p>
+        </SectionTitle>
         <CartSummary
           items={cart.items}
           serviceAreas={serviceAreas}
@@ -288,10 +293,10 @@ export function Booking() {
       </div>
 
       {step === 'cart' ? (
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3">
           <Link
             to={basePath || '/'}
-            className="inline-flex h-12 items-center justify-center rounded-lg border border-ink-200 px-6 text-sm font-medium text-ink-700 transition-colors hover:border-ink-400"
+            className="inline-flex h-12 items-center justify-center rounded-lg bg-muted-100 px-6 font-display text-[0.95rem] font-semibold text-muted-700 transition-colors hover:bg-muted-200"
           >
             Adicionar outro serviço
           </Link>
@@ -301,15 +306,13 @@ export function Booking() {
 
       {step === 'areas' ? (
         <div>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-            Selecione as áreas de tratamento
-          </h2>
+          <SectionTitle>Selecione as áreas de tratamento</SectionTitle>
           <DiscountTiersNote
             tiers={bootstrap.data.discountTiers}
             areaCount={pendingAreas.length > 0 ? 0 : quote.data?.areaCount}
           />
           <AreaPicker items={cart.items} serviceAreas={serviceAreas} onToggleArea={handleToggleArea} />
-          <div className="mt-6 flex justify-end">
+          <div className="mt-6 flex flex-col">
             <Button disabled={pendingAreas.length > 0} onClick={() => setStep('schedule')}>
               Continuar
             </Button>
@@ -325,7 +328,7 @@ export function Booking() {
             </p>
           ) : null}
           <div>
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-500">Escolha o dia</h2>
+            <SectionTitle>Escolha o dia</SectionTitle>
             <DayList
               days={availability.data?.days}
               bookingWindow={availability.data?.window}
@@ -339,9 +342,7 @@ export function Booking() {
           </div>
           {cart.date ? (
             <div ref={slotsRef} className="scroll-mt-4">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-500">
-                Selecione o horário de início
-              </h2>
+              <SectionTitle>Selecione o horário</SectionTitle>
               <TimeSlotGrid
                 slots={availability.data?.days[cart.date]?.slots}
                 isLoading={availability.isLoading}
@@ -351,7 +352,7 @@ export function Booking() {
               />
             </div>
           ) : null}
-          <div className="flex justify-end">
+          <div className="flex flex-col">
             <Button
               disabled={!cart.date || !cart.time}
               onClick={() => {
@@ -367,7 +368,7 @@ export function Booking() {
 
       {step === 'customer' ? (
         <div>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Seus dados</h2>
+          <SectionTitle>Seus dados</SectionTitle>
           <CustomerInfoForm
             defaultValues={{ fullName: cart.customerName }}
             onSubmit={handleCustomerSubmit}

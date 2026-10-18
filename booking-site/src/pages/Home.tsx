@@ -4,6 +4,8 @@ import { useClinicBootstrap } from '@/hooks/useBooking'
 import { useClinicId } from '@/hooks/useClinicId'
 import { useCart } from '@/store/useCart'
 import { ServiceCard } from '@/components/ServiceCard'
+import { ClinicWelcome } from '@/components/ClinicWelcome'
+import { SectionTitle } from '@/components/ui/SectionTitle'
 import { CartAddedModal } from '@/components/CartAddedModal'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -68,21 +70,11 @@ export function Home() {
 
   return (
     <div>
-      <div className="mb-8 flex items-center gap-4">
-        <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-ink-100 font-display text-xl text-ink-600">
-          {clinic.logo_url ? (
-            <img src={clinic.logo_url} alt={clinic.name} className="h-full w-full object-cover" />
-          ) : (
-            clinic.name.charAt(0).toUpperCase()
-          )}
-        </span>
-        <div>
-          <p className="text-sm text-ink-500">Seja bem vindo(a) ao</p>
-          <h1 className="font-display text-2xl font-bold text-ink-900">{clinic.display_name || clinic.name}</h1>
-        </div>
+      <div className="mb-6 border-b border-ink-200 pb-6">
+        <ClinicWelcome clinic={clinic} />
       </div>
 
-      <h2 className="mb-3 font-display text-lg font-semibold text-ink-900">Serviços</h2>
+      <SectionTitle>Serviços</SectionTitle>
 
       {services && services.length === 0 ? (
         <EmptyState
