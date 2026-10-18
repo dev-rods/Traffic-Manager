@@ -201,7 +201,9 @@ export function Booking() {
             ? '1 área selecionada'
             : `${selectedAreaCount} áreas selecionadas`}
         </span>
-        {pendingAreas.length === 0 && quote.data?.finalPriceCents != null ? (
+        {pendingAreas.length === 0 &&
+        !quote.isPlaceholderData &&
+        quote.data?.finalPriceCents != null ? (
           <span className="font-semibold tabular-nums text-ink-900">
             {formatCurrencyBRL(quote.data.finalPriceCents)}
           </span>
