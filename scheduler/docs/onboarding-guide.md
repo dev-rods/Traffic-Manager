@@ -391,7 +391,7 @@ POST /clinics/{clinicId}/templates
 | `SELECT_TIME` | Horarios disponiveis no dia | `{{date}}`, `{{times_list}}` |
 | `INPUT_AREAS` | Solicita areas de tratamento | - |
 | `CONFIRM_BOOKING` | Confirmacao pre-agendamento | `{{date}}`, `{{time}}`, `{{service}}`, `{{areas}}`, `{{clinic_name}}`, `{{address}}` |
-| `BOOKED` | Agendamento confirmado | `{{date}}`, `{{time}}`, `{{pre_session_instructions}}` |
+| `BOOKED` | Agendamento confirmado (criacao pelo booking-site) | `{{full_name}}`, `{{date}}`, `{{time}}`, `{{duration}}`, `{{price}}` |
 | `RESCHEDULE_FOUND` | Agendamento encontrado para remarcar | `{{date}}`, `{{time}}`, `{{service}}` |
 | `RESCHEDULE_NOT_FOUND` | Nenhum agendamento ativo encontrado | - |
 | `RESCHEDULED` | Remarcacao confirmada | `{{date}}`, `{{time}}` |
