@@ -32,6 +32,10 @@ por `clinic_id` (via path, ou via domínio próprio — ver §3).
    bootstrap: "2 a 3 áreas: 10% off · 4 ou mais áreas: 20% off") e quanto
    falta para a próxima faixa, pela contagem de áreas da cotação (depois dos
    combos). É só anúncio: o valor cobrado continua sendo o de `/quote`.
+   O "Continuar" fica preso no rodapé da tela durante essa etapa, com a
+   contagem de áreas marcadas e o valor final da cotação ao lado (o valor só
+   aparece quando a cotação das áreas atuais chegou; nunca é calculado no
+   front).
 4. **Não escolhe profissional** — o backend atribui. Se a clínica não tem
    **nenhum** cadastrado, o fluxo é bloqueado com aviso (não há quem atender).
 5. Escolhe o dia numa lista que mostra **só os dias com horário**, de hoje até
