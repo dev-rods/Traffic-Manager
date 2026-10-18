@@ -194,7 +194,10 @@ que diverge do painel autenticado.
 - Logo e favicon customizáveis por clínica (painel → "Site de Agendamento").
   O logo aparece nas boas-vindas (`ClinicWelcome`) de toda tela, não no header.
 - Domínio próprio por clínica (painel → mesma página — ver §3).
-- Botão "Voltar" sempre presente, no topo, em toda etapa do wizard.
+- Botão "Voltar" no topo de toda etapa do wizard, exceto com catálogo de 1
+  item onde ele levaria à lista de serviços (revisão, áreas, ou agenda sem
+  áreas): ali ele some, e a lista (`/:clinicId`) redireciona sempre direto
+  para o agendamento, mesmo com o carrinho cheio.
 
 ### Carrinho misto
 

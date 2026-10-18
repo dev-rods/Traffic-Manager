@@ -180,6 +180,14 @@ export function Booking() {
     }
   }
 
+  // Com um serviço só não há tela anterior de verdade: a lista de serviços
+  // teria um item, já escolhido. Onde o "Voltar" levaria para lá, ele some.
+  const backLeavesWizard =
+    step === 'cart' ||
+    step === 'areas' ||
+    (step === 'schedule' && !cartHasAreas(cart.items, serviceAreas))
+  const showBack = !(isSingleService && backLeavesWizard)
+
   function goBack() {
     if (step === 'cart') {
       navigate(basePath || '/')
@@ -293,14 +301,16 @@ export function Booking() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 border-b border-ink-200 pb-6">
-        <button
-          type="button"
-          onClick={goBack}
-          className="-ml-2 inline-flex h-11 w-fit cursor-pointer items-center gap-1 rounded-lg px-2 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
-        >
-          <IconChevronLeft />
-          Voltar
-        </button>
+        {showBack ? (
+          <button
+            type="button"
+            onClick={goBack}
+            className="-ml-2 inline-flex h-11 w-fit cursor-pointer items-center gap-1 rounded-lg px-2 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
+          >
+            <IconChevronLeft />
+            Voltar
+          </button>
+        ) : null}
         <ClinicWelcome clinic={clinic} />
       </div>
 

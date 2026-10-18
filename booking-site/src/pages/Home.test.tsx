@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Home } from './Home'
 import { CartProvider } from '@/store/CartProvider'
@@ -56,6 +56,11 @@ function PreloadCart({ children }: { children: React.ReactNode }) {
   return ready ? <>{children}</> : null
 }
 
+function CartCount() {
+  const cart = useCart()
+  return <p>Agendamento com {cart.items.length} serviço(s)</p>
+}
+
 function renderHome({ preloadCart = false } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const body = preloadCart ? (
@@ -70,7 +75,12 @@ function renderHome({ preloadCart = false } = {}) {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={['/c1']}>
         <ClinicIdContext.Provider value={{ clinicId: 'c1', basePath: '/c1' }}>
-          <CartProvider>{body}</CartProvider>
+          <CartProvider>
+            <Routes>
+              <Route path="/c1" element={body} />
+              <Route path="/c1/agendar" element={<CartCount />} />
+            </Routes>
+          </CartProvider>
         </ClinicIdContext.Provider>
       </MemoryRouter>
     </QueryClientProvider>
@@ -82,20 +92,18 @@ describe('Home - serviço único', () => {
     vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrapWith([SERVICE]))
   })
 
-  it('não trava no spinner quando volta pra cá com o serviço já no carrinho', async () => {
-    // Checar só `singleService` (sem olhar o carrinho) travava aqui pra
-    // sempre: o carrinho não está mais vazio, o efeito de redirecionamento
-    // não dispara de novo, e nada tirava a tela do spinner.
+  it('com o serviço já no carrinho, vai direto ao agendamento sem duplicá-lo', async () => {
+    // A lista com um item só e "Adicionado" confundia (e, quando o
+    // redirecionamento dependia do carrinho vazio, a tela travava no spinner).
     renderHome({ preloadCart: true })
 
-    await waitFor(() => expect(screen.getByText('Depilação a Laser')).toBeInTheDocument())
-    expect(screen.getByText('Adicionado')).toBeInTheDocument()
+    expect(await screen.findByText('Agendamento com 1 serviço(s)')).toBeInTheDocument()
+    expect(screen.queryByText('Adicionado')).not.toBeInTheDocument()
   })
 
-  it('com o carrinho vazio, não mostra a lista de serviços (vai redirecionar)', async () => {
+  it('com o carrinho vazio, põe o serviço e vai ao agendamento', async () => {
     renderHome()
 
-    await waitFor(() => expect(bookingService.bootstrap).toHaveBeenCalled())
-    expect(screen.queryByText('Depilação a Laser')).not.toBeInTheDocument()
+    expect(await screen.findByText('Agendamento com 1 serviço(s)')).toBeInTheDocument()
   })
 })
