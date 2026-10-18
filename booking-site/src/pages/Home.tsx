@@ -24,11 +24,13 @@ export function Home() {
 
   // Um único serviço ativo: nem mostramos a etapa de escolha, igual ao bot
   // (ConversationEngine._on_enter_select_services: "single service -> auto-selecting").
+  // Vale também com o serviço já no carrinho (vindo do "Agende online" do
+  // topo, ou do voltar do navegador): a lista com um item só e "Adicionado"
+  // confundia, porque não há o que escolher.
   useEffect(() => {
-    if (singleService && cart.items.length === 0) {
-      cart.addItem(singleService)
-      navigate(`${basePath}/agendar`, { replace: true })
-    }
+    if (!singleService) return
+    if (!cart.items.some((i) => i.service.id === singleService.id)) cart.addItem(singleService)
+    navigate(`${basePath}/agendar`, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [singleService?.id])
 
@@ -45,11 +47,11 @@ export function Home() {
     )
   }
 
-  // Só espera o redirecionamento automático enquanto ele ainda vai acontecer.
-  // Checar só `singleService` travava aqui pra sempre ao voltar da etapa de
-  // agendamento: o carrinho já não está mais vazio, o efeito acima não
-  // dispara de novo, e nada tira a tela do spinner.
-  if (singleService && cart.items.length === 0) {
+  // Com um serviço só, o efeito acima sempre redireciona: aqui só se espera
+  // por ele. (Antes o redirecionamento dependia de o carrinho estar vazio e,
+  // com ele cheio, a tela travava no spinner; agora o efeito não depende mais
+  // do carrinho.)
+  if (singleService) {
     return (
       <div className="flex justify-center py-24">
         <Spinner size="lg" />

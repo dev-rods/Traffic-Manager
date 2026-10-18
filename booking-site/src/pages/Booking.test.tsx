@@ -136,14 +136,22 @@ describe('Booking - serviço único', () => {
     expect(screen.queryByText('Adicionar outro serviço')).not.toBeInTheDocument()
   })
 
-  it('"Voltar" a partir do agendamento sai direto pro início, sem passar pela revisão', async () => {
+  it('sem "Voltar" na primeira etapa: não há lista de serviços para onde voltar', async () => {
     renderBooking()
 
     expect(await screen.findByText('Escolha o dia')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Voltar' })).not.toBeInTheDocument()
+  })
+
+  it('"Voltar" reaparece nas etapas seguintes e volta uma etapa', async () => {
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
 
     await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
 
-    expect(await screen.findByText('Home mockada')).toBeInTheDocument()
+    expect(await screen.findByText('Escolha o dia')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Voltar' })).not.toBeInTheDocument()
   })
 
   it('pede a agenda pelo carrinho - a duração é calculada pelo backend', async () => {
