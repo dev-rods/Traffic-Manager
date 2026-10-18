@@ -8,23 +8,37 @@ interface TimeSlotGridProps {
   onSelect: (time: string) => void
 }
 
-export function TimeSlotGrid({ slots, isLoading, isError, selectedTime, onSelect }: TimeSlotGridProps) {
+export function TimeSlotGrid({
+  slots,
+  isLoading,
+  isError,
+  selectedTime,
+  onSelect,
+}: TimeSlotGridProps) {
   if (isLoading) {
     return (
       <div className="flex flex-wrap gap-2" aria-label="Carregando horários">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-11 w-20 animate-pulse rounded-full bg-ink-100" />
+          <div key={i} className="h-11 w-20 animate-pulse rounded-lg bg-ink-100" />
         ))}
       </div>
     )
   }
 
   if (isError) {
-    return <p className="py-6 text-center text-sm text-danger-500">Não foi possível carregar os horários.</p>
+    return (
+      <p className="py-6 text-center text-sm text-danger-500">
+        Não foi possível carregar os horários.
+      </p>
+    )
   }
 
   if (!slots || slots.length === 0) {
-    return <p className="py-6 text-center text-sm text-ink-500">Nenhum horário disponível para este dia.</p>
+    return (
+      <p className="py-6 text-center text-sm text-ink-500">
+        Nenhum horário disponível para este dia.
+      </p>
+    )
   }
 
   return (
@@ -38,10 +52,10 @@ export function TimeSlotGrid({ slots, isLoading, isError, selectedTime, onSelect
             onClick={() => onSelect(slot)}
             aria-pressed={selected}
             className={cx(
-              'h-11 min-w-20 cursor-pointer rounded-full border px-4 text-sm font-medium tabular-nums transition-colors',
+              'h-11 min-w-20 cursor-pointer rounded-lg border px-4 font-medium tabular-nums transition-colors duration-150',
               selected
-                ? 'border-ink-900 bg-ink-900 text-ink-50'
-                : 'border-ink-200 text-ink-700 hover:border-ink-400'
+                ? 'border-accent-400 bg-accent-100 font-bold text-ink-900'
+                : 'border-transparent bg-ink-100 text-ink-700 hover:bg-ink-200'
             )}
           >
             {slot}

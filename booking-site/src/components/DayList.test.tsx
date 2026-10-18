@@ -4,7 +4,11 @@ import userEvent from '@testing-library/user-event'
 import { DayList } from './DayList'
 import type { AvailabilityWindow, DayAvailability } from '@/types'
 
-const WINDOW: AvailabilityWindow = { start: '2026-10-28', end: '2026-10-31', nextOpensOn: '2026-11-01' }
+const WINDOW: AvailabilityWindow = {
+  start: '2026-10-28',
+  end: '2026-10-31',
+  nextOpensOn: '2026-11-01',
+}
 
 const DAYS: Record<string, DayAvailability> = {
   '2026-10-28': { status: 'AVAILABLE', slots: ['09:00'] },
@@ -43,7 +47,10 @@ describe('DayList', () => {
 
   it('seleciona o dia', async () => {
     const { onSelectDate } = renderList({ selectedDate: '2026-10-31' })
-    expect(screen.getByRole('button', { name: 'SÁB 31 de outubro' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'SÁB 31 de outubro' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
     await userEvent.click(screen.getByRole('button', { name: 'QUA 28 de outubro' }))
     expect(onSelectDate).toHaveBeenCalledWith('2026-10-28')
   })

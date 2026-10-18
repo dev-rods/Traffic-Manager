@@ -15,15 +15,21 @@ interface DuplicateBookingDialogProps {
  * porque criar não exige código e o número pode ser de outra pessoa; quem
  * quiser conferir usa "Meus agendamentos".
  */
-export function DuplicateBookingDialog({ existingCount, confirming, onConfirm, onCancel }: DuplicateBookingDialogProps) {
+export function DuplicateBookingDialog({
+  existingCount,
+  confirming,
+  onConfirm,
+  onCancel,
+}: DuplicateBookingDialogProps) {
   const many = (existingCount ?? 0) > 1
 
   return (
     <Modal open={existingCount !== null} onClose={onCancel} title="Você já tem agendamento">
       <div className="flex flex-col gap-4">
         <p className="text-sm text-ink-700">
-          Este número já tem {many ? `${existingCount} agendamentos futuros` : 'um agendamento futuro'} nesta
-          clínica. Quer manter {many ? 'todos e marcar este também' : 'os dois'}?
+          Este número já tem{' '}
+          {many ? `${existingCount} agendamentos futuros` : 'um agendamento futuro'} nesta clínica.
+          Quer manter {many ? 'todos e marcar este também' : 'os dois'}?
         </p>
         <p className="text-sm text-ink-500">
           Para conferir datas e horários, use “Meus agendamentos” no topo da página.

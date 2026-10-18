@@ -21,7 +21,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [customerPhone, setCustomerPhone] = useState('')
 
   function addItem(service: Service) {
-    setItems((prev) => (prev.some((i) => i.service.id === service.id) ? prev : [...prev, { service, areaIds: [] }]))
+    setItems((prev) =>
+      prev.some((i) => i.service.id === service.id) ? prev : [...prev, { service, areaIds: [] }]
+    )
     setDateState(null)
     setTime(null)
   }

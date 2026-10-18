@@ -1,27 +1,35 @@
 @import 'tailwindcss';
 
 @theme {
-  /* Neutros com leve tint quente (não cinza puro) */
-  --color-ink-50: #faf9f6;
-  --color-ink-100: #f2efe9;
-  --color-ink-200: #e4ded2;
-  --color-ink-300: #cec3ac;
-  --color-ink-400: #a89678;
-  --color-ink-500: #8a7757;
-  --color-ink-600: #6b5b40;
-  --color-ink-700: #52452f;
-  --color-ink-800: #3a3121;
-  --color-ink-900: #241e14;
+  /* Neutros grafite com leve tinta fria, no matiz do botão neutro da
+     referência (muted-700). O marrom anterior deixava o texto secundário em
+     ~4:1 sobre o creme: lavado no celular, ao sol (PRD 025, V1). */
+  --color-ink-50: #f8f8fa;
+  --color-ink-100: #f1f1f4;
+  --color-ink-200: #e4e4ea;
+  --color-ink-300: #cbcbd4;
+  --color-ink-400: #9b9bab;
+  --color-ink-500: #636374;
+  --color-ink-600: #4f4f60;
+  --color-ink-700: #3d3d4c;
+  --color-ink-800: #2b2b37;
+  --color-ink-900: #1e1e28;
 
-  /* Accent: terracota queimado */
-  --color-accent-50: #fdf3ec;
-  --color-accent-100: #fbe3d0;
-  --color-accent-200: #f5c49f;
-  --color-accent-300: #eb9f68;
-  --color-accent-400: #dd7c3f;
-  --color-accent-500: #c25f28;
-  --color-accent-600: #9c4a1f;
-  --color-accent-700: #77391a;
+  /* Superfície de cartão: branco com um fio de tinta, nunca #fff puro. */
+  --color-surface: #fdfdfe;
+
+  /* Accent: creme/dourado, a família do "Reservar" da referência. Texto sobre
+     o acento usa 700 (6.6:1 sobre o 50). */
+  --color-accent-50: #fdf9ea;
+  --color-accent-100: #fbf2cf;
+  --color-accent-200: #f5e4a3;
+  --color-accent-300: #ecd174;
+  --color-accent-400: #ddb84a;
+  --color-accent-500: #c49a2c;
+  --color-accent-600: #9c7a1f;
+  --color-accent-700: #735915;
+
+  --shadow-card: 0 1px 2px rgb(30 30 40 / 0.04), 0 4px 16px rgb(30 30 40 / 0.06);
 
   --color-success-500: #03a561;
   --color-success-600: #028f54;
@@ -37,10 +45,8 @@
   --color-muted-700: #515164;
 
   /* Site de referência não usa serif em nenhum lugar — só sans, como aqui */
-  --font-display:
-    'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-sans:
-    'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
 }
 
 html {

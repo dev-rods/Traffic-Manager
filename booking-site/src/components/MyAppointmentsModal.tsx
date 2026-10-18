@@ -8,7 +8,13 @@ import { ErrorState } from './ui/ErrorState'
 import { Spinner } from './ui/Spinner'
 import { OtpCodeForm } from './OtpCodeForm'
 import { useCancelAppointment, useMyAppointments } from '@/hooks/useBooking'
-import { formatCurrencyBRL, formatDateLong, formatPhoneInput, isValidBrPhone, toApiPhone } from '@/utils/format'
+import {
+  formatCurrencyBRL,
+  formatDateLong,
+  formatPhoneInput,
+  isValidBrPhone,
+  toApiPhone,
+} from '@/utils/format'
 
 type Step = 'phone' | 'otp' | 'list'
 
@@ -74,7 +80,9 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
         </form>
       ) : null}
 
-      {step === 'otp' ? <OtpCodeForm clinicId={clinicId} phone={phone} onVerified={handleVerified} /> : null}
+      {step === 'otp' ? (
+        <OtpCodeForm clinicId={clinicId} phone={phone} onVerified={handleVerified} />
+      ) : null}
 
       {step === 'list' ? (
         <div className="flex flex-col gap-4">
@@ -100,7 +108,9 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
                 {appt.full_name ? <p className="text-sm text-ink-700">{appt.full_name}</p> : null}
                 <p className="mt-1 text-sm text-ink-500">
                   {formatDateLong(appt.appointment_date)}, {appt.start_time.slice(0, 5)}
-                  {appt.final_price_cents != null ? ` · ${formatCurrencyBRL(appt.final_price_cents)}` : ''}
+                  {appt.final_price_cents != null
+                    ? ` · ${formatCurrencyBRL(appt.final_price_cents)}`
+                    : ''}
                 </p>
                 {cancelingId === appt.id ? (
                   <div className="mt-3 flex gap-2">

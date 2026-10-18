@@ -18,8 +18,7 @@ export function ServiceCard({ service, inCart, onReserve }: ServiceCardProps) {
           {/* Duração não aparece para o cliente: é cálculo interno da agenda. */}
           {hasPrice(service.price_cents) ? (
             <span className="inline-flex items-center gap-1.5 text-sm text-ink-500">
-              <IconMoney />
-              a partir de {formatCurrencyBRL(service.price_cents)}
+              <IconMoney />a partir de {formatCurrencyBRL(service.price_cents)}
             </span>
           ) : null}
         </div>

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useClinicBootstrap, useCreateAppointment, useMonthAvailability, useQuote } from '@/hooks/useBooking'
+import {
+  useClinicBootstrap,
+  useCreateAppointment,
+  useMonthAvailability,
+  useQuote,
+} from '@/hooks/useBooking'
 import { useClinicId } from '@/hooks/useClinicId'
 import { useCart } from '@/store/useCart'
 import { AreaPicker } from '@/components/AreaPicker'
@@ -10,6 +15,8 @@ import { CartSummary } from '@/components/CartSummary'
 import { PriceBreakdown } from '@/components/PriceBreakdown'
 import { CustomerInfoForm } from '@/components/CustomerInfoForm'
 import { DiscountTiersNote } from '@/components/DiscountTiersNote'
+import { ClinicWelcome } from '@/components/ClinicWelcome'
+import { SectionTitle } from '@/components/ui/SectionTitle'
 import { DuplicateBookingDialog } from '@/components/DuplicateBookingDialog'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
@@ -34,7 +41,10 @@ interface PendingDuplicate {
 }
 
 function prefersReducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
 }
 
 export function Booking() {
@@ -74,7 +84,9 @@ export function Booking() {
     const windowDates = datesBetween(bookingWindow.start, bookingWindow.end)
     if (windowDates.length === 0) return
     setMonthDates((current) =>
-      current.length === windowDates.length && current.every((d, i) => d === windowDates[i]) ? current : windowDates
+      current.length === windowDates.length && current.every((d, i) => d === windowDates[i])
+        ? current
+        : windowDates
     )
   }, [bookingWindow])
 
@@ -127,7 +139,12 @@ export function Booking() {
   }
 
   if (bootstrap.isError || !bootstrap.data) {
-    return <ErrorState message="Não foi possível carregar este salão." onRetry={() => bootstrap.refetch()} />
+    return (
+      <ErrorState
+        message="Não foi possível carregar este salão."
+        onRetry={() => bootstrap.refetch()}
+      />
+    )
   }
 
   // Sem profissional cadastrado não há quem receber o agendamento - a
@@ -196,7 +213,13 @@ export function Booking() {
 
     if (!cart.date || !cart.time) return
 
-    submitAppointment({ ...cartPayload, phone, fullName: data.fullName, date: cart.date, time: cart.time })
+    submitAppointment({
+      ...cartPayload,
+      phone,
+      fullName: data.fullName,
+      date: cart.date,
+      time: cart.time,
+    })
   }
 
   function submitAppointment(payload: CreateAppointmentPayload) {
@@ -228,29 +251,34 @@ export function Booking() {
   if (step === 'success') {
     const finalPrice = createAppointment.data?.final_price_cents
     return (
-      <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <IconCheckCircle className="h-12 w-12 text-success-500" />
-        <h1 className="font-display text-2xl text-ink-900">Agendamento confirmado!</h1>
-        {cart.date && cart.time ? (
-          <p className="text-ink-600">
-            {formatDateLong(cart.date)}, {cart.time}
+      <div className="flex flex-col gap-6">
+        <div className="border-b border-ink-200 pb-6">
+          <ClinicWelcome clinic={clinic} />
+        </div>
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+          <IconCheckCircle className="h-12 w-12 text-success-500" />
+          <h2 className="font-display text-2xl font-bold text-ink-900">Agendamento confirmado!</h2>
+          {cart.date && cart.time ? (
+            <p className="text-ink-600">
+              {formatDateLong(cart.date)}, {cart.time}
+            </p>
+          ) : null}
+          {finalPrice != null ? (
+            <p className="tabular-nums text-ink-600">Valor: {formatCurrencyBRL(finalPrice)}</p>
+          ) : null}
+          <p className="max-w-sm text-sm text-ink-500">
+            Enviamos a confirmação e as orientações para a sessão por WhatsApp para{' '}
+            {formatPhoneDisplay(cart.customerPhone)}.
           </p>
-        ) : null}
-        {finalPrice != null ? (
-          <p className="tabular-nums text-ink-600">Valor: {formatCurrencyBRL(finalPrice)}</p>
-        ) : null}
-        <p className="max-w-sm text-sm text-ink-500">
-          Enviamos a confirmação e as orientações para a sessão por WhatsApp para{' '}
-          {formatPhoneDisplay(cart.customerPhone)}.
-        </p>
-        <Button
-          onClick={() => {
-            cart.clearCart()
-            navigate(basePath || '/')
-          }}
-        >
-          Voltar ao início
-        </Button>
+          <Button
+            onClick={() => {
+              cart.clearCart()
+              navigate(basePath || '/')
+            }}
+          >
+            Voltar ao início
+          </Button>
+        </div>
       </div>
     )
   }
@@ -263,20 +291,25 @@ export function Booking() {
     )
 
   return (
-    <div className="flex flex-col gap-8">
-      <button
-        type="button"
-        onClick={goBack}
-        className="-ml-2 inline-flex h-11 w-fit cursor-pointer items-center gap-1 rounded-lg px-2 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
-      >
-        <IconChevronLeft />
-        Voltar
-      </button>
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 border-b border-ink-200 pb-6">
+        <button
+          type="button"
+          onClick={goBack}
+          className="-ml-2 inline-flex h-11 w-fit cursor-pointer items-center gap-1 rounded-lg px-2 text-sm font-medium text-ink-500 transition-colors hover:text-ink-900"
+        >
+          <IconChevronLeft />
+          Voltar
+        </button>
+        <ClinicWelcome clinic={clinic} />
+      </div>
 
       <div>
-        <p className="mb-3 text-sm text-ink-500">
-          {cart.items.length === 1 ? 'Serviço selecionado' : `${cart.items.length} serviços selecionados`}
-        </p>
+        <SectionTitle>
+          {cart.items.length === 1
+            ? 'Serviço selecionado'
+            : `${cart.items.length} serviços selecionados`}
+        </SectionTitle>
         <CartSummary
           items={cart.items}
           serviceAreas={serviceAreas}
@@ -288,10 +321,10 @@ export function Booking() {
       </div>
 
       {step === 'cart' ? (
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3">
           <Link
             to={basePath || '/'}
-            className="inline-flex h-12 items-center justify-center rounded-lg border border-ink-200 px-6 text-sm font-medium text-ink-700 transition-colors hover:border-ink-400"
+            className="inline-flex h-12 items-center justify-center rounded-lg bg-muted-100 px-6 font-display text-[0.95rem] font-semibold text-muted-700 transition-colors hover:bg-muted-200"
           >
             Adicionar outro serviço
           </Link>
@@ -301,15 +334,17 @@ export function Booking() {
 
       {step === 'areas' ? (
         <div>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
-            Selecione as áreas de tratamento
-          </h2>
+          <SectionTitle>Selecione as áreas de tratamento</SectionTitle>
           <DiscountTiersNote
             tiers={bootstrap.data.discountTiers}
             areaCount={pendingAreas.length > 0 ? 0 : quote.data?.areaCount}
           />
-          <AreaPicker items={cart.items} serviceAreas={serviceAreas} onToggleArea={handleToggleArea} />
-          <div className="mt-6 flex justify-end">
+          <AreaPicker
+            items={cart.items}
+            serviceAreas={serviceAreas}
+            onToggleArea={handleToggleArea}
+          />
+          <div className="mt-6 flex flex-col">
             <Button disabled={pendingAreas.length > 0} onClick={() => setStep('schedule')}>
               Continuar
             </Button>
@@ -325,7 +360,7 @@ export function Booking() {
             </p>
           ) : null}
           <div>
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-500">Escolha o dia</h2>
+            <SectionTitle>Escolha o dia</SectionTitle>
             <DayList
               days={availability.data?.days}
               bookingWindow={availability.data?.window}
@@ -339,9 +374,7 @@ export function Booking() {
           </div>
           {cart.date ? (
             <div ref={slotsRef} className="scroll-mt-4">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-500">
-                Selecione o horário de início
-              </h2>
+              <SectionTitle>Selecione o horário</SectionTitle>
               <TimeSlotGrid
                 slots={availability.data?.days[cart.date]?.slots}
                 isLoading={availability.isLoading}
@@ -351,7 +384,7 @@ export function Booking() {
               />
             </div>
           ) : null}
-          <div className="flex justify-end">
+          <div className="flex flex-col">
             <Button
               disabled={!cart.date || !cart.time}
               onClick={() => {
@@ -367,7 +400,7 @@ export function Booking() {
 
       {step === 'customer' ? (
         <div>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">Seus dados</h2>
+          <SectionTitle>Seus dados</SectionTitle>
           <CustomerInfoForm
             defaultValues={{ fullName: cart.customerName }}
             onSubmit={handleCustomerSubmit}
@@ -383,7 +416,10 @@ export function Booking() {
           <DuplicateBookingDialog
             existingCount={pendingDuplicate?.existingCount ?? null}
             confirming={createAppointment.isPending}
-            onConfirm={() => pendingDuplicate && submitAppointment({ ...pendingDuplicate.payload, confirmDuplicate: true })}
+            onConfirm={() =>
+              pendingDuplicate &&
+              submitAppointment({ ...pendingDuplicate.payload, confirmDuplicate: true })
+            }
             onCancel={() => setPendingDuplicate(null)}
           />
         </div>

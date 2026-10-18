@@ -27,7 +27,12 @@ describe('PriceBreakdown', () => {
   it('com desconto mostra total, desconto com o motivo e valor final', () => {
     render(
       <PriceBreakdown
-        quote={{ ...BASE, discountPct: 50, discountReason: 'first_session', finalPriceCents: 10000 }}
+        quote={{
+          ...BASE,
+          discountPct: 50,
+          discountReason: 'first_session',
+          finalPriceCents: 10000,
+        }}
         isLoading={false}
         isError={false}
       />
@@ -41,7 +46,12 @@ describe('PriceBreakdown', () => {
   it('percentual fracionado em formato brasileiro', () => {
     render(
       <PriceBreakdown
-        quote={{ ...BASE, discountPct: 12.5, discountReason: 'personalizado', finalPriceCents: 17500 }}
+        quote={{
+          ...BASE,
+          discountPct: 12.5,
+          discountReason: 'personalizado',
+          finalPriceCents: 17500,
+        }}
         isLoading={false}
         isError={false}
       />
@@ -52,7 +62,10 @@ describe('PriceBreakdown', () => {
   it('explica o combo aplicado', () => {
     render(
       <PriceBreakdown
-        quote={{ ...BASE, combos: [{ from: ['Virilha', 'Perianal'], to: 'Virilha + ânus', savingsCents: 7500 }] }}
+        quote={{
+          ...BASE,
+          combos: [{ from: ['Virilha', 'Perianal'], to: 'Virilha + ânus', savingsCents: 7500 }],
+        }}
         isLoading={false}
         isError={false}
       />

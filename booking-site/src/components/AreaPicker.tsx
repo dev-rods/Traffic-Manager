@@ -21,7 +21,7 @@ export function AreaPicker({ items, serviceAreas, onToggleArea }: AreaPickerProp
           {itemsWithAreas.length > 1 ? (
             <h3 className="mb-2 font-semibold text-ink-900">{item.service.name}</h3>
           ) : null}
-          <div className="flex flex-col divide-y divide-ink-100 rounded-2xl border border-ink-200 bg-white">
+          <div className="flex flex-col divide-y divide-ink-100 rounded-2xl border border-ink-100 bg-surface shadow-card">
             {areas.map((area) => {
               const checked = item.areaIds.includes(area.area_id)
               return (
@@ -42,7 +42,9 @@ export function AreaPicker({ items, serviceAreas, onToggleArea }: AreaPickerProp
                     <span className="text-ink-800">{area.area_name}</span>
                   </span>
                   {hasPrice(area.price_cents) ? (
-                    <span className="shrink-0 tabular-nums text-ink-500">{formatCurrencyBRL(area.price_cents)}</span>
+                    <span className="shrink-0 tabular-nums text-ink-500">
+                      {formatCurrencyBRL(area.price_cents)}
+                    </span>
                   ) : null}
                 </label>
               )

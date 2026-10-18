@@ -53,7 +53,7 @@ export function OtpCodeForm({ clinicId, phone, onVerified }: OtpCodeFormProps) {
           type="button"
           onClick={() => sendOtp.mutate(phone)}
           disabled={sendOtp.isPending}
-          className="text-sm font-medium text-accent-600 underline underline-offset-2 disabled:opacity-50"
+          className="text-sm font-medium text-accent-700 underline underline-offset-2 disabled:opacity-50"
         >
           {sendOtp.isPending ? 'Enviando...' : 'Reenviar código'}
         </button>

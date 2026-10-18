@@ -48,11 +48,16 @@ api.interceptors.response.use(
       return Promise.reject(new ApiError(apiMessage, status, body))
     }
     if (status !== undefined && status >= 500) {
-      return Promise.reject(new ApiError('Erro interno do servidor. Tente novamente em instantes.', status))
+      return Promise.reject(
+        new ApiError('Erro interno do servidor. Tente novamente em instantes.', status)
+      )
     }
     if (!error.response) {
       return Promise.reject(
-        new ApiError('Não foi possível conectar. Verifique sua internet e tente novamente.', undefined)
+        new ApiError(
+          'Não foi possível conectar. Verifique sua internet e tente novamente.',
+          undefined
+        )
       )
     }
     return Promise.reject(new ApiError(error.message, status))

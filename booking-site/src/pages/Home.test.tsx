@@ -23,7 +23,15 @@ const SERVICE: Service = {
 function bootstrapWith(services: Service[]): BootstrapResponse {
   return {
     status: 'SUCCESS',
-    clinic: { clinic_id: 'c1', name: 'Clínica X', display_name: null, logo_url: null, favicon_url: null, timezone: 'America/Sao_Paulo', phone: null },
+    clinic: {
+      clinic_id: 'c1',
+      name: 'Clínica X',
+      display_name: null,
+      logo_url: null,
+      favicon_url: null,
+      timezone: 'America/Sao_Paulo',
+      phone: null,
+    },
     services,
     professionals: [{ id: 'p1', name: 'Prof', role: null, photo_url: null }],
     serviceAreas: [],

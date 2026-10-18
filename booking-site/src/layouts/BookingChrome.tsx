@@ -31,27 +31,27 @@ export function BookingChrome() {
 
   return (
     <div className="min-h-screen bg-ink-50">
-      <header className="flex items-center justify-between border-b border-ink-100 bg-white px-6 py-4 sm:px-10">
-        <Link
-          to={basePath || '/'}
-          aria-label="Início"
-          className="-m-1 flex min-h-11 min-w-11 items-center p-1 transition-opacity hover:opacity-70"
-        >
-          {clinic?.logo_url ? (
-            <img
-              src={clinic.logo_url}
-              alt={clinic.display_name || clinic.name}
-              className="h-9 w-9 rounded-full object-cover"
-            />
-          ) : (
-            <span className="font-display text-lg tracking-wide text-ink-900">Agende online</span>
-          )}
-        </Link>
-        <Button variant="muted" size="sm" className="h-11" onClick={() => setMyAppointmentsOpen(true)}>
-          Meus agendamentos
-        </Button>
+      <header className="border-b border-ink-200 bg-surface">
+        <div className="mx-auto flex max-w-[720px] items-center justify-between px-5 py-3 sm:px-10">
+          {/* A identidade da clínica fica nas boas-vindas de cada tela
+              (ClinicWelcome); repetir o logo aqui duplicava o avatar. */}
+          <Link
+            to={basePath || '/'}
+            className="-ml-1 flex min-h-11 items-center px-1 font-display text-base font-semibold tracking-wide text-ink-900 transition-opacity hover:opacity-70"
+          >
+            Agende online
+          </Link>
+          <Button
+            variant="muted"
+            size="sm"
+            className="h-11"
+            onClick={() => setMyAppointmentsOpen(true)}
+          >
+            Meus agendamentos
+          </Button>
+        </div>
       </header>
-      <main className="mx-auto max-w-[960px] px-6 py-10 sm:px-10">
+      <main className="mx-auto max-w-[720px] px-5 py-6 sm:px-10 sm:py-10">
         <Outlet />
       </main>
       <MyAppointmentsModal

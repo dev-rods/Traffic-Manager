@@ -55,10 +55,18 @@ describe('MyAppointmentsModal', () => {
   })
 
   it('cancela pelo telefone no formato da API', async () => {
-    vi.mocked(bookingService.cancelAppointment).mockResolvedValue({ ...APPOINTMENT, status: 'CANCELLED' })
+    vi.mocked(bookingService.cancelAppointment).mockResolvedValue({
+      ...APPOINTMENT,
+      status: 'CANCELLED',
+    })
     await verify()
     await userEvent.click(await screen.findByRole('button', { name: 'Cancelar agendamento' }))
     await userEvent.click(screen.getByRole('button', { name: 'Confirmar cancelamento' }))
-    expect(bookingService.cancelAppointment).toHaveBeenCalledWith('c1', 'ap1', '5511987654321', 'tok')
+    expect(bookingService.cancelAppointment).toHaveBeenCalledWith(
+      'c1',
+      'ap1',
+      '5511987654321',
+      'tok'
+    )
   })
 })
