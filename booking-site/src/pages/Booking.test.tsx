@@ -363,6 +363,18 @@ describe('Booking - desconto progressivo', () => {
     expect(await screen.findByText('Faltam 2 áreas para 20% de desconto')).toBeInTheDocument()
   })
 
+  it('o "Continuar" fica no rodapé com a contagem de áreas e o valor', async () => {
+    renderBooking()
+    expect(await screen.findByText('Escolha ao menos uma área')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled()
+
+    await userEvent.click(screen.getByLabelText(/Axilas/))
+    await userEvent.click(screen.getByLabelText(/Buço/))
+
+    expect(await screen.findByText('2 áreas selecionadas')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continuar' })).toBeEnabled()
+  })
+
   it('clínica sem faixas não anuncia nada', async () => {
     vi.mocked(bookingService.bootstrap).mockResolvedValue({ ...bootstrap(), serviceAreas: AREAS })
     renderBooking()
