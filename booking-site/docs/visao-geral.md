@@ -138,11 +138,12 @@ booking-site/src/
 ├── layouts/
 │   ├── BookingLayout.tsx       # clinicId por path (domínio padrão)
 │   ├── CustomDomainLayout.tsx  # clinicId por hostname (domínio próprio)
-│   └── BookingChrome.tsx       # header + favicon + modal, compartilhado pelos dois
+│   └── BookingChrome.tsx       # header ("Agende online", sem logo) + favicon + modal, compartilhado pelos dois
 ├── pages/
 │   ├── Home.tsx                # lista de serviços (ou auto-skip, se só há um)
 │   └── Booking.tsx             # o wizard: carrinho → áreas → agenda → dados → sucesso
 ├── components/
+│   ├── ClinicWelcome            # avatar + nome da clínica, no topo de toda tela
 │   ├── ServiceCard, CartAddedModal, CartSummary
 │   ├── AreaPicker, PriceBreakdown
 │   ├── DayList, TimeSlotGrid
@@ -191,6 +192,7 @@ que diverge do painel autenticado.
 - "Meus agendamentos": consulta e cancelamento, com verificação por código
   via WhatsApp (OTP) — a única barreira de posse do número no site inteiro.
 - Logo e favicon customizáveis por clínica (painel → "Site de Agendamento").
+  O logo aparece nas boas-vindas (`ClinicWelcome`) de toda tela, não no header.
 - Domínio próprio por clínica (painel → mesma página — ver §3).
 - Botão "Voltar" sempre presente, no topo, em toda etapa do wizard.
 
