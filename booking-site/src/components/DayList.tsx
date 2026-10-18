@@ -106,8 +106,8 @@ export function DayList({
       {/* Faixa compacta como a da referência: rola na horizontal quando não
           cabe e fica centralizada quando cabe. O mês fica no título, não em
           cada dia (PRD 025, V4). */}
-      <div className="-mx-5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">
-        <div className="mx-auto flex w-max snap-x gap-2">
+      <div className="-mx-5 snap-x overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">
+        <div className="mx-auto flex w-max gap-2">
           {available.map((iso) => {
             const d = parseISO(iso)
             const isSelected = iso === selectedDate

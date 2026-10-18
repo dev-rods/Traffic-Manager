@@ -230,29 +230,34 @@ export function Booking() {
   if (step === 'success') {
     const finalPrice = createAppointment.data?.final_price_cents
     return (
-      <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <IconCheckCircle className="h-12 w-12 text-success-500" />
-        <h1 className="font-display text-2xl text-ink-900">Agendamento confirmado!</h1>
-        {cart.date && cart.time ? (
-          <p className="text-ink-600">
-            {formatDateLong(cart.date)}, {cart.time}
+      <div className="flex flex-col gap-6">
+        <div className="border-b border-ink-200 pb-6">
+          <ClinicWelcome clinic={clinic} />
+        </div>
+        <div className="flex flex-col items-center gap-4 py-10 text-center">
+          <IconCheckCircle className="h-12 w-12 text-success-500" />
+          <h2 className="font-display text-2xl font-bold text-ink-900">Agendamento confirmado!</h2>
+          {cart.date && cart.time ? (
+            <p className="text-ink-600">
+              {formatDateLong(cart.date)}, {cart.time}
+            </p>
+          ) : null}
+          {finalPrice != null ? (
+            <p className="tabular-nums text-ink-600">Valor: {formatCurrencyBRL(finalPrice)}</p>
+          ) : null}
+          <p className="max-w-sm text-sm text-ink-500">
+            Enviamos a confirmação e as orientações para a sessão por WhatsApp para{' '}
+            {formatPhoneDisplay(cart.customerPhone)}.
           </p>
-        ) : null}
-        {finalPrice != null ? (
-          <p className="tabular-nums text-ink-600">Valor: {formatCurrencyBRL(finalPrice)}</p>
-        ) : null}
-        <p className="max-w-sm text-sm text-ink-500">
-          Enviamos a confirmação e as orientações para a sessão por WhatsApp para{' '}
-          {formatPhoneDisplay(cart.customerPhone)}.
-        </p>
-        <Button
-          onClick={() => {
-            cart.clearCart()
-            navigate(basePath || '/')
-          }}
-        >
-          Voltar ao início
-        </Button>
+          <Button
+            onClick={() => {
+              cart.clearCart()
+              navigate(basePath || '/')
+            }}
+          >
+            Voltar ao início
+          </Button>
+        </div>
       </div>
     )
   }

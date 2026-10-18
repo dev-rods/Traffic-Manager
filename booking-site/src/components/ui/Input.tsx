@@ -28,7 +28,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         id={inputId}
         className={cx(
           'h-12 rounded-xl border bg-surface px-4 text-base text-ink-900 placeholder:text-ink-400 outline-none transition-colors',
-          'focus:border-accent-500 focus:ring-2 focus:ring-accent-100',
+          'focus:border-accent-700 focus:ring-2 focus:ring-accent-200',
           error ? 'border-danger-500' : 'border-ink-200',
           className
         )}

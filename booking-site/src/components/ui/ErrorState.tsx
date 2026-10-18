@@ -11,7 +11,7 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
         <button
           type="button"
           onClick={onRetry}
-          className="text-sm font-medium text-accent-600 underline underline-offset-2 hover:text-accent-700"
+          className="text-sm font-medium text-accent-700 underline underline-offset-2 hover:text-ink-900"
         >
           Tentar novamente
         </button>
