@@ -129,4 +129,4 @@ task 015. Falta usá-lo:
 - [x] Spec gerada (`spec/024-booking-site-meus-agendamentos-aviso-nome.md`)
 - [x] Implementado (2026-10-18)
 - [x] Deploy dev (2026-10-18, testado com curl e no site; ver `scheduler/tests/integration/024-...md`)
-- [ ] Deploy prod
+- [x] Deploy prod (2026-10-18, PR #137; scheduler prod sem rota nova, sem create-deployment; booking-site pelo deploy do merge. Smoke: faixas no bootstrap, "Meus agendamentos" com telefone formatado achando o agendamento com nome, nota de faixas em agendar.draclaradourado.com.br)
