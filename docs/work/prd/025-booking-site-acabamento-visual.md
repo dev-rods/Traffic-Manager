@@ -53,4 +53,4 @@ SalonSoft; aqui o topo é da clínica) e escolha de profissional (removida na
 
 - [x] Spec gerada (`spec/025-booking-site-acabamento-visual.md`)
 - [x] Implementado (2026-10-18; revisão visual em 375 e 1280 px, sem overflow nem erro de console)
-- [ ] Deploy prod
+- [x] Deploy prod (2026-10-18, PR #139, pelo deploy do merge no Vercel; conferido em agendar.draclaradourado.com.br, sem erro de console)
