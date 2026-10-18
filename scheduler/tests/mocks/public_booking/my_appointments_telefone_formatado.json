@@ -1,0 +1,14 @@
+{
+  "httpMethod": "GET",
+  "resource": "/public/clinics/{clinicId}/my-appointments",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123"
+  },
+  "headers": {
+    "x-api-key": "test-api-key"
+  },
+  "queryStringParameters": {
+    "phone": "(11) 99999-0000",
+    "token": "<token de /verify/confirm>"
+  }
+}

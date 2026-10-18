@@ -126,7 +126,7 @@ task 015. Falta usá-lo:
 
 ## 5. Status
 
-- [ ] Spec gerada
-- [ ] Implementado
-- [ ] Deploy dev
+- [x] Spec gerada (`spec/024-booking-site-meus-agendamentos-aviso-nome.md`)
+- [x] Implementado (2026-10-18)
+- [x] Deploy dev (2026-10-18, testado com curl e no site; ver `scheduler/tests/integration/024-...md`)
 - [ ] Deploy prod

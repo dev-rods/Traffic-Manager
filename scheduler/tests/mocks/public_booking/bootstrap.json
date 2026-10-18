@@ -1,0 +1,10 @@
+{
+  "httpMethod": "GET",
+  "resource": "/public/clinics/{clinicId}/bootstrap",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123"
+  },
+  "headers": {
+    "x-api-key": "test-api-key"
+  }
+}
