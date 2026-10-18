@@ -67,7 +67,9 @@ export function DayList({
   }
 
   if (isError || !days || !bookingWindow) {
-    return <ErrorState message="Não foi possível carregar as datas disponíveis." onRetry={onRetry} />
+    return (
+      <ErrorState message="Não foi possível carregar as datas disponíveis." onRetry={onRetry} />
+    )
   }
 
   const available = Object.keys(days)
@@ -79,7 +81,9 @@ export function DayList({
   if (available.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-2xl border border-ink-200 bg-surface px-5 py-8 text-center">
-        <p className="font-display text-lg text-ink-800">Não há mais horários disponíveis em {month}.</p>
+        <p className="font-display text-lg text-ink-800">
+          Não há mais horários disponíveis em {month}.
+        </p>
         <p className="max-w-sm text-sm text-ink-500">
           A agenda de {nextMonth} abre em {formatDayMonth(bookingWindow.nextOpensOn)}.
         </p>
@@ -120,16 +124,27 @@ export function DayList({
                 aria-label={`${WEEKDAY_SHORT[d.getDay()]} ${d.getDate()} de ${MONTH_LONG[d.getMonth()]}`}
                 className={cx(
                   'relative flex h-16 w-14 shrink-0 cursor-pointer snap-start flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg transition-colors duration-150',
-                  isSelected ? 'bg-accent-100 text-ink-900' : 'bg-ink-100 text-ink-700 hover:bg-ink-200'
+                  isSelected
+                    ? 'bg-accent-100 text-ink-900'
+                    : 'bg-ink-100 text-ink-700 hover:bg-ink-200'
                 )}
               >
-                <span className={cx('text-xs font-semibold', isSelected ? 'text-accent-700' : 'text-ink-500')}>
+                <span
+                  className={cx(
+                    'text-xs font-semibold',
+                    isSelected ? 'text-accent-700' : 'text-ink-500'
+                  )}
+                >
                   {WEEKDAY_SHORT[d.getDay()]}
                 </span>
-                <span className={cx('text-xl tabular-nums', isSelected ? 'font-bold' : 'font-medium')}>
+                <span
+                  className={cx('text-xl tabular-nums', isSelected ? 'font-bold' : 'font-medium')}
+                >
                   {d.getDate()}
                 </span>
-                {isSelected ? <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-accent-400" /> : null}
+                {isSelected ? (
+                  <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-accent-400" />
+                ) : null}
               </button>
             )
           })}

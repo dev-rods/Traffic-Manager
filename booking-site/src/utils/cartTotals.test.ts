@@ -1,13 +1,46 @@
 import { describe, expect, it } from 'vitest'
-import { buildServiceAreaPairs, cartHasAreas, cartPendingAreaSelection, toCartPayload } from './cartTotals'
+import {
+  buildServiceAreaPairs,
+  cartHasAreas,
+  cartPendingAreaSelection,
+  toCartPayload,
+} from './cartTotals'
 import type { CartItem, ServiceArea } from '@/types'
 
-const serviceNoAreas = { id: 'svc-1', name: 'Limpeza de pele', duration_minutes: 60, price_cents: 10000, description: null }
-const serviceWithAreas = { id: 'svc-2', name: 'Depilação a laser', duration_minutes: 20, price_cents: 15000, description: null }
+const serviceNoAreas = {
+  id: 'svc-1',
+  name: 'Limpeza de pele',
+  duration_minutes: 60,
+  price_cents: 10000,
+  description: null,
+}
+const serviceWithAreas = {
+  id: 'svc-2',
+  name: 'Depilação a laser',
+  duration_minutes: 20,
+  price_cents: 15000,
+  description: null,
+}
 
 const serviceAreas: ServiceArea[] = [
-  { service_area_id: 'sa-1', service_id: 'svc-2', area_id: 'area-1', area_name: 'Axilas', display_order: 1, duration_minutes: 5, price_cents: 9500 },
-  { service_area_id: 'sa-2', service_id: 'svc-2', area_id: 'area-2', area_name: 'Buço', display_order: 2, duration_minutes: 2, price_cents: 6500 },
+  {
+    service_area_id: 'sa-1',
+    service_id: 'svc-2',
+    area_id: 'area-1',
+    area_name: 'Axilas',
+    display_order: 1,
+    duration_minutes: 5,
+    price_cents: 9500,
+  },
+  {
+    service_area_id: 'sa-2',
+    service_id: 'svc-2',
+    area_id: 'area-2',
+    area_name: 'Buço',
+    display_order: 2,
+    duration_minutes: 2,
+    price_cents: 6500,
+  },
 ]
 
 describe('cartHasAreas / cartPendingAreaSelection', () => {

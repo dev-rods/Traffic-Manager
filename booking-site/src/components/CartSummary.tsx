@@ -20,7 +20,14 @@ interface CartSummaryProps {
  * desconto é o `price`, calculado pelo backend. Duração não aparece: é conta
  * interna da agenda.
  */
-export function CartSummary({ items, serviceAreas, onRemove, date, time, price }: CartSummaryProps) {
+export function CartSummary({
+  items,
+  serviceAreas,
+  onRemove,
+  date,
+  time,
+  price,
+}: CartSummaryProps) {
   if (items.length === 0) return null
 
   return (
@@ -43,12 +50,16 @@ export function CartSummary({ items, serviceAreas, onRemove, date, time, price }
               <div className="flex min-w-0 flex-col gap-1">
                 <p className="font-display text-lg font-bold text-ink-900">{item.service.name}</p>
                 {selected.length > 0 ? (
-                  <p className="text-sm text-ink-600">{selected.map((a) => a.area_name).join(', ')}</p>
+                  <p className="text-sm text-ink-600">
+                    {selected.map((a) => a.area_name).join(', ')}
+                  </p>
                 ) : null}
                 {hasPrice(itemPrice) ? (
                   <p className="inline-flex items-center gap-2 text-sm tabular-nums text-ink-600">
                     <IconMoney />
-                    {selected.length > 0 ? formatCurrencyBRL(itemPrice) : `a partir de ${formatCurrencyBRL(itemPrice)}`}
+                    {selected.length > 0
+                      ? formatCurrencyBRL(itemPrice)
+                      : `a partir de ${formatCurrencyBRL(itemPrice)}`}
                   </p>
                 ) : null}
               </div>

@@ -34,7 +34,12 @@ export function useClinicBootstrap(clinicId: string) {
  * área pendente de escolha — sem ela a duração (e a grade) ainda não existe.
  * `staleTime` curto: a agenda muda enquanto o cliente decide.
  */
-export function useMonthAvailability(clinicId: string, dates: string[], cart: CartPayload, enabled: boolean) {
+export function useMonthAvailability(
+  clinicId: string,
+  dates: string[],
+  cart: CartPayload,
+  enabled: boolean
+) {
   return useQuery({
     queryKey: bookingKeys.availability(clinicId, dates, cart),
     queryFn: () => bookingService.availability(clinicId, dates, cart),
@@ -48,7 +53,12 @@ export function useMonthAvailability(clinicId: string, dates: string[], cart: Ca
  * `keepPreviousData`: ao entrar o telefone, o valor anterior fica na tela
  * até o novo chegar, em vez de piscar um skeleton.
  */
-export function useQuote(clinicId: string, cart: CartPayload, phone: string | undefined, enabled: boolean) {
+export function useQuote(
+  clinicId: string,
+  cart: CartPayload,
+  phone: string | undefined,
+  enabled: boolean
+) {
   return useQuery({
     queryKey: bookingKeys.quote(clinicId, cart, phone),
     queryFn: () => bookingService.quote(clinicId, cart, phone),
@@ -74,10 +84,12 @@ export function useConfirmOtp(clinicId: string) {
 export function useCreateAppointment(clinicId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: CreateAppointmentPayload) => bookingService.createAppointment(clinicId, payload),
+    mutationFn: (payload: CreateAppointmentPayload) =>
+      bookingService.createAppointment(clinicId, payload),
     // O horário marcado deixou de existir — e, num 409, a grade em cache está
     // desatualizada. Nos dois casos a próxima visita à agenda busca de novo.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: bookingKeys.availabilityAll(clinicId) }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: bookingKeys.availabilityAll(clinicId) }),
   })
 }
 
@@ -92,10 +104,19 @@ export function useMyAppointments(clinicId: string, phone: string, token: string
 export function useCancelAppointment(clinicId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ appointmentId, phone, token }: { appointmentId: string; phone: string; token: string }) =>
-      bookingService.cancelAppointment(clinicId, appointmentId, phone, token),
+    mutationFn: ({
+      appointmentId,
+      phone,
+      token,
+    }: {
+      appointmentId: string
+      phone: string
+      token: string
+    }) => bookingService.cancelAppointment(clinicId, appointmentId, phone, token),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: bookingKeys.myAppointments(clinicId, variables.phone) })
+      queryClient.invalidateQueries({
+        queryKey: bookingKeys.myAppointments(clinicId, variables.phone),
+      })
     },
   })
 }

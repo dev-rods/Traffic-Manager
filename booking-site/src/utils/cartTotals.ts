@@ -9,14 +9,20 @@ export function cartHasAreas(items: CartItem[], serviceAreas: ServiceArea[]): bo
 }
 
 /** Serviços do carrinho que têm áreas cadastradas mas nenhuma selecionada ainda. */
-export function cartPendingAreaSelection(items: CartItem[], serviceAreas: ServiceArea[]): CartItem[] {
+export function cartPendingAreaSelection(
+  items: CartItem[],
+  serviceAreas: ServiceArea[]
+): CartItem[] {
   return items.filter((item) => {
     const areas = getAreasForService(serviceAreas, item.service.id)
     return areas.length > 0 && item.areaIds.length === 0
   })
 }
 
-export function buildServiceAreaPairs(items: CartItem[], serviceAreas: ServiceArea[]): ServiceAreaPair[] {
+export function buildServiceAreaPairs(
+  items: CartItem[],
+  serviceAreas: ServiceArea[]
+): ServiceAreaPair[] {
   const pairs: ServiceAreaPair[] = []
   for (const item of items) {
     const areas = getAreasForService(serviceAreas, item.service.id)

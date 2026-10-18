@@ -42,7 +42,9 @@ export function AreaPicker({ items, serviceAreas, onToggleArea }: AreaPickerProp
                     <span className="text-ink-800">{area.area_name}</span>
                   </span>
                   {hasPrice(area.price_cents) ? (
-                    <span className="shrink-0 tabular-nums text-ink-500">{formatCurrencyBRL(area.price_cents)}</span>
+                    <span className="shrink-0 tabular-nums text-ink-500">
+                      {formatCurrencyBRL(area.price_cents)}
+                    </span>
                   ) : null}
                 </label>
               )

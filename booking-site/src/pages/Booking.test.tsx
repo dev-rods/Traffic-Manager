@@ -66,7 +66,12 @@ const NO_DISCOUNT: Quote = {
 }
 // Com telefone o backend não diz o motivo (não revela se o número já foi
 // paciente): só o percentual e o valor final.
-const PHONE_DISCOUNT: Quote = { ...NO_DISCOUNT, discountPct: 50, discountReason: null, finalPriceCents: 7500 }
+const PHONE_DISCOUNT: Quote = {
+  ...NO_DISCOUNT,
+  discountPct: 50,
+  discountReason: null,
+  finalPriceCents: 7500,
+}
 
 // Monta o carrinho já com o serviço antes do Booking montar - igual ao Home
 // faz antes de navegar pra /agendar.
@@ -102,7 +107,9 @@ function renderBooking() {
 }
 
 async function chooseSlotAndContinue() {
-  await userEvent.click(await screen.findByRole('button', { name: new RegExp(`${Number(TODAY.slice(8))} de`) }))
+  await userEvent.click(
+    await screen.findByRole('button', { name: new RegExp(`${Number(TODAY.slice(8))} de`) })
+  )
   await userEvent.click(await screen.findByRole('button', { name: '23:59' }))
   await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
 }
@@ -154,7 +161,12 @@ describe('Booking - serviço único', () => {
     const clinicToday = toISODate(new Date(now.getFullYear(), now.getMonth() + 1, 1))
     vi.mocked(bookingService.availability).mockImplementation(async (_c, dates) => ({
       days: Object.fromEntries(
-        dates.map((d) => [d, d === clinicToday ? { status: 'AVAILABLE', slots: ['10:00'] } : { status: 'CLOSED', slots: [] }])
+        dates.map((d) => [
+          d,
+          d === clinicToday
+            ? { status: 'AVAILABLE', slots: ['10:00'] }
+            : { status: 'CLOSED', slots: [] },
+        ])
       ),
       window: { start: clinicToday, end: clinicToday, nextOpensOn: clinicToday },
     }))
@@ -238,7 +250,9 @@ describe('Booking - preço e desconto', () => {
   })
 
   it('horário ocupado no meio do caminho (409) volta pra agenda com aviso', async () => {
-    vi.mocked(bookingService.createAppointment).mockRejectedValue(new ApiError('Conflito de horário', 409))
+    vi.mocked(bookingService.createAppointment).mockRejectedValue(
+      new ApiError('Conflito de horário', 409)
+    )
     renderBooking()
     await screen.findByText('Escolha o dia')
     await chooseSlotAndContinue()
@@ -329,7 +343,9 @@ describe('Booking - desconto progressivo', () => {
 
   it('anuncia as faixas antes da escolha e diz quanto falta para a próxima', async () => {
     renderBooking()
-    expect(await screen.findByText(/2 a 3 áreas: 10% off · 4 ou mais áreas: 20% off/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/2 a 3 áreas: 10% off · 4 ou mais áreas: 20% off/)
+    ).toBeInTheDocument()
     expect(screen.queryByText(/Falta/)).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByLabelText(/Axilas/))

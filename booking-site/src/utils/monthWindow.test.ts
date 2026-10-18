@@ -22,7 +22,11 @@ describe('monthWindow', () => {
 
 describe('datesBetween', () => {
   it('vai de start até end, inclusive, virando o mês', () => {
-    expect(datesBetween('2026-10-30', '2026-11-01')).toEqual(['2026-10-30', '2026-10-31', '2026-11-01'])
+    expect(datesBetween('2026-10-30', '2026-11-01')).toEqual([
+      '2026-10-30',
+      '2026-10-31',
+      '2026-11-01',
+    ])
   })
 
   it('end antes de start não dá nenhuma data', () => {

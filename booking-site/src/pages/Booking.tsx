@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useClinicBootstrap, useCreateAppointment, useMonthAvailability, useQuote } from '@/hooks/useBooking'
+import {
+  useClinicBootstrap,
+  useCreateAppointment,
+  useMonthAvailability,
+  useQuote,
+} from '@/hooks/useBooking'
 import { useClinicId } from '@/hooks/useClinicId'
 import { useCart } from '@/store/useCart'
 import { AreaPicker } from '@/components/AreaPicker'
@@ -36,7 +41,10 @@ interface PendingDuplicate {
 }
 
 function prefersReducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
 }
 
 export function Booking() {
@@ -76,7 +84,9 @@ export function Booking() {
     const windowDates = datesBetween(bookingWindow.start, bookingWindow.end)
     if (windowDates.length === 0) return
     setMonthDates((current) =>
-      current.length === windowDates.length && current.every((d, i) => d === windowDates[i]) ? current : windowDates
+      current.length === windowDates.length && current.every((d, i) => d === windowDates[i])
+        ? current
+        : windowDates
     )
   }, [bookingWindow])
 
@@ -129,7 +139,12 @@ export function Booking() {
   }
 
   if (bootstrap.isError || !bootstrap.data) {
-    return <ErrorState message="Não foi possível carregar este salão." onRetry={() => bootstrap.refetch()} />
+    return (
+      <ErrorState
+        message="Não foi possível carregar este salão."
+        onRetry={() => bootstrap.refetch()}
+      />
+    )
   }
 
   // Sem profissional cadastrado não há quem receber o agendamento - a
@@ -198,7 +213,13 @@ export function Booking() {
 
     if (!cart.date || !cart.time) return
 
-    submitAppointment({ ...cartPayload, phone, fullName: data.fullName, date: cart.date, time: cart.time })
+    submitAppointment({
+      ...cartPayload,
+      phone,
+      fullName: data.fullName,
+      date: cart.date,
+      time: cart.time,
+    })
   }
 
   function submitAppointment(payload: CreateAppointmentPayload) {
@@ -285,7 +306,9 @@ export function Booking() {
 
       <div>
         <SectionTitle>
-          {cart.items.length === 1 ? 'Serviço selecionado' : `${cart.items.length} serviços selecionados`}
+          {cart.items.length === 1
+            ? 'Serviço selecionado'
+            : `${cart.items.length} serviços selecionados`}
         </SectionTitle>
         <CartSummary
           items={cart.items}
@@ -316,7 +339,11 @@ export function Booking() {
             tiers={bootstrap.data.discountTiers}
             areaCount={pendingAreas.length > 0 ? 0 : quote.data?.areaCount}
           />
-          <AreaPicker items={cart.items} serviceAreas={serviceAreas} onToggleArea={handleToggleArea} />
+          <AreaPicker
+            items={cart.items}
+            serviceAreas={serviceAreas}
+            onToggleArea={handleToggleArea}
+          />
           <div className="mt-6 flex flex-col">
             <Button disabled={pendingAreas.length > 0} onClick={() => setStep('schedule')}>
               Continuar
@@ -389,7 +416,10 @@ export function Booking() {
           <DuplicateBookingDialog
             existingCount={pendingDuplicate?.existingCount ?? null}
             confirming={createAppointment.isPending}
-            onConfirm={() => pendingDuplicate && submitAppointment({ ...pendingDuplicate.payload, confirmDuplicate: true })}
+            onConfirm={() =>
+              pendingDuplicate &&
+              submitAppointment({ ...pendingDuplicate.payload, confirmDuplicate: true })
+            }
             onCancel={() => setPendingDuplicate(null)}
           />
         </div>

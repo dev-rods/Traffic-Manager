@@ -15,7 +15,9 @@ export const bookingService = {
   // Domínio próprio da clínica (ver CustomDomainField no painel) em vez do
   // clinicId na URL: resolve qual clínica é dona do host atual.
   resolveDomain: (host: string) =>
-    api.get<{ clinicId: string }>('/public/resolve-domain', { params: { host } }).then((r) => r.data.clinicId),
+    api
+      .get<{ clinicId: string }>('/public/resolve-domain', { params: { host } })
+      .then((r) => r.data.clinicId),
 
   // Status (CLOSED | FULL | AVAILABLE) + horários livres para uma lista de datas —
   // mesma AvailabilityEngine do bot de WhatsApp. A duração da sessão é calculada
@@ -26,7 +28,8 @@ export const bookingService = {
         params: {
           dates: dates.join(','),
           serviceIds: cart.serviceIds.join(','),
-          serviceAreaPairs: cart.serviceAreaPairs.map((p) => `${p.serviceId}:${p.areaId}`).join(',') || undefined,
+          serviceAreaPairs:
+            cart.serviceAreaPairs.map((p) => `${p.serviceId}:${p.areaId}`).join(',') || undefined,
         },
       })
       .then((r) => ({ days: r.data.days, window: r.data.window })),
@@ -39,7 +42,9 @@ export const bookingService = {
       .then((r) => r.data.quote),
 
   sendOtp: (clinicId: string, phone: string) =>
-    api.post<{ status: string }>(`/public/clinics/${clinicId}/verify/send`, { phone }).then((r) => r.data),
+    api
+      .post<{ status: string }>(`/public/clinics/${clinicId}/verify/send`, { phone })
+      .then((r) => r.data),
 
   confirmOtp: (clinicId: string, phone: string, code: string) =>
     api
@@ -60,9 +65,8 @@ export const bookingService = {
 
   cancelAppointment: (clinicId: string, appointmentId: string, phone: string, token: string) =>
     api
-      .post<{ appointment: Appointment }>(
-        `/public/clinics/${clinicId}/appointments/${appointmentId}/cancel`,
-        { phone, token }
-      )
+      .post<{
+        appointment: Appointment
+      }>(`/public/clinics/${clinicId}/appointments/${appointmentId}/cancel`, { phone, token })
       .then((r) => r.data.appointment),
 }

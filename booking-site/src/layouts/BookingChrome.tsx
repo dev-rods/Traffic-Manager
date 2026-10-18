@@ -41,7 +41,12 @@ export function BookingChrome() {
           >
             Agende online
           </Link>
-          <Button variant="muted" size="sm" className="h-11" onClick={() => setMyAppointmentsOpen(true)}>
+          <Button
+            variant="muted"
+            size="sm"
+            className="h-11"
+            onClick={() => setMyAppointmentsOpen(true)}
+          >
             Meus agendamentos
           </Button>
         </div>

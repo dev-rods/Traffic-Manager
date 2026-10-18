@@ -42,14 +42,17 @@ export function PriceBreakdown({ quote, isLoading, isError }: PriceBreakdownProp
 
   const label = discountLabel(quote.discountReason, quote.areaCount)
   const hasDiscount =
-    quote.discountPct > 0 && quote.originalPriceCents != null && quote.finalPriceCents < quote.originalPriceCents
+    quote.discountPct > 0 &&
+    quote.originalPriceCents != null &&
+    quote.finalPriceCents < quote.originalPriceCents
 
   return (
     <div className="flex flex-col gap-2 text-sm tabular-nums">
       {quote.combos.map((combo) => (
         <p key={combo.to} className="text-ink-500">
-          {combo.from.join(' + ')} viraram o combo <span className="font-medium text-ink-700">{combo.to}</span>{' '}
-          (economia de {formatCurrencyBRL(combo.savingsCents)})
+          {combo.from.join(' + ')} viraram o combo{' '}
+          <span className="font-medium text-ink-700">{combo.to}</span> (economia de{' '}
+          {formatCurrencyBRL(combo.savingsCents)})
         </p>
       ))}
 
@@ -57,7 +60,9 @@ export function PriceBreakdown({ quote, isLoading, isError }: PriceBreakdownProp
         <>
           <div className="flex items-center justify-between text-ink-600">
             <span>Total</span>
-            <span className="line-through decoration-ink-400">{formatCurrencyBRL(quote.originalPriceCents)}</span>
+            <span className="line-through decoration-ink-400">
+              {formatCurrencyBRL(quote.originalPriceCents)}
+            </span>
           </div>
           <div className="flex items-center justify-between gap-3 text-success-600">
             <span>

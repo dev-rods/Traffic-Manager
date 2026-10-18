@@ -40,12 +40,17 @@ describe('CustomerInfoForm', () => {
     await userEvent.type(screen.getByLabelText(/celular/i), '1')
     expect(onPhoneChange).toHaveBeenLastCalledWith('(11) 98765-4321')
 
-    await userEvent.type(screen.getByLabelText(/celular/i), '{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}')
+    await userEvent.type(
+      screen.getByLabelText(/celular/i),
+      '{backspace}{backspace}{backspace}{backspace}{backspace}{backspace}'
+    )
     expect(onPhoneChange).toHaveBeenLastCalledWith(null)
   })
 
   it('usa o rótulo de envio recebido', () => {
-    render(<CustomerInfoForm onSubmit={vi.fn()} submitting={false} submitLabel="Confirmar agendamento" />)
+    render(
+      <CustomerInfoForm onSubmit={vi.fn()} submitting={false} submitLabel="Confirmar agendamento" />
+    )
     expect(screen.getByRole('button', { name: 'Confirmar agendamento' })).toBeInTheDocument()
   })
 })

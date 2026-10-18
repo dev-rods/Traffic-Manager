@@ -8,7 +8,13 @@ interface TimeSlotGridProps {
   onSelect: (time: string) => void
 }
 
-export function TimeSlotGrid({ slots, isLoading, isError, selectedTime, onSelect }: TimeSlotGridProps) {
+export function TimeSlotGrid({
+  slots,
+  isLoading,
+  isError,
+  selectedTime,
+  onSelect,
+}: TimeSlotGridProps) {
   if (isLoading) {
     return (
       <div className="flex flex-wrap gap-2" aria-label="Carregando horários">
@@ -20,11 +26,19 @@ export function TimeSlotGrid({ slots, isLoading, isError, selectedTime, onSelect
   }
 
   if (isError) {
-    return <p className="py-6 text-center text-sm text-danger-500">Não foi possível carregar os horários.</p>
+    return (
+      <p className="py-6 text-center text-sm text-danger-500">
+        Não foi possível carregar os horários.
+      </p>
+    )
   }
 
   if (!slots || slots.length === 0) {
-    return <p className="py-6 text-center text-sm text-ink-500">Nenhum horário disponível para este dia.</p>
+    return (
+      <p className="py-6 text-center text-sm text-ink-500">
+        Nenhum horário disponível para este dia.
+      </p>
+    )
   }
 
   return (

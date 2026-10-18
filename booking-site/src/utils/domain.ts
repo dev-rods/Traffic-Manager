@@ -3,9 +3,5 @@
 // alguma clínica (ver CustomDomainField no painel) e o clinicId é resolvido
 // pelo hostname via /public/resolve-domain.
 export function isDefaultDomain(hostname: string): boolean {
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.endsWith('.vercel.app')
-  )
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.vercel.app')
 }

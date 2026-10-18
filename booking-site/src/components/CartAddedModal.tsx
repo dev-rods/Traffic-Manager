@@ -10,14 +10,20 @@ interface CartAddedModalProps {
   onContinue: () => void
 }
 
-export function CartAddedModal({ open, service, onClose, onAddAnother, onContinue }: CartAddedModalProps) {
+export function CartAddedModal({
+  open,
+  service,
+  onClose,
+  onAddAnother,
+  onContinue,
+}: CartAddedModalProps) {
   if (!service) return null
 
   return (
     <Modal open={open} onClose={onClose} title="Serviço adicionado">
       <p className="mb-6 text-sm text-ink-600">
-        <span className="font-medium text-ink-900">{service.name}</span> foi adicionado ao carrinho. O que
-        você gostaria de fazer agora?
+        <span className="font-medium text-ink-900">{service.name}</span> foi adicionado ao carrinho.
+        O que você gostaria de fazer agora?
       </p>
       <div className="flex flex-col gap-2">
         <Button onClick={onContinue}>Continuar</Button>

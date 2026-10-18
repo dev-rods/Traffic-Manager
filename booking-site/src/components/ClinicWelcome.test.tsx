@@ -22,7 +22,9 @@ describe('ClinicWelcome', () => {
   })
 
   it('usa o logo e cai no nome cadastrado sem nome de exibição', () => {
-    const { container } = render(<ClinicWelcome clinic={{ ...CLINIC, display_name: null, logo_url: 'https://x/logo.png' }} />)
+    const { container } = render(
+      <ClinicWelcome clinic={{ ...CLINIC, display_name: null, logo_url: 'https://x/logo.png' }} />
+    )
     expect(screen.getByRole('heading', { name: 'Clínica X' })).toBeInTheDocument()
     expect(container.querySelector('img')).toHaveAttribute('src', 'https://x/logo.png')
   })
