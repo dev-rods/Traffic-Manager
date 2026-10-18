@@ -9,6 +9,8 @@ import { TimeSlotGrid } from '@/components/TimeSlotGrid'
 import { CartSummary } from '@/components/CartSummary'
 import { PriceBreakdown } from '@/components/PriceBreakdown'
 import { CustomerInfoForm } from '@/components/CustomerInfoForm'
+import { DiscountTiersNote } from '@/components/DiscountTiersNote'
+import { DuplicateBookingDialog } from '@/components/DuplicateBookingDialog'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -20,7 +22,16 @@ import { formatCurrencyBRL, formatDateLong, formatPhoneDisplay, toApiPhone } fro
 import { cartHasAreas, cartPendingAreaSelection, toCartPayload } from '@/utils/cartTotals'
 import { datesBetween, monthWindow } from '@/utils/monthWindow'
 import { startOfToday } from '@/utils/dates'
-import type { WizardStep } from '@/types'
+import type { CreateAppointmentPayload, WizardStep } from '@/types'
+
+// A criação responde 409 por dois motivos: horário ocupado (sem code) e
+// número com agendamento futuro (este code, pede confirmação).
+const HAS_FUTURE_APPOINTMENT = 'HAS_FUTURE_APPOINTMENT'
+
+interface PendingDuplicate {
+  payload: CreateAppointmentPayload
+  existingCount: number
+}
 
 function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -38,6 +49,7 @@ export function Booking() {
   // Telefone usado na cotação: com ele entram primeira sessão e desconto
   // personalizado, antes de o cliente confirmar.
   const [quotePhone, setQuotePhone] = useState<string | undefined>(undefined)
+  const [pendingDuplicate, setPendingDuplicate] = useState<PendingDuplicate | null>(null)
   // Datas perguntadas ao backend: de hoje até o fim do mês. Quem decide o que
   // é agendável é o backend (no fuso da clínica); isto só limita a pergunta.
   const [monthDates, setMonthDates] = useState(() => monthWindow(startOfToday()))
@@ -184,23 +196,33 @@ export function Booking() {
 
     if (!cart.date || !cart.time) return
 
-    createAppointment.mutate(
-      { ...cartPayload, phone, fullName: data.fullName, date: cart.date, time: cart.time },
-      {
-        onSuccess: () => setStep('success'),
-        onError: (err) => {
-          // O horário foi ocupado enquanto o cliente preenchia os dados. A
-          // grade já foi invalidada (useCreateAppointment); volta para ela.
-          if (err instanceof ApiError && err.status === 409) {
-            cart.clearSchedule()
-            setStep('schedule')
-            setSubmitError('Esse horário acabou de ser ocupado. Escolha outro, por favor.')
-            return
-          }
-          setSubmitError(err.message)
-        },
-      }
-    )
+    submitAppointment({ ...cartPayload, phone, fullName: data.fullName, date: cart.date, time: cart.time })
+  }
+
+  function submitAppointment(payload: CreateAppointmentPayload) {
+    createAppointment.mutate(payload, {
+      onSuccess: () => {
+        setPendingDuplicate(null)
+        setStep('success')
+      },
+      onError: (err) => {
+        setPendingDuplicate(null)
+        // O número já tem agendamento futuro: pergunta antes de criar outro.
+        if (err instanceof ApiError && err.code === HAS_FUTURE_APPOINTMENT) {
+          setPendingDuplicate({ payload, existingCount: err.body?.existingCount ?? 1 })
+          return
+        }
+        // O horário foi ocupado enquanto o cliente preenchia os dados. A
+        // grade já foi invalidada (useCreateAppointment); volta para ela.
+        if (err instanceof ApiError && err.status === 409) {
+          cart.clearSchedule()
+          setStep('schedule')
+          setSubmitError('Esse horário acabou de ser ocupado. Escolha outro, por favor.')
+          return
+        }
+        setSubmitError(err.message)
+      },
+    })
   }
 
   if (step === 'success') {
@@ -282,6 +304,10 @@ export function Booking() {
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-ink-500">
             Selecione as áreas de tratamento
           </h2>
+          <DiscountTiersNote
+            tiers={bootstrap.data.discountTiers}
+            areaCount={pendingAreas.length > 0 ? 0 : quote.data?.areaCount}
+          />
           <AreaPicker items={cart.items} serviceAreas={serviceAreas} onToggleArea={handleToggleArea} />
           <div className="mt-6 flex justify-end">
             <Button disabled={pendingAreas.length > 0} onClick={() => setStep('schedule')}>
@@ -354,6 +380,12 @@ export function Booking() {
               {submitError}
             </p>
           ) : null}
+          <DuplicateBookingDialog
+            existingCount={pendingDuplicate?.existingCount ?? null}
+            confirming={createAppointment.isPending}
+            onConfirm={() => pendingDuplicate && submitAppointment({ ...pendingDuplicate.payload, confirmDuplicate: true })}
+            onCancel={() => setPendingDuplicate(null)}
+          />
         </div>
       ) : null}
     </div>

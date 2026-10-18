@@ -27,7 +27,11 @@ por `clinic_id` (via path, ou via domínio próprio — ver §3).
    aparece** em nenhuma tela (é conta interna da agenda). Se a clínica só tem
    **um** serviço no catálogo, essa escolha é pulada: o serviço já chega
    pré-selecionado.
-3. Se o serviço tiver áreas de tratamento configuradas, escolhe quais.
+3. Se o serviço tiver áreas de tratamento configuradas, escolhe quais. Acima
+   da lista, o **desconto progressivo** da clínica (`discountTiers` do
+   bootstrap: "2 a 3 áreas: 10% off · 4 ou mais áreas: 20% off") e quanto
+   falta para a próxima faixa, pela contagem de áreas da cotação (depois dos
+   combos). É só anúncio: o valor cobrado continua sendo o de `/quote`.
 4. **Não escolhe profissional** — o backend atribui. Se a clínica não tem
    **nenhum** cadastrado, o fluxo é bloqueado com aviso (não há quem atender).
 5. Escolhe o dia numa lista que mostra **só os dias com horário**, de hoje até
@@ -42,12 +46,20 @@ por `clinic_id` (via path, ou via domínio próprio — ver §3).
    motivo aparece (só a faixa por quantidade de áreas é possível). O motivo
    continua gravado no agendamento e vai na confirmação por WhatsApp, que só
    o dono do número recebe.
-7. Agendamento é criado na hora — **sem verificação prévia do número**. A
-   confirmação chega por WhatsApp (mesmo template `BOOKED` que o bot usa, com
-   o valor já com desconto), seguida das orientações pré-sessão da clínica.
+7. Agendamento é criado na hora — **sem verificação prévia do número**. Se o
+   número já tem agendamento futuro confirmado, o site pergunta antes ("Quer
+   manter os dois?"): a criação responde 409 `HAS_FUTURE_APPOINTMENT` só com a
+   contagem, sem data nem nome, porque qualquer um pode digitar o número de
+   outra pessoa. Confirmando, reenvia com `confirmDuplicate: true`. A
+   confirmação chega por WhatsApp (template `BOOKED`, com o nome digitado
+   naquele agendamento e o valor já com desconto), seguida das orientações
+   pré-sessão da clínica.
 8. "Meus agendamentos" (botão no header): consulta ou cancela agendamentos
    existentes pelo celular — **esse caminho exige confirmar o número por
    código enviado via WhatsApp** (único lugar do site com essa verificação).
+   Cada cartão mostra o nome de quem agendou: o mesmo telefone pode agendar
+   para mais de uma pessoa. A busca compara o telefone normalizado e tolera a
+   falta do nono dígito (paciente criado pelo bot fora dos DDDs 11-28).
 
 ---
 
@@ -103,14 +115,14 @@ entrar ali, não como função própria.
 
 | Método | Rota | Uso |
 |---|---|---|
-| GET | `/public/clinics/{clinicId}/bootstrap` | Clínica, serviços, profissionais, áreas — carregado uma vez no boot de cada página |
+| GET | `/public/clinics/{clinicId}/bootstrap` | Clínica, serviços, profissionais, áreas e `discountTiers` (faixas de desconto por quantidade de áreas) — carregado uma vez no boot de cada página |
 | GET | `/public/resolve-domain?host=` | Domínio próprio → `clinic_id` (só no `CustomDomainLayout`) |
 | GET | `/public/clinics/{clinicId}/availability?dates=&serviceIds=&serviceAreaPairs=` | Status por dia (`CLOSED\|FULL\|AVAILABLE`) + horários livres do mês, com a duração calculada **no backend** pelo carrinho; `window` traz o fim da janela e quando o próximo mês abre. `totalDuration` (legado) ainda é aceito e logado |
 | POST | `/public/clinics/{clinicId}/quote` | Total, desconto e valor final do carrinho (com `phone`, também primeira sessão e personalizado, mas `discountReason` vem null) — o mesmo que a criação grava |
 | POST | `/public/clinics/{clinicId}/verify/send` | Envia código por WhatsApp — só usado por "Meus agendamentos" |
 | POST | `/public/clinics/{clinicId}/verify/confirm` | Confirma o código, devolve token de sessão — idem |
-| POST | `/public/clinics/{clinicId}/appointments` | Cria o agendamento (sem token/verificação), com desconto da política e pares pós-combo; recusa data fora do mês vigente e horário que já passou |
-| GET | `/public/clinics/{clinicId}/my-appointments?phone=&token=` | Lista agendamentos do cliente (exige token) |
+| POST | `/public/clinics/{clinicId}/appointments` | Cria o agendamento (sem token/verificação), com desconto da política e pares pós-combo; recusa data fora do mês vigente e horário que já passou; 409 `HAS_FUTURE_APPOINTMENT` se o número já tem agendamento futuro e falta `confirmDuplicate: true` |
+| GET | `/public/clinics/{clinicId}/my-appointments?phone=&token=` | Lista agendamentos futuros do número, com `full_name` de cada um (exige token; telefone normalizado e tolerante ao nono dígito) |
 | POST | `/public/clinics/{clinicId}/appointments/{id}/cancel` | Cancela (exige token) |
 
 > `GET /public/clinics/{clinicId}/available-slots` (`slots.py`) ainda existe
@@ -260,5 +272,6 @@ vercel deploy --prod --yes --project booking-site   # produção
 - `docs/work/prd/013-limite-do-cloudformation.md` — por que as rotas públicas vivem numa Lambda só
 - `docs/work/prd/021-dominio-customizado-booking-site.md` + `spec/021-...` — domínio próprio por clínica
 - `docs/work/prd/023-booking-site-preco-fluxo-calendario.md` + `spec/023-...` — preço/desconto do agente, sem profissional, mês vigente
+- `docs/work/prd/024-booking-site-meus-agendamentos-aviso-nome.md` + `spec/024-...` — "Meus agendamentos" pelo telefone normalizado, faixas de desconto à vista, aviso de agendamento repetido, nome de quem agenda
 - `TASKS_LOG.md` — entradas `021-dominio-customizado` e `fix-booking-site-servico-unico` (bugs encontrados testando em produção)
 - `../CLAUDE.md` — padrões de código, comandos, diferenças em relação ao `frontend/`

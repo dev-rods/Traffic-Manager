@@ -996,35 +996,41 @@ class AppointmentService:
     def get_active_appointments_by_phone(
         self, clinic_id: str, phone: str
     ) -> List[Dict[str, Any]]:
-        patients = self.db.execute_query(
-            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL",
-            (clinic_id, phone),
-        )
+        """Os agendamentos futuros confirmados de um número, de todos os
+        pacientes que ele tenha nesta clínica.
 
-        if not patients:
+        O telefone chega como a pessoa digitou ou como o WhatsApp entregou, e
+        a comparação é feita pelas variantes normalizadas. Até 18/10/2026 a
+        comparação era exata com o que chegava: o site mandava
+        `(11) 99999-0000`, o paciente estava gravado `5511999990000`, e
+        "Meus agendamentos" respondia vazio para quem tinha acabado de
+        agendar. As variantes cobrem também o número sem o nono dígito que o
+        bot grava fora dos DDDs 11-28 (`phone.variantes_do_numero`).
+        """
+        from src.utils.phone import variantes_do_numero
+        variantes = sorted(variantes_do_numero(phone or ""))
+        if not variantes:
             return []
 
-        patient_id = str(patients[0]["id"])
-
-        appointments = self.db.execute_query(
+        return self.db.execute_query(
             """
             SELECT a.*, s.name as service_name,
                    areas_q.areas_display
             FROM scheduler.appointments a
+            JOIN scheduler.patients p ON p.id = a.patient_id
             LEFT JOIN scheduler.services s ON a.service_id = s.id
             LEFT JOIN LATERAL (
                 SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at) as areas_display
                 FROM scheduler.appointment_service_areas asa
                 WHERE asa.appointment_id = a.id
             ) areas_q ON TRUE
-            WHERE a.patient_id = %s::uuid AND a.status = 'CONFIRMED'
+            WHERE p.clinic_id = %s AND p.phone = ANY(%s) AND p.deleted_at IS NULL
+            AND a.clinic_id = %s AND a.status = 'CONFIRMED'
             AND a.appointment_date >= CURRENT_DATE
             ORDER BY a.appointment_date ASC, a.start_time ASC
             """,
-            (patient_id,),
+            (clinic_id, variantes, clinic_id),
         )
-
-        return appointments
 
     def _get_or_create_patient(self, clinic_id: str, phone: str,
                                full_name: Optional[str] = None) -> Dict[str, Any]:

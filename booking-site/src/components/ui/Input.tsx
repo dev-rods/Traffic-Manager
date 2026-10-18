@@ -1,4 +1,4 @@
-import { forwardRef } from 'react'
+import { forwardRef, useId } from 'react'
 import type { InputHTMLAttributes } from 'react'
 import { cx } from '@/utils/cx'
 
@@ -11,7 +11,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { label, error, id, className, ...props },
   ref
 ) {
-  const inputId = id ?? props.name
+  // Sem id nem name o label ficava solto: leitor de tela anunciava o campo
+  // sem nome (caso do celular e do código em "Meus agendamentos").
+  const autoId = useId()
+  const inputId = id ?? props.name ?? autoId
 
   return (
     <div className="flex flex-col gap-1.5">

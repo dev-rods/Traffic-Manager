@@ -1,0 +1,445 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Booking-site 024 (meus agendamentos, faixas, aviso, nome)",
+    "description": "PRD/Spec 024. Rode na ordem. Preencha clinicId, serviceId, areaId (de /bootstrap), dataLivre/horaLivre e dataLivre2/horaLivre2 (de /availability, mês vigente) e token (de /verify/confirm com o telefoneFormatado). O telefone de exemplo é fictício: a confirmação por WhatsApp não chega a ninguém. As duas últimas requisições cancelam o que foi criado.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "BOOKING_API_KEY",
+      "value": "YOUR_BOOKING_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "areaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "telefoneFormatado",
+      "value": "(11) 90000-0024",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "dataLivre",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "horaLivre",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "dataLivre2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "horaLivre2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId2",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Bootstrap anuncia as faixas de desconto",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/bootstrap",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "bootstrap"
+          ]
+        },
+        "description": "discountTiers = faixas por quantidade de áreas, como a cobrança as aplica. Lista vazia sem discount_rules ativa."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var t = pm.response.json().discountTiers;",
+              "pm.test(\"discountTiers é lista\", function () { pm.expect(t).to.be.an(\"array\"); });",
+              "pm.test(\"Cada faixa tem minAreas, maxAreas e pct\", function () {",
+              "    t.forEach(function (f) { pm.expect(f).to.have.keys([\"minAreas\",\"maxAreas\",\"pct\"]); });",
+              "});",
+              "pm.test(\"Só a última faixa não tem teto\", function () {",
+              "    t.slice(0, -1).forEach(function (f) { pm.expect(f.maxAreas).to.be.a(\"number\"); });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criar 1º agendamento (telefone formatado)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "description": "Telefone como o campo do site mostra. Número sem agendamento futuro: cria direto. BOOKED começa com o nome.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{telefoneFormatado}}\", \"fullName\": \"Teste 024 Ana\", \"serviceIds\": [\"{{serviceId}}\"], \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "var a = pm.response.json().appointment;",
+              "pm.test(\"Grava o nome digitado\", function () { pm.expect(a.full_name).to.eql(\"Teste 024 Ana\"); });",
+              "pm.collectionVariables.set(\"appointmentId\", a.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criar 2º sem confirmar (409 HAS_FUTURE_APPOINTMENT)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "description": "O número já tem agendamento futuro. Resposta só com a contagem: sem data, serviço nem nome.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{telefoneFormatado}}\", \"fullName\": \"Teste 024 Bia\", \"serviceIds\": [\"{{serviceId}}\"], \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}], \"date\": \"{{dataLivre2}}\", \"time\": \"{{horaLivre2}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 409\", function () { pm.response.to.have.status(409); });",
+              "var b = pm.response.json();",
+              "pm.test(\"code e contagem\", function () {",
+              "    pm.expect(b.code).to.eql(\"HAS_FUTURE_APPOINTMENT\");",
+              "    pm.expect(b.existingCount).to.be.at.least(1);",
+              "});",
+              "pm.test(\"Não entrega a agenda de ninguém\", function () {",
+              "    var s = pm.response.text();",
+              "    pm.expect(s).to.not.include(\"Teste 024\");",
+              "    pm.expect(s).to.not.include(pm.collectionVariables.get(\"dataLivre\"));",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criar 2º confirmado (confirmDuplicate)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "description": "A pessoa confirmou que quer manter os dois: cria.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{telefoneFormatado}}\", \"fullName\": \"Teste 024 Bia\", \"serviceIds\": [\"{{serviceId}}\"], \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}], \"date\": \"{{dataLivre2}}\", \"time\": \"{{horaLivre2}}\", \"confirmDuplicate\": true}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "pm.collectionVariables.set(\"appointmentId2\", pm.response.json().appointment.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meus agendamentos com telefone formatado",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/my-appointments?phone={{telefoneFormatado}}&token={{token}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "my-appointments"
+          ],
+          "query": [
+            {
+              "key": "phone",
+              "value": "{{telefoneFormatado}}"
+            },
+            {
+              "key": "token",
+              "value": "{{token}}"
+            }
+          ]
+        },
+        "description": "Antes da 024 voltava vazio: o telefone chegava formatado e era comparado sem normalizar. Token de /verify/confirm."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var l = pm.response.json().appointments;",
+              "pm.test(\"Lista os dois\", function () { pm.expect(l.length).to.be.at.least(2); });",
+              "pm.test(\"Cada um com o nome de quem agendou\", function () {",
+              "    var nomes = l.map(function (a) { return a.full_name; });",
+              "    pm.expect(nomes).to.include(\"Teste 024 Ana\");",
+              "    pm.expect(nomes).to.include(\"Teste 024 Bia\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cancelar o 1º",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments/{{appointmentId}}/cancel",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments",
+            "{{appointmentId}}",
+            "cancel"
+          ]
+        },
+        "description": "Limpeza. Mesmas variantes de telefone da listagem.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{telefoneFormatado}}\", \"token\": \"{{token}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cancelar o 2º",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments/{{appointmentId2}}/cancel",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments",
+            "{{appointmentId2}}",
+            "cancel"
+          ]
+        },
+        "description": "Limpeza.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{telefoneFormatado}}\", \"token\": \"{{token}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

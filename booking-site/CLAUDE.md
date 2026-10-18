@@ -34,6 +34,10 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
   de WhatsApp: `/availability` (duração → horários) e `/quote` (total,
   desconto, valor final). Calcular no navegador já fez o site cobrar diferente
   do WhatsApp e oferecer horário que a criação recusava (PRD 023).
+- **Agendamento repetido pede confirmação, não bloqueia.** A criação devolve
+  409 `HAS_FUTURE_APPOINTMENT` (só a contagem) e o site reenvia com
+  `confirmDuplicate: true` se a pessoa quiser manter os dois. O 409 sem `code`
+  continua sendo horário ocupado.
 - **Agenda só do mês vigente**, no fuso da clínica — a regra mora no backend
   (`scheduler/src/services/mes_vigente.py`); o front só exibe `window`.
 - Multi-tenant por `clinic_id` na URL: `/:clinicId` (lista de serviços) e
