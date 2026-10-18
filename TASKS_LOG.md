@@ -68,6 +68,8 @@ Use para rastrear o que foi implementado, refatorado ou removido.
 
 - **fix-voltar-servico-unico** Sem "Voltar" para a lista de serviços quando a clínica tem um serviço só (2026-10-18) — Pedido do Rodrigo vendo o site da Essência: o "Voltar" da primeira etapa levava a uma lista com um único serviço, já "Adicionado", e a tela confundia. O `Booking` esconde o botão nas etapas em que ele sairia do agendamento (revisão, áreas, ou agenda sem áreas) quando há um serviço só; nas etapas seguintes ele continua e volta uma etapa. A `Home` com um serviço só passa a ir direto ao agendamento também com o carrinho cheio (o "Agende online" do topo e o voltar do navegador levavam à mesma tela), sem duplicar o item. Testes: 77 no booking-site. PRD: N/A, Spec: N/A (ajuste direto).
 
+- **fix-continuar-fixo-areas** "Continuar" fixo no rodapé na escolha de áreas (2026-10-18) — Pedido do Rodrigo: a lista da Essência tem mais de 30 áreas e o "Continuar" só aparecia no fim dela, então a pessoa marcava as áreas e não via como seguir. Novo `StickyActionBar`: a ação fica presa no rodapé da tela durante a etapa de áreas, com a contagem ("2 áreas selecionadas") e o valor final da cotação ao lado, e respeita a área segura do celular. Testes: 78 no booking-site. PRD: N/A, Spec: N/A (ajuste direto).
+
 (Adicione novas linhas acima desta.)
 
 ---

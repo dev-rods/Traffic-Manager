@@ -17,6 +17,7 @@ import { CustomerInfoForm } from '@/components/CustomerInfoForm'
 import { DiscountTiersNote } from '@/components/DiscountTiersNote'
 import { ClinicWelcome } from '@/components/ClinicWelcome'
 import { SectionTitle } from '@/components/ui/SectionTitle'
+import { StickyActionBar } from '@/components/StickyActionBar'
 import { DuplicateBookingDialog } from '@/components/DuplicateBookingDialog'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
@@ -188,6 +189,26 @@ export function Booking() {
     (step === 'schedule' && !cartHasAreas(cart.items, serviceAreas))
   const showBack = !(isSingleService && backLeavesWizard)
 
+  const selectedAreaCount = cart.items.reduce((sum, item) => sum + item.areaIds.length, 0)
+  // O valor é o da cotação (com combos e desconto), o mesmo do resumo acima.
+  const areasSummary =
+    selectedAreaCount === 0 ? (
+      <span>Escolha ao menos uma área</span>
+    ) : (
+      <>
+        <span>
+          {selectedAreaCount === 1
+            ? '1 área selecionada'
+            : `${selectedAreaCount} áreas selecionadas`}
+        </span>
+        {pendingAreas.length === 0 && quote.data?.finalPriceCents != null ? (
+          <span className="font-semibold tabular-nums text-ink-900">
+            {formatCurrencyBRL(quote.data.finalPriceCents)}
+          </span>
+        ) : null}
+      </>
+    )
+
   function goBack() {
     if (step === 'cart') {
       navigate(basePath || '/')
@@ -354,11 +375,11 @@ export function Booking() {
             serviceAreas={serviceAreas}
             onToggleArea={handleToggleArea}
           />
-          <div className="mt-6 flex flex-col">
+          <StickyActionBar summary={areasSummary}>
             <Button disabled={pendingAreas.length > 0} onClick={() => setStep('schedule')}>
               Continuar
             </Button>
-          </div>
+          </StickyActionBar>
         </div>
       ) : null}
 
