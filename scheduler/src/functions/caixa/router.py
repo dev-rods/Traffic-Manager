@@ -17,6 +17,7 @@ import re
 from src.providers.payment_provider import ErroDoProvedor, PagamentoIndisponivel, provedor_ativo
 from src.services import caixa, checkin
 from src.services.db.postgres import PostgresService
+from src.services.visao_do_staff import para_o_staff
 from src.utils.acesso import require_acesso
 from src.utils.http import extract_path_param, extract_query_param, http_response, require_api_key
 
@@ -49,12 +50,12 @@ def handler(event, context):
 
         achou = DINHEIRO.match(caminho)
         if metodo == "POST" and achou:
-            _, erro = require_acesso(event, "agenda.escrever")
+            identidade, erro = require_acesso(event, "agenda.escrever")
             if erro:
                 return erro
             pagamento = checkin.marca_recebido_em_dinheiro(
                 PostgresService(), provedor_ativo(), clinic_id, achou.group(1))
-            return http_response(200, {"status": "SUCCESS", "payment": pagamento})
+            return http_response(200, para_o_staff(identidade, {"status": "SUCCESS", "payment": pagamento}))
 
         return _erro(404, "Rota não encontrada")
 

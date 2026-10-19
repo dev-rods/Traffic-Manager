@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 # siga a convenção do projeto já nasce coberto.
 SUFIXOS_DE_VALOR = (
     "price_cents",
+    "amount_cents",
+    "amountcents",
     "discount_pct",
     "total_price",
     "price",

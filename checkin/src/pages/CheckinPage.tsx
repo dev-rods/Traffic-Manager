@@ -72,7 +72,7 @@ function next(paying: Paying, payment: Payment | null): State {
   if (payment?.status === 'PENDING') {
     return { step: 'payment', ...paying, payment }
   }
-  if (appointment.finalPriceCents == null) {
+  if (appointment.finalPriceCents == null || appointment.finalPriceCents <= 0) {
     return {
       step: 'done',
       firstName,

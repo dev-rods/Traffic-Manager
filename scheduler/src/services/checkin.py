@@ -18,7 +18,6 @@ Regras que valem em todo lugar daqui:
 """
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import psycopg2
@@ -345,7 +344,7 @@ def marca_recebido_em_dinheiro(db, provider: PaymentProvider, clinic_id: str, pa
         raise CheckinInvalido("Este pagamento não está aguardando dinheiro.")
     if row["provider"] == provider.nome and row.get("provider_payment_id"):
         provider.recebe_em_dinheiro(row["provider_payment_id"], row["amount_cents"],
-                                    datetime.now(timezone.utc).date())
+                                    mes_vigente.agora_na_clinica(_fuso(db, clinic_id)).date())
     _marca(db, payment_id, PAGO)
     logger.info(f"[Checkin] dinheiro recebido {payment_id} {clinic_id}")
     rows = db.execute_query("SELECT * FROM scheduler.appointment_payments WHERE id = %s::uuid", (payment_id,))

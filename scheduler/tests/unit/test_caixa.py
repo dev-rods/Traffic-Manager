@@ -124,13 +124,15 @@ class TestRotas(unittest.TestCase):
 
     def test_baixa_em_dinheiro_e_da_recepcao(self):
         pid = str(uuid.uuid4())
-        with mock.patch(f"{self.modulo}.require_acesso", return_value=(object(), None)) as acesso, \
+        recepcao = mock.Mock(mostra_valores=False)
+        with mock.patch(f"{self.modulo}.require_acesso", return_value=(recepcao, None)) as acesso, \
                 mock.patch(f"{self.modulo}.PostgresService"), \
                 mock.patch(f"{self.modulo}.provedor_ativo"), \
                 mock.patch("src.services.checkin.marca_recebido_em_dinheiro",
-                           return_value={"id": pid, "status": "PAID"}) as baixa:
+                           return_value={"id": pid, "status": "PAID", "amountCents": 15000}) as baixa:
             s, b = self.chama("POST", f"pagamentos/{pid}/dinheiro")
         self.assertEqual((s, b["payment"]["status"]), (200, "PAID"))
+        self.assertNotIn("amountCents", b["payment"])
         self.assertEqual(acesso.call_args[0][1], "agenda.escrever")
         self.assertEqual(baixa.call_args[0][2:], (CLINIC, pid))
 
