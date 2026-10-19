@@ -1,0 +1,15 @@
+{
+  "resource": "/public/clinics/{clinicId}/checkin/{proxy+}",
+  "headers": {
+    "x-api-key": "test-api-key"
+  },
+  "httpMethod": "GET",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123",
+    "proxy": "appointments"
+  },
+  "queryStringParameters": {
+    "phone": "5511999990000",
+    "token": "<token de /verify/confirm>"
+  }
+}
