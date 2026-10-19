@@ -28,7 +28,7 @@ import logging
 from decimal import Decimal
 from typing import Callable, Dict, List, NamedTuple, Optional, Union
 
-from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
+from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA, RAZAO_PARCERIA, razao_de
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.duration_rules import normaliza_pares, servicos_sem_par
@@ -44,7 +44,7 @@ Percentual = Union[int, Decimal]
 
 __all__ = [
     "Decisao", "decide", "faixas_de_desconto", "preco_de_tabela", "texto_do_preco", "aplica_desconto",
-    "RAZAO_PERSONALIZADA", "RAZAO_PRIMEIRA_SESSAO", "RAZAO_FAIXA_2", "RAZAO_FAIXA_3",
+    "RAZAO_PERSONALIZADA", "RAZAO_PARCERIA", "RAZAO_PRIMEIRA_SESSAO", "RAZAO_FAIXA_2", "RAZAO_FAIXA_3",
 ]
 
 
@@ -83,7 +83,7 @@ def decide(
     if phone:
         personalizado = personalizado_de(db, clinic_id, phone)
         if personalizado is not None:
-            return Decisao(personalizado, RAZAO_PERSONALIZADA, False)
+            return Decisao(personalizado, razao_de(personalizado), False)
 
     rules_rows = db.execute_query(
         "SELECT * FROM scheduler.discount_rules WHERE clinic_id = %s AND is_active = TRUE",
@@ -219,6 +219,8 @@ def _rotulo(razao: Optional[str], qtd_areas: int) -> str:
         return f"{qtd_areas} áreas"
     if razao == RAZAO_PERSONALIZADA:
         return "desconto especial"
+    if razao == RAZAO_PARCERIA:
+        return "parceria"
     return ""
 
 

@@ -163,9 +163,10 @@ function LinhaDaAgenda({
         ].filter(Boolean).join(' ')}
       >
         {/* A faixa colorida carrega o mesmo significado da borda esquerda na
-            grade do desktop - parceria vence estreia, pela mesma razão de lá:
-            as duas quase sempre andam juntas e a que muda o atendimento é a
-            parceria. */}
+            grade do desktop - parceria vence estreia NA COR, pela mesma razão
+            de lá. A estreia continua dita pelo selo "1ª VEZ", que convive com
+            o "PARCERIA": quem vem por parceria pela primeira vez precisa das
+            duas informações, e só a cor não dava as duas. */}
         <span
           aria-hidden
           className={[
@@ -197,7 +198,7 @@ function LinhaDaAgenda({
                 PARCERIA
               </span>
             )}
-            {a.is_first_visit && !daParceria && (
+            {a.is_first_visit && (
               <span className="rounded bg-fuchsia-100 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-700">
                 1ª VEZ
               </span>

@@ -51,6 +51,9 @@ CASOS = (
     ("personalizado", REGRAS_PADRAO, True, Decimal("30"), 1, Decimal("30"), "personalizado", False),
     ("personalizado_zero", REGRAS_PADRAO, True, Decimal("0"), 4, Decimal("0"), "personalizado", False),
     ("personalizado_fracionado", REGRAS_PADRAO, False, Decimal("12.5"), 2, Decimal("12.5"), "personalizado", False),
+    # 100% combinado e parceria: a mesma razao que o painel grava no
+    # agendamento, para a agenda pintar igual.
+    ("parceria", REGRAS_PADRAO, True, Decimal("100"), 1, Decimal("100"), "partnership", False),
 )
 
 
@@ -155,6 +158,12 @@ class TestTextoDoPreco(unittest.TestCase):
         self.assertEqual(
             politica.texto_do_preco(20000, 17500, Decimal("12.50"), "personalizado", 1),
             "~R$ 200,00~ → R$ 175,00 (12,5% off - desconto especial)",
+        )
+
+    def test_parceria_e_dita_pelo_nome(self):
+        self.assertEqual(
+            politica.texto_do_preco(20000, 0, Decimal("100"), "partnership", 1),
+            "~R$ 200,00~ → R$ 0,00 (100% off - parceria)",
         )
 
     def test_personalizado_zero_e_sem_desconto(self):

@@ -23,7 +23,7 @@ function renderizar(props: Partial<Parameters<typeof WeekGrid>[0]> = {}) {
       onSlotClick={vi.fn()}
       onAppointmentClick={vi.fn()}
       {...props}
-    />,
+    />
   )
 }
 
@@ -94,5 +94,35 @@ describe('WeekGrid: a caixa usa a largura que tem', () => {
 
     expect(screen.getByText(/Ana Clara/)).toBeInTheDocument()
     expect(screen.queryByText(/Virilha Completa \+ ânus/)).not.toBeInTheDocument()
+  })
+})
+
+describe('WeekGrid: parceria e primeira vez convivem no mesmo card', () => {
+  const parceriaEstreando: Appointment[] = [
+    {
+      id: 'a2',
+      appointment_date: '2026-09-23',
+      start_time: '10:00:00',
+      end_time: '10:15:00',
+      status: 'CONFIRMED',
+      patient_name: 'Bia',
+      discount_pct: 100,
+      discount_reason: 'partnership',
+      is_first_visit: true,
+    } as Appointment,
+  ]
+
+  it('a cor é de parceria e o marcador "1ª" continua visível', () => {
+    renderizar({ appointments: parceriaEstreando })
+
+    const card = screen.getByRole('button', { name: /Bia/ })
+    expect(card.className).toContain('amber')
+    expect(screen.getByTitle('Primeira vez na clínica')).toBeInTheDocument()
+  })
+
+  it('na falta o marcador sai, porque a estreia não aconteceu', () => {
+    renderizar({ appointments: [{ ...parceriaEstreando[0], status: 'NO_SHOW' } as Appointment] })
+
+    expect(screen.queryByTitle('Primeira vez na clínica')).not.toBeInTheDocument()
   })
 })

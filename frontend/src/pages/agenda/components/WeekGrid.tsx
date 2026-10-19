@@ -115,9 +115,10 @@ function AppointmentBlock({
         .join(' · ')}
       className={[
         'absolute text-left rounded-md px-1.5 py-0.5 border-l-3 overflow-hidden cursor-pointer transition-opacity hover:opacity-90',
-        // Parceria vence a estreia: quem vem por parceria quase sempre esta
-        // vindo pela primeira vez, e as duas cores no mesmo card nao cabem.
-        // A que muda o atendimento e a parceria.
+        // Parceria vence a estreia NA COR: as duas no mesmo card nao cabem, e
+        // a que muda o atendimento e a parceria. A estreia continua visivel
+        // pelo marcador "1a" logo abaixo, que nao depende da cor - sem ele,
+        // parceria que tambem estreava sumia da agenda.
         //
         // Fucsia na estreia. Violeta ficava perto demais do azul padrao para
         // distinguir de relance - que e como a agenda e lida.
@@ -166,7 +167,7 @@ function AppointmentBlock({
             FALTOU
           </span>
         )}
-        {isPrimeira && !isPartnership && !faltou && (
+        {isPrimeira && !faltou && (
           <span
             title="Primeira vez na clínica"
             className="inline-block px-1 rounded bg-fuchsia-200/70 text-[10px] font-bold align-middle mr-0.5"

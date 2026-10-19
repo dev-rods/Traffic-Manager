@@ -32,6 +32,8 @@ export function CreatePatientModal({ open, onClose, onSuccess }: CreatePatientMo
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({ resolver: zodResolver(schema) })
 
@@ -110,7 +112,7 @@ export function CreatePatientModal({ open, onClose, onSuccess }: CreatePatientMo
           </div>
         </div>
 
-        <CadastroFields register={register} errors={errors} />
+        <CadastroFields register={register} errors={errors} watch={watch} setValue={setValue} />
 
         {serverError && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">

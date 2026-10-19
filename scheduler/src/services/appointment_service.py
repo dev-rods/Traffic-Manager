@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
 from src.services.desconto_personalizado import aplica as aplica_desconto
-from src.services.desconto_personalizado import RAZAO as RAZAO_PERSONALIZADA
+from src.services.desconto_personalizado import razao_de as razao_do_personalizado
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
 from src.services.politica_de_desconto import preco_de_tabela
@@ -175,7 +175,7 @@ class AppointmentService:
         if not discount_pct and not discount_reason:
             personalizado = desconto_do_paciente(self.db, clinic_id, phone)
             if personalizado is not None:
-                discount_pct, discount_reason = personalizado, RAZAO_PERSONALIZADA
+                discount_pct, discount_reason = personalizado, razao_do_personalizado(personalizado)
 
         # 2b. Auto-calculate prices when not provided by caller
         if original_price_cents is None:

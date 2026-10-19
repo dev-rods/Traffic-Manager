@@ -24,12 +24,25 @@ from typing import Optional, Union
 logger = logging.getLogger(__name__)
 
 RAZAO = "personalizado"
+# O combinado de 100% e a parceria: funcionaria, permuta, cortesia. E a mesma
+# razao que o painel grava quando a atendente escolhe "Parceria (100%)" no
+# agendamento, e por isso a agenda pinta as duas do mesmo jeito. Um combinado
+# de 100% gravado como "personalizado" aparecia como desconto comum.
+RAZAO_PARCERIA = "partnership"
 
 # Duas casas decimais: 12,5% e 33,33% sao combinados reais, e o inteiro os
 # arredondava em silencio. O percentual e gravado no agendamento tambem, entao
 # a coluna de la e NUMERIC(5,2) pelo mesmo motivo.
 CASAS = 2
 PASSO = Decimal("0.01")
+
+
+def razao_de(pct: Union[int, float, Decimal, None]) -> str:
+    """A razao gravada no agendamento para um combinado: parceria em 100%."""
+    try:
+        return RAZAO_PARCERIA if Decimal(str(pct)) == Decimal(100) else RAZAO
+    except (InvalidOperation, ValueError, TypeError):
+        return RAZAO
 
 
 def aplica(total_cents: int, pct: Union[int, float, Decimal, None]) -> int:
