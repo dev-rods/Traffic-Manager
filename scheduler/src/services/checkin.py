@@ -236,11 +236,12 @@ def cobra(db, provider: PaymentProvider, clinic_id: str, phone: str, appointment
         # Dois toques ao mesmo tempo: o outro já gravou. A cobrança desta
         # tentativa não pode ficar viva no provedor.
         logger.warning(f"[Checkin] cobrança concorrente em {appointment_id}, descartando {cobranca.id}")
-        try:
-            provider.cancela(cobranca.id)
-        except ErroDoProvedor as e:
-            logger.error(f"[Checkin] não cancelei a cobrança duplicada {cobranca.id}: {e}")
+        _cancela_orfa(provider, cobranca.id, payment_id, appointment_id)
         return pagamento_para_tela(_vivo(db, appointment_id))
+    except Exception:
+        logger.exception(f"[Checkin] cobrança {cobranca.id} criada mas não gravada em {appointment_id}")
+        _cancela_orfa(provider, cobranca.id, payment_id, appointment_id)
+        raise
 
     _guarda_cpf_no_cadastro(db, appt, cpf_pagador)
     logger.info(
@@ -248,6 +249,16 @@ def cobra(db, provider: PaymentProvider, clinic_id: str, phone: str, appointment
         f"{clinic_id} tel={_final(phone)}"
     )
     return pagamento_para_tela(row)
+
+
+def _cancela_orfa(provider: PaymentProvider, cobranca_id: str, payment_id: str, appointment_id: str) -> None:
+    try:
+        provider.cancela(cobranca_id)
+    except Exception as e:
+        logger.error(
+            f"[Checkin] cobrança órfã VIVA no provedor {provider.nome}:{cobranca_id} "
+            f"(ref {payment_id}, agendamento {appointment_id}): {e}"
+        )
 
 
 def _guarda_cpf_no_cadastro(db, appt: Dict, cpf: str) -> None:
@@ -364,7 +375,7 @@ def aplica_evento(db, provider: PaymentProvider, evento: Dict[str, Any]) -> str:
         "SELECT 1 FROM scheduler.payment_webhook_events WHERE event_id = %s", (event_id,)
     ):
         return "repetido"
-    resultado = _processa(db, provider, tipo, cobranca_id)
+    resultado = _processa(db, provider, tipo, cobranca_id, (evento.get("payment") or {}).get("externalReference"))
     db.execute_write(
         "INSERT INTO scheduler.payment_webhook_events (event_id, provider, event, provider_payment_id) "
         "VALUES (%s, 'asaas', %s, %s) ON CONFLICT (event_id) DO NOTHING",
@@ -373,7 +384,8 @@ def aplica_evento(db, provider: PaymentProvider, evento: Dict[str, Any]) -> str:
     return resultado
 
 
-def _processa(db, provider: PaymentProvider, tipo: Optional[str], cobranca_id: str) -> str:
+def _processa(db, provider: PaymentProvider, tipo: Optional[str], cobranca_id: str,
+              referencia: Optional[str] = None) -> str:
     destino = EVENTOS.get(tipo or "")
     if not destino:
         return f"ignorado: {tipo}"
@@ -383,6 +395,11 @@ def _processa(db, provider: PaymentProvider, tipo: Optional[str], cobranca_id: s
         (cobranca_id,),
     )
     if not rows:
+        if referencia and destino == PAGO:
+            logger.error(
+                f"[Checkin] {tipo} de cobrança sem registro {cobranca_id} com referência {referencia}: "
+                f"possível cobrança órfã do check-in, conferir e estornar"
+            )
         return "ignorado: cobrança desconhecida"
     row = rows[0]
 
@@ -392,16 +409,30 @@ def _processa(db, provider: PaymentProvider, tipo: Optional[str], cobranca_id: s
     if destino == PAGO and row["status"] not in VIVOS:
         # Pagou uma cobrança que já tínhamos trocado (Pix pago durante a troca
         # de método). O dinheiro entrou: esta vira a viva e a outra sai.
-        for outro in db.execute_query(
+        outros = db.execute_query(
             "SELECT * FROM scheduler.appointment_payments WHERE appointment_id = %s::uuid "
             "AND status = ANY(%s) AND id <> %s::uuid",
-            (str(row["appointment_id"]), [PENDENTE, AGUARDANDO_DINHEIRO], str(row["id"])),
-        ):
+            (str(row["appointment_id"]), [PENDENTE, AGUARDANDO_DINHEIRO, PAGO], str(row["id"])),
+        )
+        if any(o["status"] == PAGO for o in outros):
+            return _pagamento_duplicado(row, cobranca_id)
+        for outro in outros:
             try:
                 _descarta(db, provider, outro)
             except ErroDoProvedor as e:
                 logger.error(f"[Checkin] não descartei {outro['id']} após pagamento tardio: {e}")
                 _marca(db, str(outro["id"]), CANCELADO)
-    _marca(db, str(row["id"]), destino)
+    try:
+        _marca(db, str(row["id"]), destino)
+    except psycopg2.IntegrityError:
+        return _pagamento_duplicado(row, cobranca_id)
     logger.info(f"[Checkin] webhook {tipo} -> {destino} pagamento {row['id']}")
     return destino
+
+
+def _pagamento_duplicado(row: Dict, cobranca_id: str) -> str:
+    logger.error(
+        f"[Checkin] PAGAMENTO DUPLICADO: cobrança {cobranca_id} (pagamento {row['id']}) paga, mas o "
+        f"agendamento {row['appointment_id']} já tem outro pago. Estornar esta cobrança."
+    )
+    return "conflito: pagamento duplicado"
