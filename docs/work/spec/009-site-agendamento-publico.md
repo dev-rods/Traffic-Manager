@@ -37,6 +37,7 @@ Base: mesma API Gateway do `scheduler` (`serverless.yml` atual), path prefix `/p
 **Token de verificação**: `base64url(clinicId|phone_normalizado|expiresAtEpoch|hmac_sha256(BOOKING_VERIFICATION_SECRET, clinicId|phone|expiresAt))`. Stateless — não precisa de tabela própria. Validado em toda mutação/consulta que exige posse do telefone.
 
 **Rate limit do OTP**: no item do DynamoDB, contador `send_count` + `window_started_at`; máx. 3 envios / 15 min por (clinic_id, phone). Código de 6 dígitos, máx. 5 tentativas de confirmação antes de invalidar e exigir reenvio.
+> **Atualização (PRD 026, 19/10/2026):** o limite de envios foi removido, por decisão do Rodrigo, porque travava a paciente no check-in do iPad. Continua valendo o limite de 5 tentativas erradas por código. Vale para o booking-site quando a branch da 026 for para produção.
 
 ---
 

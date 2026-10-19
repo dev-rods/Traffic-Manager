@@ -14,8 +14,11 @@ export const checkinService = {
     api.get<BootstrapResponse>(`${base(clinicId)}/bootstrap`).then((r) => r.data),
 
   // O mesmo código por WhatsApp de "Meus agendamentos" no site.
+  // `devCode` só vem em dev, quando o WhatsApp da clínica de teste está fora.
   sendCode: (clinicId: string, phone: string) =>
-    api.post(`${base(clinicId)}/verify/send`, { phone }).then(() => undefined),
+    api
+      .post<{ devCode?: string }>(`${base(clinicId)}/verify/send`, { phone })
+      .then((r) => r.data.devCode ?? null),
 
   confirmCode: (clinicId: string, phone: string, code: string) =>
     api

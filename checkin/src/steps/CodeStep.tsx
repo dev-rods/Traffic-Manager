@@ -11,17 +11,20 @@ const LENGTH = 6
 export function CodeStep({
   clinicId,
   phone,
+  devCode,
   onVerified,
   onChangePhone,
 }: {
   clinicId: string
   phone: string
+  devCode: string | null
   onVerified: (token: string) => void
   onChangePhone: () => void
 }) {
   const [code, setCode] = useState('')
   const confirm = useConfirmCode(clinicId)
   const resend = useSendCode(clinicId)
+  const shownDevCode = resend.data ?? devCode
 
   function change(next: string) {
     setCode(next)
@@ -37,6 +40,13 @@ export function CodeStep({
       <StepHeader title="Digite o código">
         Enviamos para o WhatsApp {formatPhone(phone.slice(2))}.
       </StepHeader>
+      {shownDevCode ? (
+        // Só em dev, com o WhatsApp da clínica de teste fora do ar.
+        <p className="rounded-2xl border border-accent-200 bg-accent-50 px-5 py-3 text-center text-base text-accent-700">
+          Ambiente de teste, sem WhatsApp. Seu código é{' '}
+          <strong className="font-bold tabular-nums">{shownDevCode}</strong>.
+        </p>
+      ) : null}
       <div className="flex justify-center gap-2" aria-label="Código digitado">
         {Array.from({ length: LENGTH }).map((_, i) => (
           <span
