@@ -1,0 +1,639 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Check-in 026 (autoatendimento com pagamento)",
+    "description": "PRD/Spec 026. Só dev. Rode na ordem. Preencha clinicId, phone (com agendamento futuro), token (de /verify/confirm com o mesmo phone) e cpf (válido). Sem ASAAS_API_KEY, dev usa o provedor simulado.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "BOOKING_API_KEY",
+      "value": "YOUR_BOOKING_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "phone",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cpf",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pixPaymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Agendamentos do número",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments?phone={{phone}}&token={{token}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "appointments"
+          ],
+          "query": [
+            {
+              "key": "phone",
+              "value": "{{phone}}"
+            },
+            {
+              "key": "token",
+              "value": "{{token}}"
+            }
+          ]
+        },
+        "description": "Próximos agendamentos confirmados do número (até 5). Exige o token do código de WhatsApp."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var l = pm.response.json().appointments;",
+              "pm.test(\"Tem agendamento\", function () { pm.expect(l.length).to.be.above(0); });",
+              "pm.collectionVariables.set(\"appointmentId\", l[0].id);",
+              "pm.test(\"Campos da tela\", function () { pm.expect(l[0]).to.include.keys([\"fullName\",\"date\",\"startTime\",\"areas\",\"finalPriceCents\",\"checkedInAt\",\"payment\"]); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sem token (401)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments?phone={{phone}}&token=invalido",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "appointments"
+          ],
+          "query": [
+            {
+              "key": "phone",
+              "value": "{{phone}}"
+            },
+            {
+              "key": "token",
+              "value": "invalido"
+            }
+          ]
+        },
+        "description": "Token de outro número ou vencido."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 401\", function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Confirmar (check-in)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/confirm",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "appointments",
+            "{{appointmentId}}",
+            "confirm"
+          ]
+        },
+        "description": "Grava checked_in_at. payerCpfKnown diz se a tela precisa pedir CPF.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"checkedIn\", function () { pm.expect(pm.response.json().checkedIn).to.eql(true); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pix com CPF inválido (400)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/payments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "appointments",
+            "{{appointmentId}}",
+            "payments"
+          ]
+        },
+        "description": "Dígitos verificadores conferidos antes de ir ao Asaas.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"method\": \"PIX\", \"cpf\": \"529.982.247-24\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pix",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/payments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "appointments",
+            "{{appointmentId}}",
+            "payments"
+          ]
+        },
+        "description": "Cria a cobrança Pix. Em dev sem chave do Asaas, provedor simulado.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"method\": \"PIX\", \"cpf\": \"{{cpf}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "var p = pm.response.json().payment;",
+              "pm.test(\"Pix pendente com copia e cola\", function () { pm.expect(p.status).to.eql(\"PENDING\"); pm.expect(p.pixPayload).to.be.a(\"string\"); });",
+              "pm.collectionVariables.set(\"pixPaymentId\", p.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trocar para crédito",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/payments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "appointments",
+            "{{appointmentId}}",
+            "payments"
+          ]
+        },
+        "description": "Cancela o Pix no provedor e cria a cobrança de cartão (fatura com crédito e débito).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"method\": \"CREDIT_CARD\", \"cpf\": \"{{cpf}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "var p = pm.response.json().payment;",
+              "pm.test(\"Fatura\", function () { pm.expect(p.invoiceUrl).to.be.a(\"string\"); });",
+              "pm.collectionVariables.set(\"paymentId\", p.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pix antigo ficou cancelado",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/payments/{{pixPaymentId}}?phone={{phone}}&token={{token}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "payments",
+            "{{pixPaymentId}}"
+          ],
+          "query": [
+            {
+              "key": "phone",
+              "value": "{{phone}}"
+            },
+            {
+              "key": "token",
+              "value": "{{token}}"
+            }
+          ]
+        },
+        "description": ""
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Cancelado\", function () { pm.expect(pm.response.json().payment.status).to.eql(\"CANCELLED\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Simular pagamento (só dev)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/payments/{{paymentId}}/simulate",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "payments",
+            "{{paymentId}}",
+            "simulate"
+          ]
+        },
+        "description": "Existe apenas com o provedor simulado.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Pago\", function () { pm.expect(pm.response.json().payment.status).to.eql(\"PAID\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Status do pagamento",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/payments/{{paymentId}}?phone={{phone}}&token={{token}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "payments",
+            "{{paymentId}}"
+          ],
+          "query": [
+            {
+              "key": "phone",
+              "value": "{{phone}}"
+            },
+            {
+              "key": "token",
+              "value": "{{token}}"
+            }
+          ]
+        },
+        "description": "O que a tela consulta a cada 3 s. Pendente no Asaas, o backend pergunta ao Asaas."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Já pago não cobra de novo",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/payments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "appointments",
+            "{{appointmentId}}",
+            "payments"
+          ]
+        },
+        "description": "Pedir outro método depois de pago devolve o pagamento pago.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"method\": \"CASH\", \"cpf\": \"{{cpf}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "pm.test(\"Mesmo pagamento\", function () { pm.expect(pm.response.json().payment.id).to.eql(pm.collectionVariables.get(\"paymentId\")); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhook sem token (401)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/asaas/webhook",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "asaas",
+            "webhook"
+          ]
+        },
+        "description": "O Asaas manda o authToken no header asaas-access-token.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"id\": \"evt_x\", \"event\": \"PAYMENT_RECEIVED\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 401\", function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

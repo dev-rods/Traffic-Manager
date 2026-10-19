@@ -108,6 +108,12 @@ que a pessoa agendou. Não há cardápio, só confirmação e pagamento.
 
 ## 7. Status
 
-- [ ] Spec gerada
-- [ ] Implementado
-- [ ] Deploy dev
+- [x] Spec gerada (`spec/026-checkin-autoatendimento.md`)
+- [x] Implementado (2026-10-19)
+- [x] Deploy dev (2026-10-19): backend `clinic-scheduler-infra-dev` com
+  create-deployment, migrations só da 026 no banco de dev, app no projeto
+  Vercel `checkin-dev` (https://checkin-dev-ten.vercel.app/{clinicId}). Ver
+  `scheduler/tests/integration/026-checkin-autoatendimento.md`.
+- [ ] Chave de sandbox do Asaas (`/dev/ASAAS_API_KEY`) e webhook
+  (`/dev/ASAAS_WEBHOOK_TOKEN`), para sair do provedor simulado
+- [ ] Produção (conta Asaas por clínica)
