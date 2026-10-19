@@ -10,10 +10,9 @@ do CloudFormation e cada rota HTTP custa ~4; a coringa custa ~4 no total.
     POST appointments/{id}/payments       {phone, token, method, cpf?}
     GET  payments/{id}                    ?phone&token
     POST payments/{id}/simulate           {phone, token}       só provedor simulado (dev)
-    POST payments/{id}/cash-received      chave do painel      a recepção recebeu em dinheiro
 
-Tudo, menos a baixa em dinheiro, exige a chave do booking-site E o token do
-código de WhatsApp (o mesmo de "Meus agendamentos"): sem ele, quem digitasse
+A baixa em dinheiro é da recepção e mora no painel (`functions/caixa`), não
+aqui. Tudo exige a chave do booking-site E o token do código de WhatsApp (o mesmo de "Meus agendamentos"): sem ele, quem digitasse
 o número de outra pessoa veria e pagaria a sessão dela.
 """
 import logging
@@ -25,7 +24,7 @@ from src.services.db.postgres import PostgresService
 from src.utils.booking_verification import verify_token
 from src.utils.http import (
     extract_path_param, extract_query_param, http_response, parse_body,
-    require_api_key, require_booking_intake_api_key,
+    require_booking_intake_api_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,7 +37,6 @@ ROTAS = (
     ("POST", re.compile(rf"^appointments/({UUID})/payments$"), "cobra"),
     ("GET", re.compile(rf"^payments/({UUID})$"), "status"),
     ("POST", re.compile(rf"^payments/({UUID})/simulate$"), "simula"),
-    ("POST", re.compile(rf"^payments/({UUID})/cash-received$"), "dinheiro"),
 )
 
 
@@ -66,13 +64,6 @@ def handler(event, context):
 
     try:
         db = PostgresService()
-
-        if nome == "dinheiro":
-            _, erro = require_api_key(event, body)
-            if erro:
-                return erro
-            pagamento = checkin.marca_recebido_em_dinheiro(db, provedor_ativo(), clinic_id, recurso_id)
-            return http_response(200, {"status": "SUCCESS", "payment": pagamento})
 
         _, erro = require_booking_intake_api_key(event, body)
         if erro:

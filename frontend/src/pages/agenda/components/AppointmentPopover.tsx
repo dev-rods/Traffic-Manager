@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
 import type { Appointment } from '@/types'
+import { PagamentoDoAgendamento } from './PagamentoDoAgendamento'
 
 const DISCOUNT_LABELS: Record<string, string> = {
   first_session: '1a sessao',
@@ -199,6 +200,9 @@ export function AppointmentPopover({
             </div>
           </div>
         )}
+
+        {/* Check-in e pagamento do iPad (PRD 026). Cancelado não cobra. */}
+        {!isCancelled && <PagamentoDoAgendamento appointment={a} />}
 
         {/* Notes */}
         {a.notes && (

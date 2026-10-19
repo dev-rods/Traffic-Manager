@@ -4,6 +4,13 @@ import { AppointmentPopover } from './AppointmentPopover'
 import { AgendaDoDia } from './AgendaDoDia'
 import type { Appointment, AvailabilityRule } from '@/types'
 
+// O detalhe do agendamento agora mostra o pagamento do iPad (PRD 026), que usa
+// mutation e toast. Fora do assunto destes testes: mocks inertes.
+vi.mock('@/hooks/useCaixa', () => ({
+  useReceberDinheiro: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false, data: undefined }),
+}))
+vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
+
 /**
  * Falta (`NO_SHOW`) é diferente de cancelamento, e a agenda tem de mostrar isso.
  *

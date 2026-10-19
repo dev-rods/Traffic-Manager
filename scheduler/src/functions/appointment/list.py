@@ -77,7 +77,15 @@ def handler(event, context):
                 s.name as service_name,
                 pr.name as professional_name,
                 areas_q.areas_display as areas,
-                area_ids_q.area_ids
+                area_ids_q.area_ids,
+                -- Check-in e pagamento do iPad (PRD 026). O pagamento é o VIVO
+                -- (pendente, aguardando dinheiro ou pago); tentativas
+                -- canceladas ficam no caixa, não aqui. O valor sai com sufixo
+                -- de preço para `para_o_staff` esconder de quem não vê valores.
+                a.checked_in_at,
+                vivo.id AS payment_id, vivo.method AS payment_method,
+                vivo.status AS payment_status, vivo.paid_at AS payment_paid_at,
+                vivo.amount_cents AS payment_price_cents
             FROM scheduler.appointments a
             LEFT JOIN scheduler.patients p ON a.patient_id = p.id
             LEFT JOIN scheduler.services s ON a.service_id = s.id
@@ -92,6 +100,12 @@ def handler(event, context):
                 FROM scheduler.appointment_service_areas asa
                 WHERE asa.appointment_id = a.id
             ) area_ids_q ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT pay.id, pay.method, pay.status, pay.paid_at, pay.amount_cents
+                FROM scheduler.appointment_payments pay
+                WHERE pay.appointment_id = a.id AND pay.status IN ('PENDING', 'AWAITING_CASH', 'PAID')
+                LIMIT 1
+            ) vivo ON TRUE
             WHERE a.clinic_id = %s
         """
         params = [clinic_id]

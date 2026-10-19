@@ -132,6 +132,7 @@ functions:
   - ${file(sls/functions/lead/interface.yml)}
   - ${file(sls/functions/attendant/interface.yml)}
   - ${file(sls/functions/public_booking/interface.yml)}
+  - ${file(sls/functions/caixa/interface.yml)}
   - ${file(sls/functions/outbound/interface.yml)}
   - ${file(sls/functions/atendimento/interface.yml)}
   - ${file(sls/functions/tarefa/interface.yml)}
