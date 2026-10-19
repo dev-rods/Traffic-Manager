@@ -18,7 +18,7 @@ import { formatCurrencyBRL } from '@/utils/format'
 type State =
   | { step: 'start' }
   | { step: 'phone' }
-  | { step: 'code'; phone: string }
+  | { step: 'code'; phone: string; devCode: string | null }
   | { step: 'appointment'; session: Session }
   | ({ step: 'method' } & Paying)
   | ({ step: 'cpf'; method: PaymentMethod } & Paying)
@@ -132,13 +132,17 @@ export function CheckinPage() {
         ) : null}
 
         {state.step === 'phone' ? (
-          <PhoneStep clinicId={clinicId} onSent={(phone) => go({ step: 'code', phone })} />
+          <PhoneStep
+            clinicId={clinicId}
+            onSent={(phone, devCode) => go({ step: 'code', phone, devCode })}
+          />
         ) : null}
 
         {state.step === 'code' ? (
           <CodeStep
             clinicId={clinicId}
             phone={state.phone}
+            devCode={state.devCode}
             onVerified={(token) =>
               go({ step: 'appointment', session: { phone: state.phone, token } })
             }

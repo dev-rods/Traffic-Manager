@@ -71,7 +71,7 @@ beforeEach(() => {
   vi.mocked(checkinService.bootstrap).mockResolvedValue({
     clinic: { clinic_id: 'c1', name: 'Clínica X', display_name: 'Essência', logo_url: null },
   })
-  vi.mocked(checkinService.sendCode).mockResolvedValue(undefined)
+  vi.mocked(checkinService.sendCode).mockResolvedValue(null)
   vi.mocked(checkinService.confirmCode).mockResolvedValue('tok')
   vi.mocked(checkinService.appointments).mockResolvedValue([ANA])
   vi.mocked(checkinService.confirm).mockResolvedValue({ payerCpfKnown: true })
@@ -229,6 +229,15 @@ describe('Check-in', () => {
     })
     expect(await screen.findByRole('button', { name: 'Fazer check-in' })).toBeInTheDocument()
     expect(screen.queryByText('Ana Souza')).not.toBeInTheDocument()
+  })
+
+  it('dev sem WhatsApp: mostra o código de teste na tela', async () => {
+    vi.mocked(checkinService.sendCode).mockResolvedValue('654321')
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Fazer check-in' }))
+    await typeDigits('11999990000')
+    await userEvent.click(screen.getByRole('button', { name: 'Receber código' }))
+    expect(await screen.findByText(/Ambiente de teste/)).toHaveTextContent('654321')
   })
 
   it('"Recomeçar" volta ao início a qualquer momento', async () => {

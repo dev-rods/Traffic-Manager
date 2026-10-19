@@ -23,6 +23,7 @@ import logging
 import os
 import random
 import time
+from typing import Optional
 
 import boto3
 
@@ -33,14 +34,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 CODE_TTL_SECONDS = 5 * 60
-MAX_SEND_PER_WINDOW = 3
-SEND_WINDOW_SECONDS = 15 * 60
+# Sem limite de envios por janela: até 19/10/2026 eram 3 códigos a cada 15
+# min por número, e a paciente travava no "Muitos códigos solicitados" no
+# check-in do iPad (reenviar e recomeçar também contavam). Decisão do Rodrigo
+# (PRD 026): tirar. O que continua protegendo o código é o limite de
+# tentativas ERRADAS por código, abaixo.
 MAX_VERIFY_ATTEMPTS = 5
 TOKEN_TTL_SECONDS = 15 * 60
-
-
-class RateLimitedError(Exception):
-    pass
 
 
 class InvalidCodeError(Exception):
@@ -59,28 +59,22 @@ def _item_key(clinic_id: str, phone: str) -> str:
     return f"{clinic_id}#{normalize_phone(phone)}"
 
 
-def generate_and_send_code(clinic: dict, phone: str) -> None:
+def generate_and_send_code(clinic: dict, phone: str) -> Optional[str]:
     """Gera um código de 6 dígitos, persiste com TTL e envia por WhatsApp.
 
-    Levanta RateLimitedError se o (clinic_id, phone) excedeu o limite de
-    envios na janela atual, ou SendFailedError se o z-api falhar.
+    Levanta SendFailedError se o z-api falhar. Cada pedido gera um código
+    novo, que substitui o anterior.
+
+    Só em dev (`STAGE=dev`), se o WhatsApp falhar, devolve o código em vez
+    de levantar: a clínica de teste não tem instância do z-api, e sem isso
+    ninguém consegue testar o login do check-in (PRD 026). Em qualquer outro
+    stage devolve None e o código só existe no WhatsApp da pessoa.
     """
     clinic_id = clinic["clinic_id"]
     phone = normalize_phone(phone)
     table = _table()
     pk = _item_key(clinic_id, phone)
     now = int(time.time())
-
-    item = table.get_item(Key={"clinic_phone": pk}).get("Item")
-    if item and int(item.get("window_started_at", 0)) > now - SEND_WINDOW_SECONDS:
-        if int(item.get("send_count", 0)) >= MAX_SEND_PER_WINDOW:
-            logger.warning(f"[BookingVerification] Rate limit atingido: clinic={clinic_id}")
-            raise RateLimitedError("Muitos códigos solicitados. Tente novamente em alguns minutos.")
-        send_count = int(item["send_count"]) + 1
-        window_started_at = int(item["window_started_at"])
-    else:
-        send_count = 1
-        window_started_at = now
 
     code = f"{random.randint(0, 999999):06d}"
     table.put_item(
@@ -91,8 +85,6 @@ def generate_and_send_code(clinic: dict, phone: str) -> None:
             "verified": False,
             "created_at": now,
             "expires_at": now + CODE_TTL_SECONDS,
-            "send_count": send_count,
-            "window_started_at": window_started_at,
         }
     )
 
@@ -105,9 +97,13 @@ def generate_and_send_code(clinic: dict, phone: str) -> None:
     result = provider.send_text(phone, message)
     if not result.success:
         logger.error(f"[BookingVerification] Falha ao enviar código via WhatsApp: {result.error}")
+        if os.environ.get("STAGE") == "dev":
+            logger.warning(f"[BookingVerification] dev: código devolvido na resposta (clinic={clinic_id})")
+            return code
         raise SendFailedError("Não foi possível enviar o código por WhatsApp. Tente novamente.")
 
-    logger.info(f"[BookingVerification] Código enviado: clinic={clinic_id} sendCount={send_count}")
+    logger.info(f"[BookingVerification] Código enviado: clinic={clinic_id}")
+    return None
 
 
 def confirm_code(clinic_id: str, phone: str, code: str) -> str:

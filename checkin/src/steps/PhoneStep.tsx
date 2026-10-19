@@ -10,7 +10,7 @@ export function PhoneStep({
   onSent,
 }: {
   clinicId: string
-  onSent: (apiPhone: string) => void
+  onSent: (apiPhone: string, devCode: string | null) => void
 }) {
   const [digits, setDigits] = useState('')
   const sendCode = useSendCode(clinicId)
@@ -18,7 +18,7 @@ export function PhoneStep({
 
   function submit() {
     const phone = toApiPhone(digits)
-    sendCode.mutate(phone, { onSuccess: () => onSent(phone) })
+    sendCode.mutate(phone, { onSuccess: (devCode) => onSent(phone, devCode) })
   }
 
   return (
