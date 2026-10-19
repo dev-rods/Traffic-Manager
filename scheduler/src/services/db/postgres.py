@@ -38,6 +38,12 @@ class PostgresService:
         conn = self._pool.getconn()
         try:
             yield conn
+        except Exception:
+            # Sem isto, uma escrita que falha (ex.: índice único) devolvia a
+            # conexão ao pool com a transação abortada, e a PRÓXIMA consulta
+            # nela falhava com "current transaction is aborted".
+            conn.rollback()
+            raise
         finally:
             self._pool.putconn(conn)
 
