@@ -63,6 +63,16 @@ logger = logging.getLogger(__name__)
 # 08/10/2026 em duas conversas. Depois destas rodadas ha UMA chamada de
 # fechamento, sem ferramentas, para responder com o que ja foi apurado.
 MAX_AGENT_ITERATIONS = 10
+# Teto de saida por chamada. Era 1024 e, em 17/10/2026, uma present_options
+# com os horarios de duas areas em tres dias nao coube: a API cortou no meio
+# do bloco de ferramenta, devolveu conteudo vazio e o bot calou sem log. Saida
+# custa pouco perto da entrada (o prompt e ~15k tokens em cache).
+MAX_TOKENS_DE_SAIDA = 2048
+PEDIDO_DE_VERSAO_CURTA = (
+    "PARE. Sua resposta anterior foi cortada por tamanho ou veio vazia. Responda "
+    "de novo em no maximo tres frases curtas. Se for apresentar horarios, "
+    "ofereca no maximo tres opcoes e pergunte se algum serve."
+)
 MAX_HISTORY_PAIRS = 20
 # O prazo vive em bot_policy: era a mesma regra escrita em cinco lugares,
 # e regra duplicada diverge em silencio quando alguem muda so um deles.
@@ -576,6 +586,7 @@ class ConversationAgent:
         ja_refez_cadastro = False
         ja_refez_narracao = False
         ja_refez_valor = False
+        ja_refez_truncada = False
         em_campanha = campanha_viva(session)
         # O contador do quebra-laço atravessa turnos: cada pergunta da trava é
         # uma mensagem nova, e um contador de uma rodada só veria a primeira
@@ -624,7 +635,7 @@ class ConversationAgent:
                     system=system_prompt,
                     messages=history,
                     tools=tools,
-                    max_tokens=1024,
+                    max_tokens=MAX_TOKENS_DE_SAIDA,
                     tool_choice=forcar_tool,
                 )
 
@@ -666,6 +677,42 @@ class ConversationAgent:
                     break
 
                 stop_reason = response.get("stop_reason", "end_turn")
+
+                # Resposta cortada pelo teto de saida, ou vazia: nao e resposta.
+                # Em 17/10/2026 a rodada veio com stop_reason=max_tokens, sem
+                # texto e sem ferramenta (a API omite o bloco de tool_use que
+                # ficou pela metade), e o agente tratou o vazio como resposta
+                # final - zero mensagens, zero log, e a paciente dois dias sem
+                # resposta. Com ferramenta inteira no conteudo o corte nao
+                # importa: o que veio e valido e segue para execucao.
+                texto_da_rodada = "\n".join(current_text_parts).strip()
+                cortada = stop_reason == "max_tokens" and not tool_uses
+                # Vazio so e vazio se o turno nao tem mais nada a entregar:
+                # FAQ ja escolhido, opcoes ja apresentadas ou handoff pedido
+                # saem com texto nenhum do modelo, de proposito.
+                turno_ja_tem_saida = bool(pending_buttons or faq_entregues or handoff_requested)
+                vazia = not tool_uses and not texto_da_rodada and not turno_ja_tem_saida
+                if cortada or vazia:
+                    logger.error(
+                        f"[Truncada] {phone}: stop_reason={stop_reason} | "
+                        f"texto={len(texto_da_rodada)} chars | tools={len(tool_uses)}"
+                    )
+                    if not ja_refez_truncada and not fechando:
+                        ja_refez_truncada = True
+                        if content_blocks:
+                            history.append({"role": "assistant", "content": content_blocks})
+                            history.append({"role": "user", "content": PEDIDO_DE_VERSAO_CURTA})
+                        else:
+                            # Turno de assistente vazio e invalido na API.
+                            _anexa_ao_turno_do_usuario(history, PEDIDO_DE_VERSAO_CURTA)
+                        text_parts = []
+                        continue
+                    # Segunda vez, ou ja era o fechamento: uma pessoa assume.
+                    # Silencio nunca.
+                    text_parts = []
+                    tool_uses = []
+                    esgotou = True
+                    break
 
                 if not tool_uses:
                     # Resposta final: confere antes de aceitar. Data e horário
