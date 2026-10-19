@@ -103,6 +103,7 @@ class TestSendComCampanha(unittest.TestCase):
         db.execute_query.return_value = [{"clinic_id": "c1", "name": "X", "use_agent": True,
                                           **(clinica or {})}]
         evento = {"headers": {"x-api-key": "k"}, "body": json.dumps(corpo)}
+        self.gravou = mock.MagicMock(return_value=True)
 
         with mock.patch.object(modulo, "require_api_key", return_value=("k", None)), \
              mock.patch.object(modulo, "PostgresService", return_value=db), \
@@ -111,21 +112,59 @@ class TestSendComCampanha(unittest.TestCase):
              mock.patch.object(modulo, "_tabela_de_sessoes"), \
              mock.patch.object(modulo, "_sessao", return_value=dict(sessao)), \
              mock.patch.object(modulo, "_agora", return_value=agora), \
+             mock.patch.object(modulo, "grava_atendimento", self.gravou), \
              mock.patch.object(modulo, "abre_campanha", return_value=True):
             resposta = modulo.handler(evento, None)
         return resposta, provider
 
     BASE = {"clinicId": "c1", "phone": "5511999990000", "type": "text", "content": "oi"}
 
-    def test_campanha_em_cooldown_e_409_com_motivo(self):
-        resposta, provider = self._dispara({**self.BASE, "campanha": {"datas": ["2026-10-07"]}}, em_cooldown())
-        self.assertEqual(resposta["statusCode"], 409)
-        self.assertEqual(json.loads(resposta["body"])["motivo"], "cooldown")
-        provider.send_text.assert_not_called()
+    def _sessao_gravada(self):
+        """A sessao que o handler mandou gravar ao destravar."""
+        self.gravou.assert_called_once()
+        return self.gravou.call_args.args[3]
 
-    def test_campanha_com_pessoa_e_409(self):
-        resposta, _ = self._dispara({**self.BASE, "campanha": {"datas": ["2026-10-07"]}}, com_pessoa())
-        self.assertEqual(json.loads(resposta["body"])["motivo"], "atendimento_humano")
+    def test_campanha_em_cooldown_destrava_e_envia(self):
+        """Quem marcou "o bot conduz" decidiu que ele pode falar: cooldown e
+        pausa por resposta no celular nao fazem o disparo falhar (19/10/2026)."""
+        resposta, provider = self._dispara({**self.BASE, "campanha": {"datas": ["2026-10-07"]}}, em_cooldown())
+        self.assertEqual(resposta["statusCode"], 200, resposta["body"])
+        provider.send_text.assert_called_once()
+        gravada = self._sessao_gravada()
+        self.assertEqual(at.estado(gravada, AGORA), at.BOT_ACTIVE)
+        self.assertTrue(gravada["bot_enabled"])
+
+    def test_campanha_com_pessoa_destrava_e_envia(self):
+        resposta, provider = self._dispara({**self.BASE, "campanha": {"datas": ["2026-10-07"]}}, com_pessoa())
+        self.assertEqual(resposta["statusCode"], 200, resposta["body"])
+        provider.send_text.assert_called_once()
+        self.assertEqual(at.estado(self._sessao_gravada(), AGORA), at.BOT_ACTIVE)
+
+    def test_porta_aberta_nao_grava_atendimento_a_toa(self):
+        self._dispara({**self.BASE, "campanha": {"datas": ["2026-10-07"]}}, {})
+        self.gravou.assert_not_called()
+
+    def test_envio_que_falhou_nao_destrava(self):
+        """A conversa so solta do atendente se a mensagem saiu."""
+        from src.functions.send import handler as modulo
+        provider = mock.MagicMock()
+        provider.send_text.return_value = mock.MagicMock(success=False, error="x", raw_response={})
+        db = mock.MagicMock()
+        db.execute_query.return_value = [{"clinic_id": "c1", "name": "X", "use_agent": True}]
+        gravou = mock.MagicMock(return_value=True)
+        evento = {"headers": {"x-api-key": "k"},
+                  "body": json.dumps({**self.BASE, "campanha": {"datas": ["2026-10-07"]}})}
+        with mock.patch.object(modulo, "require_api_key", return_value=("k", None)), \
+             mock.patch.object(modulo, "PostgresService", return_value=db), \
+             mock.patch.object(modulo, "get_provider", return_value=provider), \
+             mock.patch.object(modulo, "MessageTracker"), \
+             mock.patch.object(modulo, "_tabela_de_sessoes"), \
+             mock.patch.object(modulo, "_sessao", return_value=com_pessoa()), \
+             mock.patch.object(modulo, "_agora", return_value=AGORA), \
+             mock.patch.object(modulo, "grava_atendimento", gravou), \
+             mock.patch.object(modulo, "abre_campanha", return_value=True):
+            modulo.handler(evento, None)
+        gravou.assert_not_called()
 
     def test_campanha_de_madrugada_e_409(self):
         resposta, _ = self._dispara({**self.BASE, "campanha": {"datas": ["2026-10-07"]}}, {},

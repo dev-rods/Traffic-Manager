@@ -13,6 +13,23 @@ export interface BatchMessageResult {
 }
 
 const DELIVERY_POLL_INTERVAL_MS = 10_000
+
+/** Os motivos do /send (409), em palavras que a recepcao entende. */
+const MOTIVOS: Record<string, string> = {
+  bot_da_clinica_pausado: 'o bot da clínica está pausado',
+  janela_de_silencio: 'fora do horário de atendimento',
+  atendimento_humano: 'conversa em atendimento humano',
+  cooldown: 'conversa recém-atendida por pessoa',
+}
+
+/** O que dizer de um envio que falhou: o motivo do backend quando houver. */
+export function descreveFalha(err: unknown): string {
+  const resposta = (err as { response?: { data?: { motivo?: string; message?: string } } } | null)?.response
+  const motivo = resposta?.data?.motivo
+  if (motivo) return MOTIVOS[motivo] ?? motivo
+  if (resposta?.data?.message) return resposta.data.message
+  return err instanceof Error ? err.message : 'Erro desconhecido'
+}
 const DELIVERY_POLL_MAX_ATTEMPTS = 6
 
 export function useSendBatchMessages() {
@@ -116,7 +133,7 @@ export function useSendBatchMessages() {
           sentForPolling.push({ providerMessageId, sentAtIso })
         }
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Erro desconhecido'
+        const message = descreveFalha(err)
         setResults((prev) =>
           prev.map((r) =>
             r.patientId === payload.patient_id ? { ...r, status: 'failed', error: message } : r,
