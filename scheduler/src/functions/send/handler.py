@@ -12,7 +12,7 @@ from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import get_provider
 from src.services import atendimento
 from src.services.campanha import DURACAO_PADRAO_DIAS, abre
-from src.services.session_store import abre_campanha
+from src.services.session_store import abre_campanha, grava_atendimento
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -40,6 +40,17 @@ def _agora():
     """Epoch UTC. Funcao para o teste fixar o relogio."""
     import time
     return int(time.time())
+
+
+# Estados que o disparo com bot DESTRAVA em vez de recusar. Sao os mesmos que
+# o botao "Retomar bot" limpa: quem marcou "o bot conduz" na tela decidiu que
+# ele pode falar com esta pessoa, e a pausa de 24h que uma resposta pelo
+# celular deixa nao e motivo para o disparo falhar (19/10/2026: um envio da
+# Essencia voltou "atendimento_humano" e a tela so disse "Falhou").
+#
+# Bot da clinica pausado e janela de silencio continuam recusando: um e
+# decisao da clinica inteira, o outro e horario.
+MOTIVOS_QUE_O_DISPARO_DESTRAVA = frozenset({"atendimento_humano", "cooldown"})
 
 
 def _motivo_para_nao_iniciar(clinic, sessao, agora):
@@ -165,11 +176,16 @@ def handler(event, context):
         # O operador decidiu isso na tela, entao a politica da clinica nao
         # entra; so o estado da conversa pode barrar. Sem campanha e a
         # atendente mandando mensagem a mao - nada barra.
+        destrava = None
         if campanha_pedida is not None:
             sessao = _sessao(clinic_id, phone)
             agora = _agora()
             motivo = _motivo_para_nao_iniciar(clinic, sessao, agora)
-            if motivo:
+            if motivo in MOTIVOS_QUE_O_DISPARO_DESTRAVA:
+                # Libera DEPOIS de a mensagem sair, junto com a campanha: uma
+                # falha de envio nao pode deixar a conversa solta do atendente.
+                destrava = motivo
+            elif motivo:
                 logger.info(f"[Send] Campanha para {phone} recusada: {motivo}")
                 return http_response(409, {
                     "status": "ERROR",
@@ -239,6 +255,18 @@ def handler(event, context):
             # falha de entrega deixaria o bot esperando resposta de uma
             # mensagem que ninguem recebeu.
             campanha_aberta = None
+            if destrava:
+                # A mesma rotina do "Retomar bot" do painel: limpa o bloco de
+                # atendimento e marca a conversa como elegivel, para valer em
+                # qualquer politica.
+                atendimento.retoma_pelo_painel(sessao)
+                sessao["bot_enabled"] = True
+                if grava_atendimento(_tabela_de_sessoes(), clinic_id, phone, sessao,
+                                     extras={"bot_enabled": True}):
+                    logger.info(f"[Send] Conversa de {phone} destravada ({destrava}) pelo disparo com bot")
+                else:
+                    logger.error(f"[Send] Mensagem enviada para {phone} mas NAO destravou ({destrava}); "
+                                 f"o bot nao respondera ate a pausa vencer")
             if campanha_pedida is not None:
                 campanha_aberta = abre_campanha(
                     _tabela_de_sessoes(), clinic_id, phone,

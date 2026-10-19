@@ -261,14 +261,18 @@ export function PacientesPage() {
           setFeedback({ tone: 'success', message: `${name} foi excluído.` })
         }
       />
-      <BatchMessageModal
-        open={batchOpen}
-        patients={batchPatients}
-        availableDates={availableDates}
-        clinicTemplate={clinic?.batch_message_template}
-        onClose={() => setBatchOpen(false)}
-        onDone={() => { clearSelection(); setBatchPatients([]) }}
-      />
+      {/* So enquanto aberto: o modal fixa texto e datas ao montar, e precisa
+          encontrar a clinica e as datas ja carregadas. */}
+      {batchOpen && (
+        <BatchMessageModal
+          open
+          patients={batchPatients}
+          availableDates={availableDates}
+          clinicTemplate={clinic?.batch_message_template}
+          onClose={() => setBatchOpen(false)}
+          onDone={() => { clearSelection(); setBatchPatients([]) }}
+        />
+      )}
       <BatchDeletePatientsModal
         open={batchDeleteOpen}
         patients={batchDeleteTargets}

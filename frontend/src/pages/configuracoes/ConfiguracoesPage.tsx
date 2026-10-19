@@ -128,7 +128,7 @@ export function ConfiguracoesPage() {
         <hr className="border-gray-100" />
 
         {/* Batch WhatsApp message template */}
-        <Section title="Mensagem WhatsApp em lote" description="Template padrão para envio em lote. Use {nome} para o primeiro nome do paciente.">
+        <Section title="Mensagem WhatsApp em lote" description="Template padrão para envio em lote. Use {nome} para o primeiro nome do paciente e {datas} para as datas marcadas no disparo.">
           <textarea
             value={form.batch_message_template as string}
             onChange={(e) => set('batch_message_template', e.target.value)}
@@ -136,7 +136,7 @@ export function ConfiguracoesPage() {
             placeholder={buildDefaultMessage([])}
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
           />
-          <p className="text-[11px] text-gray-400">Deixe vazio para usar a mensagem padrão com as datas disponíveis.</p>
+          <p className="text-[11px] text-gray-400">Deixe vazio para usar a mensagem padrão. Sem {'{datas}'} no texto, as datas não entram na mensagem.</p>
         </Section>
 
         {/* Save */}

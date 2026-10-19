@@ -3,14 +3,18 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useSendBatchMessages, type BatchMessageResult } from '@/hooks/useMessages'
 import { formatPhone } from '@/utils/formatPhone'
-import { buildDefaultMessage } from '@/utils/buildDefaultMessage'
+import { mensagemDoDisparo } from '@/utils/buildDefaultMessage'
 import { CampanhaDoBot } from './CampanhaDoBot'
 import type { PatientWithStats } from '@/types'
 import type { SendMessagePayload } from '@/services/messages.service'
 
 function getStatusLabel(result: BatchMessageResult | undefined): { text: string; className: string } | null {
   if (!result) return null
-  if (result.status === 'failed') return { text: 'Falhou', className: 'text-red-500' }
+  // O motivo junto: "Falhou" sozinho fez parecer defeito o que era a regra
+  // (19/10/2026, conversa em atendimento humano).
+  if (result.status === 'failed') {
+    return { text: result.error ? `Falhou: ${result.error}` : 'Falhou', className: 'text-red-500' }
+  }
   if (result.status === 'pending') return { text: '...', className: 'text-gray-400' }
   // status === 'sent' | 'queued'
   if (result.delivery === 'delivered') return { text: 'Entregue', className: 'text-emerald-600' }
@@ -28,16 +32,24 @@ interface BatchMessageModalProps {
   onDone: () => void
 }
 
+/**
+ * Montado SO enquanto aberto (a pagina faz `{batchOpen && ...}`): os estados
+ * iniciais abaixo precisam das datas e do texto da clinica ja carregados.
+ * Montado junto com a pagina, nasciam vazios e nunca mais mudavam - o texto
+ * saia "em breve" e nenhuma data vinha marcada (19/10/2026).
+ */
 export function BatchMessageModal({ open, patients, availableDates, clinicTemplate, onClose, onDone }: BatchMessageModalProps) {
-  const [messageTemplate, setMessageTemplate] = useState(() =>
-    clinicTemplate?.trim() ? clinicTemplate : buildDefaultMessage(availableDates),
-  )
   const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
   // Tres datas vem marcadas por padrao (decisao do Andre em 09/09/2026); a
   // atendente marca ou desmarca quantas quiser, sem teto (06/10/2026). O bot assume por padrao: o disparo e o comeco de um
   // atendimento, nao uma mensagem solta.
   const [datasDaCampanha, setDatasDaCampanha] = useState(() => availableDates.slice(0, 3))
   const [botAssume, setBotAssume] = useState(true)
+  // O texto segue as datas marcadas ate a atendente mexer nele; depois e dela.
+  // Uma lista so para o texto e para o bot: antes o texto listava todas as
+  // datas disponiveis e o bot oferecia outras.
+  const [textoEditado, setTextoEditado] = useState<string | null>(null)
+  const messageTemplate = textoEditado ?? mensagemDoDisparo(clinicTemplate, datasDaCampanha)
   const { send, results, isSending, isCheckingDelivery, progress, reset } = useSendBatchMessages()
 
   const activePatients = useMemo(
@@ -136,12 +148,23 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
         {/* Message template */}
         {results.length === 0 && (
           <div>
-            <label className="text-xs font-medium text-gray-500 block mb-1.5">
-              Mensagem <span className="text-gray-300">({'{nome}'} = primeiro nome do paciente)</span>
-            </label>
+            <div className="flex items-baseline justify-between mb-1.5">
+              <label className="text-xs font-medium text-gray-500">
+                Mensagem <span className="text-gray-300">({'{nome}'} = primeiro nome do paciente)</span>
+              </label>
+              {textoEditado !== null && (
+                <button
+                  type="button"
+                  onClick={() => setTextoEditado(null)}
+                  className="text-xs text-brand-600 hover:text-brand-700"
+                >
+                  Voltar ao texto padrão
+                </button>
+              )}
+            </div>
             <textarea
               value={messageTemplate}
-              onChange={(e) => setMessageTemplate(e.target.value)}
+              onChange={(e) => setTextoEditado(e.target.value)}
               rows={5}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 resize-none"
             />
