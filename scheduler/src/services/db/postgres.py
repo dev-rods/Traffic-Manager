@@ -36,16 +36,22 @@ class PostgresService:
     @contextmanager
     def _get_connection(self) -> Generator:
         conn = self._pool.getconn()
+        quebrada = False
         try:
             yield conn
         except Exception:
             # Sem isto, uma escrita que falha (ex.: índice único) devolvia a
             # conexão ao pool com a transação abortada, e a PRÓXIMA consulta
             # nela falhava com "current transaction is aborted".
-            conn.rollback()
+            if not conn.closed:
+                try:
+                    conn.rollback()
+                except Exception as e:
+                    quebrada = True
+                    logger.warning(f"[Postgres] rollback falhou: {e}")
             raise
         finally:
-            self._pool.putconn(conn)
+            self._pool.putconn(conn, close=quebrada or bool(conn.closed))
 
     def execute_query(self, query: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:

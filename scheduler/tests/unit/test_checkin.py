@@ -282,6 +282,13 @@ class TestCobra(Base):
         self.assertEqual(self.prov.canceladas, ["pay_1"])
 
 
+    def test_falha_ao_gravar_cancela_a_cobranca_criada(self):
+        self.db.execute_write_returning = mock.Mock(side_effect=psycopg2.OperationalError("timeout"))
+        with self.assertRaises(psycopg2.OperationalError):
+            checkin.cobra(self.db, self.prov, CLINIC, FONE, APPT, "PIX")
+        self.assertEqual(self.prov.canceladas, ["pay_1"])
+
+
 class TestStatus(Base):
     def test_pendente_pergunta_ao_asaas(self):
         a = checkin.cobra(self.db, self.prov, CLINIC, FONE, APPT, "PIX")
@@ -353,6 +360,17 @@ class TestWebhook(Base):
         self.assertEqual(self.db.pagamentos[a["id"]]["status"], PAGO)
         self.assertEqual(self.db.pagamentos[b["id"]]["status"], CANCELADO)
         self.assertIn("pay_2", self.prov.canceladas)
+
+    def test_segundo_pagamento_pago_nao_trava_a_fila(self):
+        a = checkin.cobra(self.db, self.prov, CLINIC, FONE, APPT, "PIX")
+        b = checkin.cobra(self.db, self.prov, CLINIC, FONE, APPT, "CREDIT_CARD")
+        checkin.aplica_evento(self.db, self.prov, evento("evt_1", "PAYMENT_RECEIVED", "pay_2"))
+        with self.assertLogs(checkin.logger, "ERROR"):
+            r = checkin.aplica_evento(self.db, self.prov, evento("evt_2", "PAYMENT_RECEIVED", "pay_1"))
+        self.assertEqual(r, "conflito: pagamento duplicado")
+        self.assertEqual(self.db.pagamentos[a["id"]]["status"], CANCELADO)
+        self.assertEqual(self.db.pagamentos[b["id"]]["status"], PAGO)
+        self.assertIn("evt_2", self.db.eventos)
 
     def test_cobranca_desconhecida(self):
         self.assertEqual(checkin.aplica_evento(self.db, self.prov, evento("evt_9", "PAYMENT_RECEIVED", "pay_zz")),
