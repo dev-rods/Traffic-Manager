@@ -89,7 +89,14 @@ class AsaasProvider(PaymentProvider):
         })
         pix_payload = None
         if metodo == PIX:
-            pix_payload = self._chama("GET", f"/payments/{cobranca['id']}/pixQrCode").get("payload")
+            try:
+                pix_payload = self._chama("GET", f"/payments/{cobranca['id']}/pixQrCode").get("payload")
+            except ErroDoProvedor:
+                try:
+                    self.cancela(cobranca["id"])
+                except ErroDoProvedor as e:
+                    logger.error(f"[Asaas] cobrança {cobranca['id']} ficou viva sem QR do Pix: {e}")
+                raise
         return Cobranca(
             id=cobranca["id"],
             status=status_do_asaas(cobranca.get("status")) or PENDENTE,
