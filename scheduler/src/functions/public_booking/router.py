@@ -11,9 +11,11 @@ continuam intactos, testáveis e importáveis individualmente.
 import logging
 
 from src.functions.public_booking import (
+    asaas_webhook,
     availability,
     bootstrap,
     cancel_appointment,
+    checkin,
     confirm_otp,
     create_appointment,
     list_appointments,
@@ -38,6 +40,10 @@ ROUTES = {
     ("GET", "public/clinics/{clinicId}/my-appointments"): list_appointments.handler,
     ("POST", "public/clinics/{clinicId}/appointments/{appointmentId}/cancel"): cancel_appointment.handler,
     ("GET", "public/resolve-domain"): resolve_domain.handler,
+    # Check-in do iPad (PRD 026): uma rota coringa para todas as sub-rotas,
+    # que `checkin.handler` distingue pelo `proxy`.
+    **{(m, "public/clinics/{clinicId}/checkin/{proxy+}"): checkin.handler for m in ("GET", "POST")},
+    ("POST", "public/asaas/webhook"): asaas_webhook.handler,
 }
 
 
