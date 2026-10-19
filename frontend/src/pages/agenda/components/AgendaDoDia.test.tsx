@@ -60,7 +60,7 @@ describe('AgendaDoDia', () => {
         ]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     const nomes = screen.getAllByRole('button').map((b) => b.textContent)
@@ -76,7 +76,7 @@ describe('AgendaDoDia', () => {
         appointments={[agendamento({ areas: 'Virilha Completa + ânus', duration_minutes: 25 })]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.getByText('Virilha Completa + ânus')).toBeInTheDocument()
@@ -90,7 +90,7 @@ describe('AgendaDoDia', () => {
         appointments={[agendamento({ duration_minutes: 10, manual_duration_minutes: 10 })]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.getByText(/ajustada/)).toBeInTheDocument()
@@ -106,7 +106,7 @@ describe('AgendaDoDia', () => {
         ]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.getByText('Do dia')).toBeInTheDocument()
@@ -120,7 +120,7 @@ describe('AgendaDoDia', () => {
         appointments={[agendamento({ status: 'CANCELLED', patient_name: 'Cancelada' })]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.queryByText('Cancelada')).not.toBeInTheDocument()
@@ -128,12 +128,14 @@ describe('AgendaDoDia', () => {
   })
 
   it('dia vazio explica, em vez de mostrar uma caixa em branco', () => {
-    render(<AgendaDoDia
+    render(
+      <AgendaDoDia
         dia="2026-09-23"
         appointments={[]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />)
+      />
+    )
 
     expect(screen.getByText(/Nenhum atendimento neste dia/)).toBeInTheDocument()
   })
@@ -147,7 +149,7 @@ describe('AgendaDoDia', () => {
         appointments={[alvo]}
         rules={EXPEDIENTE}
         onAppointmentClick={onClick}
-      />,
+      />
     )
 
     await userEvent.click(screen.getByRole('button'))
@@ -166,7 +168,7 @@ describe('AgendaDoDia', () => {
 describe('AgendaDoDia - espaços livres', () => {
   function textos() {
     return Array.from(document.querySelectorAll('li')).map((l) =>
-      l.textContent?.replace(/\s+/g, ' ').trim(),
+      l.textContent?.replace(/\s+/g, ' ').trim()
     )
   }
 
@@ -176,15 +178,19 @@ describe('AgendaDoDia - espaços livres', () => {
         dia="2026-09-23"
         appointments={[
           agendamento({
-            start_time: '09:00:00', end_time: '10:00:00', patient_name: 'Manha',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            patient_name: 'Manha',
           }),
           agendamento({
-            start_time: '14:00:00', end_time: '15:00:00', patient_name: 'Tarde',
+            start_time: '14:00:00',
+            end_time: '15:00:00',
+            patient_name: 'Tarde',
           }),
         ]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     const linhas = textos()
@@ -199,12 +205,10 @@ describe('AgendaDoDia - espaços livres', () => {
     render(
       <AgendaDoDia
         dia="2026-09-23"
-        appointments={[
-          agendamento({ start_time: '14:00:00', end_time: '15:00:00' }),
-        ]}
+        appointments={[agendamento({ start_time: '14:00:00', end_time: '15:00:00' })]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.getByText(/Livre até 14:00/)).toBeInTheDocument()
@@ -224,7 +228,7 @@ describe('AgendaDoDia - espaços livres', () => {
         ]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.getByText(/Livre até 17:30/)).toBeInTheDocument()
@@ -241,7 +245,7 @@ describe('AgendaDoDia - espaços livres', () => {
         ]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.queryByText(/Livre até 10:03/)).not.toBeInTheDocument()
@@ -253,14 +257,16 @@ describe('AgendaDoDia - espaços livres', () => {
         dia="2026-09-23"
         appointments={[
           agendamento({
-            start_time: '09:00:00', end_time: '10:00:00',
-            status: 'CANCELLED', patient_name: 'Desmarcou',
+            start_time: '09:00:00',
+            end_time: '10:00:00',
+            status: 'CANCELLED',
+            patient_name: 'Desmarcou',
           }),
           agendamento({ start_time: '14:00:00', end_time: '15:00:00' }),
         ]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.queryByText('Desmarcou')).not.toBeInTheDocument()
@@ -277,7 +283,7 @@ describe('AgendaDoDia - espaços livres', () => {
         appointments={[agendamento({ start_time: '14:00:00', end_time: '15:00:00' })]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     // Só o atendimento é botão. O horário livre na tela não é horário
@@ -286,12 +292,14 @@ describe('AgendaDoDia - espaços livres', () => {
   })
 
   it('dia sem atendimento continua mostrando o estado vazio', () => {
-    render(<AgendaDoDia
+    render(
+      <AgendaDoDia
         dia="2026-09-23"
         appointments={[]}
         rules={EXPEDIENTE}
         onAppointmentClick={clique}
-      />)
+      />
+    )
 
     expect(screen.getByText('Nenhum atendimento neste dia.')).toBeInTheDocument()
     expect(screen.queryByText(/Livre até/)).not.toBeInTheDocument()
@@ -306,7 +314,7 @@ describe('AgendaDoDia - horário real da clínica', () => {
         appointments={[agendamento({ start_time: '09:00:00', end_time: '10:00:00' })]}
         rules={[regra({ start_time: '08:00:00', end_time: '19:00:00' })]}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.getByText(/Livre até 19:00/)).toBeInTheDocument()
@@ -320,11 +328,11 @@ describe('AgendaDoDia - horário real da clínica', () => {
         appointments={[agendamento({ start_time: '14:00:00', end_time: '15:00:00' })]}
         rules={[regra({ start_time: '10:00:00', end_time: '19:00:00' })]}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     const linhas = Array.from(document.querySelectorAll('li')).map((l) =>
-      l.textContent?.replace(/\s+/g, ' ').trim(),
+      l.textContent?.replace(/\s+/g, ' ').trim()
     )
     // o vão começa às 10:00, e não às 07:00
     expect(linhas[0]).toContain('10:00')
@@ -340,7 +348,7 @@ describe('AgendaDoDia - horário real da clínica', () => {
         appointments={[agendamento({ patient_name: 'Ana Clara' })]}
         rules={[]}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.getByText('Ana Clara')).toBeInTheDocument()
@@ -355,10 +363,26 @@ describe('AgendaDoDia - horário real da clínica', () => {
         appointments={[agendamento({ start_time: '19:30:00', end_time: '20:00:00' })]}
         rules={[regra({ start_time: '08:00:00', end_time: '19:00:00' })]}
         onAppointmentClick={clique}
-      />,
+      />
     )
 
     expect(screen.getByText(/Livre até 19:00/)).toBeInTheDocument()
     expect(screen.getAllByText(/Livre até/)).toHaveLength(1)
+  })
+
+  it('parceria que vem pela primeira vez mostra os dois selos', () => {
+    render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[
+          agendamento({ discount_pct: 100, discount_reason: 'partnership', is_first_visit: true }),
+        ]}
+        rules={EXPEDIENTE}
+        onAppointmentClick={clique}
+      />
+    )
+
+    expect(screen.getByText('PARCERIA')).toBeInTheDocument()
+    expect(screen.getByText('1ª VEZ')).toBeInTheDocument()
   })
 })

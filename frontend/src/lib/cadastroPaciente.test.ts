@@ -51,4 +51,12 @@ describe('cadastroSchema', () => {
     expect(schema.safeParse({ email: 'nao-e-email' }).success).toBe(false)
     expect(schema.safeParse({ email: 'a@b.co' }).success).toBe(true)
   })
+
+  // "Parceria (100%)" no cadastro grava 100: o limite e inclusivo, e o
+  // backend aceita o mesmo (CHECK <= 100).
+  it('aceita 100, que e a parceria', () => {
+    expect(schema.safeParse({ custom_discount_pct: '100' }).success).toBe(true)
+    expect(schema.safeParse({ custom_discount_pct: '100,00' }).success).toBe(true)
+    expect(schema.safeParse({ custom_discount_pct: '100,5' }).success).toBe(false)
+  })
 })

@@ -56,6 +56,18 @@ class TestNaToolDoBot(unittest.TestCase):
         self.assertEqual(r["discount_reason"], "personalizado")
         self.assertEqual(r["discounted_price_cents"], 14000)
 
+    def test_combinado_de_cem_e_parceria(self):
+        """O painel grava 'partnership' quando a atendente escolhe Parceria (100%);
+        o combinado de 100% da paciente precisa chegar com a mesma razao, senao a
+        agenda pinta um como parceria e o outro como desconto comum."""
+        with mock.patch("src.services.ai_tools.e_primeira_visita", return_value=True):
+            r = executor(100).execute("calculate_discount",
+                                      {"service_area_pairs": PARES}, dict(CONVERSA))
+
+        self.assertEqual(r["discount_pct"], 100)
+        self.assertEqual(r["discount_reason"], "partnership")
+        self.assertEqual(r["discounted_price_cents"], 0)
+
     def test_combinado_de_zero_zera_o_desconto(self):
         """Nao e ausencia: e a clinica dizendo que esta paciente nao tem desconto."""
         with mock.patch("src.services.ai_tools.e_primeira_visita", return_value=True):
