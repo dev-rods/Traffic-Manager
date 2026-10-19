@@ -436,10 +436,9 @@ class TestHandler(unittest.TestCase):
             s, _ = self.chama("POST", f"appointments/{APPT}/payments", {"phone": FONE, "token": "ok", "method": "PIX"})
         self.assertEqual(s, 503)
 
-    def test_baixa_em_dinheiro_exige_chave_do_painel(self):
-        from src.utils.http import http_response
-        with mock.patch(f"{self.modulo}.require_api_key", return_value=(None, http_response(401, {}))):
-            self.assertEqual(self.chama("POST", f"payments/{uuid.uuid4()}/cash-received", {})[0], 401)
+    def test_baixa_em_dinheiro_nao_existe_na_rota_publica(self):
+        """Mudou para o painel (functions/caixa), com a permissão da recepção."""
+        self.assertEqual(self.chama("POST", f"payments/{uuid.uuid4()}/cash-received", {})[0], 404)
 
 
 class TestWebhookHandler(unittest.TestCase):

@@ -114,6 +114,18 @@ booking-site fica intocado).
 - Testes: fluxo feliz (Pix simulado), escolha entre agendamentos, CPF
   inválido, troca de método, dinheiro, idle reset.
 
+## 5.1 Fase 2: painel
+
+| Arquivo | Alteração |
+|---|---|
+| `scheduler/src/services/caixa.py` (novo) | `resumo(db, clinic_id, date_from, date_to)`: previsto por data da sessão, recebido por `paid_at` no fuso da clínica (por dia e por método), `pendentes` (confirmada até hoje, com valor, sem `PAID`) e `pagamentos`. Período máximo de 92 dias. |
+| `scheduler/src/functions/caixa/router.py` (novo) + `sls/functions/caixa/interface.yml` | Lambda `Caixa`, `ANY clinics/{clinicId}/caixa/{proxy+}`: `GET resumo` (`require_api_key`) e `POST pagamentos/{id}/dinheiro` (`require_acesso("agenda.escrever")`). |
+| `scheduler/src/functions/public_booking/checkin.py` | Sai a sub-rota `cash-received`. |
+| `scheduler/src/functions/appointment/list.py` | `checked_in_at` e o pagamento vivo (`payment_id`, `payment_method`, `payment_status`, `payment_paid_at`, `payment_price_cents`, que `para_o_staff` remove). |
+| `frontend/src/services/caixa.service.ts`, `hooks/useCaixa.ts`, `utils/pagamento.ts`, `utils/caixa.ts` (novos) | Service, hooks (a baixa invalida caixa e agenda), rótulos e períodos. |
+| `frontend/src/pages/agenda/components/PagamentoDoAgendamento.tsx` (novo) | Check-in, situação do pagamento e "Recebi em dinheiro" no popover. |
+| `frontend/src/pages/relatorios/components/CaixaPanel.tsx` (novo) + `RelatoriosPage.tsx` | Abas Faturamento / Caixa. |
+
 ## 6. Testes backend
 
 `tests/unit/test_checkin.py` (serviço e handler), `test_asaas_provider.py`

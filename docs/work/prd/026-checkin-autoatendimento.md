@@ -81,12 +81,33 @@ que a pessoa agendou. Não há cardápio, só confirmação e pagamento.
 - **`scheduler.payment_webhook_events`** (nova): `event_id` único, para
   descartar entrega repetida (o Asaas entrega "pelo menos uma vez").
 
+## 4.1 Fase 2: o pagamento no painel (19/10/2026, pedido do Rodrigo)
+
+- **Agenda**: o detalhe do agendamento mostra o check-in ("Feito às 08:52") e
+  o pagamento ("Pago · Pix às 08:54", "Aguardando dinheiro", "Aguardando
+  Pix", "Não pago"). Com "Aguardando dinheiro", aparece o botão **Recebi em
+  dinheiro**, que dá a baixa aqui e no Asaas (`receiveInCash`).
+- **Relatórios → aba Caixa** (só admin): Recebido, Previsto pelas sessões e
+  Falta receber; total por forma de pagamento; lista do que falta receber
+  (com o botão de dinheiro) e lista de recebimentos. Períodos: hoje, ontem,
+  7 dias, este mês.
+- **Duas datas, de propósito**: o previsto é pela data da SESSÃO e o
+  recebido pela data em que o dinheiro ENTROU (no fuso da clínica). É isso
+  que bate com o extrato do Asaas e com a gaveta. Por isso a diferença entre
+  os dois não é "o que falta": o que falta é a lista de pendências (sessão
+  confirmada até hoje, com valor, sem pagamento confirmado).
+- **Quem pode**: a baixa em dinheiro é da recepção (`agenda.escrever`), que
+  é quem recebe a nota. O resumo do caixa é do admin, como os relatórios.
+  Funcionário que não vê valores continua sem ver o valor do pagamento (o
+  servidor remove), mas vê se está pago.
+- **Rotas**: Lambda nova `Caixa` com rota coringa
+  `clinics/{clinicId}/caixa/{proxy+}` (`GET resumo`, `POST
+  pagamentos/{id}/dinheiro`). A baixa saiu da rota pública do check-in.
+
 ## 5. Fora do escopo (fases seguintes)
 
 - Documentos no check-in (termo de consentimento, anamnese) e o envio na
   véspera para preencher pelo celular.
-- Botão de baixa em dinheiro e visão de caixa no painel (fechamento do dia
-  por método).
 - Conta Asaas por clínica e deploy em produção.
 - Reembolso e cancelamento de pagamento já feito.
 - Maquininha integrada.
