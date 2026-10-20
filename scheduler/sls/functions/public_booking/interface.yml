@@ -58,3 +58,13 @@ PublicBooking:
         path: public/resolve-domain
         method: get
         cors: true
+    # Check-in do iPad (PRD 026). Coringa: a stack está perto do limite de
+    # 500 recursos do CloudFormation, e uma rota por sub-rota gastaria ~4 cada.
+    - http:
+        path: public/clinics/{clinicId}/checkin/{proxy+}
+        method: any
+        cors: true
+    # Chamado pelo Asaas, servidor a servidor: sem CORS.
+    - http:
+        path: public/asaas/webhook
+        method: post

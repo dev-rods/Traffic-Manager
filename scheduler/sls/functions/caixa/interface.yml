@@ -1,0 +1,13 @@
+# Caixa no painel (PRD 026, fase 2). Uma rota coringa para as sub-rotas de
+# src/functions/caixa/router.py: a stack está perto do limite de 500 recursos
+# do CloudFormation. Sem iamRoleStatements: só fala com o Postgres e o Asaas
+# (HTTP), então usa a role compartilhada do provider.
+Caixa:
+  handler: src.functions.caixa.router.handler
+  memorySize: 512
+  timeout: 30
+  events:
+    - http:
+        path: clinics/{clinicId}/caixa/{proxy+}
+        method: any
+        cors: true

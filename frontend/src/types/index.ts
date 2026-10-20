@@ -210,7 +210,26 @@ export interface Appointment {
   version: number
   created_at: string
   updated_at: string
+  /** Check-in feito pela paciente no iPad da recepção (PRD 026). */
+  checked_in_at: string | null
+  /** O pagamento vivo do agendamento (pendente, aguardando dinheiro ou pago). */
+  payment_id: string | null
+  payment_method: PaymentMethod | null
+  payment_status: PaymentStatus | null
+  payment_paid_at: string | null
+  /** Ausente para quem não vê valores: o servidor remove. */
+  payment_price_cents?: number | null
 }
+
+export type PaymentMethod = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'
+
+export type PaymentStatus =
+  | 'PENDING'
+  | 'AWAITING_CASH'
+  | 'PAID'
+  | 'CANCELLED'
+  | 'FAILED'
+  | 'REFUNDED'
 
 export interface ListAppointmentsResponse {
   status: string

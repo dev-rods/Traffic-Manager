@@ -47,3 +47,21 @@ def normaliza_data_nascimento(valor):
             return False
         return d.isoformat()
     return False
+
+
+def cpf_valido(digitos):
+    """Os dígitos verificadores batem.
+
+    Só para o check-in do iPad (PRD 026): ali o CPF vai para o Asaas, que
+    recusa CPF inválido, e a pessoa está na frente da tela para corrigir. O
+    bot continua sem checar dígito, pelo motivo do topo do arquivo.
+    """
+    d = re.sub(r"\D", "", str(digitos or ""))
+    if len(d) != TAMANHO_CPF or d == d[0] * TAMANHO_CPF:
+        return False
+    for tamanho in (9, 10):
+        soma = sum(int(d[i]) * (tamanho + 1 - i) for i in range(tamanho))
+        dv = (soma * 10) % 11 % 10
+        if dv != int(d[tamanho]):
+            return False
+    return True

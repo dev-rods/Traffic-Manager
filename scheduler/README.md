@@ -41,7 +41,10 @@ scheduler/
 │   │   ├── sheets_sync.py          # Sincronizacao Google Sheets
 │   │   └── db/                     # Conexao PostgreSQL
 │   ├── providers/          # Abstracoes de providers
-│   │   └── whatsapp_provider.py    # Implementacao z-api
+│   │   ├── whatsapp_provider.py    # Implementacao z-api
+│   │   ├── payment_provider.py     # Interface de pagamento (PRD 026)
+│   │   ├── asaas_provider.py       # Asaas v3
+│   │   └── simulated_payment_provider.py  # Simulado (so dev, sem ASAAS_API_KEY)
 │   ├── utils/              # Utilitarios (http, auth, logging, phone, decimal)
 │   └── scripts/            # Scripts de setup e migracao
 ├── sls/
@@ -139,12 +142,14 @@ cd scheduler && serverless logs -f WhatsAppWebhook --stage dev --aws-profile dev
 | availability_rules | Regras de disponibilidade (dia da semana ou data especifica) |
 | availability_exceptions | Excecoes de disponibilidade (bloqueios, feriados) |
 | patients | Pacientes por clinica (identificados por telefone) |
-| appointments | Agendamentos com status, preco, desconto, full_name |
+| appointments | Agendamentos com status, preco, desconto, full_name, checked_in_at |
 | appointment_services | Servicos de cada agendamento |
 | appointment_service_areas | Areas de cada agendamento |
 | message_templates | Templates de mensagem personalizaveis por clinica |
 | faq_items | Perguntas frequentes por clinica |
 | discount_rules | Regras de desconto por clinica |
+| appointment_payments | Cobrancas do check-in (no maximo uma viva por agendamento) |
+| payment_webhook_events | Ids de eventos de webhook ja processados (idempotencia) |
 
 ### DynamoDB
 
@@ -160,6 +165,7 @@ cd scheduler && serverless logs -f WhatsAppWebhook --stage dev --aws-profile dev
 |---------|-----|
 | z-api | Envio/recebimento de mensagens WhatsApp |
 | Google Sheets API | Sync bidirecional de agendamentos |
+| Asaas | Cobranca do check-in no iPad (Pix, cartao, dinheiro) — ver PRD 026 |
 | AWS SSM | Armazenamento de secrets (API keys, tokens) |
 
 ## Scripts utilitarios

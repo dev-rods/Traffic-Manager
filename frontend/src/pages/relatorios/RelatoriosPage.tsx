@@ -6,6 +6,7 @@ import { ReportsHeader } from './components/ReportsHeader'
 import { KpiCard } from './components/KpiCard'
 import { TopServicesChart } from './components/TopServicesChart'
 import { DiscountBreakdown } from './components/DiscountBreakdown'
+import { CaixaPanel } from './components/CaixaPanel'
 import { formatCurrency } from '@/utils/formatCurrency'
 import type { ReportPeriod } from '@/services/reports.service'
 
@@ -15,7 +16,51 @@ const PERIOD_COMPARE_LABEL: Record<ReportPeriod, string> = {
   current_year: 'vs ano anterior',
 }
 
+type Aba = 'faturamento' | 'caixa'
+
+const ABAS: { value: Aba; label: string }[] = [
+  { value: 'faturamento', label: 'Faturamento' },
+  { value: 'caixa', label: 'Caixa' },
+]
+
 export function RelatoriosPage() {
+  const [aba, setAba] = useState<Aba>('faturamento')
+
+  return (
+    <div>
+      <div className="px-6 pt-6" role="tablist" aria-label="Relatórios">
+        <div className="flex gap-6 border-b border-gray-200">
+          {ABAS.map((a) => (
+            <button
+              key={a.value}
+              role="tab"
+              aria-selected={aba === a.value}
+              onClick={() => setAba(a.value)}
+              className={[
+                '-mb-px border-b-2 px-1 pb-3 text-sm font-semibold transition-colors cursor-pointer',
+                aba === a.value
+                  ? 'border-brand-500 text-brand-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-800',
+              ].join(' ')}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {aba === 'caixa' ? (
+        <div className="p-6 space-y-6">
+          <h1 className="text-2xl font-bold text-gray-800">Caixa</h1>
+          <CaixaPanel />
+        </div>
+      ) : (
+        <Faturamento />
+      )}
+    </div>
+  )
+}
+
+function Faturamento() {
   const [period, setPeriod] = useState<ReportPeriod>('current_month')
   const { data, isLoading, isError, error, refetch } = useReports(period)
 
