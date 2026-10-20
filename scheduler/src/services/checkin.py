@@ -326,7 +326,7 @@ def simula_pagamento(db, provider: PaymentProvider, clinic_id: str, phone: str, 
 
 
 def marca_recebido_em_dinheiro(db, provider: PaymentProvider, clinic_id: str, payment_id: str) -> Dict[str, Any]:
-    """A recepção recebeu o dinheiro. Só ela chama (chave do painel)."""
+    """A recepção recebeu o dinheiro. Só ela chama (Lambda `Caixa`, `agenda.escrever`)."""
     try:
         uuid.UUID(str(payment_id))
     except ValueError:

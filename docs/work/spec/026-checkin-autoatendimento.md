@@ -96,7 +96,8 @@ Sub-rotas (`checkin.py`):
 | POST | `appointments/{id}/payments` | `{phone, token, method, cpf?}` |
 | GET | `payments/{id}` | `?phone&token` |
 | POST | `payments/{id}/simulate` | `{phone, token}`, só provedor simulado em dev |
-| POST | `payments/{id}/cash-received` | chave do painel (`SCHEDULER_API_KEY`) |
+
+A baixa em dinheiro não fica aqui: é da Lambda `Caixa` (§5.1).
 
 Env novas (`serverless.yml`): `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN` (SSM,
 fallback vazio), `ASAAS_BASE_URL` (sandbox em dev, produção em prod).

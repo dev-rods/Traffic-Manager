@@ -76,10 +76,13 @@ Outro número: 404/401.
 
 200 `status: PAID`. Com o Asaas configurado: 404.
 
-## 6. Baixa em dinheiro (recepção) — `POST checkin/payments/{id}/cash-received`
+## 6. Baixa em dinheiro (recepção) — `POST /clinics/{clinicId}/caixa/pagamentos/{id}/dinheiro`
 
-Chave do painel (`SCHEDULER_API_KEY`). Só `AWAITING_CASH`; chama
-`receiveInCash` no Asaas e marca `PAID`.
+Lambda `Caixa` (fase 2), não a rota pública: `checkin/payments/{id}/cash-received`
+responde 404. Auth do painel com `agenda.escrever` (recepção). Só
+`AWAITING_CASH`; chama `receiveInCash` no Asaas e marca `PAID`. Já pago: 200 sem
+nova baixa; outro status: 409; pagamento de outra clínica: 404. O resumo (`GET caixa/resumo?date_from&date_to`)
+é só do admin.
 
 ## 7. Webhook do Asaas — `POST /public/asaas/webhook`
 
