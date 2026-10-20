@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Clinic Scheduler - Check-in 026 (autoatendimento com pagamento)",
-    "description": "PRD/Spec 026. Só dev. Rode na ordem. Preencha clinicId, phone (com agendamento futuro), token (de /verify/confirm com o mesmo phone) e cpf (válido). Sem ASAAS_API_KEY, dev usa o provedor simulado.",
+    "description": "PRD/Spec 026. Só dev. Rode na ordem. Preencha clinicId, phone (com agendamento futuro), token (de /verify/confirm com o mesmo phone) e cpf (válido). Sem ASAAS_API_KEY, dev usa o provedor simulado. As requests de Caixa (fase 2) usam a auth do painel (API_KEY = chave do admin; a baixa em dinheiro também aceita a sessão da recepção com agenda.escrever) e precisam de um segundo agendamento futuro do mesmo número para a cobrança em dinheiro.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -18,6 +18,11 @@
     {
       "key": "BOOKING_API_KEY",
       "value": "YOUR_BOOKING_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
       "type": "string"
     },
     {
@@ -52,6 +57,16 @@
     },
     {
       "key": "paymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cashAppointmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cashPaymentId",
       "value": "",
       "type": "string"
     }
@@ -109,7 +124,8 @@
               "var l = pm.response.json().appointments;",
               "pm.test(\"Tem agendamento\", function () { pm.expect(l.length).to.be.above(0); });",
               "pm.collectionVariables.set(\"appointmentId\", l[0].id);",
-              "pm.test(\"Campos da tela\", function () { pm.expect(l[0]).to.include.keys([\"fullName\",\"date\",\"startTime\",\"areas\",\"finalPriceCents\",\"checkedInAt\",\"payment\"]); });"
+              "pm.test(\"Campos da tela\", function () { pm.expect(l[0]).to.include.keys([\"fullName\",\"date\",\"startTime\",\"areas\",\"finalPriceCents\",\"checkedInAt\",\"payment\"]); });",
+              "if (l.length > 1) { pm.collectionVariables.set(\"cashAppointmentId\", l[1].id); }"
             ]
           }
         }
@@ -630,6 +646,349 @@
             "type": "text/javascript",
             "exec": [
               "pm.test(\"Status 401\", function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dinheiro (2º agendamento)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{cashAppointmentId}}/payments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "checkin",
+            "appointments",
+            "{{cashAppointmentId}}",
+            "payments"
+          ]
+        },
+        "description": "Cobrança em dinheiro: fica AWAITING_CASH até a recepção dar baixa. Usa o 2º agendamento do número (cashAppointmentId, preenchido pela primeira request).",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"method\": \"CASH\", \"cpf\": \"{{cpf}}\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "var p = pm.response.json().payment;",
+              "pm.test(\"Aguardando dinheiro\", function () { pm.expect(p.status).to.eql(\"AWAITING_CASH\"); });",
+              "pm.collectionVariables.set(\"cashPaymentId\", p.id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Baixa em dinheiro sem auth do painel (401)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/pagamentos/{{cashPaymentId}}/dinheiro",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "pagamentos",
+            "{{cashPaymentId}}",
+            "dinheiro"
+          ]
+        },
+        "description": "A chave do booking não abre a Lambda Caixa."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 401\", function () { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Baixa em dinheiro (recepção)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/pagamentos/{{cashPaymentId}}/dinheiro",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "pagamentos",
+            "{{cashPaymentId}}",
+            "dinheiro"
+          ]
+        },
+        "description": "Lambda Caixa (fase 2). Exige agenda.escrever (recepção ou admin). Chama receiveInCash no Asaas e marca PAID."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Pago\", function () { pm.expect(pm.response.json().payment.status).to.eql(\"PAID\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Baixa repetida não duplica",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/pagamentos/{{cashPaymentId}}/dinheiro",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "pagamentos",
+            "{{cashPaymentId}}",
+            "dinheiro"
+          ]
+        },
+        "description": "Já pago: 200 sem nova baixa no provedor."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "pm.test(\"Continua pago\", function () { pm.expect(pm.response.json().payment.status).to.eql(\"PAID\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Baixa de pagamento inexistente (404)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/pagamentos/00000000-0000-0000-0000-000000000000/dinheiro",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "pagamentos",
+            "00000000-0000-0000-0000-000000000000",
+            "dinheiro"
+          ]
+        },
+        "description": "Id que não existe ou é de outra clínica."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 404\", function () { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Resumo do caixa (admin)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/resumo?date_from=2026-10-01&date_to=2026-10-31",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "resumo"
+          ],
+          "query": [
+            {
+              "key": "date_from",
+              "value": "2026-10-01"
+            },
+            {
+              "key": "date_to",
+              "value": "2026-10-31"
+            }
+          ]
+        },
+        "description": "Só admin. Recebido pela data em que o dinheiro entrou (fuso da clínica), previsto pela data da sessão, pendências e total por método. date_from e date_to obrigatórios (YYYY-MM-DD)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var r = pm.response.json();",
+              "pm.test(\"Campos do resumo\", function () { pm.expect(r).to.include.keys([\"dateFrom\",\"dateTo\",\"timezone\",\"totals\",\"days\",\"pending\"]); pm.expect(r.totals).to.include.keys([\"expectedCents\",\"receivedCents\",\"pendingCents\",\"pendingCount\",\"byMethod\"]); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Resumo com período invertido (400)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/resumo?date_from=2026-12-31&date_to=2026-01-01",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "resumo"
+          ],
+          "query": [
+            {
+              "key": "date_from",
+              "value": "2026-12-31"
+            },
+            {
+              "key": "date_to",
+              "value": "2026-01-01"
+            }
+          ]
+        },
+        "description": "date_from depois de date_to."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
             ]
           }
         }
