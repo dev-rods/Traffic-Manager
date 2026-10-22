@@ -1,0 +1,77 @@
+name: Deploy Backend
+
+# Deploy manual (workflow_dispatch) para evitar deploys automáticos surpresa.
+# O runner do GitHub tem Docker, então o serverless consegue buildar a imagem
+# do infra (provider.ecr.images) e fazer push no ECR — o que não dá pra fazer
+# localmente sem Docker.
+#
+# Pré-requisitos (configurar uma vez em Settings > Secrets and variables > Actions):
+#   - AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY de um IAM com permissão de deploy
+#     (CloudFormation, Lambda, IAM, ECR, API Gateway, S3, SSM:GetParameter, EventBridge).
+# Hardening opcional: trocar as access keys por OIDC (aws-actions/configure-aws-credentials
+# com role-to-assume) e remover os secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Serviço a deployar"
+        required: true
+        type: choice
+        options:
+          - infra
+          - scheduler
+      stage:
+        description: "Stage"
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
+
+permissions:
+  contents: read
+
+concurrency:
+  # Evita dois deploys simultâneos do mesmo serviço/stage
+  group: deploy-${{ inputs.service }}-${{ inputs.stage }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.service }} (${{ inputs.stage }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Só o scheduler empacota deps Python localmente (dockerizePip: false).
+      # O infra builda tudo dentro da imagem Docker, então não precisa de Python no runner.
+      - name: Setup Python (scheduler)
+        if: ${{ inputs.service == 'scheduler' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Install plugins
+        working-directory: ${{ inputs.service }}
+        run: npm ci || npm install
+
+      - name: Serverless deploy
+        working-directory: ${{ inputs.service }}
+        # frameworkVersion "3" nos dois serviços. Credenciais vêm do ambiente
+        # (configuradas acima), então não passamos --aws-profile.
+        run: npx serverless@3 deploy --stage ${{ inputs.stage }} --verbose
