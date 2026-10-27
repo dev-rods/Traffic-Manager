@@ -2,21 +2,19 @@ import os
 import time
 import uuid
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 import boto3
 from boto3.dynamodb.conditions import Key, Attr
 
-from src.services.business_hours import CLINIC_TZ, fuso
-
 logger = logging.getLogger(__name__)
 
-# Ha "lembrete" no codigo desde o commit inicial, mas NUNCA foi ligado:
-# `AppointmentService.completo()` nao passa `reminder_service`, nenhuma clinica
-# tem o template REMINDER_24H e a tabela de prod esta vazia (conferido em
-# 06/10/2026). O que esta aqui e codigo latente, corrigido para o dia em que
-# alguem decidir ligar - ligar e decisao de produto, nao deste arquivo.
+# A fila de ENTREGA dos lembretes de sessao (PRD 027). Quem decide QUANDO e o
+# chamador (`lembrete_da_agenda`): o botao do painel manda "agora", o lote
+# automatico manda "primeiro horario do dia menos a antecedencia". Ate 27/10/2026
+# este arquivo calculava "24h antes de cada sessao" e nunca foi ligado em
+# producao; o calculo saiu daqui porque o lembrete e por DIA, nao por sessao.
 
 
 class ReminderService:
@@ -25,77 +23,34 @@ class ReminderService:
         dynamodb = boto3.resource("dynamodb")
         self.table = dynamodb.Table(os.environ["SCHEDULED_REMINDERS_TABLE"])
 
-    def schedule_reminder(self, appointment: Dict[str, Any],
-                          clinic: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Agenda o lembrete para 24h antes da sessao, no fuso da clinica.
-
-        `clinic` traz o `timezone`. Sem ele, America/Sao_Paulo. Antes a hora
-        local era gravada com sufixo Z e comparada com utcnow: sessao as 07:15
-        em Brasilia gerava lembrete as 07:15 UTC, 04:15 local.
-        """
+    def agenda_lembrete(self, appointment: Dict[str, Any], clinic: Dict[str, Any],
+                        send_at: datetime) -> Dict[str, Any]:
+        """Um item na fila com o `sendAt` do LOTE. `send_at` tem fuso; e gravado
+        em UTC porque e com o relogio UTC que o processador compara."""
         reminder_id = str(uuid.uuid4())
-        clinic_id = appointment.get("clinic_id", "")
-        appointment_id = str(appointment.get("id", ""))
-
-        # Calculate send_at: appointment_date + start_time - 24h
-        appt_date = appointment.get("appointment_date")
-        appt_time = appointment.get("start_time")
-
-        if isinstance(appt_date, str):
-            dt = datetime.strptime(appt_date, "%Y-%m-%d")
-        else:
-            dt = datetime.combine(appt_date, datetime.min.time())
-
-        if isinstance(appt_time, str):
-            parts = appt_time.split(":")
-            dt = dt.replace(hour=int(parts[0]), minute=int(parts[1]))
-        elif hasattr(appt_time, 'hour'):
-            dt = dt.replace(hour=appt_time.hour, minute=appt_time.minute)
-        elif isinstance(appt_time, timedelta):
-            total_seconds = int(appt_time.total_seconds())
-            dt = dt.replace(hour=total_seconds // 3600, minute=(total_seconds % 3600) // 60)
-
-        # A sessao e hora LOCAL da clinica; o `sendAt` e UTC, porque e com
-        # utcnow que o processador compara.
-        tz = fuso(clinic) if clinic else CLINIC_TZ
-        sessao_local = tz.localize(dt)
-        send_at_dt = (sessao_local - timedelta(hours=24)).astimezone(timezone.utc)
-        send_at_iso = send_at_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        # Get patient info
-        phone = appointment.get("patient_phone", "")
-        # O nome digitado neste agendamento: o mesmo telefone pode agendar
-        # para mais de uma pessoa, e o cadastro guarda um nome so.
-        patient_name = appointment.get("full_name") or appointment.get("patient_name") or ""
-
-        # If patient info not in appointment dict, try from nested data
-        if not phone:
-            phone = appointment.get("phone", "")
-
+        send_at_iso = send_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         item = {
             "pk": f"REMINDER#{reminder_id}",
             "sk": f"SEND_AT#{send_at_iso}",
             "reminderId": reminder_id,
-            "appointmentId": appointment_id,
-            "clinicId": clinic_id,
-            "phoneNumber": phone,
-            "patientName": patient_name,
-            "reminderType": "REMINDER_24H",
+            "appointmentId": str(appointment.get("id", "")),
+            "clinicId": appointment.get("clinic_id") or clinic.get("clinic_id", ""),
+            "phoneNumber": appointment.get("patient_phone") or appointment.get("phone") or "",
+            # O nome digitado neste agendamento: o mesmo telefone pode agendar
+            # para mais de uma pessoa, e o cadastro guarda um nome so.
+            "patientName": appointment.get("full_name") or appointment.get("patient_name") or "",
+            "reminderType": "LEMBRETE_SESSAO",
             "status": "PENDING",
             "sendAt": send_at_iso,
-            "appointmentDate": str(appt_date),
-            "appointmentTime": str(appt_time),
+            "appointmentDate": str(appointment.get("appointment_date")),
+            "appointmentTime": str(appointment.get("start_time")),
             "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
-
-        try:
-            self.table.put_item(Item=item)
-            logger.info(
-                f"[ReminderService] Lembrete agendado: id={reminder_id} "
-                f"appointmentId={appointment_id} sendAt={send_at_iso}"
-            )
-        except Exception as e:
-            logger.error(f"[ReminderService] Erro ao agendar lembrete: {e}")
-
+        self.table.put_item(Item=item)
+        logger.info(
+            f"[ReminderService] Lembrete enfileirado: {reminder_id} "
+            f"appointment={item['appointmentId']} sendAt={send_at_iso}"
+        )
         return item
 
     def cancel_reminder(self, appointment_id: str) -> int:

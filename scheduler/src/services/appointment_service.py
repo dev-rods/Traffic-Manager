@@ -326,12 +326,8 @@ class AppointmentService:
             f"service_area_pairs={len(service_area_pairs) if service_area_pairs else 0}"
         )
 
-        # 8. Schedule reminder (if available)
-        if self.reminder_service:
-            try:
-                self.reminder_service.schedule_reminder(result, self._fuso_da_clinica(clinic_id))
-            except Exception as e:
-                logger.error(f"[AppointmentService] Erro ao agendar lembrete: {e}")
+        # 8. O lembrete de sessao e por DIA da agenda (PRD 027), enfileirado
+        # pelo botao do painel ou pelo lote automatico - nao na criacao.
 
         # 9. Mark lead as booked (if lead exists for this phone+clinic)
         if self.lead_service:
@@ -465,7 +461,8 @@ class AppointmentService:
         if updated_rows == 0:
             raise OptimisticLockError("Agendamento foi modificado por outro processo")
 
-        # 6. Cancel old reminder and schedule new
+        # 6. Remarcou: o lembrete pendente do dia antigo cai. O do dia novo vem
+        # pelo lote daquele dia (PRD 027), nao daqui.
         # A estreia passa para a proxima sessao confirmada, se houver.
         passa_a_marca_adiante(self.db, appointment_id)
 
@@ -480,15 +477,6 @@ class AppointmentService:
             (appointment_id,),
         )
         updated_appointment = result[0] if result else appointment
-
-        if self.reminder_service:
-            try:
-                self.reminder_service.schedule_reminder(
-                    updated_appointment,
-                    self._fuso_da_clinica(updated_appointment.get("clinic_id")),
-                )
-            except Exception as e:
-                logger.error(f"[AppointmentService] Erro ao agendar novo lembrete: {e}")
 
         # Keep any pending conversion aligned with the moved appointment
         if self.lead_service:
