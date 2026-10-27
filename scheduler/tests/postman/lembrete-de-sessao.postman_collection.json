@@ -1,0 +1,149 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Lembrete de Sessao",
+    "description": "PRD 027: lembrete por dia da agenda (previa e envio), confirmacao de presenca pela equipe e configuracao do lote automatico.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "lembrete-sessao-collection-027"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "API_KEY", "value": "YOUR_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "dia", "value": "2026-11-06", "type": "string" },
+    { "key": "appointmentId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Previa do lembrete do dia",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+        "var j = pm.response.json();",
+        "pm.test('tem contagens', function () { pm.expect(j).to.have.property('enfileirados'); pm.expect(j).to.have.property('ja_lembrados'); pm.expect(j).to.have.property('tem_link_de_autoatendimento'); });"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "x-api-key", "value": "{{API_KEY}}" }, { "key": "Content-Type", "value": "application/json" } ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/agenda/{{dia}}/lembretes?simular=true",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "agenda", "{{dia}}", "lembretes"],
+          "query": [{ "key": "simular", "value": "true" }]
+        }
+      }
+    },
+    {
+      "name": "Enviar lembrete do dia",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+        "pm.test('status SUCCESS', function () { pm.expect(pm.response.json().status).to.eql('SUCCESS'); });"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "x-api-key", "value": "{{API_KEY}}" }, { "key": "Content-Type", "value": "application/json" } ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/agenda/{{dia}}/lembretes",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "agenda", "{{dia}}", "lembretes"]
+        }
+      }
+    },
+    {
+      "name": "Dia passado e recusado",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "x-api-key", "value": "{{API_KEY}}" }, { "key": "Content-Type", "value": "application/json" } ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/agenda/2020-01-01/lembretes",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "agenda", "2020-01-01", "lembretes"]
+        }
+      }
+    },
+    {
+      "name": "Confirmar presenca (equipe)",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+        "pm.test('confirmado_por EQUIPE', function () { pm.expect(pm.response.json().appointment.confirmado_por).to.eql('EQUIPE'); });"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [ { "key": "x-api-key", "value": "{{API_KEY}}" }, { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"confirmado\": true\n}" },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "appointments", "{{appointmentId}}"]
+        }
+      }
+    },
+    {
+      "name": "Desfazer confirmacao",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+        "pm.test('confirmado_em limpo', function () { pm.expect(pm.response.json().appointment.confirmado_em).to.be.null; });"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [ { "key": "x-api-key", "value": "{{API_KEY}}" }, { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"confirmado\": false\n}" },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "appointments", "{{appointmentId}}"]
+        }
+      }
+    },
+    {
+      "name": "Confirmado combinado e recusado",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [ { "key": "x-api-key", "value": "{{API_KEY}}" }, { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"confirmado\": true,\n  \"notes\": \"x\"\n}" },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "appointments", "{{appointmentId}}"]
+        }
+      }
+    },
+    {
+      "name": "Ligar lembrete automatico",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [ { "key": "x-api-key", "value": "{{API_KEY}}" }, { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"lembrete_automatico\": true,\n  \"lembrete_antecedencia_horas\": 24\n}" },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}"]
+        }
+      }
+    },
+    {
+      "name": "Antecedencia fora do limite e recusada",
+      "event": [{ "listen": "test", "script": { "exec": [
+        "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+      ] } }],
+      "request": {
+        "method": "PUT",
+        "header": [ { "key": "x-api-key", "value": "{{API_KEY}}" }, { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"lembrete_antecedencia_horas\": 0\n}" },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}"]
+        }
+      }
+    }
+  ]
+}

@@ -386,6 +386,13 @@ se a pessoa pedir".
 ## Status
 
 - [x] Discovery concluído em 27/10/2026
-- [ ] Spec gerada: `spec/027-lembrete-de-sessao.md`
-- [ ] Implementado em:
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Spec gerada: `spec/027-lembrete-de-sessao.md`
+- [x] Implementado em: 27/10/2026 (branch `feat/027-lembrete-de-sessao`)
+- [x] Registrado em `TASKS_LOG.md`
+
+Adaptações ao implementar: o template `LEMBRETE_SESSAO` usa a sintaxe
+`{{variavel}}` do `render_template` (o PRD escrevia `{variavel}`);
+`confirm_attendance` não entra em `TOOL_DEFINITIONS`, o agente a acrescenta
+só com a sobreposição viva (sem vetar em cada skill); a porta do disparo
+(`motivo_para_nao_iniciar`) foi movida de `send/handler.py` para
+`services/porta_do_disparo.py` para o processador reusar.
