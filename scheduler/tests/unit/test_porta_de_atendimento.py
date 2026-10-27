@@ -262,53 +262,54 @@ class TestRetomadaPeloPainel(unittest.TestCase):
         falar.assert_not_called()
 
 
-# ── Lembrete (código latente) ────────────────────────────────────────────
+# ── Lembrete de sessão (PRD 027) ─────────────────────────────────────────
+#
+# A porta do lembrete é a do disparo em lote (`porta_do_disparo`): cooldown e
+# pessoa na conversa NÃO barram - o lembrete sai e destrava a conversa, como o
+# "Retomar bot". Só bot pausado (falha) e silêncio (adia) continuam fechando.
+# O processador inteiro está coberto em test_reminder_processor.py.
 
 class TestLembrete(unittest.TestCase):
-    def _roda(self, sessao):
+    def _roda(self, sessao, clinic=None, agora=AGORA_UTC):
         from src.functions.reminder import processor as modulo
 
         lembrete = {"reminderId": "r1", "appointmentId": "ap1", "clinicId": "c1",
-                    "phoneNumber": "5511999990000", "patientName": "Y",
-                    "appointmentTime": "07:15", "pk": "REMINDER#r1", "sk": "SEND_AT#x"}
-        svc = mock.MagicMock()
-        svc.get_pending_reminders.return_value = [lembrete]
+                    "phoneNumber": "5511999990000", "pk": "REMINDER#r1", "sk": "SEND_AT#x"}
+        clinic = clinic or {"clinic_id": "c1", "timezone": "America/Sao_Paulo", "bot_paused": False}
+        appt = {"id": "ap1", "clinic_id": "c1", "status": "CONFIRMED", "appointment_date": "2026-09-05",
+                "start_time": "07:15:00", "full_name": "Y", "patient_phone": "5511999990000", "areas": None}
         db = mock.MagicMock()
-        db.execute_query.side_effect = lambda sql, params=None: (
-            [{"clinic_id": "c1", "timezone": "America/Sao_Paulo"}] if "clinics" in sql
-            else [{"status": "CONFIRMED"}])
+        db.execute_query.side_effect = lambda sql, params=None: ([clinic] if "clinics" in sql else [appt])
         provider = mock.MagicMock()
         provider.send_text.return_value = mock.MagicMock(success=True, provider_message_id="z", raw_response={})
+        deps = modulo.Deps(db=db, reminder_service=mock.MagicMock(), template_service=mock.MagicMock(),
+                           tracker=mock.MagicMock(), provider=provider, tabela_sessoes=mock.MagicMock(),
+                           abre_lembrete=mock.MagicMock(return_value=True),
+                           grava_atendimento=mock.MagicMock(return_value=True),
+                           carrega_sessao=lambda c, p: dict(sessao))
+        return modulo.entrega(lembrete, deps, agora), deps
 
-        class Relogio(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return AGORA_UTC if tz else AGORA_UTC.replace(tzinfo=None)
+    def test_em_cooldown_envia_e_destrava(self):
+        resultado, deps = self._roda(em_cooldown())
+        self.assertEqual(resultado, "enviado")
+        deps.provider.send_text.assert_called_once()
+        deps.grava_atendimento.assert_called_once()
 
-            @classmethod
-            def utcnow(cls):
-                return AGORA_UTC.replace(tzinfo=None)
+    def test_com_pessoa_envia_e_destrava(self):
+        resultado, deps = self._roda(com_pessoa())
+        self.assertEqual(resultado, "enviado")
+        deps.grava_atendimento.assert_called_once()
 
-        with mock.patch.object(modulo, "ReminderService", return_value=svc), \
-             mock.patch.object(modulo, "PostgresService", return_value=db), \
-             mock.patch.object(modulo, "TemplateService"), \
-             mock.patch.object(modulo, "MessageTracker"), \
-             mock.patch.object(modulo, "get_provider", return_value=provider), \
-             mock.patch.object(modulo, "carrega_sessao", return_value=dict(sessao)), \
-             mock.patch.object(modulo, "datetime", Relogio):
-            modulo.handler({}, None)
-        return svc, provider
+    def test_bot_pausado_falha(self):
+        resultado, deps = self._roda({}, clinic={"clinic_id": "c1", "timezone": "America/Sao_Paulo", "bot_paused": True})
+        self.assertEqual(resultado, "falhou")
+        deps.provider.send_text.assert_not_called()
 
-    def test_em_cooldown_ENVIA(self):
-        """Transacional: a sessão existe e a pessoa precisa saber."""
-        svc, provider = self._roda(em_cooldown())
-        provider.send_text.assert_called_once()
-
-    def test_com_pessoa_adia(self):
-        svc, provider = self._roda(com_pessoa())
-        provider.send_text.assert_not_called()
-        svc.adia.assert_called_once()
-        self.assertEqual(svc.adia.call_args[0][3], "porta_fechada")
+    def test_de_madrugada_adia(self):
+        resultado, deps = self._roda({}, agora=MADRUGADA_UTC)
+        self.assertEqual(resultado, "adiado")
+        deps.reminder_service.adia.assert_called_once()
+        self.assertEqual(deps.reminder_service.adia.call_args[0][3], "janela_de_silencio")
 
 
 # ── Webhook: quem renova, quem não ───────────────────────────────────────

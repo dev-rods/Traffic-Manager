@@ -24,6 +24,8 @@ ABERTAS = {
     "appointment/list.py": "agenda.ler",
     "appointment/create.py": "agenda.escrever",
     "appointment/update.py": "agenda.escrever",
+    # Lembrar a agenda do dia é trabalho da recepção (PRD 027).
+    "appointment/lembretes_do_dia.py": "agenda.escrever",
     "availability/slots.py": "agenda.ler",
     # As datas com atendimento, que é o que a tela da agenda pagina.
     "availability/rules.py": "agenda.ler",

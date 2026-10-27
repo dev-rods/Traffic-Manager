@@ -34,9 +34,17 @@ ALLOWED_FIELDS = {
     "bot_autoreply_policy",
     "bot_pilot_phones",
     "custom_domain",
+    # Lembrete de sessao (PRD 027): lote automatico e antecedencia em horas em
+    # relacao ao primeiro horario do dia.
+    "lembrete_automatico",
+    "lembrete_antecedencia_horas",
 }
 
 JSONB_FIELDS = {"business_hours"}
+
+# Antecedencia fora disto nao faz sentido: menos de 1h nao da tempo de ninguem
+# reagir, mais de 72h e a pessoa nem lembra que recebeu.
+ANTECEDENCIA_MIN_HORAS, ANTECEDENCIA_MAX_HORAS = 1, 72
 
 
 def _serialize_row(row):
@@ -120,6 +128,18 @@ def handler(event, context):
             })
 
         logger.info(f"Atualizando clinica: {clinic_id}")
+
+        if "lembrete_antecedencia_horas" in body:
+            try:
+                horas = int(body["lembrete_antecedencia_horas"])
+            except (TypeError, ValueError):
+                horas = -1
+            if not ANTECEDENCIA_MIN_HORAS <= horas <= ANTECEDENCIA_MAX_HORAS:
+                return http_response(400, {
+                    "status": "ERROR",
+                    "message": f"lembrete_antecedencia_horas deve estar entre {ANTECEDENCIA_MIN_HORAS} e {ANTECEDENCIA_MAX_HORAS}",
+                })
+            body["lembrete_antecedencia_horas"] = horas
 
         db = PostgresService()
 
