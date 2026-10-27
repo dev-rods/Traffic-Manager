@@ -1148,6 +1148,28 @@ class ToolExecutor:
         self.appointment_service.cancel_appointment(appointment_id)
         return {"success": True, "appointment_id": appointment_id}
 
+    def _tool_confirm_attendance(self, args, clinic_id, phone, ctx):
+        """A pessoa respondeu ao lembrete confirmando que vai (PRD 027).
+
+        O agendamento vem da SESSAO (sobreposicao de lembrete), nao do modelo:
+        ele nao tem como confirmar outro que nao o do lembrete. Idempotente: a
+        segunda confirmacao nao mexe em quem confirmou primeiro.
+        """
+        from src.services import lembrete
+
+        appointment_id = lembrete.appointment_id(ctx.get("session"))
+        if not appointment_id:
+            return {"error": "Nenhum lembrete ativo nesta conversa"}
+        n = self.db.execute_write(
+            """UPDATE scheduler.appointments
+                  SET confirmado_em = COALESCE(confirmado_em, NOW()),
+                      confirmado_por = COALESCE(confirmado_por, 'PACIENTE'),
+                      updated_at = NOW()
+                WHERE id = %s::uuid AND status = 'CONFIRMED'""",
+            (appointment_id,),
+        )
+        return {"success": n > 0, "appointment_id": appointment_id}
+
     def _tool_request_human_handoff(self, args, clinic_id, phone, ctx):
         """Entrega a conversa, dizendo POR QUÊ.
 

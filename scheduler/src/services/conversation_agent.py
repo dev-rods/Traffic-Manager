@@ -24,6 +24,7 @@ from src.services.prompt_da_campanha import adapta as adapta_para_campanha
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services import desambiguacao
 from src.services import estado_comercial
+from src.services import lembrete
 from src.services import nivel_de_risco
 from src.services import policy_do_faq
 from src.services import skills
@@ -52,6 +53,25 @@ from src.services.template_service import TemplateService
 
 # Botões inline do WhatsApp. Acima disso a lista sai numerada (opcoes_numeradas).
 LIMITE_DE_BOTOES = 3
+
+
+def _nome_da_tool(definicao):
+    return definicao.get("name") or (definicao.get("function") or {}).get("name")
+
+
+def _ferramentas_para(session, clinic, skill, definicoes):
+    """As tools que o modelo enxerga neste turno.
+
+    A skill poda pelo estado comercial. A sobreposicao de lembrete (PRD 027)
+    vem por cima: com site de autoatendimento, cancelar e remarcar SAEM (a
+    pessoa recebe o link); e `confirm_attendance` ENTRA, so enquanto o
+    lembrete esta vivo. Pura, para o teste nao precisar do agente inteiro.
+    """
+    remover = lembrete.ferramentas_a_remover(session, clinic)
+    tools = skill.filtra([d for d in definicoes if _nome_da_tool(d) not in remover])
+    if lembrete.FERRAMENTA_DE_CONFIRMACAO in lembrete.ferramentas_a_liberar(session):
+        tools.append(lembrete.definicao_da_tool())
+    return tools
 
 logger = logging.getLogger(__name__)
 
@@ -321,6 +341,23 @@ class ConversationAgent:
             logger.error(f"[Proveniencia] Falha ao conferir resposta: {e}")
             return set()
 
+    def _clinica(self, clinic_id):
+        """A linha da clinica, ou {} quando nao ha banco (testes montam o agente
+        sem ele) ou a consulta falha. Sem clinica, a sobreposicao de lembrete
+        age como "sem site": nao esconde ferramenta nenhuma."""
+        db = getattr(self, "db", None)
+        if db is None:
+            return {}
+        try:
+            linhas = db.execute_query(
+                "SELECT * FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
+                (clinic_id,),
+            )
+            return linhas[0] if linhas else {}
+        except Exception as e:
+            logger.error(f"[ConversationAgent] Nao li a clinica {clinic_id}: {e}")
+            return {}
+
     def process_message(self, clinic_id, incoming):
         """
         Process an incoming WhatsApp message and return outgoing messages.
@@ -371,10 +408,17 @@ class ConversationAgent:
         skill = skills.despacha(estado)
         logger.info(f"[Skill] {phone}: {skill.nome}")
 
+        # 2f. A clinica, uma vez: a sobreposicao de lembrete precisa dela
+        # (dominio do site decide se cancelar/remarcar vao ao modelo).
+        clinic = self._clinica(clinic_id)
+
         # 3. Build system prompt
         system_prompt = self._build_system_prompt(clinic_id, phone, session)
         if not campanha_viva(session):
             system_prompt += skill.bloco
+        # Sobreposicao de lembrete (PRD 027): bloco por cima de qualquer skill,
+        # como a campanha. Gravada na entrega do lembrete, nunca inferida.
+        system_prompt += lembrete.bloco_de_prompt(session, clinic)
         if cadastrada:
             # RETIRADO, nao contradito: o roteiro com texto pronto vence
             # qualquer "nao peca" colado no fim. Ver prompt_da_campanha.
@@ -566,7 +610,8 @@ class ConversationAgent:
                 + f"═══ MENSAGEM DA PESSOA ═══\n{user_content}"
             )}
 
-        tools = skill.filtra(get_tool_definitions(format="anthropic", faq=itens_do_faq))
+        tools = _ferramentas_para(session, clinic, skill,
+                                  get_tool_definitions(format="anthropic", faq=itens_do_faq))
         pending_buttons = None
         handoff_requested = False
         # O MOTIVO que a tool recebeu. Era descartado, e a conversa chegava à

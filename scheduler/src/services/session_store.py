@@ -67,11 +67,21 @@ def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
     Devolve True se gravou. Nunca levanta: falhar aqui não pode derrubar o envio
     que já aconteceu. Quem chama reporta o resultado para a tela.
     """
+    return _abre_sobreposicao(table, clinic_id, phone, "campanha", campanha, "Campanha")
+
+
+def abre_lembrete(table, clinic_id: str, phone: str, lembrete: dict) -> bool:
+    """Grava a sobreposicao de lembrete (PRD 027) na sessao, DEPOIS de a
+    mensagem sair. Mesmas razoes e mesmo formato da campanha."""
+    return _abre_sobreposicao(table, clinic_id, phone, "lembrete", lembrete, "Lembrete")
+
+
+def _abre_sobreposicao(table, clinic_id: str, phone: str, chave: str, dados: dict, rotulo: str) -> bool:
     pk, sk = f"CLINIC#{clinic_id}", f"PHONE#{phone}"
     try:
         item = table.get_item(Key={"pk": pk, "sk": sk}).get("Item") or {}
         session = item.get("session") or {}
-        session["campanha"] = campanha
+        session[chave] = dados
 
         # A campanha COMECA uma conversa. Quem ja falou com o bot antes tem
         # historico guardado, e sem limpar aqui o agente leria a conversa velha
@@ -97,10 +107,10 @@ def abre_campanha(table, clinic_id: str, phone: str, campanha: dict) -> bool:
                 "ttl": retencao.ttl_da_sessao(agora),
             }
         )
-        logger.info(f"[SessionStore] Campanha aberta para {phone}")
+        logger.info(f"[SessionStore] {rotulo} aberta para {phone}")
         return True
     except Exception as e:
-        logger.error(f"[SessionStore] Falha ao abrir campanha para {phone}: {e}")
+        logger.error(f"[SessionStore] Falha ao abrir {rotulo.lower()} para {phone}: {e}")
         return False
 
 
