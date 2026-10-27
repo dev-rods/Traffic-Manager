@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { useAppointments, useMarcarFalta, useDesmarcarFalta } from '@/hooks/useAppointments'
+import { useAppointments, useMarcarFalta, useDesmarcarFalta, useConfirmarPresenca } from '@/hooks/useAppointments'
 import { useToast } from '@/components/ui/toastContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
@@ -71,6 +71,42 @@ export function AgendaPage() {
       })
     },
     [marcarFaltaMutation, showToast, desmarcarFalta],
+  )
+
+  // Confirmacao de presenca pela equipe (PRD 027): quem confirma por telefone
+  // e marcado aqui; quem responde o lembrete no WhatsApp e marcado pelo bot.
+  // Reversivel, entao sem modal - o desfazer vive no toast, como a falta.
+  const confirmarPresencaMutation = useConfirmarPresenca()
+  // Desfazer vem primeiro porque confirmar o usa na acao do toast.
+  const desconfirmarPresenca = useCallback(
+    (a: Appointment) => {
+      confirmarPresencaMutation.mutate({ appointmentId: a.id, confirmado: false }, {
+        onSuccess: () => showToast({ message: 'Confirmação desfeita' }),
+        onError: (erro) =>
+          showToast({
+            message: mensagemDoErro(erro, 'Nao foi possivel desfazer a confirmacao.'),
+            variant: 'error',
+          }),
+      })
+    },
+    [confirmarPresencaMutation, showToast],
+  )
+  const confirmarPresenca = useCallback(
+    (a: Appointment) => {
+      confirmarPresencaMutation.mutate({ appointmentId: a.id, confirmado: true }, {
+        onSuccess: () =>
+          showToast({
+            message: 'Presença confirmada',
+            action: { label: 'Desfazer', onClick: () => desconfirmarPresenca(a) },
+          }),
+        onError: (erro) =>
+          showToast({
+            message: mensagemDoErro(erro, 'Nao foi possivel confirmar a presenca.'),
+            variant: 'error',
+          }),
+      })
+    },
+    [confirmarPresencaMutation, showToast, desconfirmarPresenca],
   )
 
   // null = ainda não navegou, então vale a página padrão (as próximas datas).
@@ -243,6 +279,8 @@ export function AgendaPage() {
             ? indiceDoDiaExpandido >= 0 && indiceDoDiaExpandido < allDates.length - 1
             : janela.podeAvancar
         }
+        diaParaLembrar={diaUnico}
+        podeLembrar={!!diaUnico && diaUnico >= todayStr()}
       />
 
       {faltasNaFaixa > 0 && (
@@ -297,6 +335,8 @@ export function AgendaPage() {
         onCancel={(a) => setCancelling(a)}
         onMarcarFalta={marcarFalta}
         onDesmarcarFalta={desmarcarFalta}
+        onConfirmar={confirmarPresenca}
+        onDesconfirmar={desconfirmarPresenca}
       />
 
       {/* Edit appointment modal — key forces remount to reset form */}

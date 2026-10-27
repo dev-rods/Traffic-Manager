@@ -16,6 +16,9 @@ export interface Clinic {
   zapi_instance_token: string | null
   bot_paused: boolean
   batch_message_template: string | null
+  /** Lembrete de sessao (PRD 027): lote automatico e antecedencia em horas. */
+  lembrete_automatico: boolean
+  lembrete_antecedencia_horas: number
   active: boolean
   logo_url: string | null
   favicon_url: string | null
@@ -43,6 +46,8 @@ export interface UpdateClinicPayload {
   zapi_instance_token?: string
   bot_paused?: boolean
   batch_message_template?: string
+  lembrete_automatico?: boolean
+  lembrete_antecedencia_horas?: number
   logo_url?: string
   favicon_url?: string
   custom_domain?: string | null
@@ -207,9 +212,37 @@ export interface Appointment {
   original_price_cents: number | null
   final_price_cents: number | null
   full_name: string | null
+  /** Rastro do lembrete de sessao (PRD 027). null = nunca enfileirado. */
+  lembrete_enviado_em: string | null
+  lembrete_status: 'ENFILEIRADO' | 'ADIADO' | 'ENVIADO' | 'FALHOU' | null
+  lembrete_erro: string | null
+  /** Presenca confirmada pela pessoa (bot) ou pela equipe (popover). */
+  confirmado_em: string | null
+  confirmado_por: 'PACIENTE' | 'EQUIPE' | null
   version: number
   created_at: string
   updated_at: string
+}
+
+/** Resposta do botao "Lembrar agenda do dia" (previa ou envio). */
+export interface LembretesDoDiaResponse {
+  status: string
+  enfileirados: number
+  ja_lembrados: number
+  sem_telefone: number
+  enfileirados_antes: number
+  send_at: string
+  /** ISO quando o lote caiu na janela de silencio; null quando sai agora. */
+  adiados_para: string | null
+  tem_link_de_autoatendimento: boolean
+}
+
+export interface MessageTemplate {
+  id: string
+  clinic_id: string
+  template_key: string
+  content: string
+  active: boolean
 }
 
 export interface ListAppointmentsResponse {

@@ -53,3 +53,35 @@ describe('appointmentsService', () => {
     expect(mockApi.post).toHaveBeenCalledWith('/appointments', payload)
   })
 })
+
+describe('lembrete da agenda do dia (PRD 027)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('a previa manda simular=true como query param', async () => {
+    mockApi.post.mockResolvedValueOnce({ data: { status: 'SUCCESS', enfileirados: 3 } })
+    await appointmentsService.lembrarAgendaDoDia(CLINIC_ID, '2026-11-06', true)
+    expect(mockApi.post).toHaveBeenCalledWith(
+      `/clinics/${CLINIC_ID}/agenda/2026-11-06/lembretes`,
+      null,
+      { params: { simular: 'true' } },
+    )
+  })
+
+  it('o envio real nao manda params', async () => {
+    mockApi.post.mockResolvedValueOnce({ data: { status: 'SUCCESS', enfileirados: 3 } })
+    await appointmentsService.lembrarAgendaDoDia(CLINIC_ID, '2026-11-06', false)
+    expect(mockApi.post).toHaveBeenCalledWith(
+      `/clinics/${CLINIC_ID}/agenda/2026-11-06/lembretes`,
+      null,
+      { params: undefined },
+    )
+  })
+
+  // `confirmado` vai SOZINHO no corpo: o backend recusa combinado com outros
+  // campos, porque confirmacao e coluna e nao status.
+  it('confirmar presenca e um PUT so com confirmado', async () => {
+    mockApi.put.mockResolvedValueOnce({ data: { status: 'SUCCESS' } })
+    await appointmentsService.confirmarPresenca('appt-1', true)
+    expect(mockApi.put).toHaveBeenCalledWith('/appointments/appt-1', { confirmado: true })
+  })
+})

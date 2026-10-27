@@ -7,6 +7,7 @@ import {
   type Vao,
 } from '@/lib/expediente'
 import type { Appointment, AvailabilityRule } from '@/types'
+import { ConfirmacaoBadge } from './ConfirmacaoBadge'
 
 interface AgendaDoDiaProps {
   dia: string
@@ -193,6 +194,7 @@ function LinhaDaAgenda({
                 FALTOU
               </span>
             )}
+            <ConfirmacaoBadge appointment={a} />
             {daParceria && (
               <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                 PARCERIA

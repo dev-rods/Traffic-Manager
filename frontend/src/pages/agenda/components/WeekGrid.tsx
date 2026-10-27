@@ -2,6 +2,7 @@ import { shortDayName, dayNumber, shortMonthName, todayStr, timeToMinutes } from
 import { distribuiEmColunas } from '@/lib/agendaLayout'
 import { PRIMEIRA_HORA, ULTIMA_HORA, MINUTOS_DO_SLOT } from '@/lib/expediente'
 import type { Appointment } from '@/types'
+import { ConfirmacaoBadge } from './ConfirmacaoBadge'
 
 // A janela e a granularidade moram em lib/expediente: a lista do celular
 // desenha os vaos livres sobre exatamente o mesmo intervalo. Duas copias
@@ -175,6 +176,7 @@ function AppointmentBlock({
             1ª
           </span>
         )}
+        <ConfirmacaoBadge appointment={a} compacto />
         <span className={faltou ? 'line-through' : undefined}>{displayName}</span>
         {/* Com um dia só na tela a caixa fica larga demais para horário e nome,
             e a área sobrava em branco. Na MESMA linha, e não numa segunda:
