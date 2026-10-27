@@ -59,6 +59,10 @@ SQL_STATEMENTS = [
         -- (PRD 020 §3.7). Tem de ser maior que o TTL humano de 24h.
         idade_maxima_da_pendencia_horas INTEGER NOT NULL DEFAULT 72,
         batch_message_template TEXT,
+        -- Lembrete de sessao (PRD 027): lote automatico do dia, `antecedencia`
+        -- horas antes do primeiro horario. Desligado ate a clinica decidir.
+        lembrete_automatico BOOLEAN NOT NULL DEFAULT FALSE,
+        lembrete_antecedencia_horas INTEGER NOT NULL DEFAULT 24,
         active BOOLEAN DEFAULT TRUE,
         logo_url VARCHAR(500),
         favicon_url VARCHAR(500),
@@ -164,6 +168,13 @@ SQL_STATEMENTS = [
         notes TEXT,
         full_name VARCHAR(255),
         manual_duration_minutes INTEGER,
+        -- Lembrete de sessao (PRD 027): rastro do envio por agendamento e a
+        -- confirmacao da pessoa ou da equipe. Confirmacao NAO e status.
+        lembrete_enviado_em TIMESTAMPTZ,
+        lembrete_status VARCHAR(16),
+        lembrete_erro VARCHAR(120),
+        confirmado_em TIMESTAMPTZ,
+        confirmado_por VARCHAR(16),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -1106,6 +1117,38 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS custom_domain VARCHAR(255)",
     """CREATE UNIQUE INDEX IF NOT EXISTS uq_clinics_custom_domain
        ON scheduler.clinics(custom_domain) WHERE custom_domain IS NOT NULL""",
+
+    # -- Lembrete de sessao (PRD 027) ------------------------------------------
+    #
+    # `lembrete_*` e o rastro do envio por agendamento (idempotencia e estado
+    # para o popover). `confirmado_*` e a resposta da pessoa ou da equipe.
+    # Confirmacao NAO e status: `status` governa motor de horarios, conversao e
+    # agenda, e um quarto valor exigiria revisar tudo isso.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS lembrete_enviado_em TIMESTAMPTZ",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS lembrete_status VARCHAR(16)",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS lembrete_erro VARCHAR(120)",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS confirmado_em TIMESTAMPTZ",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS confirmado_por VARCHAR(16)",
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_appointments_lembrete_status') THEN
+            ALTER TABLE scheduler.appointments ADD CONSTRAINT chk_appointments_lembrete_status CHECK (
+                lembrete_status IS NULL OR lembrete_status IN ('ENFILEIRADO','ADIADO','ENVIADO','FALHOU'));
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_appointments_confirmado_por') THEN
+            ALTER TABLE scheduler.appointments ADD CONSTRAINT chk_appointments_confirmado_por CHECK (
+                confirmado_por IS NULL OR confirmado_por IN ('PACIENTE','EQUIPE'));
+        END IF;
+    END $$
+    """,
+    # Serve a selecao do lote: "que agendamento deste dia ainda nao foi lembrado?"
+    """CREATE INDEX IF NOT EXISTS idx_appointments_sem_lembrete
+       ON scheduler.appointments (clinic_id, appointment_date)
+       WHERE lembrete_enviado_em IS NULL""",
+
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS lembrete_automatico BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS lembrete_antecedencia_horas INTEGER NOT NULL DEFAULT 24",
 ]
 
 
