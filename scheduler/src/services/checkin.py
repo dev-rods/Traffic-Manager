@@ -380,6 +380,30 @@ def estorna(db, provider: PaymentProvider, clinic_id: str, payment_id: str) -> D
         uuid.UUID(str(payment_id))
     except ValueError:
         raise NaoEncontrado()
+    row = _estornavel(db, clinic_id, payment_id)
+    if row["status"] == ESTORNADO:
+        return pagamento_para_tela(row)
+    if not _troca_status(db, payment_id, PAGO, ESTORNADO):
+        row = _estornavel(db, clinic_id, payment_id)
+        if row["status"] == ESTORNADO:
+            return dict(pagamento_para_tela(row), refundNeedsAuthorization=False)
+        raise CheckinInvalido("Só pagamento confirmado pode ser estornado.")
+    aguarda_autorizacao = False
+    if row["method"] != DINHEIRO and row["provider"] == provider.nome and row.get("provider_payment_id"):
+        try:
+            aguarda_autorizacao = provider.estorna(row["provider_payment_id"])
+        except Exception:
+            _troca_status(db, payment_id, ESTORNADO, PAGO)
+            raise
+    logger.info(f"[Checkin] estorno {payment_id} {row['method']} {row['amount_cents']} {clinic_id}"
+                f" aguarda_autorizacao={aguarda_autorizacao}")
+    # Estornado aqui = a clínica decidiu devolver e o pedido foi aceito. Se o
+    # Asaas ainda pede a autorização do dono da conta, o painel avisa.
+    return dict(pagamento_para_tela(dict(row, status=ESTORNADO)),
+                refundNeedsAuthorization=aguarda_autorizacao)
+
+
+def _estornavel(db, clinic_id: str, payment_id: str) -> Dict[str, Any]:
     rows = db.execute_query(
         """
         SELECT pay.*, a.status AS appointment_status
@@ -392,22 +416,19 @@ def estorna(db, provider: PaymentProvider, clinic_id: str, payment_id: str) -> D
     if not rows:
         raise NaoEncontrado()
     row = rows[0]
-    if row["status"] == ESTORNADO:
-        return pagamento_para_tela(row)
-    if row["status"] != PAGO:
+    if row["status"] not in (PAGO, ESTORNADO):
         raise CheckinInvalido("Só pagamento confirmado pode ser estornado.")
-    if row.get("appointment_status") != "CANCELLED":
+    if row["status"] == PAGO and row.get("appointment_status") != "CANCELLED":
         raise CheckinInvalido("Cancele a sessão antes de estornar o pagamento.")
-    aguarda_autorizacao = False
-    if row["method"] != DINHEIRO and row["provider"] == provider.nome and row.get("provider_payment_id"):
-        aguarda_autorizacao = provider.estorna(row["provider_payment_id"])
-    _marca(db, payment_id, ESTORNADO)
-    logger.info(f"[Checkin] estorno {payment_id} {row['method']} {row['amount_cents']} {clinic_id}"
-                f" aguarda_autorizacao={aguarda_autorizacao}")
-    # Estornado aqui = a clínica decidiu devolver e o pedido foi aceito. Se o
-    # Asaas ainda pede a autorização do dono da conta, o painel avisa.
-    return dict(pagamento_para_tela(dict(row, status=ESTORNADO)),
-                refundNeedsAuthorization=aguarda_autorizacao)
+    return row
+
+
+def _troca_status(db, payment_id: str, de: str, para: str) -> bool:
+    return db.execute_write(
+        "UPDATE scheduler.appointment_payments SET status = %s, updated_at = NOW() "
+        "WHERE id = %s::uuid AND status = %s",
+        (para, payment_id, de),
+    ) > 0
 
 
 EVENTOS_PAGO = {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"}

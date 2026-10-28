@@ -33,19 +33,25 @@ class Db:
 
     def execute_write(self, sql, params=None):
         assert "UPDATE scheduler.appointment_payments SET status" in sql
-        self.marcado = params[0]
+        para, _, de = params
+        if self.row["status"] != de:
+            return 0
+        self.row["status"] = self.marcado = para
         return 1
 
 
 class Provedor:
     nome = "asaas"
 
-    def __init__(self, aguarda=False):
+    def __init__(self, aguarda=False, falha=None):
         self.estornados = []
         self.aguarda = aguarda
+        self.falha = falha
 
     def estorna(self, cobranca_id):
         self.estornados.append(cobranca_id)
+        if self.falha:
+            raise self.falha
         return self.aguarda
 
 
@@ -74,6 +80,23 @@ class TestEstorno(unittest.TestCase):
         db, prov = Db(status="REFUNDED"), Provedor()
         self.assertEqual(checkin.estorna(db, prov, CLINIC, PAG)["status"], "REFUNDED")
         self.assertEqual(prov.estornados, [])
+
+    def test_quem_perde_a_corrida_nao_pede_outro_estorno(self):
+        class DbDisputado(Db):
+            def execute_write(self, sql, params=None):
+                self.row["status"] = "REFUNDED"
+                return 0
+
+        db, prov = DbDisputado(), Provedor()
+        r = checkin.estorna(db, prov, CLINIC, PAG)
+        self.assertEqual((r["status"], r["refundNeedsAuthorization"], prov.estornados), ("REFUNDED", False, []))
+
+    def test_asaas_recusando_volta_para_pago(self):
+        from src.providers.payment_provider import ErroDoProvedor
+        db, prov = Db(), Provedor(falha=ErroDoProvedor("x"))
+        with self.assertRaises(ErroDoProvedor):
+            checkin.estorna(db, prov, CLINIC, PAG)
+        self.assertEqual((db.row["status"], prov.estornados), ("PAID", ["pay_1"]))
 
     def test_de_outra_clinica_ou_id_invalido(self):
         for cid, pid in (("outra", PAG), (CLINIC, "x")):
@@ -108,6 +131,12 @@ class TestRotaDeEstorno(unittest.TestCase):
                 mock.patch(f"{self.modulo}.PostgresService"), mock.patch(f"{self.modulo}.provedor_ativo"), \
                 mock.patch("src.services.checkin.estorna", side_effect=checkin.CheckinInvalido("x")):
             self.assertEqual(self.chama()[0], 409)
+
+    def test_asaas_recusando_fala_de_estorno(self):
+        from src.providers.payment_provider import ErroDoProvedor
+        with mock.patch(f"{self.modulo}.require_api_key", return_value=("k", None)),                 mock.patch(f"{self.modulo}.PostgresService"), mock.patch(f"{self.modulo}.provedor_ativo"),                 mock.patch("src.services.checkin.estorna", side_effect=ErroDoProvedor("x")):
+            s, b = self.chama()
+        self.assertEqual((s, b["message"]), (502, "O Asaas não aceitou o estorno. Tente de novo."))
 
 
 class TestAutorizacao(unittest.TestCase):

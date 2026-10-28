@@ -40,6 +40,7 @@ def handler(event, context):
     if not clinic_id:
         return _erro(404, "Rota não encontrada")
 
+    falha_do_provedor = "O Asaas não confirmou a baixa. Tente de novo."
     try:
         if metodo == "GET" and caminho == "resumo":
             _, erro = require_api_key(event)
@@ -65,6 +66,7 @@ def handler(event, context):
             _, erro = require_api_key(event)
             if erro:
                 return erro
+            falha_do_provedor = "O Asaas não aceitou o estorno. Tente de novo."
             pagamento = checkin.estorna(PostgresService(), provedor_ativo(), clinic_id, achou.group(1))
             return http_response(200, {"status": "SUCCESS", "payment": pagamento})
 
@@ -79,8 +81,8 @@ def handler(event, context):
     except PagamentoIndisponivel:
         return _erro(503, "Pagamentos indisponíveis neste ambiente")
     except ErroDoProvedor as e:
-        logger.error(f"[Caixa] provedor recusou a baixa ({clinic_id}): {e}")
-        return _erro(502, "O Asaas não confirmou a baixa. Tente de novo.")
+        logger.error(f"[Caixa] provedor recusou {metodo} {caminho} ({clinic_id}): {e}")
+        return _erro(502, falha_do_provedor)
     except Exception as e:
         logger.error(f"[Caixa] erro em {metodo} {caminho}: {e}", exc_info=True)
         return _erro(500, "Erro interno no servidor")
