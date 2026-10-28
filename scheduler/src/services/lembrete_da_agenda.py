@@ -93,7 +93,8 @@ def _com_e(partes: List[str]) -> str:
 
 
 def variaveis_do_template(appt: Dict, clinic: Dict) -> Dict[str, str]:
-    """O que entra em LEMBRETE_SESSAO: {{nome}}, {{areas}}, {{clinic_name}}, {{dia}}, {{hora}}."""
+    """O que entra em LEMBRETE_SESSAO: {{nome}}, {{areas}}, {{clinic_name}},
+    {{dia}}, {{hora}} e {{endereco}} (o `address` da clinica; vazio se nao ha)."""
     nome_completo = appt.get("full_name") or appt.get("patient_name") or ""
     dia = appt.get("appointment_date")
     if not hasattr(dia, "weekday"):
@@ -106,4 +107,5 @@ def variaveis_do_template(appt: Dict, clinic: Dict) -> Dict[str, str]:
         "clinic_name": clinic.get("display_name") or clinic.get("name") or "",
         "dia": f"{DIAS_PT[dia.weekday()]}, {dia.strftime('%d/%m')}",
         "hora": hora_txt,
+        "endereco": (clinic.get("address") or "").strip(),
     }

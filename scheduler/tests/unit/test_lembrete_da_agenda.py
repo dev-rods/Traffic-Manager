@@ -93,6 +93,11 @@ class TestVariaveis(unittest.TestCase):
         self.assertEqual(v["dia"], "sexta, 06/11")
         self.assertEqual(v["hora"], "10:00")
 
+    def test_endereco_da_clinica(self):
+        v = LA.variaveis_do_template(appt(1), dict(CLINIC, address="  Rua X, 10 - Jardins  "))
+        self.assertEqual(v["endereco"], "Rua X, 10 - Jardins")
+        self.assertEqual(LA.variaveis_do_template(appt(1), CLINIC)["endereco"], "")
+
     def test_sem_nome_nem_area_tem_fallback(self):
         v = LA.variaveis_do_template(appt(1, full_name=None, areas=None, appointment_date="2026-11-06", start_time="09:30:00"), CLINIC)
         self.assertEqual((v["nome"], v["areas"], v["hora"]), ("tudo bem", "depilação a laser", "09:30"))

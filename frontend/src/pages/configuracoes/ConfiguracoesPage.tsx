@@ -177,7 +177,7 @@ export function ConfiguracoesPage() {
             label="Texto do lembrete"
             padrao={LEMBRETE_PADRAO}
             exemplo={EXEMPLO_DO_LEMBRETE}
-            help="Use {{nome}}, {{areas}}, {{clinic_name}}, {{dia}} e {{hora}}. Vazio volta ao texto padrão."
+            help="Use {{nome}}, {{areas}}, {{clinic_name}}, {{dia}}, {{hora}} e {{endereco}} (o endereço cadastrado em Dados gerais). Vazio volta ao texto padrão."
           />
         </Section>
 

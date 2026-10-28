@@ -14,4 +14,5 @@ export const EXEMPLO_DO_LEMBRETE: Record<string, string> = {
   clinic_name: 'sua clínica',
   dia: 'sexta, 06/11',
   hora: '09:00',
+  endereco: 'Rua Exemplo, 100 - Jardins',
 }
