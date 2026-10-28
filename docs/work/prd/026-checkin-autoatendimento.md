@@ -149,4 +149,16 @@ que a pessoa agendou. Não há cardápio, só confirmação e pagamento.
   4444 4444 4444 4444, webhook `PAYMENT_CONFIRMED`) e dinheiro (baixa pela
   recepção com `receiveInCash`). A conta sandbox precisa de chave Pix
   cadastrada para gerar QR, e a de produção também vai precisar.
-- [ ] Produção (conta Asaas por clínica)
+- [x] Produção (2026-10-28, PR #146): migrations só da 026 no banco de prod,
+  `serverless deploy --stage prod` + create-deployment (stack 450 → ~463
+  recursos), retenção de 90 dias no log da Lambda `Caixa`, painel e
+  booking-site pelo deploy do merge, app do iPad no projeto Vercel
+  `checkin-prod` (https://checkin-prod.vercel.app/{clinicId}, API de prod).
+  Smoke: check-in sem token 401, caixa 200 com dados reais, webhook sem token
+  401 e pagamento 503 "indisponível".
+- [ ] **Pagamento em produção desligado até existir a chave do Asaas de
+  produção**: `/prod/ASAAS_API_KEY` e `/prod/ASAAS_WEBHOOK_TOKEN`, webhook
+  cadastrado na conta de produção apontando para `/prod/public/asaas/webhook`
+  e chave Pix cadastrada na conta (sem ela o Asaas não gera QR). Depois,
+  `serverless deploy --stage prod` (as chaves são lidas no deploy).
+- [ ] Conta Asaas por clínica (hoje uma por stage).
