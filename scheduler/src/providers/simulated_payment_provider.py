@@ -20,6 +20,7 @@ FATURA_SIMULADA = "https://sandbox.asaas.com/i/simulado"
 
 class SimulatedPaymentProvider(PaymentProvider):
     nome = "simulado"
+    pode_simular = True
 
     def cria_cobranca(self, pagador: Pagador, metodo: str, valor_cents: int,
                       vencimento: date, descricao: str, referencia: str) -> Cobranca:
@@ -38,4 +39,7 @@ class SimulatedPaymentProvider(PaymentProvider):
         return None
 
     def recebe_em_dinheiro(self, cobranca_id: str, valor_cents: int, data: date) -> None:
+        return None
+
+    def simula(self, cobranca_id: str) -> None:
         return None

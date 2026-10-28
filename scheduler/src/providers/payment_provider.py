@@ -54,6 +54,13 @@ class Cobranca(NamedTuple):
 
 class PaymentProvider:
     nome = ""
+    # Só quem não movimenta dinheiro de verdade sabe "fingir" um pagamento: o
+    # simulado e o Asaas em SANDBOX (`/sandbox/payment/{id}/confirm`). É o que
+    # o botão "Simular pagamento (teste)" do iPad usa em dev.
+    pode_simular = False
+
+    def simula(self, cobranca_id: str) -> None:
+        raise NotImplementedError
 
     def cria_cobranca(self, pagador: Pagador, metodo: str, valor_cents: int,
                       vencimento: date, descricao: str, referencia: str) -> Cobranca:
@@ -68,6 +75,14 @@ class PaymentProvider:
 
     def recebe_em_dinheiro(self, cobranca_id: str, valor_cents: int, data: date) -> None:
         raise NotImplementedError
+
+
+def cobranca_de_teste(provider_nome: Optional[str]) -> bool:
+    """A cobrança não movimenta dinheiro de verdade: simulado, ou Asaas apontado
+    para o sandbox (dev). A tela marca como TESTE e oferece "Simular pagamento"."""
+    if provider_nome == "simulado":
+        return True
+    return provider_nome == "asaas" and "sandbox" in (os.environ.get("ASAAS_BASE_URL") or "")
 
 
 def provedor_ativo() -> PaymentProvider:

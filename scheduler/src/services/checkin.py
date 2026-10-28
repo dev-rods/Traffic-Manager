@@ -23,8 +23,8 @@ from typing import Any, Dict, List, Optional
 import psycopg2
 
 from src.providers.payment_provider import (
-    AGUARDANDO_DINHEIRO, CANCELADO, DINHEIRO, ESTORNADO, METODOS, PAGO, PENDENTE,
-    ErroDoProvedor, Pagador, PaymentProvider,
+    AGUARDANDO_DINHEIRO, CANCELADO, DINHEIRO, ESTORNADO, METODOS, PAGO, PENDENTE, PIX,
+    ErroDoProvedor, Pagador, PaymentProvider, cobranca_de_teste,
 )
 from src.services import mes_vigente
 from src.services.appointment_service import AppointmentService
@@ -64,8 +64,18 @@ def pagamento_para_tela(row: Optional[Dict]) -> Optional[Dict[str, Any]]:
         "invoiceUrl": row.get("invoice_url"),
         "pixPayload": row.get("pix_payload"),
         "paidAt": _iso(row.get("paid_at")),
-        "simulated": row.get("provider") == "simulado",
+        "simulated": cobranca_de_teste(row.get("provider")),
+        "canSimulate": _da_para_simular(row),
     }
+
+
+def _da_para_simular(row: Dict) -> bool:
+    """O botão "Simular pagamento (teste)". O simulado simula qualquer método.
+    No sandbox do Asaas só o Pix: o "confirmar" do sandbox recusa cartão (pede o
+    titular), e cartão se testa pagando a fatura com o cartão de teste."""
+    if row.get("provider") == "simulado":
+        return True
+    return cobranca_de_teste(row.get("provider")) and row.get("method") == PIX
 
 
 def _mesmo_nome(a: Optional[str], b: Optional[str]) -> bool:
@@ -317,10 +327,16 @@ def status(db, provider: PaymentProvider, clinic_id: str, phone: str, payment_id
 
 
 def simula_pagamento(db, provider: PaymentProvider, clinic_id: str, phone: str, payment_id: str) -> Dict[str, Any]:
+    """Só em teste: provedor simulado, ou Asaas no sandbox (que confirma a
+    cobrança de verdade lá e manda o webhook). Em produção não existe."""
     row = _pagamento_do_numero(db, clinic_id, phone, payment_id)
-    if row["provider"] != "simulado" or provider.nome != "simulado":
+    if row["provider"] != provider.nome or not provider.pode_simular:
         raise NaoEncontrado()
+    if not _da_para_simular(row):
+        raise CheckinInvalido("No ambiente de teste, pague a fatura com o cartão 4444 4444 4444 4444.")
     if row["status"] in (PENDENTE, AGUARDANDO_DINHEIRO):
+        if row.get("provider_payment_id"):
+            provider.simula(row["provider_payment_id"])
         _marca(db, payment_id, PAGO)
     return pagamento_para_tela(_pagamento_do_numero(db, clinic_id, phone, payment_id))
 

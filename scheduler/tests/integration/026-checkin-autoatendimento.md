@@ -113,3 +113,27 @@ nova baixa; outro status: 409; pagamento de outra clínica: 404. O resumo (`GET 
 
 Site `checkin-dev-ten.vercel.app` em iPad retrato (820×1180) e paisagem
 (1180×820): fluxo completo até "Tudo certo", sem overflow nem erro de console.
+
+## Resultado com o Asaas sandbox (dev, 28/10/2026)
+
+Webhook cadastrado na conta sandbox para `/dev/public/asaas/webhook`, com
+`authToken`. Telefone fictício `5511900000026`, CPF de teste válido:
+
+- **Pix:** `201 PENDING` com "copia e cola" real; "Simular pagamento" deu
+  `200 PAID`, e o webhook `PAYMENT_RECEIVED` chegou.
+- **Troca Pix → cartão:** o Pix virou `CANCELLED` (`DELETE` no Asaas; webhook
+  `PAYMENT_DELETED` registrado e ignorado, porque já estava cancelado). A
+  fatura do sandbox foi gerada.
+- **Simular cartão:** `400`. O sandbox não confirma cartão por API; a fatura
+  foi paga com o cartão 4444 4444 4444 4444 (`payWithCreditCard`), o webhook
+  `PAYMENT_CONFIRMED` chegou e o status virou `PAID`.
+- **Já pago:** pedir Pix depois devolveu o cartão pago, sem nova cobrança.
+- **Dinheiro:** `AWAITING_CASH`; a baixa pelo `caixa/pagamentos/{id}/dinheiro`
+  (chave do painel) deu `PAID` e chamou `receiveInCash` no Asaas.
+- **Caixa do dia:** os recebimentos aparecem marcados como teste.
+- **Limpeza:** os agendamentos foram cancelados.
+
+Antes da chave Pix existir na conta sandbox, o `pixQrCode` respondia 400
+("Você não possui uma chave Pix cadastrada"). O check-in respondeu 502 e
+cancelou a cobrança órfã, como previsto.
+

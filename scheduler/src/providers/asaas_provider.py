@@ -49,6 +49,8 @@ class AsaasProvider(PaymentProvider):
     nome = "asaas"
 
     def __init__(self, api_key: str, base_url: str):
+        # Sandbox confirma pagamento de teste por API; produção, nunca.
+        self.pode_simular = "sandbox" in base_url
         self.base_url = base_url.rstrip("/") + "/v3"
         self.headers = {"access_token": api_key, "Content-Type": "application/json",
                         "User-Agent": "clinic-scheduler"}
@@ -116,3 +118,10 @@ class AsaasProvider(PaymentProvider):
             "value": round(valor_cents / 100, 2),
             "notifyCustomer": False,
         })
+
+    def simula(self, cobranca_id: str) -> None:
+        """Confirma uma cobrança no SANDBOX, como se a paciente tivesse pago.
+        O Asaas avisa pelo webhook (`PAYMENT_RECEIVED`), como num pagamento real."""
+        if not self.pode_simular:
+            raise ErroDoProvedor("Simular pagamento só existe no sandbox do Asaas")
+        self._chama("POST", f"/sandbox/payment/{cobranca_id}/confirm")

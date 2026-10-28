@@ -16,7 +16,7 @@ pagamento confirmado - com o estado da cobrança, se houver uma.
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from src.providers.payment_provider import METODOS
+from src.providers.payment_provider import METODOS, cobranca_de_teste
 from src.services import mes_vigente
 
 MAX_DIAS = 92
@@ -181,7 +181,7 @@ def pagamentos(db, clinic_id: str, tz: str, inicio: date, fim: date) -> List[Dic
             "appointmentDate": _iso(r["appointment_date"]),
             "startTime": str(r["start_time"])[:5],
             "name": r.get("nome"),
-            "simulated": r.get("provider") == "simulado",
+            "simulated": cobranca_de_teste(r.get("provider")),
         }
         for r in rows
     ]

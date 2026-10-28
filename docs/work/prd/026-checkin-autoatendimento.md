@@ -137,6 +137,15 @@ que a pessoa agendou. Não há cardápio, só confirmação e pagamento.
   create-deployment, migrations só da 026 no banco de dev, app no projeto
   Vercel `checkin-dev` (https://checkin-dev-ten.vercel.app/{clinicId}). Ver
   `scheduler/tests/integration/026-checkin-autoatendimento.md`.
-- [ ] Chave de sandbox do Asaas (`/dev/ASAAS_API_KEY`) e webhook
-  (`/dev/ASAAS_WEBHOOK_TOKEN`), para sair do provedor simulado
+- [x] Asaas sandbox em dev (2026-10-28): chave do André em
+  `/dev/ASAAS_API_KEY` (SecureString), token gerado em
+  `/dev/ASAAS_WEBHOOK_TOKEN` e webhook cadastrado na conta sandbox
+  (`PAYMENT_RECEIVED`, `PAYMENT_CONFIRMED`, `PAYMENT_DELETED`,
+  `PAYMENT_REFUNDED`, envio sequencial) apontando para
+  `/dev/public/asaas/webhook`. Ponta a ponta validado: Pix (QR real,
+  "Simular pagamento" pelo `/sandbox/payment/{id}/confirm`, webhook
+  `PAYMENT_RECEIVED`), cartão (fatura paga com o cartão de teste
+  4444 4444 4444 4444, webhook `PAYMENT_CONFIRMED`) e dinheiro (baixa pela
+  recepção com `receiveInCash`). A conta sandbox precisa de chave Pix
+  cadastrada para gerar QR, e a de produção também vai precisar.
 - [ ] Produção (conta Asaas por clínica)

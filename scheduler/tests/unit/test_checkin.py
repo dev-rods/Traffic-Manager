@@ -328,6 +328,32 @@ class TestSimulado(Base):
         self.assertEqual(checkin.simula_pagamento(self.db, sim, CLINIC, FONE, a["id"])["status"], PAGO)
 
 
+class TestSimulaNoSandbox(Base):
+    def test_asaas_sandbox_confirma_la_e_marca_pago(self):
+        self.prov.pode_simular = True
+        self.prov.simulados = []
+        self.prov.simula = lambda cid: self.prov.simulados.append(cid)
+        with mock.patch.dict(os.environ, {"ASAAS_BASE_URL": "https://api-sandbox.asaas.com"}):
+            a = checkin.cobra(self.db, self.prov, CLINIC, FONE, APPT, "PIX")
+            self.assertTrue(a["canSimulate"])
+            r = checkin.simula_pagamento(self.db, self.prov, CLINIC, FONE, a["id"])
+        self.assertEqual(r["status"], PAGO)
+        self.assertEqual(self.prov.simulados, ["pay_1"])
+
+    def test_no_sandbox_cartao_nao_simula_paga_a_fatura(self):
+        self.prov.pode_simular = True
+        with mock.patch.dict(os.environ, {"ASAAS_BASE_URL": "https://api-sandbox.asaas.com"}):
+            a = checkin.cobra(self.db, self.prov, CLINIC, FONE, APPT, "CREDIT_CARD")
+            self.assertEqual((a["simulated"], a["canSimulate"]), (True, False))
+            with self.assertRaises(checkin.CheckinInvalido):
+                checkin.simula_pagamento(self.db, self.prov, CLINIC, FONE, a["id"])
+
+    def test_asaas_de_producao_nao_simula(self):
+        a = checkin.cobra(self.db, self.prov, CLINIC, FONE, APPT, "PIX")
+        with self.assertRaises(checkin.NaoEncontrado):
+            checkin.simula_pagamento(self.db, self.prov, CLINIC, FONE, a["id"])
+
+
 def evento(eid, tipo, cobranca):
     return {"id": eid, "event": tipo, "payment": {"id": cobranca, "status": "RECEIVED"}}
 

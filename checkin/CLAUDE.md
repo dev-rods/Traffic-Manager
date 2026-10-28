@@ -26,9 +26,12 @@ pode ser afetado por mudanças daqui.
 - **Cartão no celular da paciente.** Crédito e débito mostram o QR da fatura
   do Asaas; ninguém digita cartão no tablet compartilhado. Dinheiro termina o
   check-in e manda para a recepção, que dá a baixa.
-- **Provedor simulado em dev.** Sem `ASAAS_API_KEY` no SSM, o backend de dev
-  usa o provedor simulado e a tela mostra "Simular pagamento (teste)". Em
-  prod sem chave, o pagamento responde 503 (nunca simula).
+- **Teste em dev = Asaas sandbox.** Dev usa a conta sandbox do Asaas
+  (`/dev/ASAAS_API_KEY`). Pix: o botão "Simular pagamento (teste)" confirma a
+  cobrança pelo sandbox e o webhook chega como num pagamento real. Cartão: a
+  tela mostra o cartão de teste aprovado (4444 4444 4444 4444, validade
+  futura, CVV 123) para pagar a fatura pelo QR. Sem chave, dev cai no
+  provedor simulado; prod sem chave responde 503 (nunca simula).
 - Rota: `/:clinicId`.
 
 ## Comandos

@@ -105,6 +105,8 @@ def handler(event, context):
         return _erro(503, "Pagamento pelo tablet indisponível no momento. Pague na recepção.")
     except ErroDoProvedor as e:
         logger.error(f"[Checkin] provedor recusou ({clinic_id} {nome}): {e}")
+        if nome == "simula":
+            return _erro(502, "O Asaas não confirmou o pagamento de teste. Tente de novo.")
         return _erro(502, "Não conseguimos gerar a cobrança agora. Tente de novo ou pague na recepção.")
     except Exception as e:
         logger.error(f"[Checkin] erro em {metodo} {caminho}: {e}", exc_info=True)

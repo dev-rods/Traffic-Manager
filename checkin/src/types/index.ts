@@ -27,9 +27,12 @@ export interface Payment {
   invoiceUrl: string | null
   pixPayload: string | null
   paidAt: string | null
-  // Provedor simulado (só dev, sem conta no Asaas): o pagamento é confirmado
-  // por um botão, não pelo banco.
+  // Cobrança de teste (dev: provedor simulado ou Asaas sandbox). Não movimenta
+  // dinheiro de verdade.
   simulated: boolean
+  // O botão "Simular pagamento (teste)" vale para esta cobrança. No sandbox
+  // do Asaas só para Pix: cartão se testa pagando a fatura com cartão de teste.
+  canSimulate: boolean
 }
 
 export interface CheckinAppointment {

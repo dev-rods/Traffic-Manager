@@ -102,6 +102,35 @@ class TestCobranca(unittest.TestCase):
                 self.cria("PIX")
 
 
+class TestSimulaNoSandbox(unittest.TestCase):
+    """O botão "Simular pagamento (teste)" do iPad, com o Asaas de verdade em dev."""
+
+    def test_sandbox_confirma_pela_api(self):
+        chamadas = []
+        with mock.patch("src.providers.asaas_provider.requests.request",
+                        side_effect=lambda m, u, **k: chamadas.append((m, u)) or resposta(json={"status": "RECEIVED"})):
+            asaas = AsaasProvider("chave", "https://api-sandbox.asaas.com")
+            self.assertTrue(asaas.pode_simular)
+            asaas.simula("pay_1")
+        self.assertEqual(chamadas, [("POST", "https://api-sandbox.asaas.com/v3/sandbox/payment/pay_1/confirm")])
+
+    def test_producao_nunca_simula(self):
+        with mock.patch("src.providers.asaas_provider.requests.request") as http:
+            asaas = AsaasProvider("chave", "https://api.asaas.com")
+            self.assertFalse(asaas.pode_simular)
+            with self.assertRaises(ErroDoProvedor):
+                asaas.simula("pay_1")
+        http.assert_not_called()
+
+    def test_cobranca_de_teste(self):
+        from src.providers.payment_provider import cobranca_de_teste
+        self.assertTrue(cobranca_de_teste("simulado"))
+        with mock.patch.dict(os.environ, {"ASAAS_BASE_URL": "https://api-sandbox.asaas.com"}):
+            self.assertTrue(cobranca_de_teste("asaas"))
+        with mock.patch.dict(os.environ, {"ASAAS_BASE_URL": "https://api.asaas.com"}):
+            self.assertFalse(cobranca_de_teste("asaas"))
+
+
 class TestStatus(unittest.TestCase):
     def test_mapa(self):
         from src.providers.asaas_provider import status_do_asaas

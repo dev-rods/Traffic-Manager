@@ -38,6 +38,7 @@ function payment(over: Partial<Payment> = {}): Payment {
     pixPayload: '000201PIX',
     paidAt: null,
     simulated: true,
+    canSimulate: true,
     ...over,
   }
 }

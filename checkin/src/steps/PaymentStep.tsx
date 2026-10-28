@@ -67,6 +67,15 @@ export function PaymentStep({
             {payment.method === 'CREDIT_CARD' ? 'crédito' : 'débito'}.
           </StepHeader>
           <QrCode value={payment.invoiceUrl} label="QR code da fatura" />
+          {payment.simulated && !payment.canSimulate ? (
+            // Ambiente de teste (Asaas sandbox): o cartão aprovado da
+            // documentação do Asaas, que dispara o webhook de verdade.
+            <p className="rounded-2xl border border-accent-200 bg-accent-50 px-5 py-3 text-center text-base text-accent-700">
+              Ambiente de teste: na fatura, use o cartão{' '}
+              <strong className="tabular-nums">4444 4444 4444 4444</strong>, validade futura e CVV
+              123.
+            </p>
+          ) : null}
         </>
       ) : null}
 
@@ -78,7 +87,7 @@ export function PaymentStep({
       {simulate.isError ? <ErrorMessage>{simulate.error.message}</ErrorMessage> : null}
 
       <div className="flex w-full max-w-sm flex-col gap-2">
-        {payment.simulated ? (
+        {payment.canSimulate ? (
           // Só existe com o provedor simulado (dev, sem conta no Asaas).
           <Button
             variant="secondary"
