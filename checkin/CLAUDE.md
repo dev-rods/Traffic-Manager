@@ -47,8 +47,17 @@ npm run test
 
 ## Deploy
 
-Projeto Vercel **`checkin-dev`** (sem integração com o Git: deploy só pela
-CLI, nunca automático no merge), apontado para a API de **dev**:
+Dois projetos Vercel, **sem integração com o Git** (deploy só pela CLI, nunca
+automático no merge):
+
+- **`checkin-dev`** → API de dev (Asaas sandbox). É o que `.vercel/` desta
+  pasta aponta.
+- **`checkin-prod`** → API de prod (https://checkin-prod.vercel.app/{clinicId}).
+  Para publicar: `VERCEL_ORG_ID=team_ZLFt6HlpGbYXZsEloIbOVq96
+  VERCEL_PROJECT_ID=prj_5DMFqCPTYk7bFZFYAKCikdPfUaol npx vercel deploy --prod --yes`.
+  Sem `/prod/ASAAS_API_KEY`, o pagamento responde "indisponível" (503).
+
+Dev:
 
 ```bash
 cd checkin && npx vercel deploy --prod --yes --scope team_ZLFt6HlpGbYXZsEloIbOVq96
@@ -56,4 +65,5 @@ cd checkin && npx vercel deploy --prod --yes --scope team_ZLFt6HlpGbYXZsEloIbOVq
 
 URL: https://checkin-dev-ten.vercel.app/{clinicId}. Env vars do projeto:
 `VITE_API_BASE_URL` (dev) e `VITE_BOOKING_API_KEY` (a mesma chave pública do
-booking-site de dev). Produção é uma fase própria (conta Asaas por clínica).
+booking-site de dev). O que falta para ligar o pagamento em prod está no
+PRD 026 (§7).
