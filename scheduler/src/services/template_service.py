@@ -35,7 +35,14 @@ DEFAULT_TEMPLATES = {
     "CANCELLED": "Agendamento cancelado com sucesso.",
     "FAREWELL": "Obrigado pelo contato e tenha uma ótima semana! Até a próxima!",
     "RECOMMENDATIONS": "📋 *Recomendações importantes para sua sessão:*\n\n{{recommendations}}\n\nPor favor, confirme que leu e entendeu as recomendações acima.",
-    "REMINDER_24H": "Lembrete: Amanhã às {{time}} você tem sessão na {{clinic_name}}. Responda OK para confirmar.",
+    # Lembrete de sessao (PRD 027). Sem "cancelar", "remarcar" nem link, de
+    # proposito: citar a saida planta a ideia. O preparo pequeno (raspar, sol)
+    # reforca o compromisso. O link so vai se a pessoa pedir, pelo bot.
+    "LEMBRETE_SESSAO": (
+        "Oi {{nome}}! Sua sessão de {{areas}} na {{clinic_name}} está confirmada "
+        "para {{dia}} às {{hora}}. Já estamos preparando tudo para você. "
+        "Lembre de raspar a área no dia e evitar sol até lá. Até breve! 😊"
+    ),
     "AI_SYSTEM_PROMPT": """Você é a assistente virtual da {{clinic_display_name}}.
 Você NÃO é especialista em nada. Você é apenas uma recepcionista simpática que
 agenda sessões e responde dúvidas SOMENTE com o que está no sistema (tools).

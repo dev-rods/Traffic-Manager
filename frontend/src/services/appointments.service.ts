@@ -3,6 +3,7 @@ import type {
   ListAppointmentsResponse,
   CreateAppointmentPayload,
   UpdateAppointmentPayload,
+  LembretesDoDiaResponse,
 } from '@/types'
 
 export interface ListAppointmentsParams {
@@ -49,6 +50,24 @@ export const appointmentsService = {
   desmarcarFalta(appointmentId: string) {
     return api
       .put(`/appointments/${appointmentId}`, { status: 'CONFIRMED' })
+      .then((r) => r.data)
+  },
+
+  /** Previa (`simular`) ou disparo do lembrete da agenda do dia (PRD 027). */
+  lembrarAgendaDoDia(clinicId: string, dia: string, simular: boolean) {
+    return api
+      .post<LembretesDoDiaResponse>(
+        `/clinics/${clinicId}/agenda/${dia}/lembretes`,
+        null,
+        { params: simular ? { simular: 'true' } : undefined },
+      )
+      .then((r) => r.data)
+  },
+
+  /** A equipe confirma (ou desfaz) a presenca. Coluna, nao status. */
+  confirmarPresenca(appointmentId: string, confirmado: boolean) {
+    return api
+      .put(`/appointments/${appointmentId}`, { confirmado })
       .then((r) => r.data)
   },
 }

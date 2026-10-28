@@ -39,6 +39,7 @@ from typing import Dict, Optional
 
 from src.services.business_hours import em_silencio
 from src.services.campanha import esta_viva as campanha_viva
+from src.services.lembrete import esta_vivo as lembrete_vivo
 from src.utils.phone import normalize_phone
 
 CAMPO = "atendimento"
@@ -178,7 +179,8 @@ def aguarda_especialista(session: Optional[Dict], agora: Optional[int] = None) -
 
 # ── As duas perguntas ──────────────────────────────────────────────────────
 
-def _politica_permite(clinic: Dict, session: Dict, phone: str) -> bool:
+def _politica_permite(clinic: Dict, session: Dict, phone: str,
+                      agora: Optional[int] = None) -> bool:
     """A política da clínica (ALL, PILOT, LEADS_ONLY, OFF) cobre esta conversa?
 
     Política ausente equivale a ALL: uma clínica lida antes da migration não
@@ -191,9 +193,13 @@ def _politica_permite(clinic: Dict, session: Dict, phone: str) -> bool:
         piloto = {normalize_phone(p) for p in (clinic.get("bot_pilot_phones") or [])}
         return normalize_phone(phone) in piloto
     if policy == POLICY_LEADS_ONLY:
-        # Dois caminhos para a mesma política: lead da landing page que escreveu
-        # (`bot_enabled`) ou paciente para quem NÓS escrevemos (campanha viva).
-        return bool(session.get("bot_enabled")) or campanha_viva(session)
+        # Três caminhos para a mesma política: lead da landing page que escreveu
+        # (`bot_enabled`), ou paciente para quem NÓS escrevemos - campanha viva
+        # ou lembrete de sessão vivo (PRD 027). O lembrete abre a conversa como
+        # a campanha abre: sem isto a Essência mandaria o lembrete e o bot
+        # ficaria mudo para quem respondesse "preciso remarcar".
+        return (bool(session.get("bot_enabled")) or campanha_viva(session, agora)
+                or lembrete_vivo(session, agora))
     return False
 
 
@@ -211,7 +217,7 @@ def pode_responder(clinic: Optional[Dict], session: Optional[Dict], phone: str,
         return False
     if esta_com_pessoa(session, agora):
         return False
-    return _politica_permite(clinic, session, phone)
+    return _politica_permite(clinic, session, phone, agora)
 
 
 def pode_iniciar(clinic: Optional[Dict], session: Optional[Dict], phone: str,

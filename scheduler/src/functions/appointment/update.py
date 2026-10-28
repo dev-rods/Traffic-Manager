@@ -116,6 +116,30 @@ def handler(event, context):
         if new_date and not dentro_da_janela(identidade, new_date):
             return fora_da_janela()
 
+        # Confirmacao de presenca (PRD 027). Coluna, nao status: nao mexe em
+        # horario nem em conversao. Vem sozinha no body e e exclusiva, como a
+        # falta: combinar com reschedule confundiria o que foi confirmado.
+        if "confirmado" in body:
+            if len(body) != 1:
+                return http_response(400, {
+                    "status": "ERROR",
+                    "message": "'confirmado' vai sozinho no corpo",
+                })
+            if body["confirmado"]:
+                sql = ("UPDATE scheduler.appointments SET confirmado_em = NOW(), confirmado_por = 'EQUIPE', "
+                       "updated_at = NOW() WHERE id = %s::uuid AND status = 'CONFIRMED' RETURNING *")
+            else:
+                sql = ("UPDATE scheduler.appointments SET confirmado_em = NULL, confirmado_por = NULL, "
+                       "updated_at = NOW() WHERE id = %s::uuid RETURNING *")
+            result = db.execute_write_returning(sql, (appointment_id,))
+            if not result:
+                return http_response(404, {"status": "ERROR", "message": "Agendamento nao encontrado ou nao confirmado"})
+            return http_response(200, para_o_staff(identidade, {
+                "status": "SUCCESS",
+                "message": "Presenca confirmada" if body["confirmado"] else "Confirmacao desfeita",
+                "appointment": _serialize_row(result),
+            }))
+
         # Ver a nota em appointment/create.py: o construtor cru perde a
         # conversao do lead.
         service = AppointmentService.completo(db)

@@ -1,4 +1,5 @@
 import { dateRangeLabel } from '@/utils/dateHelpers'
+import { LembrarAgendaDoDia } from './LembrarAgendaDoDia'
 
 interface AgendaHeaderProps {
   visibleDates: string[]
@@ -8,6 +9,13 @@ interface AgendaHeaderProps {
   onNewAppointment: () => void
   hasPrev: boolean
   hasNext: boolean
+  /**
+   * O dia que o botao "Lembrar agenda do dia" alcanca (PRD 027). So existe
+   * com um dia aberto: lembrar "a semana" nao e a unidade de trabalho.
+   */
+  diaParaLembrar?: string | null
+  /** Dia passado nao se lembra. */
+  podeLembrar?: boolean
 }
 
 export function AgendaHeader({
@@ -18,6 +26,8 @@ export function AgendaHeader({
   onNewAppointment,
   hasPrev,
   hasNext,
+  diaParaLembrar,
+  podeLembrar = true,
 }: AgendaHeaderProps) {
   return (
     <div className="flex items-center justify-between">
@@ -54,6 +64,8 @@ export function AgendaHeader({
             ›
           </button>
         </div>
+
+        {diaParaLembrar && <LembrarAgendaDoDia dia={diaParaLembrar} disabled={!podeLembrar} />}
 
         {/* New appointment */}
         <button

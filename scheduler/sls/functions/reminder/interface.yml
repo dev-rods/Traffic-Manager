@@ -1,7 +1,7 @@
 ReminderProcessor:
   handler: src.functions.reminder.processor.handler
   memorySize: 512
-  timeout: 60
+  timeout: 120
   iamRoleStatementsName: ${self:service}-${self:custom.stage}-ReminderProcessor-lambdaRole
   iamRoleStatements:
     - Effect: Allow
@@ -16,10 +16,13 @@ ReminderProcessor:
         - dynamodb:PutItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
-    # A porta de atendimento le a sessao: pessoa na conversa barra o lembrete.
+    # Le a sessao (porta), abre a sobreposicao de lembrete e destrava humano e
+    # cooldown depois do envio (PRD 027).
     - Effect: Allow
       Action:
         - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
     - Effect: Allow
@@ -29,6 +32,32 @@ ReminderProcessor:
         - logs:PutLogEvents
       Resource: "arn:aws:logs:*:*:*"
   events:
+    # Horario: entrega os lotes automaticos (LembretesAutomaticos roda no
+    # minuto 5). O botao do painel nao espera o cron - invoca esta funcao.
     - schedule:
-        rate: rate(15 minutes)
-        enabled: false
+        rate: cron(0 * * * ? *)
+        enabled: true
+
+LembretesAutomaticos:
+  handler: src.functions.reminder.automaticos.handler
+  memorySize: 512
+  timeout: 120
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-LembretesAutomaticos-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-scheduled-reminders"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    # De hora em hora, no minuto 5; o processador entrega no minuto 0 da hora
+    # seguinte. Precisao de uma hora basta para "antecedencia" (PRD 027).
+    - schedule:
+        rate: cron(5 * * * ? *)
+        enabled: true

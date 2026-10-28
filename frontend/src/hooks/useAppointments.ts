@@ -89,3 +89,27 @@ export function useDesmarcarFalta() {
     onSuccess: () => invalidaAgenda(queryClient),
   })
 }
+
+/** Previa ou envio do lembrete do dia (PRD 027). So o envio real invalida a agenda. */
+export function useLembrarAgendaDoDia() {
+  const { clinicId } = useAuth()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ dia, simular }: { dia: string; simular: boolean }) =>
+      appointmentsService.lembrarAgendaDoDia(clinicId!, dia, simular),
+    onSuccess: (_, { simular }) => {
+      if (!simular) invalidaAgenda(queryClient)
+    },
+  })
+}
+
+export function useConfirmarPresenca() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ appointmentId, confirmado }: { appointmentId: string; confirmado: boolean }) =>
+      appointmentsService.confirmarPresenca(appointmentId, confirmado),
+    onSuccess: () => invalidaAgenda(queryClient),
+  })
+}

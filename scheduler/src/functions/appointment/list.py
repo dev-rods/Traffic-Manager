@@ -73,6 +73,10 @@ def handler(event, context):
                 a.discount_pct, a.discount_reason, a.original_price_cents, a.final_price_cents,
                 a.full_name, a.total_duration_minutes as duration_minutes,
                 a.manual_duration_minutes,
+                -- Lembrete de sessao e confirmacao (PRD 027): a agenda mostra
+                -- Pendente/Confirmado e o popover mostra o estado do envio.
+                a.lembrete_enviado_em, a.lembrete_status, a.lembrete_erro,
+                a.confirmado_em, a.confirmado_por,
                 p.name as patient_name, p.phone as patient_phone,
                 s.name as service_name,
                 pr.name as professional_name,

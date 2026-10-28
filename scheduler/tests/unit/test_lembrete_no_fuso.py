@@ -1,16 +1,12 @@
 # -*- coding: utf-8 -*-
-"""O lembrete de 24h sai na hora certa, não sai para sessão cancelada e não
-sai de madrugada.
+"""O lembrete grava o instante certo na fila, a janela de silêncio é lida no
+fuso da clínica, e adiar mantém PENDING.
 
-Código LATENTE: o lembrete nunca foi ligado em produção (06/10/2026 - tabela
-vazia, `completo()` sem `reminder_service`, nenhum template REMINDER_24H).
-Estes testes fixam o comportamento para o dia em que alguém ligar. Os três
-defeitos que eles fecham:
-
-  1. `sendAt` era hora LOCAL gravada com sufixo Z e comparada com utcnow:
-     sessão às 07:15 em Brasília virava lembrete às 04:15.
-  2. O processador não conferia se a sessão ainda existia.
-  3. O processador não conhecia a janela de silêncio (PRD 020 §3.5).
+Até 27/10/2026 o serviço calculava "24h antes de cada sessão" e nunca foi
+ligado em produção. O PRD 027 trocou isso por um lote por DIA: quem decide o
+`send_at` é `lembrete_da_agenda`, e aqui só se grava - em UTC, porque é com o
+relógio UTC que o processador compara. Os testes do processador novo estão em
+`test_reminder_processor.py`.
 """
 import os
 import unittest
@@ -41,36 +37,32 @@ def sessao(data="2026-10-09", hora="07:15"):
             "start_time": hora, "patient_phone": "5511999990000", "patient_name": "Yasmin"}
 
 
-class TestSendAtNoFuso(unittest.TestCase):
-    def test_sessao_as_7h15_em_brasilia_lembra_as_7h15_do_dia_anterior_em_brasilia(self):
-        """07:15 BRT = 10:15 UTC. Antes saía 07:15Z, que é 04:15 BRT."""
-        item = servico().schedule_reminder(sessao(), ESSENCIA)
-        self.assertEqual(item["sendAt"], "2026-10-08T10:15:00Z")
+class TestAgendaLembrete(unittest.TestCase):
+    def test_grava_o_send_at_do_lote_em_utc(self):
+        """12:00 BRT = 15:00 UTC."""
+        send_at = SP.localize(datetime(2026, 10, 8, 12, 0))
+        item = servico().agenda_lembrete(sessao(), ESSENCIA, send_at)
+        self.assertEqual(item["sendAt"], "2026-10-08T15:00:00Z")
+        self.assertEqual(item["reminderType"], "LEMBRETE_SESSAO")
+        self.assertEqual(item["status"], "PENDING")
 
-    def test_sem_clinica_assume_brasilia(self):
-        item = servico().schedule_reminder(sessao())
-        self.assertEqual(item["sendAt"], "2026-10-08T10:15:00Z")
-
-    def test_outro_fuso(self):
-        manaus = {"timezone": "America/Manaus"}  # UTC-4
-        item = servico().schedule_reminder(sessao(), manaus)
-        self.assertEqual(item["sendAt"], "2026-10-08T11:15:00Z")
-
-    def test_fuso_invalido_cai_no_padrao(self):
-        item = servico().schedule_reminder(sessao(), {"timezone": "Marte/Olympus"})
-        self.assertEqual(item["sendAt"], "2026-10-08T10:15:00Z")
+    def test_o_sk_e_o_indice_usam_o_mesmo_instante(self):
+        item = servico().agenda_lembrete(sessao(), ESSENCIA, datetime(2026, 10, 8, 15, 0, tzinfo=timezone.utc))
+        self.assertEqual(item["sk"], f"SEND_AT#{item['sendAt']}")
 
     def test_aceita_os_tipos_que_o_banco_devolve(self):
-        """psycopg devolve date e time, não string."""
         s = sessao()
         s["appointment_date"] = date(2026, 10, 9)
         s["start_time"] = time(7, 15)
-        item = servico().schedule_reminder(s, ESSENCIA)
-        self.assertEqual(item["sendAt"], "2026-10-08T10:15:00Z")
+        s["full_name"] = "Yasmin Costa"
+        item = servico().agenda_lembrete(s, ESSENCIA, datetime(2026, 10, 8, 15, 0, tzinfo=timezone.utc))
+        self.assertEqual((item["appointmentDate"], item["appointmentTime"], item["patientName"]),
+                         ("2026-10-09", "07:15:00", "Yasmin Costa"))
 
-    def test_o_sk_e_o_indice_usam_o_mesmo_instante(self):
-        item = servico().schedule_reminder(sessao(), ESSENCIA)
-        self.assertEqual(item["sk"], f"SEND_AT#{item['sendAt']}")
+    def test_grava_na_tabela(self):
+        s = servico()
+        s.agenda_lembrete(sessao(), ESSENCIA, datetime(2026, 10, 8, 15, 0, tzinfo=timezone.utc))
+        s.table.put_item.assert_called_once()
 
 
 class TestAdiar(unittest.TestCase):
@@ -144,88 +136,6 @@ class TestJanelaDeSilencio(unittest.TestCase):
         self.assertEqual(fuso({}).zone, "America/Sao_Paulo")
         self.assertEqual(fuso(None).zone, "America/Sao_Paulo")
         self.assertEqual(fuso({"timezone": "America/Manaus"}).zone, "America/Manaus")
-
-
-class TestProcessador(unittest.TestCase):
-    """O cron: cancelado descarta, madrugada adia, confirmado em horário envia."""
-
-    def _roda(self, status_da_sessao="CONFIRMED", agora_utc=None):
-        from src.functions.reminder import processor as modulo
-
-        lembrete = {"reminderId": "r1", "appointmentId": "ap1", "clinicId": "essencia",
-                    "phoneNumber": "5511999990000", "patientName": "Yasmin",
-                    "appointmentTime": "07:15", "pk": "REMINDER#r1", "sk": "SEND_AT#x"}
-        reminder_service = mock.MagicMock()
-        reminder_service.get_pending_reminders.return_value = [lembrete]
-        db = mock.MagicMock()
-
-        def query(sql, params=None):
-            if "FROM scheduler.clinics" in sql:
-                return [ESSENCIA]
-            if "FROM scheduler.appointments" in sql:
-                return [{"status": status_da_sessao}] if status_da_sessao else []
-            return []
-
-        db.execute_query.side_effect = query
-        provider = mock.MagicMock()
-        provider.send_text.return_value = mock.MagicMock(success=True, provider_message_id="z1", raw_response={})
-        template = mock.MagicMock()
-        template.get_and_render.return_value = "Lembrete: amanhã às 07:15"
-
-        agora = agora_utc or datetime(2026, 10, 8, 10, 15, tzinfo=timezone.utc)  # 07:15 BRT
-
-        class RelogioFalso(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return agora if tz else agora.replace(tzinfo=None)
-
-            @classmethod
-            def utcnow(cls):
-                return agora.replace(tzinfo=None)
-
-        with mock.patch.object(modulo, "ReminderService", return_value=reminder_service), \
-             mock.patch.object(modulo, "PostgresService", return_value=db), \
-             mock.patch.object(modulo, "TemplateService", return_value=template), \
-             mock.patch.object(modulo, "MessageTracker"), \
-             mock.patch.object(modulo, "get_provider", return_value=provider), \
-             mock.patch.object(modulo, "datetime", RelogioFalso):
-            resultado = modulo.handler({}, None)
-        return resultado, reminder_service, provider
-
-    def test_confirmado_em_horario_envia(self):
-        resultado, svc, provider = self._roda()
-        provider.send_text.assert_called_once()
-        svc.mark_sent.assert_called_once()
-        self.assertEqual(resultado["sent"], 1)
-
-    def test_cancelado_nao_envia(self):
-        resultado, svc, provider = self._roda(status_da_sessao="CANCELLED")
-        provider.send_text.assert_not_called()
-        svc.mark_failed.assert_called_once()
-        self.assertEqual(svc.mark_failed.call_args[0][3], "agendamento_nao_confirmado")
-
-    def test_sessao_apagada_nao_envia(self):
-        _, svc, provider = self._roda(status_da_sessao=None)
-        provider.send_text.assert_not_called()
-        svc.mark_failed.assert_called_once()
-
-    def test_madrugada_adia_para_as_4h59_e_nao_falha(self):
-        agora = SP.localize(datetime(2026, 10, 8, 1, 0)).astimezone(timezone.utc)
-        resultado, svc, provider = self._roda(agora_utc=agora)
-
-        provider.send_text.assert_not_called()
-        svc.mark_failed.assert_not_called()
-        svc.adia.assert_called_once()
-        novo = svc.adia.call_args[0][2]
-        self.assertEqual(novo, "2026-10-08T07:59:00Z")  # 04:59 BRT
-        self.assertEqual(resultado["skipped"], 1)
-
-    def test_o_adiamento_vem_depois_da_conferencia_de_status(self):
-        """Cancelado de madrugada é descartado, não adiado para ser descartado às 5h."""
-        agora = SP.localize(datetime(2026, 10, 8, 1, 0)).astimezone(timezone.utc)
-        _, svc, _ = self._roda(status_da_sessao="CANCELLED", agora_utc=agora)
-        svc.adia.assert_not_called()
-        svc.mark_failed.assert_called_once()
 
 
 class TestOServicoDeAgendamentoPassaOFuso(unittest.TestCase):

@@ -20,6 +20,28 @@ interface AppointmentPopoverProps {
   onCancel: (appointment: Appointment) => void
   onMarcarFalta: (appointment: Appointment) => void
   onDesmarcarFalta: (appointment: Appointment) => void
+  /** Confirmacao de presenca pela equipe (PRD 027). Opcionais para as telas
+   *  que so mostram o popover. */
+  onConfirmar?: (appointment: Appointment) => void
+  onDesconfirmar?: (appointment: Appointment) => void
+}
+
+/** O estado do lembrete em uma linha, para a atendente saber se a mensagem saiu. */
+function estadoDoLembrete(a: Appointment): string {
+  switch (a.lembrete_status) {
+    case 'ENVIADO':
+      return a.lembrete_enviado_em
+        ? `Lembrete enviado às ${new Date(a.lembrete_enviado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+        : 'Lembrete enviado'
+    case 'ADIADO':
+      return 'Lembrete aguardando o horário de envio'
+    case 'ENFILEIRADO':
+      return 'Lembrete a caminho'
+    case 'FALHOU':
+      return `Lembrete falhou: ${a.lembrete_erro ?? 'erro'}`
+    default:
+      return 'Lembrete não enviado'
+  }
 }
 
 /**
@@ -36,6 +58,7 @@ interface AppointmentPopoverProps {
  */
 export function AppointmentPopover({
   appointment, anchorRect, onClose, onEdit, onCancel, onMarcarFalta, onDesmarcarFalta,
+  onConfirmar, onDesconfirmar,
 }: AppointmentPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
   const ehDesktop = useEhDesktop()
@@ -174,6 +197,21 @@ export function AppointmentPopover({
               {isCancelled ? 'Cancelado' : 'Confirmado'}
             </span>
           </div>
+          {/* Presenca (PRD 027): so faz sentido depois de o lembrete sair.
+              Antes nao houve pergunta, e "pendente" sem pergunta e ruido. */}
+          {!isCancelled && !faltou && a.lembrete_enviado_em && (
+            <div className="flex justify-between">
+              <span className="text-gray-400">Presença</span>
+              <span className={a.confirmado_em ? 'font-medium text-emerald-600' : 'font-medium text-amber-600'}>
+                {a.confirmado_em
+                  ? `Confirmada${a.confirmado_por === 'EQUIPE' ? ' pela equipe' : ''}`
+                  : 'Pendente'}
+              </span>
+            </div>
+          )}
+          {!isCancelled && !faltou && (
+            <p className="pt-1 text-xs text-gray-400">{estadoDoLembrete(a)}</p>
+          )}
         </div>
 
         {/* Price breakdown */}
@@ -244,6 +282,24 @@ export function AppointmentPopover({
                   ("Essa acao nao pode ser desfeita") e a confirmação se paga;
                   falta tem "Desfazer" no próprio toast. Cerimônia que não
                   compra nada treina a clicar sem ler. */}
+              {/* Quem confirma por telefone e marcado aqui (PRD 027). Reversivel,
+                  pela mesma logica da falta: sem modal, com desfazer. */}
+              {onConfirmar && !a.confirmado_em && (
+                <button
+                  onClick={() => { onConfirmar(a); onClose() }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Marcar como confirmado
+                </button>
+              )}
+              {onDesconfirmar && a.confirmado_em && (
+                <button
+                  onClick={() => { onDesconfirmar(a); onClose() }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Desfazer confirmação
+                </button>
+              )}
               <button
                 onClick={() => { onMarcarFalta(a); onClose() }}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"

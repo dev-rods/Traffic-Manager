@@ -3,8 +3,11 @@ import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { Button } from '@/components/ui/Button'
+import { Switch } from '@/components/ui/Switch'
+import { TemplateField } from '@/components/TemplateField'
 import type { UpdateClinicPayload } from '@/types'
 import { buildDefaultMessage } from '@/utils/buildDefaultMessage'
+import { EXEMPLO_DO_LEMBRETE, LEMBRETE_PADRAO } from '@/lib/lembretePadrao'
 
 function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['data']>): UpdateClinicPayload {
   return {
@@ -18,6 +21,8 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     zapi_instance_id: clinic.zapi_instance_id ?? '',
     zapi_instance_token: clinic.zapi_instance_token ?? '',
     batch_message_template: clinic.batch_message_template ?? '',
+    lembrete_automatico: clinic.lembrete_automatico ?? false,
+    lembrete_antecedencia_horas: clinic.lembrete_antecedencia_horas ?? 24,
   }
 }
 
@@ -139,6 +144,43 @@ export function ConfiguracoesPage() {
           <p className="text-[11px] text-gray-400">Deixe vazio para usar a mensagem padrão. Sem {'{datas}'} no texto, as datas não entram na mensagem.</p>
         </Section>
 
+        <hr className="border-gray-100" />
+
+        {/* Lembrete de sessao (PRD 027) */}
+        <Section
+          title="Lembrete de sessão"
+          description="Lembra quem tem sessão marcada. O texto não menciona cancelamento de propósito; o bot envia o link do site só se a pessoa pedir."
+        >
+          <div className="flex items-center justify-between gap-4 rounded-lg border border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Enviar automaticamente</p>
+              <p className="text-xs text-gray-400">Desligado, o lembrete sai só pelo botão na agenda do dia.</p>
+            </div>
+            <Switch
+              checked={Boolean(form.lembrete_automatico)}
+              onChange={(v) => set('lembrete_automatico', v)}
+              label="Enviar lembrete automaticamente"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <NumberField
+              label="Antecedência (horas)"
+              value={form.lembrete_antecedencia_horas as number}
+              onChange={(v) => set('lembrete_antecedencia_horas', v)}
+              min={1}
+              max={72}
+              help="Em relação ao primeiro horário do dia"
+            />
+          </div>
+          <TemplateField
+            templateKey="LEMBRETE_SESSAO"
+            label="Texto do lembrete"
+            padrao={LEMBRETE_PADRAO}
+            exemplo={EXEMPLO_DO_LEMBRETE}
+            help="Use {{nome}}, {{areas}}, {{clinic_name}}, {{dia}}, {{hora}} e {{endereco}} (o endereço cadastrado em Dados gerais). Vazio volta ao texto padrão."
+          />
+        </Section>
+
         {/* Save */}
         <div className="flex items-center gap-3 pt-2">
           <Button onClick={() => void handleSave()} loading={updateClinic.isPending}>
@@ -187,6 +229,7 @@ function NumberField({ label, value, onChange, min, max, help }: { label: string
       <label className="text-xs font-medium text-gray-500 block mb-1.5">{label}</label>
       <input
         type="number"
+        aria-label={label}
         value={value}
         onChange={(e) => {
           const v = parseInt(e.target.value, 10)
