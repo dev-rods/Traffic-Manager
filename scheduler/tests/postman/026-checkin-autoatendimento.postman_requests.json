@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Clinic Scheduler - Check-in 026 (autoatendimento com pagamento)",
-    "description": "PRD/Spec 026. Só dev. Rode na ordem. Preencha clinicId, phone (com agendamento futuro), token (de /verify/confirm com o mesmo phone) e cpf (válido). Sem ASAAS_API_KEY, dev usa o provedor simulado. As requests de Caixa (fase 2) usam a auth do painel (API_KEY = chave do admin; a baixa em dinheiro também aceita a sessão da recepção com agenda.escrever) e precisam de um segundo agendamento futuro do mesmo número para a cobrança em dinheiro.",
+    "description": "PRD/Spec 026. Só dev. Rode na ordem. Preencha clinicId, phone (com agendamento futuro), token (de /verify/confirm com o mesmo phone) e cpf (válido). Dev usa o Asaas sandbox; sem ASAAS_API_KEY, o provedor simulado. As requests de Caixa (fase 2) usam a auth do painel (API_KEY = chave do admin; a baixa em dinheiro também aceita a sessão da recepção com agenda.escrever) e precisam de um segundo agendamento futuro do mesmo número para a cobrança em dinheiro.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -318,7 +318,7 @@
             "payments"
           ]
         },
-        "description": "Cria a cobrança Pix. Em dev sem chave do Asaas, provedor simulado.",
+        "description": "Cria a cobrança Pix. Em dev, no Asaas sandbox (sem chave, provedor simulado).",
         "body": {
           "mode": "raw",
           "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"method\": \"PIX\", \"cpf\": \"{{cpf}}\"}"
@@ -480,7 +480,7 @@
             "simulate"
           ]
         },
-        "description": "Existe apenas com o provedor simulado.",
+        "description": "Só em teste: provedor simulado (qualquer método) ou Asaas sandbox (só Pix; cartão responde 400). Asaas de produção: 404.",
         "body": {
           "mode": "raw",
           "raw": "{\"phone\": \"{{phone}}\", \"token\": \"{{token}}\"}"

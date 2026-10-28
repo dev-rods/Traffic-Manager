@@ -63,7 +63,7 @@ que a pessoa agendou. Não há cardápio, só confirmação e pagamento.
 | Cartão no iPad | QR code da fatura, pago no celular da paciente | Digitar cartão num tablet compartilhado expõe o dado e é lento. No celular dela, ela usa o autopreenchimento e a carteira digital. |
 | Dinheiro | Cobrança criada e marcada `AWAITING_CASH`; a recepção dá baixa (`receiveInCash`) | Só quem recebe o dinheiro pode confirmar. Assim o caixa fica num lugar só (Asaas + nosso registro). |
 | Valor | `appointments.final_price_cents`, o valor gravado com desconto | Mesma regra do site e do bot. Sem valor (a combinar), o iPad manda para a recepção. |
-| Provedor | Interface `PaymentProvider` com `asaas` (sandbox/produção) e `simulado` (só dev) | Ainda não há chave do Asaas. O simulado permite validar a experiência em dev agora; com `ASAAS_API_KEY` no SSM, vira o Asaas de verdade. O simulado é recusado fora de dev. |
+| Provedor | Interface `PaymentProvider` com `asaas` (sandbox/produção) e `simulado` (só dev) | Dev usa o Asaas sandbox (`/dev/ASAAS_API_KEY`); sem chave, cai no simulado, que valida a experiência sem conta. O simulado é recusado fora de dev. |
 | Limite de códigos | Removido o limite de 3 códigos a cada 15 min por número; continua o de 5 tentativas erradas por código | O "Muitos códigos solicitados" travou o teste do Rodrigo no iPad (reenviar e recomeçar também contavam). Decisão dele em 19/10/2026: tirar. O efeito chega ao booking-site junto com esta branch. |
 | Código em dev | Em dev, se o WhatsApp falhar, o código volta na resposta e aparece na tela | A clínica de teste não tem instância do z-api ("Instance not found"); sem isso ninguém testa o login. Fora de dev, nunca. |
 | Conta Asaas | Fase 1: uma conta por stage (`/{stage}/ASAAS_API_KEY`) | Fase 1 é validação em dev. Uma conta por clínica (o dinheiro cai na conta dela) vem na fase de produção. |
@@ -120,7 +120,8 @@ que a pessoa agendou. Não há cardápio, só confirmação e pagamento.
 3. Confirmar grava `checked_in_at`.
 4. Sem CPF conhecido, pede o CPF e valida os dígitos verificadores.
 5. Pix: mostra QR e "copia e cola" e confirma sozinho quando pago (no
-   simulado, por um botão "simular pagamento" visível só em dev).
+   teste, por um botão "simular pagamento", no simulado ou no Asaas sandbox;
+   em produção o botão não existe).
 6. Crédito/Débito: mostra o QR da fatura e confirma sozinho quando pago.
 7. Dinheiro: mostra "pague na recepção"; o pagamento fica `AWAITING_CASH`.
 8. Trocar de método antes de pagar cancela a cobrança anterior.

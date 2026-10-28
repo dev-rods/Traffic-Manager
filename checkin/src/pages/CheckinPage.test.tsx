@@ -178,6 +178,45 @@ describe('Check-in', () => {
     )
   })
 
+  it('Asaas sandbox: cartão mostra o cartão de teste, sem botão de simular', async () => {
+    const card = payment({
+      method: 'CREDIT_CARD',
+      pixPayload: null,
+      invoiceUrl: 'https://sandbox.asaas.com/i/1',
+      canSimulate: false,
+    })
+    vi.mocked(checkinService.pay).mockResolvedValue(card)
+    vi.mocked(checkinService.payment).mockResolvedValue(card)
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Crédito/ }))
+
+    expect(await screen.findByRole('img', { name: 'QR code da fatura' })).toBeInTheDocument()
+    expect(screen.getByText('4444 4444 4444 4444')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Simular pagamento (teste)' })).toBeNull()
+  })
+
+  it('produção: sem cartão de teste nem botão de simular', async () => {
+    const card = payment({
+      method: 'CREDIT_CARD',
+      pixPayload: null,
+      invoiceUrl: 'https://www.asaas.com/i/1',
+      simulated: false,
+      canSimulate: false,
+    })
+    vi.mocked(checkinService.pay).mockResolvedValue(card)
+    vi.mocked(checkinService.payment).mockResolvedValue(card)
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Crédito/ }))
+
+    expect(await screen.findByRole('img', { name: 'QR code da fatura' })).toBeInTheDocument()
+    expect(screen.queryByText('4444 4444 4444 4444')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Simular pagamento (teste)' })).toBeNull()
+  })
+
   it('dinheiro: termina o check-in e manda para a recepção', async () => {
     vi.mocked(checkinService.pay).mockResolvedValue(
       payment({ method: 'CASH', status: 'AWAITING_CASH', pixPayload: null })

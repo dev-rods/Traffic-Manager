@@ -5,7 +5,8 @@ Spec: `docs/work/spec/026-checkin-autoatendimento.md`
 
 Rotas da Lambda `PublicBooking`. Chave do booking-site (`x-api-key`) e token
 do código de WhatsApp (`verify/confirm`), nunca copiados para este arquivo.
-Só **dev** nesta fase; sem `ASAAS_API_KEY`, dev usa o provedor **simulado**.
+Só **dev** nesta fase; dev usa o Asaas **sandbox** (`/dev/ASAAS_API_KEY`) e,
+sem chave, o provedor **simulado**.
 
 ## Preparação
 
@@ -72,9 +73,11 @@ curl -s -G "$CK/appointments" -H "x-api-key: $KEY" --data-urlencode "phone=$PHON
 Pendente no Asaas: o backend consulta o Asaas (rede para webhook atrasado).
 Outro número: 404/401.
 
-## 5. Simular (só provedor simulado) — `POST checkin/payments/{id}/simulate`
+## 5. Simular (só teste) — `POST checkin/payments/{id}/simulate`
 
-200 `status: PAID`. Com o Asaas configurado: 404.
+Simulado, qualquer método: 200 `status: PAID`. Asaas sandbox: Pix 200 `PAID`
+(confirma pelo `/sandbox/payment/{id}/confirm` e o webhook chega); cartão 400
+(pague a fatura com o cartão de teste). Asaas de produção: 404.
 
 ## 6. Baixa em dinheiro (recepção) — `POST /clinics/{clinicId}/caixa/pagamentos/{id}/dinheiro`
 

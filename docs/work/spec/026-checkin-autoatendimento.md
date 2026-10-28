@@ -51,8 +51,8 @@ CREATE TABLE IF NOT EXISTS scheduler.payment_webhook_events (
 
 | Arquivo | Conteúdo |
 |---|---|
-| `payment_provider.py` | `Cobranca` (id, status, invoice_url, pix_payload), `PagadorAsaas`, `PaymentProvider` (interface): `cria_cobranca(pagador, metodo, valor_cents, vencimento, descricao, referencia)`, `cancela(id)`, `consulta_status(id)`, `recebe_em_dinheiro(id, valor_cents, data)`; `provedor_ativo()`: Asaas com `ASAAS_API_KEY`, simulado só com `STAGE=dev`, senão `PagamentoIndisponivel`. |
-| `asaas_provider.py` | REST v3 (`access_token`): cliente por CPF (`GET /customers?cpfCnpj`, senão `POST /customers` com `notificationDisabled`), `POST /payments` (`PIX` → `GET /payments/{id}/pixQrCode`; `CREDIT_CARD` para crédito e débito, devolve `invoiceUrl`; `UNDEFINED` para dinheiro), `DELETE /payments/{id}`, `GET /payments/{id}`, `POST /payments/{id}/receiveInCash`. Base: `ASAAS_BASE_URL`. |
+| `payment_provider.py` | `Cobranca` (id, status, invoice_url, pix_payload), `PagadorAsaas`, `PaymentProvider` (interface): `cria_cobranca(pagador, metodo, valor_cents, vencimento, descricao, referencia)`, `cancela(id)`, `consulta_status(id)`, `recebe_em_dinheiro(id, valor_cents, data)`, `simula(id)` com `pode_simular` (só simulado e Asaas sandbox); `cobranca_de_teste(provider)` (simulado, ou Asaas com `ASAAS_BASE_URL` de sandbox) alimenta `simulated`/`canSimulate` da tela; `provedor_ativo()`: Asaas com `ASAAS_API_KEY`, simulado só com `STAGE=dev`, senão `PagamentoIndisponivel`. |
+| `asaas_provider.py` | REST v3 (`access_token`): cliente por CPF (`GET /customers?cpfCnpj`, senão `POST /customers` com `notificationDisabled`), `POST /payments` (`PIX` → `GET /payments/{id}/pixQrCode`; `CREDIT_CARD` para crédito e débito, devolve `invoiceUrl`; `UNDEFINED` para dinheiro), `DELETE /payments/{id}`, `GET /payments/{id}`, `POST /payments/{id}/receiveInCash`; no sandbox, `POST /sandbox/payment/{id}/confirm` (só Pix: o sandbox recusa cartão). Base: `ASAAS_BASE_URL`. |
 | `simulated_payment_provider.py` | Ids `sim_*`, payload Pix e fatura fictícios; status em memória do banco (a confirmação vem do endpoint `simulate`). |
 
 Mapa de status do Asaas: `RECEIVED|CONFIRMED|RECEIVED_IN_CASH` → `PAID`;
@@ -95,7 +95,7 @@ Sub-rotas (`checkin.py`):
 | POST | `appointments/{id}/confirm` | `{phone, token}` |
 | POST | `appointments/{id}/payments` | `{phone, token, method, cpf?}` |
 | GET | `payments/{id}` | `?phone&token` |
-| POST | `payments/{id}/simulate` | `{phone, token}`, só provedor simulado em dev |
+| POST | `payments/{id}/simulate` | `{phone, token}`, só em teste: simulado (qualquer método) ou Asaas sandbox (só Pix; cartão: 400). Produção: 404 |
 
 A baixa em dinheiro não fica aqui: é da Lambda `Caixa` (§5.1).
 
