@@ -48,6 +48,10 @@ ABERTAS = {
     "patient_record/protocol.py": "prontuario.ler",
     # O nome e o horário da clínica, sem as credenciais.
     "clinic/get.py": "clinica.basica",
+    # Caixa (PRD 026): SÓ a baixa em dinheiro, porque quem recebe a nota é a
+    # recepção. O resumo do caixa, no mesmo arquivo, continua do admin
+    # (`require_api_key`), como os relatórios.
+    "caixa/router.py": "agenda.escrever",
 }
 
 # Os três itens que o André nomeou, e o resto do que não pode vazar junto.

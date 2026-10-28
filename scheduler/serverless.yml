@@ -13,6 +13,10 @@ custom:
   stage: ${opt:stage, self:provider.stage}
   resourcePrefix: ${self:service}-${self:custom.stage}
   accountId: "796000356030"
+  # Asaas (PRD 026): sandbox em dev, produção em prod.
+  asaasBaseUrl:
+    dev: https://api-sandbox.asaas.com
+    prod: https://api.asaas.com
   pythonRequirements:
     dockerizePip: false
     pythonBin: py -3.8
@@ -88,6 +92,12 @@ provider:
     # (ver src/utils/booking_verification.py). Fallback vazio para não quebrar o deploy
     # antes do parâmetro ser provisionado no SSM — nesse caso os tokens não validam.
     BOOKING_VERIFICATION_SECRET: ${ssm:/${self:custom.stage}/BOOKING_VERIFICATION_SECRET, ''}
+    # Check-in com pagamento (PRD 026). Sem ASAAS_API_KEY, dev usa o provedor
+    # simulado e prod recusa a cobrança. O token do webhook é o `authToken`
+    # configurado no painel do Asaas; vazio, o webhook recusa tudo.
+    ASAAS_API_KEY: ${ssm:/${self:custom.stage}/ASAAS_API_KEY, ''}
+    ASAAS_WEBHOOK_TOKEN: ${ssm:/${self:custom.stage}/ASAAS_WEBHOOK_TOKEN, ''}
+    ASAAS_BASE_URL: ${self:custom.asaasBaseUrl.${self:custom.stage}}
     # Domínio customizado por clínica no booking-site (ver UpdateClinic e
     # public_booking/resolve_domain). Projeto Vercel é um só pros dois stages -
     # a distinção dev/prod vive no banco, não na Vercel - só o token é secreto.
@@ -122,6 +132,7 @@ functions:
   - ${file(sls/functions/lead/interface.yml)}
   - ${file(sls/functions/attendant/interface.yml)}
   - ${file(sls/functions/public_booking/interface.yml)}
+  - ${file(sls/functions/caixa/interface.yml)}
   - ${file(sls/functions/outbound/interface.yml)}
   - ${file(sls/functions/atendimento/interface.yml)}
   - ${file(sls/functions/tarefa/interface.yml)}

@@ -1,0 +1,12 @@
+{
+  "resource": "/public/clinics/{clinicId}/checkin/{proxy+}",
+  "headers": {
+    "x-api-key": "test-api-key"
+  },
+  "httpMethod": "POST",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123",
+    "proxy": "appointments/00000000-0000-4000-8000-0000000000a1/payments"
+  },
+  "body": "{\"phone\": \"5511999990000\", \"token\": \"<token>\", \"method\": \"PIX\", \"cpf\": \"52998224725\"}"
+}

@@ -3,7 +3,7 @@ import logging
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
 from src.utils.phone import is_valid_br_phone
 from src.services.db.postgres import PostgresService
-from src.utils.booking_verification import generate_and_send_code, RateLimitedError, SendFailedError
+from src.utils.booking_verification import generate_and_send_code, SendFailedError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -39,12 +39,14 @@ def handler(event, context):
         if not clinics:
             return http_response(404, {"status": "ERROR", "message": "Salão não encontrado"})
 
-        generate_and_send_code(clinics[0], phone)
+        codigo_de_teste = generate_and_send_code(clinics[0], phone)
+        if codigo_de_teste:
+            # Só acontece em dev, com o WhatsApp fora (ver generate_and_send_code).
+            return http_response(200, {"status": "SUCCESS", "message": "Ambiente de teste: WhatsApp indisponível",
+                                       "devCode": codigo_de_teste})
 
         return http_response(200, {"status": "SUCCESS", "message": "Código enviado por WhatsApp"})
 
-    except RateLimitedError as e:
-        return http_response(429, {"status": "ERROR", "message": str(e)})
     except SendFailedError as e:
         return http_response(502, {"status": "ERROR", "message": str(e)})
     except Exception as e:

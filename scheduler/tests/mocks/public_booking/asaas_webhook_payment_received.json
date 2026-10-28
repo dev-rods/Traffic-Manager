@@ -1,0 +1,8 @@
+{
+  "httpMethod": "POST",
+  "resource": "/public/asaas/webhook",
+  "headers": {
+    "asaas-access-token": "<ASAAS_WEBHOOK_TOKEN>"
+  },
+  "body": "{\"id\": \"evt_00000000000000000000000000000001\", \"event\": \"PAYMENT_RECEIVED\", \"payment\": {\"id\": \"pay_000000000001\", \"status\": \"RECEIVED\", \"value\": 225.0}}"
+}

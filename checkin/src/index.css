@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Neutros grafite com leve tinta fria, no matiz do botão neutro da
+     referência (muted-700). O marrom anterior deixava o texto secundário em
+     ~4:1 sobre o creme: lavado no celular, ao sol (PRD 025, V1). */
+  --color-ink-50: #f8f8fa;
+  --color-ink-100: #f1f1f4;
+  --color-ink-200: #e4e4ea;
+  --color-ink-300: #cbcbd4;
+  --color-ink-400: #9b9bab;
+  --color-ink-500: #636374;
+  --color-ink-600: #4f4f60;
+  --color-ink-700: #3d3d4c;
+  --color-ink-800: #2b2b37;
+  --color-ink-900: #1e1e28;
+
+  /* Superfície de cartão: branco com um fio de tinta, nunca #fff puro. */
+  --color-surface: #fdfdfe;
+
+  /* Accent: creme/dourado, a família do "Reservar" da referência. Texto sobre
+     o acento usa 700 (6.6:1 sobre o 50). */
+  --color-accent-50: #fdf9ea;
+  --color-accent-100: #fbf2cf;
+  --color-accent-200: #f5e4a3;
+  --color-accent-300: #ecd174;
+  --color-accent-400: #ddb84a;
+  --color-accent-500: #c49a2c;
+  --color-accent-600: #9c7a1f;
+  --color-accent-700: #735915;
+
+  --shadow-card: 0 1px 2px rgb(30 30 40 / 0.04), 0 4px 16px rgb(30 30 40 / 0.06);
+
+  --color-success-500: #03a561;
+  --color-success-600: #028f54;
+  --color-success-100: #e5efe2;
+  --color-danger-500: #b3462f;
+  --color-danger-100: #f6e6e0;
+
+  /* Fiel ao site de referência: botão de reservar (creme) e botão neutro (cinza) */
+  --color-cream-100: #fcf6d7;
+  --color-cream-200: #f5e9b0;
+  --color-muted-100: #f3f3f4;
+  --color-muted-200: #e9e9ea;
+  --color-muted-700: #515164;
+
+  /* Site de referência não usa serif em nenhum lugar — só sans, como aqui */
+  --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-ink-50);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+}
+
+/* Tailwind's preflight resets <button> cursor to "default" — todo elemento
+   clicável precisa deixar isso óbvio pro usuário (mãozinha no hover). Regra
+   global em vez de repetir cursor-pointer em cada botão/label. */
+button:not(:disabled),
+[role='button']:not(:disabled) {
+  cursor: pointer;
+}
+
+label:has(input[type='checkbox']),
+label:has(input[type='radio']) {
+  cursor: pointer;
+}
+
+/* Quiosque: nada de seleção de texto, menu de toque longo ou destaque azul do
+   toque no Safari - a tela é um aparelho, não uma página para copiar. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}

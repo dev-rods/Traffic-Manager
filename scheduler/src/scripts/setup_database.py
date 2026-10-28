@@ -175,6 +175,7 @@ SQL_STATEMENTS = [
         lembrete_erro VARCHAR(120),
         confirmado_em TIMESTAMPTZ,
         confirmado_por VARCHAR(16),
+        checked_in_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -1149,6 +1150,51 @@ SQL_STATEMENTS = [
 
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS lembrete_automatico BOOLEAN NOT NULL DEFAULT FALSE",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS lembrete_antecedencia_horas INTEGER NOT NULL DEFAULT 24",
+    # -- Check-in de autoatendimento com pagamento (PRD 026) -----------------
+    #
+    # `checked_in_at`: a paciente confirmou no iPad que chegou. Separado do
+    # pagamento de propósito - ela pode confirmar e pagar na recepção.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ",
+
+    # Uma linha por tentativa de cobrança. Trocar de método cria outra linha e
+    # cancela a anterior; o histórico fica, porque é ele que explica o caixa.
+    """CREATE TABLE IF NOT EXISTS scheduler.appointment_payments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        appointment_id UUID NOT NULL REFERENCES scheduler.appointments(id),
+        method VARCHAR(20) NOT NULL
+            CHECK (method IN ('PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH')),
+        amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+        status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+            CHECK (status IN ('PENDING', 'AWAITING_CASH', 'PAID', 'CANCELLED', 'FAILED', 'REFUNDED')),
+        provider VARCHAR(20) NOT NULL CHECK (provider IN ('asaas', 'simulado')),
+        provider_payment_id VARCHAR(100),
+        invoice_url TEXT,
+        pix_payload TEXT,
+        payer_name VARCHAR(255),
+        payer_cpf VARCHAR(11),
+        paid_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    # No máximo um pagamento vivo por agendamento: duas abas (ou dois toques)
+    # não geram duas cobranças. Cancelado/falho não conta, para poder tentar
+    # de novo.
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_appointment_payments_ativo
+       ON scheduler.appointment_payments (appointment_id)
+       WHERE status IN ('PENDING', 'AWAITING_CASH', 'PAID')""",
+    """CREATE INDEX IF NOT EXISTS idx_appointment_payments_provider
+       ON scheduler.appointment_payments (provider, provider_payment_id)""",
+
+    # O Asaas entrega webhook "pelo menos uma vez": o id do evento descarta
+    # a repetição.
+    """CREATE TABLE IF NOT EXISTS scheduler.payment_webhook_events (
+        event_id VARCHAR(100) PRIMARY KEY,
+        provider VARCHAR(20) NOT NULL,
+        event VARCHAR(50),
+        provider_payment_id VARCHAR(100),
+        received_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
 ]
 
 

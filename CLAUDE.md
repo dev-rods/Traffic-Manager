@@ -148,7 +148,7 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 ### Key Directories
 - `scheduler/src/functions/` - Lambda handlers by domain (webhook, send, clinic, service, professional, availability, appointment, template, faq, reminder, report, lead)
 - `scheduler/src/services/` - Business logic (conversation_agent, ai_tools, skills, atendimento, availability_engine, appointment_service, lead_service, message_tracker, reminder_service, sheets_sync, template_service)
-- `scheduler/src/providers/` - WhatsApp provider abstraction (z-api implementation)
+- `scheduler/src/providers/` - WhatsApp provider abstraction (z-api implementation) and payment providers (Asaas, simulated in dev)
 - `scheduler/src/utils/` - Utilities (http, auth, logging, phone, decimal)
 - `scheduler/sls/functions/` - Serverless function interface files
 - `scheduler/sls/resources/` - DynamoDB table definitions
@@ -163,6 +163,7 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 - z-api (WhatsApp messaging)
 - Google Sheets API (appointment sync)
 - Anthropic API (the conversation agent; see `conversation_agent.py`)
+- Asaas (check-in payments; see PRD 026)
 
 ### Database Migrations
 - Schema changes go in the `MIGRATIONS` list in `scheduler/src/scripts/setup_database.py`
@@ -176,7 +177,7 @@ cd scheduler && serverless deploy --stage prod --aws-profile traffic-manager
 - Handlers: `src.functions.{domain}.{module}.handler`
 - DynamoDB tables: `clinic-scheduler-infra-{stage}-{table-name}`
 - RDS tables: `scheduler.{table_name}` (schema-qualified)
-- Secrets: SSM `/${stage}/KEY_NAME` (SCHEDULER_API_KEY, ZAPI_CLIENT_TOKEN, RDS_*, GOOGLE_SHEETS_SERVICE_ACCOUNT)
+- Secrets: SSM `/${stage}/KEY_NAME` (SCHEDULER_API_KEY, ZAPI_CLIENT_TOKEN, RDS_*, GOOGLE_SHEETS_SERVICE_ACCOUNT, ASAAS_API_KEY, ASAAS_WEBHOOK_TOKEN)
 
 ---
 
