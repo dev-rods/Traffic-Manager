@@ -34,6 +34,8 @@ export interface CaixaPayment {
   startTime: string
   name: string | null
   simulated: boolean
+  /** A sessão foi cancelada depois de paga: o dinheiro entrou e falta decidir o estorno. */
+  appointmentCancelled: boolean
 }
 
 export interface CaixaResumo {
@@ -45,16 +47,21 @@ export interface CaixaResumo {
     receivedCents: number
     pendingCents: number
     pendingCount: number
+    refundsPendingCents: number
     byMethod: Record<PaymentMethod, { count: number; cents: number }>
   }
   days: CaixaDay[]
   pending: CaixaPending[]
   payments: CaixaPayment[]
+  /** Pagos de sessões canceladas, de qualquer data: um estorno esquecido não some com o filtro. */
+  refundsPending: CaixaPayment[]
 }
 
 export interface CaixaPaymentResult {
   id: string
   status: PaymentStatus
+  /** Estorno: o Asaas aceitou o pedido, mas o dono da conta ainda precisa autorizar (token). */
+  refundNeedsAuthorization?: boolean
 }
 
 export const caixaService = {
@@ -70,6 +77,14 @@ export const caixaService = {
     api
       .post<{ payment: CaixaPaymentResult }>(
         `/clinics/${clinicId}/caixa/pagamentos/${paymentId}/dinheiro`,
+      )
+      .then((r) => r.data.payment),
+
+  /** Estorno de pagamento de sessão cancelada: Pix e cartão voltam pelo Asaas; dinheiro, em mão. */
+  estornar: (clinicId: string, paymentId: string) =>
+    api
+      .post<{ payment: CaixaPaymentResult }>(
+        `/clinics/${clinicId}/caixa/pagamentos/${paymentId}/estorno`,
       )
       .then((r) => r.data.payment),
 }

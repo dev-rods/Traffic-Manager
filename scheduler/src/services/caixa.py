@@ -99,6 +99,7 @@ def resumo(db, clinic_id: str, date_from: Optional[str], date_to: Optional[str])
         por_metodo[r["method"]]["cents"] += valor
 
     pend = pendentes(db, clinic_id, inicio, min(fim, hoje))
+    estornos = estornos_pendentes(db, clinic_id)
     return {
         "dateFrom": inicio.isoformat(),
         "dateTo": fim.isoformat(),
@@ -108,11 +109,13 @@ def resumo(db, clinic_id: str, date_from: Optional[str], date_to: Optional[str])
             "receivedCents": sum(d["receivedCents"] for d in dias.values()),
             "pendingCents": sum(p["amountCents"] for p in pend),
             "pendingCount": len(pend),
+            "refundsPendingCents": sum(e["amountCents"] for e in estornos),
             "byMethod": por_metodo,
         },
         "days": sorted(dias.values(), key=lambda d: d["date"]),
         "pending": pend,
         "payments": pagamentos(db, clinic_id, tz, inicio, fim),
+        "refundsPending": estornos,
     }
 
 
@@ -162,7 +165,8 @@ def pagamentos(db, clinic_id: str, tz: str, inicio: date, fim: date) -> List[Dic
     rows = db.execute_query(
         """
         SELECT pay.id, pay.method, pay.amount_cents, pay.paid_at, pay.provider,
-               a.appointment_date, a.start_time, COALESCE(a.full_name, p.name) AS nome
+               a.appointment_date, a.start_time, a.status AS appointment_status,
+               COALESCE(a.full_name, p.name) AS nome
         FROM scheduler.appointment_payments pay
         JOIN scheduler.appointments a ON a.id = pay.appointment_id
         LEFT JOIN scheduler.patients p ON p.id = a.patient_id
@@ -182,6 +186,41 @@ def pagamentos(db, clinic_id: str, tz: str, inicio: date, fim: date) -> List[Dic
             "startTime": str(r["start_time"])[:5],
             "name": r.get("nome"),
             "simulated": cobranca_de_teste(r.get("provider")),
+            # Dinheiro que entrou de sessão que não vai acontecer: a decisão
+            # de estornar é humana (pode virar crédito), mas não pode passar
+            # despercebida no caixa (PRD 028, M7).
+            "appointmentCancelled": r.get("appointment_status") == "CANCELLED",
+        }
+        for r in rows
+    ]
+
+
+def estornos_pendentes(db, clinic_id: str) -> List[Dict[str, Any]]:
+    """Pagamentos confirmados de sessões canceladas, de qualquer data: um
+    estorno esquecido não some porque o período do filtro passou."""
+    rows = db.execute_query(
+        """
+        SELECT pay.id, pay.method, pay.amount_cents, pay.paid_at, pay.provider,
+               a.appointment_date, a.start_time, COALESCE(a.full_name, p.name) AS nome
+        FROM scheduler.appointment_payments pay
+        JOIN scheduler.appointments a ON a.id = pay.appointment_id
+        LEFT JOIN scheduler.patients p ON p.id = a.patient_id
+        WHERE pay.clinic_id = %s AND pay.status = 'PAID' AND a.status = 'CANCELLED'
+        ORDER BY pay.paid_at
+        """,
+        (clinic_id,),
+    )
+    return [
+        {
+            "id": str(r["id"]),
+            "method": r["method"],
+            "amountCents": int(r["amount_cents"]),
+            "paidAt": _iso(r.get("paid_at")),
+            "appointmentDate": _iso(r["appointment_date"]),
+            "startTime": str(r["start_time"])[:5],
+            "name": r.get("nome"),
+            "simulated": cobranca_de_teste(r.get("provider")),
+            "appointmentCancelled": True,
         }
         for r in rows
     ]

@@ -41,11 +41,17 @@ class TestCodigoDeTeste(unittest.TestCase):
             with self.assertRaises(bv.SendFailedError):
                 bv.generate_and_send_code(CLINIC, "5511999990000")
 
-    def test_whatsapp_funcionando_nunca_devolve(self):
+    def test_dev_devolve_mesmo_com_o_whatsapp_aceitando(self):
+        """O z-api de dev aceita o envio e não entrega (teste gravado de
+        28/10/2026): em dev o código vem sempre (PRD 028, M4)."""
         self.provider.send_text.return_value = mock.MagicMock(success=True)
-        for stage in ("dev", "prod"):
-            with self.subTest(stage=stage), mock.patch.dict(os.environ, {"STAGE": stage}):
-                self.assertIsNone(bv.generate_and_send_code(CLINIC, "5511999990000"))
+        with mock.patch.dict(os.environ, {"STAGE": "dev"}):
+            self.assertEqual(bv.generate_and_send_code(CLINIC, "5511999990000"), self.codigo_gravado())
+
+    def test_prod_nunca_devolve(self):
+        self.provider.send_text.return_value = mock.MagicMock(success=True)
+        with mock.patch.dict(os.environ, {"STAGE": "prod"}):
+            self.assertIsNone(bv.generate_and_send_code(CLINIC, "5511999990000"))
 
 
 class TestSemLimiteDeEnvios(unittest.TestCase):

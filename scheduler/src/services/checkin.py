@@ -367,6 +367,49 @@ def marca_recebido_em_dinheiro(db, provider: PaymentProvider, clinic_id: str, pa
     return pagamento_para_tela(rows[0])
 
 
+def estorna(db, provider: PaymentProvider, clinic_id: str, payment_id: str) -> Dict[str, Any]:
+    """Devolve um pagamento de sessão cancelada (PRD 028, M7). Só o admin
+    chama (Lambda `Caixa`, `require_api_key`): é dinheiro saindo.
+
+    Só vale para sessão CANCELADA: estornar sessão que ainda vai acontecer
+    deixaria a paciente atendida sem pagar. Dinheiro não passa pelo provedor
+    (o Asaas não tem o que devolver); fica registrado como estornado e a
+    devolução é feita em mão, na recepção.
+    """
+    try:
+        uuid.UUID(str(payment_id))
+    except ValueError:
+        raise NaoEncontrado()
+    rows = db.execute_query(
+        """
+        SELECT pay.*, a.status AS appointment_status
+        FROM scheduler.appointment_payments pay
+        JOIN scheduler.appointments a ON a.id = pay.appointment_id
+        WHERE pay.id = %s::uuid AND pay.clinic_id = %s
+        """,
+        (payment_id, clinic_id),
+    )
+    if not rows:
+        raise NaoEncontrado()
+    row = rows[0]
+    if row["status"] == ESTORNADO:
+        return pagamento_para_tela(row)
+    if row["status"] != PAGO:
+        raise CheckinInvalido("Só pagamento confirmado pode ser estornado.")
+    if row.get("appointment_status") != "CANCELLED":
+        raise CheckinInvalido("Cancele a sessão antes de estornar o pagamento.")
+    aguarda_autorizacao = False
+    if row["method"] != DINHEIRO and row["provider"] == provider.nome and row.get("provider_payment_id"):
+        aguarda_autorizacao = provider.estorna(row["provider_payment_id"])
+    _marca(db, payment_id, ESTORNADO)
+    logger.info(f"[Checkin] estorno {payment_id} {row['method']} {row['amount_cents']} {clinic_id}"
+                f" aguarda_autorizacao={aguarda_autorizacao}")
+    # Estornado aqui = a clínica decidiu devolver e o pedido foi aceito. Se o
+    # Asaas ainda pede a autorização do dono da conta, o painel avisa.
+    return dict(pagamento_para_tela(dict(row, status=ESTORNADO)),
+                refundNeedsAuthorization=aguarda_autorizacao)
+
+
 EVENTOS_PAGO = {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"}
 EVENTOS = {**{e: PAGO for e in EVENTOS_PAGO}, "PAYMENT_DELETED": CANCELADO, "PAYMENT_REFUNDED": ESTORNADO}
 

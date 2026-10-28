@@ -19,6 +19,10 @@ interface PaymentStepProps {
  * Mostra como pagar (Pix ou cartão) e espera. Quem confirma é o provedor
  * (webhook, ou a consulta que o backend faz a cada 3 s); a tela não pergunta
  * "já pagou?". Dinheiro não passa por aqui: a paciente paga na recepção.
+ *
+ * Em tela deitada e larga (iPad em paisagem), QR à esquerda e instruções à
+ * direita: em uma coluna só, o título saía da tela e o "Trocar forma de
+ * pagamento" ficava abaixo da dobra (teste gravado de 28/10/2026, PRD 028 M6).
  */
 export function PaymentStep({
   clinicId,
@@ -48,59 +52,84 @@ export function PaymentStep({
     )
   }
 
+  const pix = payment.method === 'PIX' && payment.pixPayload
+  const card =
+    (payment.method === 'CREDIT_CARD' || payment.method === 'DEBIT_CARD') && payment.invoiceUrl
+  const qrValue = pix ? payment.pixPayload : card ? payment.invoiceUrl : null
+
   return (
-    <div className="flex flex-col items-center gap-8">
-      {payment.method === 'PIX' && payment.pixPayload ? (
-        <>
-          <StepHeader title={`Pague ${amount} com Pix`}>
-            Abra o app do seu banco, escolha Pix e aponte a câmera para o código.
-          </StepHeader>
-          <QrCode value={payment.pixPayload} label="QR code do Pix" />
-        </>
+    <div className="flex flex-col items-center gap-6 md:landscape:grid md:landscape:grid-cols-[auto_1fr] md:landscape:items-center md:landscape:gap-12">
+      {qrValue ? (
+        <div className="md:landscape:order-first">
+          <QrCode value={qrValue} label={pix ? 'QR code do Pix' : 'QR code da fatura'} />
+        </div>
       ) : null}
 
-      {(payment.method === 'CREDIT_CARD' || payment.method === 'DEBIT_CARD') &&
-      payment.invoiceUrl ? (
-        <>
-          <StepHeader title={`Pague ${amount} no seu celular`}>
+      <div className="order-first flex w-full flex-col items-center gap-6 md:landscape:order-none md:landscape:items-start">
+        {pix ? (
+          <StepHeader title={`Pague ${amount} com Pix`} align="responsive">
+            Abra o app do seu banco, escolha Pix e aponte a câmera para o código.
+          </StepHeader>
+        ) : null}
+        {card ? (
+          <StepHeader title={`Pague ${amount} no seu celular`} align="responsive">
             Aponte a câmera do celular para o código e pague com cartão de{' '}
             {payment.method === 'CREDIT_CARD' ? 'crédito' : 'débito'}.
           </StepHeader>
-          <QrCode value={payment.invoiceUrl} label="QR code da fatura" />
-          {payment.simulated && !payment.canSimulate ? (
-            // Ambiente de teste (Asaas sandbox): o cartão aprovado da
-            // documentação do Asaas, que dispara o webhook de verdade.
-            <p className="rounded-2xl border border-accent-200 bg-accent-50 px-5 py-3 text-center text-base text-accent-700">
-              Ambiente de teste: na fatura, use o cartão{' '}
-              <strong className="tabular-nums">4444 4444 4444 4444</strong>, validade futura e CVV
-              123.
-            </p>
-          ) : null}
-        </>
-      ) : null}
-
-      <p className="flex items-center gap-3 text-lg text-ink-600" aria-live="polite">
-        <Spinner size="md" className="text-ink-400" />
-        Aguardando o pagamento…
-      </p>
-
-      {simulate.isError ? <ErrorMessage>{simulate.error.message}</ErrorMessage> : null}
-
-      <div className="flex w-full max-w-sm flex-col gap-2">
-        {payment.canSimulate ? (
-          // Só existe com o provedor simulado (dev, sem conta no Asaas).
-          <Button
-            variant="secondary"
-            loading={simulate.isPending}
-            onClick={() => simulate.mutate(payment.id, { onSuccess: onPaid })}
-          >
-            Simular pagamento (teste)
-          </Button>
         ) : null}
-        <Button variant="ghost" onClick={onChangeMethod}>
-          Trocar forma de pagamento
-        </Button>
+
+        {card && payment.simulated && !payment.canSimulate ? <TestCardHint /> : null}
+
+        <p className="flex items-center gap-3 text-lg text-ink-600" aria-live="polite">
+          <Spinner size="md" className="text-ink-400" />
+          Aguardando o pagamento…
+        </p>
+
+        {simulate.isError ? <ErrorMessage>{simulate.error.message}</ErrorMessage> : null}
+
+        <div className="flex w-full max-w-sm flex-col gap-2">
+          {payment.canSimulate ? (
+            // Só em teste: provedor simulado, ou Asaas sandbox no Pix.
+            <Button
+              variant="secondary"
+              loading={simulate.isPending}
+              onClick={() => simulate.mutate(payment.id, { onSuccess: onPaid })}
+            >
+              Simular pagamento (teste)
+            </Button>
+          ) : null}
+          <Button variant="ghost" onClick={onChangeMethod}>
+            Trocar forma de pagamento
+          </Button>
+        </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Ambiente de teste (Asaas sandbox): tudo o que a fatura pede. Só o número do
+ * cartão não bastava; no teste gravado ninguém sabia o que pôr como titular
+ * (PRD 028, M5). Dados do cartão aprovado da documentação do Asaas.
+ */
+function TestCardHint() {
+  return (
+    <div className="w-full max-w-md rounded-2xl border border-accent-200 bg-accent-50 px-5 py-4 text-base text-accent-700">
+      <p className="font-semibold">Ambiente de teste: dados para a fatura</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+        <dt>Cartão</dt>
+        <dd className="font-semibold tabular-nums">4444 4444 4444 4444</dd>
+        <dt>Validade</dt>
+        <dd>qualquer data futura (ex.: 12/2030)</dd>
+        <dt>CVV</dt>
+        <dd className="tabular-nums">123</dd>
+        <dt>Titular</dt>
+        <dd>qualquer nome</dd>
+        <dt>CPF</dt>
+        <dd className="tabular-nums">529.982.247-25</dd>
+        <dt>E-mail, CEP, telefone</dt>
+        <dd>quaisquer válidos</dd>
+      </dl>
     </div>
   )
 }

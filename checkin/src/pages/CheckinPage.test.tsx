@@ -236,9 +236,59 @@ describe('Check-in', () => {
     ])
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
-    expect(await screen.findByText(/Seu pagamento está confirmado/)).toBeInTheDocument()
+    // Sem pedir "confirmar" de novo: no teste gravado isso pareceu um duplo
+    // check-in (PRD 028, M1).
+    expect(await screen.findByText(/Seu pagamento já está confirmado/)).toBeInTheDocument()
+    expect(checkinService.confirm).not.toHaveBeenCalled()
     expect(checkinService.pay).not.toHaveBeenCalled()
+  })
+
+  it('a lista mostra o que já foi feito em cada agendamento', async () => {
+    vi.mocked(checkinService.appointments).mockResolvedValue([
+      { ...ANA, payment: payment({ status: 'PAID', method: 'PIX' }) },
+      { ...BIA, checkedInAt: '2026-10-28T22:06:00Z' },
+    ])
+    renderPage()
+    await login()
+    expect(await screen.findByText('Pago · Pix')).toBeInTheDocument()
+    expect(screen.getByText(/^Check-in às/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Bia Souza/ }))
+    expect(await screen.findByText(/Seu check-in já foi feito às/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continuar para o pagamento' })).toBeInTheDocument()
+  })
+
+  it('escolher na lista o agendamento já pago vai direto para a confirmação', async () => {
+    vi.mocked(checkinService.appointments).mockResolvedValue([
+      { ...ANA, payment: payment({ status: 'PAID' }) },
+      BIA,
+    ])
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: /Ana Souza/ }))
+    expect(await screen.findByText(/Seu pagamento já está confirmado/)).toBeInTheDocument()
+    expect(checkinService.confirm).not.toHaveBeenCalled()
+  })
+
+  it('cartão em teste mostra todos os dados da fatura', async () => {
+    const card = payment({
+      method: 'CREDIT_CARD',
+      pixPayload: null,
+      invoiceUrl: 'https://asaas/i/1',
+      canSimulate: false,
+    })
+    vi.mocked(checkinService.pay).mockResolvedValue(card)
+    vi.mocked(checkinService.payment).mockResolvedValue(card)
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Crédito/ }))
+    expect(await screen.findByText('Ambiente de teste: dados para a fatura')).toBeInTheDocument()
+    expect(screen.getByText('qualquer nome')).toBeInTheDocument()
+    expect(screen.getByText('529.982.247-25')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Simular pagamento (teste)' })
+    ).not.toBeInTheDocument()
   })
 
   it('número sem agendamento', async () => {

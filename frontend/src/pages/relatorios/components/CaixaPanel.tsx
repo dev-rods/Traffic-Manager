@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { useCaixa, useReceberDinheiro } from '@/hooks/useCaixa'
+import { useCaixa, useEstornar, useReceberDinheiro } from '@/hooks/useCaixa'
 import { useToast } from '@/components/ui/toastContext'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { METODOS, METODO_LABEL, dataDe, horaDe, situacaoDoPagamento } from '@/utils/pagamento'
 import { FAIXAS, intervaloDa, type Faixa } from '@/utils/caixa'
-import type { CaixaPending, CaixaResumo } from '@/services/caixa.service'
+import type { CaixaPayment, CaixaPending, CaixaResumo } from '@/services/caixa.service'
 import { KpiCard } from './KpiCard'
 
 function dataCurta(iso: string): string {
@@ -115,6 +115,7 @@ function CaixaConteudo({ data }: { data: CaixaResumo }) {
         </dl>
       </div>
 
+      {data.refundsPending.length > 0 ? <EstornosPendentes pagamentos={data.refundsPending} /> : null}
       <Pendencias pendentes={data.pending} />
       <Recebimentos data={data} />
     </>
@@ -209,6 +210,11 @@ function Recebimentos({ data }: { data: CaixaResumo }) {
                     TESTE
                   </span>
                 ) : null}
+                {p.appointmentCancelled ? (
+                  <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                    SESSÃO CANCELADA
+                  </span>
+                ) : null}
               </span>
               <span className="text-sm text-gray-600">{METODO_LABEL[p.method]}</span>
               <span className="w-24 text-right text-sm font-semibold tabular-nums text-emerald-600">
@@ -221,3 +227,91 @@ function Recebimentos({ data }: { data: CaixaResumo }) {
     </section>
   )
 }
+
+/**
+ * Dinheiro que entrou de sessão que não vai acontecer (PRD 028, M7). Estornar
+ * é decisão humana (pode virar crédito para outra sessão), mas não pode
+ * passar despercebido. Pix e cartão voltam pelo Asaas; dinheiro fica
+ * registrado como estornado e a devolução é feita em mão.
+ */
+function EstornosPendentes({ pagamentos }: { pagamentos: CaixaPayment[] }) {
+  const estornar = useEstornar()
+  const { showToast } = useToast()
+  const [confirmando, setConfirmando] = useState<string | null>(null)
+
+  function confirmar(p: CaixaPayment) {
+    estornar.mutate(p.id, {
+      onSuccess: (r) => {
+        setConfirmando(null)
+        showToast({
+          message:
+            p.method === 'CASH'
+              ? 'Estorno registrado. Devolva o dinheiro na recepção.'
+              : r.refundNeedsAuthorization
+                ? 'Estorno pedido ao Asaas. Autorize no app ou no painel do Asaas para o dinheiro voltar.'
+                : 'Estorno enviado ao Asaas.',
+        })
+      },
+      onError: (erro) =>
+        showToast({
+          message: mensagemDoErro(erro, 'Não foi possível estornar.'),
+          variant: 'error',
+        }),
+    })
+  }
+
+  return (
+    <section className="rounded-xl border border-amber-200 bg-amber-50 shadow-sm">
+      <h2 className="border-b border-amber-200 px-5 py-4 text-base font-semibold text-amber-800">
+        Estornos pendentes
+        <span className="ml-2 text-sm font-normal text-amber-700">
+          pagamentos de sessões canceladas
+        </span>
+      </h2>
+      <ul className="divide-y divide-amber-100">
+        {pagamentos.map((p) => (
+          <li key={p.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-800">
+              {p.name ?? 'Sem nome'}
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                sessão {dataCurta(p.appointmentDate)} {p.startTime} · pago em {dataDe(p.paidAt)}
+              </span>
+            </span>
+            <span className="text-sm text-gray-600">{METODO_LABEL[p.method]}</span>
+            <span className="w-24 text-right text-sm font-semibold tabular-nums text-gray-800">
+              {formatCurrency(p.amountCents)}
+            </span>
+            {confirmando === p.id ? (
+              <span className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={estornar.isPending}
+                  onClick={() => confirmar(p)}
+                  className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 cursor-pointer"
+                >
+                  {estornar.isPending ? 'Estornando…' : 'Confirmar estorno'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmando(null)}
+                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-amber-100 cursor-pointer"
+                >
+                  Voltar
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmando(p.id)}
+                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100 cursor-pointer"
+              >
+                Estornar
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+

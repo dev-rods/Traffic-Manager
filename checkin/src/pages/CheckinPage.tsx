@@ -1,7 +1,6 @@
 import { useCallback, useReducer } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/ui/Button'
 import { useClinic } from '@/hooks/useCheckin'
 import { useIdleReset } from '@/hooks/useIdleReset'
 import { StartStep } from '@/steps/StartStep'
@@ -109,24 +108,69 @@ export function CheckinPage() {
 
   const clinicName = clinic.data ? clinic.data.display_name || clinic.data.name : ''
 
+  const alreadyPaid = useCallback(
+    (appointment: CheckinAppointment) =>
+      dispatch({
+        type: 'go',
+        state: {
+          step: 'done',
+          firstName: firstNameOf(appointment),
+          message: 'Seu pagamento já está confirmado. É só aguardar ser chamado(a).',
+        },
+      }),
+    []
+  )
+
   return (
     <div className="flex min-h-dvh flex-col bg-ink-50">
       {state.step !== 'start' ? (
         <header className="border-b border-ink-200 bg-surface">
-          <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 px-6 py-3">
-            <span className="truncate font-display text-lg font-semibold text-ink-900">
-              {clinicName}
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-ink-100 shadow-card">
+                {clinic.data?.logo_url ? (
+                  <img src={clinic.data.logo_url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span aria-hidden className="font-display text-lg font-semibold text-ink-600">
+                    {clinicName.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </span>
+              <span className="truncate font-display text-lg font-semibold text-ink-900">
+                {clinicName}
+              </span>
             </span>
             {state.step !== 'done' ? (
-              <Button variant="ghost" onClick={reset} className="min-h-12 px-4 text-base">
+              <button
+                type="button"
+                onClick={reset}
+                className="inline-flex min-h-12 shrink-0 items-center gap-2 rounded-xl border border-ink-200 bg-surface px-4 font-display text-base font-semibold text-ink-700 transition-colors duration-150 active:bg-ink-100"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  aria-hidden
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 12a9 9 0 1 0 3-6.7" />
+                  <path d="M3 4v5h5" />
+                </svg>
                 Recomeçar
-              </Button>
+              </button>
             ) : null}
           </div>
         </header>
       ) : null}
 
-      <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <main
+        className={`mx-auto flex w-full flex-1 flex-col justify-center px-6 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] ${
+          state.step === 'payment' ? 'max-w-2xl md:landscape:max-w-4xl' : 'max-w-2xl'
+        }`}
+      >
         {state.step === 'start' ? (
           <StartStep clinic={clinic.data} onStart={() => go({ step: 'phone' })} />
         ) : null}
@@ -162,6 +206,7 @@ export function CheckinPage() {
                 )
               )
             }
+            onAlreadyPaid={alreadyPaid}
             onRestart={reset}
           />
         ) : null}
