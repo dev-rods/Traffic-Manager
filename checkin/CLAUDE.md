@@ -65,4 +65,5 @@ cd checkin && npx vercel deploy --prod --yes --scope team_ZLFt6HlpGbYXZsEloIbOVq
 
 URL: https://checkin-dev-ten.vercel.app/{clinicId}. Env vars do projeto:
 `VITE_API_BASE_URL` (dev) e `VITE_BOOKING_API_KEY` (a mesma chave pública do
-booking-site de dev). Produção é uma fase própria (conta Asaas por clínica).
+booking-site de dev). O que falta para ligar o pagamento em prod está no
+PRD 026 (§7).
