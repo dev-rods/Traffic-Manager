@@ -65,18 +65,21 @@ export function PaymentStep({
         </div>
       ) : null}
 
-      <div className="order-first flex w-full flex-col items-center gap-6 md:landscape:order-none md:landscape:items-start">
-        {pix ? (
-          <StepHeader title={`Pague ${amount} com Pix`} align="responsive">
-            Abra o app do seu banco, escolha Pix e aponte a câmera para o código.
-          </StepHeader>
-        ) : null}
-        {card ? (
-          <StepHeader title={`Pague ${amount} no seu celular`} align="responsive">
-            Aponte a câmera do celular para o código e pague com cartão de{' '}
-            {payment.method === 'CREDIT_CARD' ? 'crédito' : 'débito'}.
-          </StepHeader>
-        ) : null}
+      {/* Em pé, a coluna some (contents): título → QR → status → botões. */}
+      <div className="contents md:landscape:flex md:landscape:w-full md:landscape:flex-col md:landscape:items-start md:landscape:gap-6">
+        <div className="order-first w-full md:landscape:order-none">
+          {pix ? (
+            <StepHeader title={`Pague ${amount} com Pix`} align="responsive">
+              Abra o app do seu banco, escolha Pix e aponte a câmera para o código.
+            </StepHeader>
+          ) : null}
+          {card ? (
+            <StepHeader title={`Pague ${amount} no seu celular`} align="responsive">
+              Aponte a câmera do celular para o código e pague com cartão de{' '}
+              {payment.method === 'CREDIT_CARD' ? 'crédito' : 'débito'}.
+            </StepHeader>
+          ) : null}
+        </div>
 
         {card && payment.simulated && !payment.canSimulate ? <TestCardHint /> : null}
 
