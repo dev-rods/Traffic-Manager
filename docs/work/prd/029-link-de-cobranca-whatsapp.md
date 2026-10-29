@@ -25,7 +25,8 @@ mandar a cobrança para ela pagar depois.
    telefone do agendamento: nome, data e hora da sessão, valor e o link da
    fatura.
 4. **Um pagamento vivo por agendamento** continua valendo:
-   - já existe link pendente: reenvia o MESMO link, sem nova cobrança;
+   - já existe link pendente dentro dos 7 dias: reenvia o MESMO link, sem
+     nova cobrança; link vencido é descartado como abaixo e um novo é criado;
    - existe outra cobrança pendente (Pix do iPad abandonado, "pagar em
      dinheiro" que não aconteceu): é cancelada no Asaas e o link a substitui;
      se o Asaas disser que ela foi paga nesse meio-tempo, nada é enviado;

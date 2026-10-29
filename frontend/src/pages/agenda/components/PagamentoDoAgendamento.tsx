@@ -74,11 +74,11 @@ export function PagamentoDoAgendamento({ appointment: a }: PagamentoDoAgendament
       {a.status === 'CONFIRMED' &&
         status !== 'PAID' &&
         (!('final_price_cents' in a) || (a.final_price_cents ?? 0) > 0) && (
-        <EnviarLinkDePagamento
-          appointmentId={a.id}
-          linkPendente={a.payment_method === 'LINK' && status === 'PENDING'}
-        />
-      )}
+          <EnviarLinkDePagamento
+            appointmentId={a.id}
+            linkPendente={a.payment_method === 'LINK' && status === 'PENDING'}
+          />
+        )}
     </div>
   )
 }
