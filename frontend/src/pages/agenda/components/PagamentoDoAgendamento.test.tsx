@@ -18,6 +18,7 @@ vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast })
 function agendamento(over: Partial<Appointment> = {}): Appointment {
   return {
     id: 'a1',
+    status: 'CONFIRMED',
     checked_in_at: null,
     payment_id: null,
     payment_method: null,
@@ -57,6 +58,15 @@ describe('PagamentoDoAgendamento', () => {
     expect(screen.getByRole('button', { name: 'Reenviar link pelo WhatsApp' })).toBeInTheDocument()
   })
 
+  it('cancelado: sem link, o backend recusaria', () => {
+    render(
+      <PagamentoDoAgendamento
+        appointment={agendamento({ status: 'CANCELLED', final_price_cents: 13500 })}
+      />
+    )
+    expect(screen.queryByRole('button', { name: /link/i })).not.toBeInTheDocument()
+  })
+
   it('pago: sem link', () => {
     render(
       <PagamentoDoAgendamento
@@ -71,8 +81,8 @@ describe('PagamentoDoAgendamento', () => {
     expect(screen.queryByRole('button', { name: /link/i })).not.toBeInTheDocument()
   })
 
-  it('sem check-in nem pagamento', () => {
-    render(<PagamentoDoAgendamento appointment={agendamento()} />)
+  it('sem check-in nem pagamento, sem valor: nada a cobrar', () => {
+    render(<PagamentoDoAgendamento appointment={agendamento({ final_price_cents: null })} />)
     expect(screen.getByText('Não feito')).toBeInTheDocument()
     expect(screen.getByText('Não pago')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
