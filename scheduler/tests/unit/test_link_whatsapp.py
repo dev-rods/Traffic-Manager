@@ -9,7 +9,7 @@ link.
 import json
 import os
 import unittest
-from datetime import date, time
+from datetime import date, datetime, time, timedelta, timezone
 from unittest import mock
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
@@ -128,6 +128,33 @@ class TestEnviaLink(unittest.TestCase):
         r = checkin.envia_link(db, prov, CLINIC, APPT, whatsapp_de=zap)
         self.assertEqual((prov.criadas, r["invoiceUrl"]), ([], "https://asaas/i/ja"))
         self.assertIn("https://asaas/i/ja", zap.enviados[0][1])
+
+    def test_link_vencido_vira_cobranca_nova(self):
+        criado = datetime.now(timezone.utc) - timedelta(days=10)
+        db, prov = Db(vivo=vivo(method="LINK", invoice_url="https://asaas/i/velho", created_at=criado)), Provedor()
+        r = checkin.envia_link(db, prov, CLINIC, APPT, whatsapp_de=Zap())
+        self.assertEqual((prov.canceladas, r["invoiceUrl"]), (["pay_old"], "https://asaas/i/link"))
+        self.assertEqual(db.marcados, [("pg-1", "CANCELLED")])
+
+    def test_link_no_prazo_e_reenviado(self):
+        criado = datetime.now(timezone.utc) - timedelta(days=2)
+        db, prov = Db(vivo=vivo(method="LINK", invoice_url="https://asaas/i/ja", created_at=criado)), Provedor()
+        r = checkin.envia_link(db, prov, CLINIC, APPT, whatsapp_de=Zap())
+        self.assertEqual((prov.criadas, r["invoiceUrl"]), ([], "https://asaas/i/ja"))
+
+    def test_link_ja_pago_no_asaas_nao_e_reenviado(self):
+        db, prov, zap = Db(vivo=vivo(method="LINK")), Provedor(pago=True), Zap()
+        with self.assertRaises(checkin.CheckinInvalido):
+            checkin.envia_link(db, prov, CLINIC, APPT, whatsapp_de=zap)
+        self.assertEqual((db.marcados, zap.enviados), ([("pg-1", "PAID")], []))
+
+    def test_sem_cpf_nao_derruba_o_pix_do_ipad(self):
+        db, prov = Db(vivo=vivo(), cpf=None), Provedor()
+        with self.assertRaises(checkin.PrecisaDeCpf):
+            checkin.envia_link(db, prov, CLINIC, APPT, whatsapp_de=Zap())
+        with self.assertRaises(checkin.CheckinInvalido):
+            checkin.envia_link(db, prov, CLINIC, APPT, cpf="111.111.111-11", whatsapp_de=Zap())
+        self.assertEqual((prov.canceladas, db.marcados), ([], []))
 
     def test_pix_abandonado_do_ipad_e_substituido(self):
         db, prov = Db(vivo=vivo()), Provedor()

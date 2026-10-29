@@ -18,7 +18,7 @@ Regras que valem em todo lugar daqui:
 """
 import logging
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
 import psycopg2
@@ -500,13 +500,14 @@ def envia_link(db, provider: PaymentProvider, clinic_id: str, appointment_id: st
 
     row = None
     vivo = _vivo(db, appointment_id)
-    if vivo:
-        if vivo["status"] == PAGO:
-            raise CheckinInvalido("Este agendamento já está pago.")
-        if vivo["method"] == LINK and vivo["provider"] == provider.nome and vivo.get("invoice_url"):
-            row = vivo
-        elif _descarta(db, provider, vivo):
+    if vivo and vivo["status"] == PAGO:
+        raise CheckinInvalido("Este agendamento já está pago.")
+    if (vivo and vivo["method"] == LINK and vivo["provider"] == provider.nome
+            and vivo.get("invoice_url") and not _link_vencido(clinica, vivo)):
+        if vivo.get("provider_payment_id") and provider.consulta_status(vivo["provider_payment_id"]) == PAGO:
+            _marca(db, str(vivo["id"]), PAGO)
             raise CheckinInvalido("Este agendamento acabou de ser pago.")
+        row = vivo
 
     if row is None:
         cpf_pagador = _cpf_conhecido(appt)
@@ -517,6 +518,8 @@ def envia_link(db, provider: PaymentProvider, clinic_id: str, appointment_id: st
             cpf_pagador = digitos
         if not cpf_pagador:
             raise PrecisaDeCpf()
+        if vivo and _descarta(db, provider, vivo):
+            raise CheckinInvalido("Este agendamento acabou de ser pago.")
         row = _cria_link(db, provider, clinic_id, appointment_id, appt, int(valor), cpf_pagador)
         if row is None:
             # Outro pedido criou o pagamento vivo ao mesmo tempo.
@@ -538,6 +541,15 @@ def envia_link(db, provider: PaymentProvider, clinic_id: str, appointment_id: st
     logger.info(f"[Checkin] link de cobrança {row['id']} {clinic_id} {appointment_id} "
                 f"tel={_final(appt['patient_phone'])} enviado={enviado}")
     return {"payment": pagamento_para_tela(row), "invoiceUrl": link, "sent": enviado}
+
+
+def _link_vencido(clinica: Dict, row: Dict) -> bool:
+    criado = row.get("created_at")
+    if not isinstance(criado, datetime):
+        return False
+    tz = clinica.get("timezone")
+    emitido = mes_vigente.agora_na_clinica(tz, criado).date()
+    return emitido + VENCIMENTO_DO_LINK < mes_vigente.agora_na_clinica(tz).date()
 
 
 def _cria_link(db, provider: PaymentProvider, clinic_id: str, appointment_id: str, appt: Dict,
