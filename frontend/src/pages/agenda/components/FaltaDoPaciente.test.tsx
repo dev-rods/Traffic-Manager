@@ -8,6 +8,7 @@ import type { Appointment, AvailabilityRule } from '@/types'
 // mutation e toast. Fora do assunto destes testes: mocks inertes.
 vi.mock('@/hooks/useCaixa', () => ({
   useReceberDinheiro: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false, data: undefined }),
+  useEnviarLink: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
 

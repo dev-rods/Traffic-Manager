@@ -4,7 +4,15 @@ import { useToast } from '@/components/ui/toastContext'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { METODOS, METODO_LABEL, dataDe, horaDe, situacaoDoPagamento } from '@/utils/pagamento'
+import {
+  METODOS,
+  METODO_LABEL,
+  dataDe,
+  horaDe,
+  mensagemDoErro,
+  situacaoDoPagamento,
+} from '@/utils/pagamento'
+import { EnviarLinkDePagamento } from '@/pages/agenda/components/EnviarLinkDePagamento'
 import { FAIXAS, intervaloDa, type Faixa } from '@/utils/caixa'
 import type { CaixaPayment, CaixaPending, CaixaResumo } from '@/services/caixa.service'
 import { KpiCard } from './KpiCard'
@@ -12,10 +20,6 @@ import { KpiCard } from './KpiCard'
 function dataCurta(iso: string): string {
   const [, m, d] = iso.split('-')
   return `${d}/${m}`
-}
-
-function mensagemDoErro(erro: unknown, padrao: string): string {
-  return (erro as { response?: { data?: { message?: string } } })?.response?.data?.message ?? padrao
 }
 
 /**
@@ -93,9 +97,7 @@ function CaixaConteudo({ data }: { data: CaixaResumo }) {
           label="Falta receber"
           value={formatCurrency(t.pendingCents)}
           valueColor={t.pendingCount > 0 ? 'text-amber-600' : 'text-gray-800'}
-          subtext={
-            t.pendingCount > 0 ? `${t.pendingCount} sessão(ões) até hoje` : 'Nada pendente'
-          }
+          subtext={t.pendingCount > 0 ? `${t.pendingCount} sessão(ões) até hoje` : 'Nada pendente'}
           subtextColor="text-gray-400"
         />
       </div>
@@ -115,7 +117,9 @@ function CaixaConteudo({ data }: { data: CaixaResumo }) {
         </dl>
       </div>
 
-      {data.refundsPending.length > 0 ? <EstornosPendentes pagamentos={data.refundsPending} /> : null}
+      {data.refundsPending.length > 0 ? (
+        <EstornosPendentes pagamentos={data.refundsPending} />
+      ) : null}
       <Pendencias pendentes={data.pending} />
       <Recebimentos data={data} />
     </>
@@ -163,7 +167,10 @@ function Pendencias({ pendentes }: { pendentes: CaixaPending[] }) {
                         onSuccess: () => showToast({ message: 'Pagamento em dinheiro registrado' }),
                         onError: (erro) =>
                           showToast({
-                            message: mensagemDoErro(erro, 'Não foi possível registrar o pagamento.'),
+                            message: mensagemDoErro(
+                              erro,
+                              'Não foi possível registrar o pagamento.'
+                            ),
                             variant: 'error',
                           }),
                       })
@@ -173,6 +180,13 @@ function Pendencias({ pendentes }: { pendentes: CaixaPending[] }) {
                     Recebi em dinheiro
                   </button>
                 ) : null}
+                <div className="basis-full sm:basis-auto">
+                  <EnviarLinkDePagamento
+                    appointmentId={p.appointmentId}
+                    linkPendente={p.method === 'LINK' && p.paymentStatus === 'PENDING'}
+                    compacto
+                  />
+                </div>
               </li>
             )
           })}
@@ -314,4 +328,3 @@ function EstornosPendentes({ pagamentos }: { pagamentos: CaixaPayment[] }) {
     </section>
   )
 }
-

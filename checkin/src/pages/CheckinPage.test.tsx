@@ -243,6 +243,18 @@ describe('Check-in', () => {
     expect(checkinService.pay).not.toHaveBeenCalled()
   })
 
+  it('link pendente mandado pela recepção: mostra a mesma fatura (PRD 029)', async () => {
+    const link = payment({ method: 'LINK', pixPayload: null, invoiceUrl: 'https://asaas/i/link' })
+    vi.mocked(checkinService.appointments).mockResolvedValue([{ ...ANA, payment: link }])
+    vi.mocked(checkinService.payment).mockResolvedValue(link)
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    expect(await screen.findByText(/mesmo link que enviamos no seu WhatsApp/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Trocar forma de pagamento' })).toBeInTheDocument()
+    expect(checkinService.pay).not.toHaveBeenCalled()
+  })
+
   it('a lista mostra o que já foi feito em cada agendamento', async () => {
     vi.mocked(checkinService.appointments).mockResolvedValue([
       { ...ANA, payment: payment({ status: 'PAID', method: 'PIX' }) },

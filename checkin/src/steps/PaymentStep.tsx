@@ -55,7 +55,10 @@ export function PaymentStep({
   const pix = payment.method === 'PIX' && payment.pixPayload
   const card =
     (payment.method === 'CREDIT_CARD' || payment.method === 'DEBIT_CARD') && payment.invoiceUrl
-  const qrValue = pix ? payment.pixPayload : card ? payment.invoiceUrl : null
+  // Link que a recepção mandou pelo WhatsApp (PRD 029): a mesma fatura, aqui
+  // em QR, para quem prefere pagar agora.
+  const link = payment.method === 'LINK' && payment.invoiceUrl
+  const qrValue = pix ? payment.pixPayload : card || link ? payment.invoiceUrl : null
 
   return (
     <div className="flex flex-col items-center gap-6 md:landscape:grid md:landscape:grid-cols-[auto_1fr] md:landscape:items-center md:landscape:gap-12">
@@ -81,7 +84,14 @@ export function PaymentStep({
           ) : null}
         </div>
 
-        {card && payment.simulated && !payment.canSimulate ? <TestCardHint /> : null}
+        {link ? (
+          <StepHeader title={`Pague ${amount} no seu celular`} align="responsive">
+            Aponte a câmera para o código e escolha Pix ou cartão na fatura. É o mesmo link que
+            enviamos no seu WhatsApp.
+          </StepHeader>
+        ) : null}
+
+        {(card || link) && payment.simulated && !payment.canSimulate ? <TestCardHint /> : null}
 
         <p className="flex items-center gap-3 text-lg text-ink-600" aria-live="polite">
           <Spinner size="md" className="text-ink-400" />

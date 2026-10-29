@@ -20,6 +20,7 @@ const METODO: Record<string, string> = {
   CREDIT_CARD: 'Crédito',
   DEBIT_CARD: 'Débito',
   CASH: 'Dinheiro',
+  LINK: 'Link',
 }
 
 function horaDe(iso: string): string {

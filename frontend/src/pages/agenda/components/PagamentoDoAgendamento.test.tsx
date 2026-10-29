@@ -5,17 +5,20 @@ import { PagamentoDoAgendamento } from './PagamentoDoAgendamento'
 import type { Appointment } from '@/types'
 
 const mutate = vi.fn()
+const enviarLink = vi.fn()
 const showToast = vi.fn()
 let mutacao: { data?: { id: string; status: string }; isSuccess: boolean } = { isSuccess: false }
 
 vi.mock('@/hooks/useCaixa', () => ({
   useReceberDinheiro: () => ({ mutate, isPending: false, ...mutacao }),
+  useEnviarLink: () => ({ mutate: enviarLink, isPending: false }),
 }))
 vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast }) }))
 
 function agendamento(over: Partial<Appointment> = {}): Appointment {
   return {
     id: 'a1',
+    status: 'CONFIRMED',
     checked_in_at: null,
     payment_id: null,
     payment_method: null,
@@ -31,8 +34,55 @@ beforeEach(() => {
 })
 
 describe('PagamentoDoAgendamento', () => {
-  it('sem check-in nem pagamento', () => {
-    render(<PagamentoDoAgendamento appointment={agendamento()} />)
+  it('não pago e com valor: oferece o link pelo WhatsApp (PRD 029)', async () => {
+    render(<PagamentoDoAgendamento appointment={agendamento({ final_price_cents: 13500 })} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar link pelo WhatsApp' }))
+    expect(enviarLink).toHaveBeenCalledWith(
+      { appointmentId: 'a1', cpf: undefined },
+      expect.any(Object)
+    )
+  })
+
+  it('link já enviado: mostra a situação e reenvia o mesmo', () => {
+    render(
+      <PagamentoDoAgendamento
+        appointment={agendamento({
+          final_price_cents: 13500,
+          payment_id: 'p1',
+          payment_method: 'LINK',
+          payment_status: 'PENDING',
+        })}
+      />
+    )
+    expect(screen.getByText('Link enviado')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reenviar link pelo WhatsApp' })).toBeInTheDocument()
+  })
+
+  it('cancelado: sem link, o backend recusaria', () => {
+    render(
+      <PagamentoDoAgendamento
+        appointment={agendamento({ status: 'CANCELLED', final_price_cents: 13500 })}
+      />
+    )
+    expect(screen.queryByRole('button', { name: /link/i })).not.toBeInTheDocument()
+  })
+
+  it('pago: sem link', () => {
+    render(
+      <PagamentoDoAgendamento
+        appointment={agendamento({
+          final_price_cents: 13500,
+          payment_status: 'PAID',
+          payment_method: 'LINK',
+        })}
+      />
+    )
+    expect(screen.getByText(/^Pago · Link \(WhatsApp\)/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /link/i })).not.toBeInTheDocument()
+  })
+
+  it('sem check-in nem pagamento, sem valor: nada a cobrar', () => {
+    render(<PagamentoDoAgendamento appointment={agendamento({ final_price_cents: null })} />)
     expect(screen.getByText('Não feito')).toBeInTheDocument()
     expect(screen.getByText('Não pago')).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
@@ -48,7 +98,7 @@ describe('PagamentoDoAgendamento', () => {
           payment_status: 'PAID',
           payment_paid_at: '2026-10-19T12:52:00Z',
         })}
-      />,
+      />
     )
     expect(screen.getByText(/^Feito às/)).toBeInTheDocument()
     expect(screen.getByText(/^Pago · Pix às/)).toBeInTheDocument()
@@ -62,7 +112,7 @@ describe('PagamentoDoAgendamento', () => {
           payment_method: 'CASH',
           payment_status: 'AWAITING_CASH',
         })}
-      />,
+      />
     )
     expect(screen.getByText('Aguardando dinheiro')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Recebi em dinheiro' }))
@@ -78,7 +128,7 @@ describe('PagamentoDoAgendamento', () => {
           payment_method: 'CASH',
           payment_status: 'AWAITING_CASH',
         })}
-      />,
+      />
     )
     expect(screen.getByText(/^Pago · Dinheiro/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Recebi em dinheiro' })).not.toBeInTheDocument()

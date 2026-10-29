@@ -64,6 +64,13 @@ export interface CaixaPaymentResult {
   refundNeedsAuthorization?: boolean
 }
 
+export interface LinkDePagamento {
+  payment: CaixaPaymentResult
+  invoiceUrl: string
+  /** false: a cobrança existe, mas o WhatsApp não foi. A recepção manda o link à mão. */
+  sent: boolean
+}
+
 export const caixaService = {
   resumo: (clinicId: string, dateFrom: string, dateTo: string) =>
     api
@@ -75,16 +82,25 @@ export const caixaService = {
   /** A recepção recebeu em dinheiro: dá baixa aqui e no Asaas. */
   receberDinheiro: (clinicId: string, paymentId: string) =>
     api
-      .post<{ payment: CaixaPaymentResult }>(
-        `/clinics/${clinicId}/caixa/pagamentos/${paymentId}/dinheiro`,
-      )
+      .post<{
+        payment: CaixaPaymentResult
+      }>(`/clinics/${clinicId}/caixa/pagamentos/${paymentId}/dinheiro`)
       .then((r) => r.data.payment),
+
+  /** Link de cobrança pelo WhatsApp para quem não pagou no check-in (PRD 029). */
+  enviarLink: (clinicId: string, appointmentId: string, cpf?: string) =>
+    api
+      .post<LinkDePagamento>(
+        `/clinics/${clinicId}/caixa/agendamentos/${appointmentId}/link`,
+        cpf ? { cpf } : {}
+      )
+      .then((r) => r.data),
 
   /** Estorno de pagamento de sessão cancelada: Pix e cartão voltam pelo Asaas; dinheiro, em mão. */
   estornar: (clinicId: string, paymentId: string) =>
     api
-      .post<{ payment: CaixaPaymentResult }>(
-        `/clinics/${clinicId}/caixa/pagamentos/${paymentId}/estorno`,
-      )
+      .post<{
+        payment: CaixaPaymentResult
+      }>(`/clinics/${clinicId}/caixa/pagamentos/${paymentId}/estorno`)
       .then((r) => r.data.payment),
 }

@@ -1087,6 +1087,104 @@
           }
         }
       ]
+    },
+    {
+      "name": "Enviar link de cobrança pelo WhatsApp (PRD 029)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/agendamentos/{{appointmentId}}/link",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "agendamentos",
+            "{{appointmentId}}",
+            "link"
+          ]
+        },
+        "description": "Recepção. Cria a cobrança LINK (forma livre) e manda pelo WhatsApp da clínica. Repetir reenvia o mesmo link. `sent: false` = WhatsApp falhou, use `invoiceUrl`."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Enviar link com CPF (quando o backend pede CPF_REQUIRED)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"cpf\": \"52998224725\"}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/agendamentos/{{appointmentId}}/link",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "agendamentos",
+            "{{appointmentId}}",
+            "link"
+          ]
+        },
+        "description": "Sem CPF conhecido o backend responde 409 `CPF_REQUIRED`; este é o reenvio com o CPF de quem paga."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

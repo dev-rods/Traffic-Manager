@@ -7,11 +7,13 @@ stack está perto do limite de 500 recursos do CloudFormation.
     GET  resumo?date_from&date_to     admin           previsto, recebido, pendências
     POST pagamentos/{id}/dinheiro     agenda.escrever a recepção recebeu em dinheiro
     POST pagamentos/{id}/estorno      admin           devolve pagamento de sessão cancelada
+    POST agendamentos/{id}/link       agenda.escrever link de cobrança pelo WhatsApp (PRD 029)
 
 A baixa em dinheiro é da recepção (é ela quem recebe a nota), por isso usa a
 permissão de escrever na agenda e não a chave de admin. O resumo é dinheiro
 da clínica inteira: só admin, como os relatórios.
 """
+import json
 import logging
 import re
 
@@ -27,6 +29,7 @@ logger.setLevel(logging.INFO)
 
 DINHEIRO = re.compile(r"^pagamentos/([0-9a-fA-F-]{36})/dinheiro$")
 ESTORNO = re.compile(r"^pagamentos/([0-9a-fA-F-]{36})/estorno$")
+LINK = re.compile(r"^agendamentos/([0-9a-fA-F-]{36})/link$")
 
 
 def _erro(status, mensagem):
@@ -70,12 +73,33 @@ def handler(event, context):
             pagamento = checkin.estorna(PostgresService(), provedor_ativo(), clinic_id, achou.group(1))
             return http_response(200, {"status": "SUCCESS", "payment": pagamento})
 
+        achou = LINK.match(caminho)
+        if metodo == "POST" and achou:
+            # Cobrar quem não pagou no check-in é trabalho da recepção, como a
+            # baixa em dinheiro.
+            identidade, erro = require_acesso(event, "agenda.escrever")
+            if erro:
+                return erro
+            try:
+                corpo = json.loads(event.get("body") or "{}")
+            except ValueError:
+                return _erro(400, "Corpo inválido")
+            if not isinstance(corpo, dict):
+                return _erro(400, "Corpo inválido")
+            falha_do_provedor = "O Asaas não criou a cobrança. Tente de novo."
+            resultado = checkin.envia_link(PostgresService(), provedor_ativo(), clinic_id,
+                                           achou.group(1), cpf=corpo.get("cpf"))
+            return http_response(200, para_o_staff(identidade, {"status": "SUCCESS", **resultado}))
+
         return _erro(404, "Rota não encontrada")
 
+    except checkin.PrecisaDeCpf:
+        return http_response(409, {"status": "ERROR", "code": "CPF_REQUIRED",
+                                   "message": "Informe o CPF de quem vai pagar."})
     except caixa.PeriodoInvalido as e:
         return _erro(400, str(e))
     except checkin.NaoEncontrado:
-        return _erro(404, "Pagamento não encontrado")
+        return _erro(404, "Agendamento não encontrado" if LINK.match(caminho) else "Pagamento não encontrado")
     except checkin.CheckinInvalido as e:
         return _erro(409, str(e))
     except PagamentoIndisponivel:

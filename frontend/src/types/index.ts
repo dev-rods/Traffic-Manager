@@ -254,7 +254,8 @@ export interface MessageTemplate {
   active: boolean
 }
 
-export type PaymentMethod = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'
+// LINK: link de cobrança mandado pelo WhatsApp; a paciente escolhe a forma na fatura (PRD 029).
+export type PaymentMethod = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'LINK'
 
 export type PaymentStatus =
   | 'PENDING'

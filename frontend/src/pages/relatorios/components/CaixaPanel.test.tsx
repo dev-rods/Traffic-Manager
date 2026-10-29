@@ -12,6 +12,7 @@ vi.mock('@/hooks/useCaixa', () => ({
   useCaixa: (de: string, ate: string) => useCaixa(de, ate),
   useReceberDinheiro: () => ({ mutate, isPending: false }),
   useEstornar: () => ({ mutate: estornar, isPending: false }),
+  useEnviarLink: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 const showToast = vi.fn()
 vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast }) }))
@@ -27,7 +28,13 @@ const RESUMO: CaixaResumo = {
     pendingCents: 13500,
     pendingCount: 1,
     refundsPendingCents: 0,
-    byMethod: { PIX: { count: 1, cents: 13500 }, CREDIT_CARD: zero, DEBIT_CARD: zero, CASH: zero },
+    byMethod: {
+      PIX: { count: 1, cents: 13500 },
+      CREDIT_CARD: zero,
+      DEBIT_CARD: zero,
+      CASH: zero,
+      LINK: zero,
+    },
   },
   days: [
     {
@@ -35,7 +42,7 @@ const RESUMO: CaixaResumo = {
       sessions: 2,
       expectedCents: 27000,
       receivedCents: 13500,
-      byMethod: { PIX: 13500, CREDIT_CARD: 0, DEBIT_CARD: 0, CASH: 0 },
+      byMethod: { PIX: 13500, CREDIT_CARD: 0, DEBIT_CARD: 0, CASH: 0, LINK: 0 },
     },
   ],
   pending: [
@@ -120,7 +127,11 @@ describe('CaixaPanel', () => {
     expect(estornar).toHaveBeenCalledWith('p9', expect.any(Object))
 
     // O Asaas aceitou, mas pede a autorização do dono da conta: o aviso diz isso.
-    estornar.mock.calls[0][1].onSuccess({ id: 'p9', status: 'REFUNDED', refundNeedsAuthorization: true })
+    estornar.mock.calls[0][1].onSuccess({
+      id: 'p9',
+      status: 'REFUNDED',
+      refundNeedsAuthorization: true,
+    })
     expect(showToast).toHaveBeenCalledWith({ message: expect.stringMatching(/Autorize no app/) })
 
     expect(within(secao('Recebimentos')).getByText('SESSÃO CANCELADA')).toBeInTheDocument()
