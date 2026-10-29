@@ -119,6 +119,18 @@ class AsaasProvider(PaymentProvider):
             "notifyCustomer": False,
         })
 
+    def estorna(self, cobranca_id: str) -> bool:
+        """Estorno total (Pix devolve o valor, cartão cancela a transação). O
+        Asaas confirma pelo webhook `PAYMENT_REFUNDED`.
+
+        Com a proteção de eventos críticos da conta ligada (o padrão), o estorno
+        fica em `AWAITING_CRITICAL_ACTION_AUTHORIZATION` até o dono autorizar
+        com token no app ou no painel do Asaas (visto no sandbox em 28/10/2026).
+        """
+        resp = self._chama("POST", f"/payments/{cobranca_id}/refund", json={})
+        estornos = resp.get("refunds") or []
+        return bool(estornos) and estornos[-1].get("status") == "AWAITING_CRITICAL_ACTION_AUTHORIZATION"
+
     def simula(self, cobranca_id: str) -> None:
         """Confirma uma cobrança no SANDBOX, como se a paciente tivesse pago.
         O Asaas avisa pelo webhook (`PAYMENT_RECEIVED`), como num pagamento real."""

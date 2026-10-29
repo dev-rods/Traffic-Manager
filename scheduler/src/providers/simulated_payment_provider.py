@@ -43,3 +43,6 @@ class SimulatedPaymentProvider(PaymentProvider):
 
     def simula(self, cobranca_id: str) -> None:
         return None
+
+    def estorna(self, cobranca_id: str) -> bool:
+        return False

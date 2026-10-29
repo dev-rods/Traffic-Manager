@@ -21,6 +21,19 @@ export function useCaixa(dateFrom: string, dateTo: string) {
   })
 }
 
+/** Estorno de sessão cancelada (só admin). */
+export function useEstornar() {
+  const { clinicId } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (paymentId: string) => caixaService.estornar(clinicId!, paymentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: caixaKeys.all })
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+    },
+  })
+}
+
 /** Baixa em dinheiro. Agenda e caixa mudam juntos: os dois mostram o pagamento. */
 export function useReceberDinheiro() {
   const { clinicId } = useAuth()

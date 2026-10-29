@@ -76,6 +76,12 @@ class PaymentProvider:
     def recebe_em_dinheiro(self, cobranca_id: str, valor_cents: int, data: date) -> None:
         raise NotImplementedError
 
+    def estorna(self, cobranca_id: str) -> bool:
+        """Devolve ao pagador uma cobrança paga por Pix ou cartão. True quando
+        o provedor recebeu o pedido mas o dono da conta ainda precisa autorizar
+        (no Asaas, "ação crítica" com token): o dinheiro só sai depois disso."""
+        raise NotImplementedError
+
 
 def cobranca_de_teste(provider_nome: Optional[str]) -> bool:
     """A cobrança não movimenta dinheiro de verdade: simulado, ou Asaas apontado

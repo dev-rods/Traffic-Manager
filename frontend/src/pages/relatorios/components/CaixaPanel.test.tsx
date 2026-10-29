@@ -5,13 +5,16 @@ import { CaixaPanel } from './CaixaPanel'
 import type { CaixaResumo } from '@/services/caixa.service'
 
 const mutate = vi.fn()
+const estornar = vi.fn()
 const useCaixa = vi.fn()
 
 vi.mock('@/hooks/useCaixa', () => ({
   useCaixa: (de: string, ate: string) => useCaixa(de, ate),
   useReceberDinheiro: () => ({ mutate, isPending: false }),
+  useEstornar: () => ({ mutate: estornar, isPending: false }),
 }))
-vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
+const showToast = vi.fn()
+vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast }) }))
 
 const zero = { count: 0, cents: 0 }
 const RESUMO: CaixaResumo = {
@@ -23,6 +26,7 @@ const RESUMO: CaixaResumo = {
     receivedCents: 13500,
     pendingCents: 13500,
     pendingCount: 1,
+    refundsPendingCents: 0,
     byMethod: { PIX: { count: 1, cents: 13500 }, CREDIT_CARD: zero, DEBIT_CARD: zero, CASH: zero },
   },
   days: [
@@ -57,8 +61,10 @@ const RESUMO: CaixaResumo = {
       startTime: '10:00',
       name: 'Ana',
       simulated: true,
+      appointmentCancelled: false,
     },
   ],
+  refundsPending: [],
 }
 
 function secao(titulo: string): HTMLElement {
@@ -80,6 +86,50 @@ describe('CaixaPanel', () => {
     expect(mutate).toHaveBeenCalledWith('p2', expect.any(Object))
 
     expect(within(secao('Recebimentos')).getByText('TESTE')).toBeInTheDocument()
+  })
+
+  it('estornos pendentes: pagamento de sessão cancelada, com confirmação antes de estornar', async () => {
+    const cancelado = {
+      id: 'p9',
+      method: 'PIX' as const,
+      amountCents: 13500,
+      paidAt: '2026-10-28T21:00:00Z',
+      appointmentDate: '2026-10-30',
+      startTime: '09:00',
+      name: 'Teste Cancelado',
+      simulated: true,
+      appointmentCancelled: true,
+    }
+    useCaixa.mockReturnValue({
+      data: {
+        ...RESUMO,
+        payments: [...RESUMO.payments, cancelado],
+        refundsPending: [cancelado],
+        totals: { ...RESUMO.totals, refundsPendingCents: 13500 },
+      },
+      isLoading: false,
+      isError: false,
+    })
+    render(<CaixaPanel />)
+
+    const estornos = secao('Estornos pendentes pagamentos de sessões canceladas')
+    expect(within(estornos).getByText('Teste Cancelado')).toBeInTheDocument()
+    await userEvent.click(within(estornos).getByRole('button', { name: 'Estornar' }))
+    expect(estornar).not.toHaveBeenCalled()
+    await userEvent.click(within(estornos).getByRole('button', { name: 'Confirmar estorno' }))
+    expect(estornar).toHaveBeenCalledWith('p9', expect.any(Object))
+
+    // O Asaas aceitou, mas pede a autorização do dono da conta: o aviso diz isso.
+    estornar.mock.calls[0][1].onSuccess({ id: 'p9', status: 'REFUNDED', refundNeedsAuthorization: true })
+    expect(showToast).toHaveBeenCalledWith({ message: expect.stringMatching(/Autorize no app/) })
+
+    expect(within(secao('Recebimentos')).getByText('SESSÃO CANCELADA')).toBeInTheDocument()
+  })
+
+  it('sem estornos pendentes, a seção não aparece', () => {
+    useCaixa.mockReturnValue({ data: RESUMO, isLoading: false, isError: false })
+    render(<CaixaPanel />)
+    expect(screen.queryByText('Estornos pendentes')).not.toBeInTheDocument()
   })
 
   it('troca o período', async () => {

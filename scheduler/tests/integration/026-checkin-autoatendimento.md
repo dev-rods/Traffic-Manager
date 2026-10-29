@@ -87,6 +87,23 @@ responde 404. Auth do painel com `agenda.escrever` (recepção). Só
 nova baixa; outro status: 409; pagamento de outra clínica: 404. O resumo (`GET caixa/resumo?date_from&date_to`)
 é só do admin.
 
+## 6b. Estorno (PRD 028) — `POST /clinics/{clinicId}/caixa/pagamentos/{id}/estorno`
+
+Só admin. Devolve pagamento de sessão cancelada; o resumo traz esses
+pagamentos em `refundsPending` (de qualquer data) e o total em
+`totals.refundsPendingCents`.
+
+| # | Caso | Esperado |
+|---|------|----------|
+| 6b.1 | Pix ou cartão pago, sessão cancelada | 200, `REFUNDED`; `POST /payments/{id}/refund` no Asaas |
+| 6b.2 | Asaas com proteção de eventos críticos (padrão) | 200, `refundNeedsAuthorization: true`; o dono autoriza no Asaas |
+| 6b.3 | Dinheiro, sessão cancelada | 200, `REFUNDED`, sem chamar o Asaas (devolução em mão) |
+| 6b.4 | Já estornado | 200, sem novo pedido ao Asaas |
+| 6b.5 | Sessão ainda ativa | 409 "Cancele a sessão antes de estornar o pagamento." |
+| 6b.6 | Pagamento não pago | 409 |
+| 6b.7 | Sem chave | 401 |
+| 6b.8 | Pagamento de outra clínica ou id inválido | 404 |
+
 ## 7. Webhook do Asaas — `POST /public/asaas/webhook`
 
 | # | Caso | Esperado |
@@ -140,3 +157,10 @@ Antes da chave Pix existir na conta sandbox, o `pixQrCode` respondia 400
 ("Você não possui uma chave Pix cadastrada"). O check-in respondeu 502 e
 cancelou a cobrança órfã, como previsto.
 
+## Resultado do estorno (dev, 28/10/2026, PRD 028)
+
+- Pix de sessão cancelada (sandbox): 200 `REFUNDED`; no Asaas, o estorno ficou
+  `AWAITING_CRITICAL_ACTION_AUTHORIZATION` (6b.2).
+- Pagamento antigo do provedor simulado: 200 `REFUNDED`; repetido: 200 igual (6b.4).
+- Sessão ativa: 409. Sem chave: 401.
+- `refundsPending` saiu de 7 para 6 depois do estorno.

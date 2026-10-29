@@ -65,10 +65,11 @@ def generate_and_send_code(clinic: dict, phone: str) -> Optional[str]:
     Levanta SendFailedError se o z-api falhar. Cada pedido gera um código
     novo, que substitui o anterior.
 
-    Só em dev (`STAGE=dev`), se o WhatsApp falhar, devolve o código em vez
-    de levantar: a clínica de teste não tem instância do z-api, e sem isso
-    ninguém consegue testar o login do check-in (PRD 026). Em qualquer outro
-    stage devolve None e o código só existe no WhatsApp da pessoa.
+    Só em dev (`STAGE=dev`) devolve o código, SEMPRE, e o check-in o mostra
+    na tela. Na 026 só devolvia quando o WhatsApp falhava, mas o z-api de dev
+    aceita o envio e não entrega: o teste gravado de 28/10/2026 precisou ir
+    buscar o código no DynamoDB (PRD 028, M4). Em qualquer outro stage
+    devolve None e o código só existe no WhatsApp da pessoa.
     """
     clinic_id = clinic["clinic_id"]
     phone = normalize_phone(phone)
@@ -103,6 +104,8 @@ def generate_and_send_code(clinic: dict, phone: str) -> Optional[str]:
         raise SendFailedError("Não foi possível enviar o código por WhatsApp. Tente novamente.")
 
     logger.info(f"[BookingVerification] Código enviado: clinic={clinic_id}")
+    if os.environ.get("STAGE") == "dev":
+        return code
     return None
 
 

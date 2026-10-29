@@ -85,3 +85,64 @@ body {
   -webkit-touch-callout: none;
   overscroll-behavior: none;
 }
+
+/* Conclusão do check-in (PRD 028, M2): o círculo cresce, o check se desenha e
+   um confete leve cai. Só transform e opacity; nada disso com "reduzir
+   movimento" ligado. */
+@keyframes celebra-entra {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes celebra-desenha {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes confete-cai {
+  0% {
+    transform: translateY(-2rem);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(70vh);
+    opacity: 0;
+  }
+}
+
+.celebra {
+  animation: celebra-entra 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.celebra-check {
+  stroke-dasharray: 40;
+  stroke-dashoffset: 40;
+  animation: celebra-desenha 450ms cubic-bezier(0.16, 1, 0.3, 1) 250ms forwards;
+}
+
+.confete {
+  opacity: 0;
+  animation-name: confete-cai;
+  animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+  animation-fill-mode: forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .celebra {
+    animation: none;
+  }
+  .celebra-check {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .confete {
+    display: none;
+  }
+}

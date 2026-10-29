@@ -69,6 +69,10 @@
       "key": "cashPaymentId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "refundPaymentId",
+      "value": ""
     }
   ],
   "item": [
@@ -989,6 +993,96 @@
             "type": "text/javascript",
             "exec": [
               "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Estornar pagamento de sessão cancelada (PRD 028)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/pagamentos/{{refundPaymentId}}/estorno",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "pagamentos",
+            "{{refundPaymentId}}",
+            "estorno"
+          ]
+        },
+        "description": "Só admin. Pix e cartão: pedido de estorno no Asaas; `refundNeedsAuthorization: true` quando a conta exige autorizar a ação crítica. Dinheiro: só registra (devolução em mão). Idempotente."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Estornar pagamento de sessão ativa (409)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/caixa/pagamentos/{{paymentId}}/estorno",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "caixa",
+            "pagamentos",
+            "{{paymentId}}",
+            "estorno"
+          ]
+        },
+        "description": "Sessão ainda não cancelada: 'Cancele a sessão antes de estornar o pagamento.'"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 409\", function () { pm.response.to.have.status(409); });"
             ]
           }
         }

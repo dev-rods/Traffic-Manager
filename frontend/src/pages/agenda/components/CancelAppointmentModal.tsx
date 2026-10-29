@@ -47,6 +47,14 @@ export function CancelAppointmentModal({ appointment, onClose }: CancelAppointme
           Essa acao nao pode ser desfeita.
         </p>
 
+        {/* Pago pelo iPad: cancelar não devolve o dinheiro (PRD 028, M7). */}
+        {appointment?.payment_status === 'PAID' && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            Este agendamento já foi pago. Cancelar não devolve o dinheiro: depois, faça o estorno
+            em <span className="font-semibold">Relatórios → Caixa → Estornos pendentes</span>.
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">
             {error}
