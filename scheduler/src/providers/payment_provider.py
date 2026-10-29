@@ -20,6 +20,10 @@ CREDITO = "CREDIT_CARD"
 DEBITO = "DEBIT_CARD"
 DINHEIRO = "CASH"
 METODOS = (PIX, CREDITO, DEBITO, DINHEIRO)
+# Link de cobrança mandado pelo WhatsApp (PRD 029): a paciente escolhe a forma
+# na fatura. Não é escolha do iPad, por isso fica fora de METODOS.
+LINK = "LINK"
+METODOS_DO_CAIXA = METODOS + (LINK,)
 
 # Status no NOSSO vocabulário (coluna appointment_payments.status).
 PENDENTE = "PENDING"

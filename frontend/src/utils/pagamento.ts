@@ -5,18 +5,20 @@ export const METODO_LABEL: Record<PaymentMethod, string> = {
   CREDIT_CARD: 'Crédito',
   DEBIT_CARD: 'Débito',
   CASH: 'Dinheiro',
+  LINK: 'Link (WhatsApp)',
 }
 
-export const METODOS: PaymentMethod[] = ['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH']
+export const METODOS: PaymentMethod[] = ['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH', 'LINK']
 
 /** Como a recepção lê o estado do pagamento de um agendamento. */
 export function situacaoDoPagamento(
   status: PaymentStatus | null | undefined,
-  method: PaymentMethod | null | undefined,
+  method: PaymentMethod | null | undefined
 ): { label: string; tom: 'pago' | 'aguardando' | 'pendente' | 'nada' } {
   const metodo = method ? METODO_LABEL[method] : ''
   if (status === 'PAID') return { label: `Pago · ${metodo}`, tom: 'pago' }
   if (status === 'AWAITING_CASH') return { label: 'Aguardando dinheiro', tom: 'aguardando' }
+  if (status === 'PENDING' && method === 'LINK') return { label: 'Link enviado', tom: 'pendente' }
   if (status === 'PENDING') return { label: `Aguardando ${metodo}`, tom: 'pendente' }
   return { label: 'Não pago', tom: 'nada' }
 }
@@ -29,4 +31,14 @@ export function dataDe(iso: string): string {
 /** `2026-10-19T12:52:00Z` → `09:52`, no relógio de quem está na tela. */
 export function horaDe(iso: string): string {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+/** A mensagem que o backend mandou no erro, ou a padrão. */
+export function mensagemDoErro(erro: unknown, padrao: string): string {
+  return (erro as { response?: { data?: { message?: string } } })?.response?.data?.message ?? padrao
+}
+
+/** O código de erro do backend (ex.: `CPF_REQUIRED`), quando há. */
+export function codigoDoErro(erro: unknown): string | undefined {
+  return (erro as { response?: { data?: { code?: string } } })?.response?.data?.code
 }

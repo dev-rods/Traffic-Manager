@@ -1,6 +1,7 @@
 import { useToast } from '@/components/ui/toastContext'
 import { useReceberDinheiro } from '@/hooks/useCaixa'
 import { horaDe, situacaoDoPagamento } from '@/utils/pagamento'
+import { EnviarLinkDePagamento } from './EnviarLinkDePagamento'
 import type { Appointment } from '@/types'
 
 const TOM = {
@@ -68,6 +69,13 @@ export function PagamentoDoAgendamento({ appointment: a }: PagamentoDoAgendament
         >
           {receber.isPending ? 'Registrando…' : 'Recebi em dinheiro'}
         </button>
+      )}
+      {/* Quem não pagou no check-in recebe o link pelo WhatsApp (PRD 029). */}
+      {status !== 'PAID' && (a.final_price_cents ?? 0) > 0 && (
+        <EnviarLinkDePagamento
+          appointmentId={a.id}
+          linkPendente={a.payment_method === 'LINK' && status === 'PENDING'}
+        />
       )}
     </div>
   )

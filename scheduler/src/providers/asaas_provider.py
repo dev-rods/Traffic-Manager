@@ -20,13 +20,14 @@ from typing import Any, Dict, Optional
 import requests
 
 from src.providers.payment_provider import (
-    CANCELADO, CREDITO, DEBITO, DINHEIRO, ESTORNADO, PAGO, PENDENTE, PIX,
+    CANCELADO, CREDITO, DEBITO, DINHEIRO, ESTORNADO, LINK, PAGO, PENDENTE, PIX,
     Cobranca, ErroDoProvedor, Pagador, PaymentProvider,
 )
 
 logger = logging.getLogger(__name__)
 
-TIPO_DE_COBRANCA = {PIX: "PIX", CREDITO: "CREDIT_CARD", DEBITO: "CREDIT_CARD", DINHEIRO: "UNDEFINED"}
+TIPO_DE_COBRANCA = {PIX: "PIX", CREDITO: "CREDIT_CARD", DEBITO: "CREDIT_CARD", DINHEIRO: "UNDEFINED",
+                    LINK: "UNDEFINED"}
 
 STATUS = {
     "RECEIVED": PAGO,

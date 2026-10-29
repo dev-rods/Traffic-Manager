@@ -9,7 +9,8 @@ export interface BootstrapResponse {
   clinic: Clinic
 }
 
-export type PaymentMethod = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH'
+// LINK: cobrança mandada pela recepção no WhatsApp (PRD 029); não é escolha do iPad.
+export type PaymentMethod = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'LINK'
 
 export type PaymentStatus =
   | 'PENDING'

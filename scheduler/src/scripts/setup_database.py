@@ -1163,7 +1163,7 @@ SQL_STATEMENTS = [
         clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
         appointment_id UUID NOT NULL REFERENCES scheduler.appointments(id),
         method VARCHAR(20) NOT NULL
-            CHECK (method IN ('PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH')),
+            CHECK (method IN ('PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH', 'LINK')),
         amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
         status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
             CHECK (status IN ('PENDING', 'AWAITING_CASH', 'PAID', 'CANCELLED', 'FAILED', 'REFUNDED')),
@@ -1195,6 +1195,17 @@ SQL_STATEMENTS = [
         provider_payment_id VARCHAR(100),
         received_at TIMESTAMPTZ DEFAULT NOW()
     )""",
+
+    # PRD 029: link de cobrança pelo WhatsApp. A paciente escolhe na fatura
+    # (Pix, cartão ou boleto); o nosso registro guarda que foi por link.
+    # Drop + add: idempotente e corrige bancos criados antes do LINK.
+    """DO $$ BEGIN
+        ALTER TABLE scheduler.appointment_payments
+            DROP CONSTRAINT IF EXISTS appointment_payments_method_check;
+        ALTER TABLE scheduler.appointment_payments
+            ADD CONSTRAINT appointment_payments_method_check
+            CHECK (method IN ('PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH', 'LINK'));
+    END $$""",
 ]
 
 

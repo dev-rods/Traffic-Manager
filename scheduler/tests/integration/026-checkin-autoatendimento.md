@@ -104,6 +104,24 @@ pagamentos em `refundsPending` (de qualquer data) e o total em
 | 6b.7 | Sem chave | 401 |
 | 6b.8 | Pagamento de outra clínica ou id inválido | 404 |
 
+## 6c. Link de cobrança pelo WhatsApp (PRD 029) — `POST /clinics/{clinicId}/caixa/agendamentos/{id}/link`
+
+Auth do painel com `agenda.escrever` (recepção). Corpo opcional `{"cpf": "..."}`.
+Cria cobrança `LINK` no Asaas (`billingType: UNDEFINED`, vence em 7 dias) e
+manda pelo WhatsApp da clínica. Resposta: `{payment, invoiceUrl, sent}`.
+
+| # | Caso | Esperado |
+|---|------|----------|
+| 6c.1 | Confirmado, com valor, CPF no cadastro | 200, `sent: true`, método `LINK` pendente |
+| 6c.2 | Mesmo agendamento de novo | 200, mesmo `invoiceUrl`, sem nova cobrança |
+| 6c.3 | Pix pendente do iPad | o Pix é cancelado no Asaas e o link o substitui |
+| 6c.4 | Sem CPF conhecido | 409 `code: CPF_REQUIRED`; com `cpf` no corpo, 200 |
+| 6c.5 | CPF inválido | 409 |
+| 6c.6 | Já pago, cancelado ou sem valor | 409 |
+| 6c.7 | WhatsApp falhou | 200, `sent: false`, a cobrança fica e o link volta |
+| 6c.8 | Agendamento de outra clínica / id inválido | 404 |
+| 6c.9 | Sem acesso | 401/403 |
+
 ## 7. Webhook do Asaas — `POST /public/asaas/webhook`
 
 | # | Caso | Esperado |

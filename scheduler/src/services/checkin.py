@@ -18,12 +18,13 @@ Regras que valem em todo lugar daqui:
 """
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from datetime import timedelta
+from typing import Any, Callable, Dict, List, Optional
 
 import psycopg2
 
 from src.providers.payment_provider import (
-    AGUARDANDO_DINHEIRO, CANCELADO, DINHEIRO, ESTORNADO, METODOS, PAGO, PENDENTE, PIX,
+    AGUARDANDO_DINHEIRO, CANCELADO, DINHEIRO, ESTORNADO, LINK, METODOS, PAGO, PENDENTE, PIX,
     ErroDoProvedor, Pagador, PaymentProvider, cobranca_de_teste,
 )
 from src.services import mes_vigente
@@ -43,6 +44,10 @@ class CheckinInvalido(Exception):
 
 class NaoEncontrado(Exception):
     pass
+
+
+class PrecisaDeCpf(Exception):
+    """Link de cobrança sem CPF conhecido: o painel pede e manda de novo."""
 
 
 def _final(phone: str) -> str:
@@ -429,6 +434,145 @@ def _troca_status(db, payment_id: str, de: str, para: str) -> bool:
         "WHERE id = %s::uuid AND status = %s",
         (para, payment_id, de),
     ) > 0
+
+
+# Link de cobrança pelo WhatsApp (PRD 029) ---------------------------------
+
+VENCIMENTO_DO_LINK = timedelta(days=7)
+
+
+def _whatsapp_padrao(clinic: Dict):
+    from src.providers.whatsapp_provider import get_provider
+    return get_provider(clinic)
+
+
+def _mensagem_do_link(appt: Dict, clinica: str, valor_cents: int, link: str) -> str:
+    from src.services.preco_minimo import formata_reais
+    nome = (appt.get("full_name") or appt.get("patient_name") or "").strip().split(" ")[0]
+    data = appt.get("appointment_date")
+    data_txt = data.strftime("%d/%m") if hasattr(data, "strftime") else str(data)[8:10] + "/" + str(data)[5:7]
+    hora = str(appt.get("start_time") or "")[:5]
+    saudacao = f"Olá, {nome}!" if nome else "Olá!"
+    return (
+        f"{saudacao} Segue o link para pagar a sua sessão de {data_txt} às {hora} na {clinica}:\n\n"
+        f"Valor: {formata_reais(valor_cents)}\n{link}\n\n"
+        f"No link você escolhe Pix, cartão ou boleto."
+    )
+
+
+def envia_link(db, provider: PaymentProvider, clinic_id: str, appointment_id: str,
+               cpf: Optional[str] = None,
+               whatsapp_de: Callable[[Dict], Any] = _whatsapp_padrao) -> Dict[str, Any]:
+    """Cobrança com forma livre (a paciente escolhe na fatura) mandada pelo
+    WhatsApp da clínica, para quem não pagou no check-in (PRD 029).
+
+    Um pagamento vivo por agendamento: link pendente é REENVIADO (sem nova
+    cobrança); outra cobrança pendente é descartada antes; pago não envia.
+    Falha do WhatsApp não desfaz a cobrança: a resposta traz o link e
+    `sent: False`, para a recepção mandar à mão.
+    """
+    try:
+        uuid.UUID(str(appointment_id))
+    except ValueError:
+        raise NaoEncontrado()
+    rows = db.execute_query(
+        """
+        SELECT a.*, p.id AS patient_uuid, p.name AS patient_name, p.cpf AS patient_cpf,
+               p.phone AS patient_phone
+        FROM scheduler.appointments a
+        JOIN scheduler.patients p ON p.id = a.patient_id
+        WHERE a.id = %s::uuid AND a.clinic_id = %s
+        """,
+        (appointment_id, clinic_id),
+    )
+    if not rows:
+        raise NaoEncontrado()
+    appt = rows[0]
+    if appt.get("status") != "CONFIRMED":
+        raise CheckinInvalido("Só agendamento confirmado pode receber link de pagamento.")
+    valor = appt.get("final_price_cents")
+    if not valor or int(valor) <= 0:
+        raise CheckinInvalido("Este agendamento não tem valor definido.")
+    clinicas = db.execute_query("SELECT * FROM scheduler.clinics WHERE clinic_id = %s", (clinic_id,))
+    if not clinicas:
+        raise NaoEncontrado()
+    clinica = clinicas[0]
+
+    row = None
+    vivo = _vivo(db, appointment_id)
+    if vivo:
+        if vivo["status"] == PAGO:
+            raise CheckinInvalido("Este agendamento já está pago.")
+        if vivo["method"] == LINK and vivo["provider"] == provider.nome and vivo.get("invoice_url"):
+            row = vivo
+        elif _descarta(db, provider, vivo):
+            raise CheckinInvalido("Este agendamento acabou de ser pago.")
+
+    if row is None:
+        cpf_pagador = _cpf_conhecido(appt)
+        if cpf:
+            digitos = normaliza_cpf(cpf)
+            if not digitos or not cpf_valido(digitos):
+                raise CheckinInvalido("Confira o CPF: os números não batem.")
+            cpf_pagador = digitos
+        if not cpf_pagador:
+            raise PrecisaDeCpf()
+        row = _cria_link(db, provider, clinic_id, appointment_id, appt, int(valor), cpf_pagador)
+        if row is None:
+            # Outro pedido criou o pagamento vivo ao mesmo tempo.
+            row = _vivo(db, appointment_id)
+            if not row or row["method"] != LINK or not row.get("invoice_url"):
+                raise CheckinInvalido("O pagamento deste agendamento mudou. Atualize a tela.")
+
+    link = row["invoice_url"]
+    nome_clinica = clinica.get("display_name") or clinica.get("name") or "clínica"
+    enviado = False
+    try:
+        resposta = whatsapp_de(clinica).send_text(
+            appt["patient_phone"], _mensagem_do_link(appt, nome_clinica, int(row["amount_cents"]), link))
+        enviado = bool(resposta.success)
+        if not enviado:
+            logger.error(f"[Checkin] link {row['id']} não foi pelo WhatsApp: {resposta.error}")
+    except Exception as e:
+        logger.error(f"[Checkin] link {row['id']} não foi pelo WhatsApp: {e}", exc_info=True)
+    logger.info(f"[Checkin] link de cobrança {row['id']} {clinic_id} {appointment_id} "
+                f"tel={_final(appt['patient_phone'])} enviado={enviado}")
+    return {"payment": pagamento_para_tela(row), "invoiceUrl": link, "sent": enviado}
+
+
+def _cria_link(db, provider: PaymentProvider, clinic_id: str, appointment_id: str, appt: Dict,
+               valor: int, cpf: str) -> Optional[Dict]:
+    nome = appt.get("full_name") or appt.get("patient_name") or "Paciente"
+    hoje = mes_vigente.agora_na_clinica(_fuso(db, clinic_id)).date()
+    payment_id = str(uuid.uuid4())
+    data_sessao = appt.get("appointment_date")
+    descricao = f"Sessão de {data_sessao.strftime('%d/%m/%Y') if hasattr(data_sessao, 'strftime') else data_sessao}"
+    cobranca = provider.cria_cobranca(
+        Pagador(nome=nome, cpf=cpf, telefone=normalize_phone(appt["patient_phone"])),
+        LINK, valor, hoje + VENCIMENTO_DO_LINK, descricao, payment_id,
+    )
+    try:
+        row = db.execute_write_returning(
+            """
+            INSERT INTO scheduler.appointment_payments
+                (id, clinic_id, appointment_id, method, amount_cents, status, provider,
+                 provider_payment_id, invoice_url, pix_payload, payer_name, payer_cpf)
+            VALUES (%s::uuid, %s, %s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (payment_id, clinic_id, appointment_id, LINK, valor, cobranca.status, provider.nome,
+             cobranca.id, cobranca.invoice_url, None, nome, cpf),
+        )
+    except psycopg2.IntegrityError:
+        logger.warning(f"[Checkin] link concorrente em {appointment_id}, descartando {cobranca.id}")
+        _cancela_orfa(provider, cobranca.id, payment_id, appointment_id)
+        return None
+    except Exception:
+        logger.exception(f"[Checkin] link {cobranca.id} criado mas não gravado em {appointment_id}")
+        _cancela_orfa(provider, cobranca.id, payment_id, appointment_id)
+        raise
+    _guarda_cpf_no_cadastro(db, appt, cpf)
+    return row
 
 
 EVENTOS_PAGO = {"PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"}

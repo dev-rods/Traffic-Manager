@@ -21,6 +21,20 @@ export function useCaixa(dateFrom: string, dateTo: string) {
   })
 }
 
+/** Link de cobrança pelo WhatsApp. Agenda e caixa passam a mostrar "Link enviado". */
+export function useEnviarLink() {
+  const { clinicId } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ appointmentId, cpf }: { appointmentId: string; cpf?: string }) =>
+      caixaService.enviarLink(clinicId!, appointmentId, cpf),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: caixaKeys.all })
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+    },
+  })
+}
+
 /** Estorno de sessão cancelada (só admin). */
 export function useEstornar() {
   const { clinicId } = useAuth()

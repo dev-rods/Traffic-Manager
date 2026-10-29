@@ -5,21 +5,24 @@ import { usePay } from '@/hooks/useCheckin'
 import type { CheckinAppointment, Payment, PaymentMethod, Session } from '@/types'
 import { formatCurrencyBRL } from '@/utils/format'
 
-const METHOD_LABEL: Record<PaymentMethod, string> = {
+// O que a paciente escolhe no iPad. LINK só existe quando a recepção manda.
+type ChoosableMethod = Exclude<PaymentMethod, 'LINK'>
+
+const METHOD_LABEL: Record<ChoosableMethod, string> = {
   PIX: 'Pix',
   CREDIT_CARD: 'Crédito',
   DEBIT_CARD: 'Débito',
   CASH: 'Dinheiro',
 }
 
-const METHOD_HINT: Record<PaymentMethod, string> = {
+const METHOD_HINT: Record<ChoosableMethod, string> = {
   PIX: 'QR code no seu celular',
   CREDIT_CARD: 'Pague pelo seu celular',
   DEBIT_CARD: 'Pague pelo seu celular',
   CASH: 'Pague na recepção',
 }
 
-const ORDER: PaymentMethod[] = ['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH']
+const ORDER: ChoosableMethod[] = ['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH']
 
 interface MethodStepProps {
   clinicId: string

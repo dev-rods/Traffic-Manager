@@ -16,7 +16,7 @@ pagamento confirmado - com o estado da cobrança, se houver uma.
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from src.providers.payment_provider import METODOS, cobranca_de_teste
+from src.providers.payment_provider import METODOS_DO_CAIXA, cobranca_de_teste
 from src.services import mes_vigente
 
 MAX_DIAS = 92
@@ -82,14 +82,14 @@ def resumo(db, clinic_id: str, date_from: Optional[str], date_to: Optional[str])
         chave = _iso(d)
         if chave not in dias:
             dias[chave] = {"date": chave, "sessions": 0, "expectedCents": 0, "receivedCents": 0,
-                           "byMethod": {m: 0 for m in METODOS}}
+                           "byMethod": {m: 0 for m in METODOS_DO_CAIXA}}
         return dias[chave]
 
     for r in previsto:
         d = dia(r["dia"])
         d["sessions"] = int(r["sessoes"])
         d["expectedCents"] = int(r["previsto"] or 0)
-    por_metodo = {m: {"count": 0, "cents": 0} for m in METODOS}
+    por_metodo = {m: {"count": 0, "cents": 0} for m in METODOS_DO_CAIXA}
     for r in recebido:
         d = dia(r["dia"])
         valor = int(r["recebido"] or 0)
