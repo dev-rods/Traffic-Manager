@@ -36,8 +36,9 @@ por `clinic_id` (via path, ou via domínio próprio — ver §3).
    contagem de áreas marcadas e o valor final da cotação ao lado (o valor só
    aparece quando a cotação das áreas atuais chegou; nunca é calculado no
    front).
-4. **Não escolhe profissional** — o backend atribui. Se a clínica não tem
-   **nenhum** cadastrado, o fluxo é bloqueado com aviso (não há quem atender).
+4. **Não escolhe profissional** — o backend atribui se houver um ativo; sem
+   nenhum, o agendamento fica sem profissional e o fluxo segue normal (o
+   horário é da clínica inteira, não de alguém).
 5. Escolhe o dia numa lista que mostra **só os dias com horário**, de hoje até
    o fim do mês vigente (fuso da clínica), e depois o horário. Sem vaga no
    resto do mês, a tela diz quando o próximo mês abre e oferece o WhatsApp da
@@ -183,8 +184,6 @@ que diverge do painel autenticado.
 - Skip automático da etapa de serviço quando o catálogo tem 1 item.
 - Profissional atribuído pelo backend (o conflito de horário é da clínica
   inteira, então a escolha não reservava a agenda de ninguém).
-- Aviso bloqueante quando a clínica não tem **nenhum** profissional
-  cadastrado (sem isso, o calendário apareceria todo fechado sem explicação).
 - Agenda do mês vigente: só os dias com horário aparecem; horários que já
   passaram hoje não são oferecidos; a criação recusa data fora da janela.
 - Horário ocupado enquanto o cliente preenchia (409): volta para a agenda com

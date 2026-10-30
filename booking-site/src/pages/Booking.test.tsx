@@ -136,6 +136,16 @@ describe('Booking - serviço único', () => {
     expect(screen.queryByText('Adicionar outro serviço')).not.toBeInTheDocument()
   })
 
+  it('clinica sem profissional cadastrado agenda normalmente', async () => {
+    // O horario e da clinica inteira e o backend grava o agendamento sem
+    // profissional; bloquear aqui deixava a clinica nova fora do site a toa.
+    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap(0))
+    renderBooking()
+
+    expect(await screen.findByText('Escolha o dia')).toBeInTheDocument()
+    expect(screen.queryByText(/indisponível no momento/i)).not.toBeInTheDocument()
+  })
+
   it('sem "Voltar" na primeira etapa: não há lista de serviços para onde voltar', async () => {
     renderBooking()
 
