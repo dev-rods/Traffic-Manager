@@ -64,4 +64,4 @@ backend antigo respondia 400 sem ele.
 ## Status
 
 - [x] Implementado em 30/10/2026 (branch `feat/030-site-proximas-datas`).
-- [ ] Deploy prod do scheduler, depois merge (Vercel publica o site e o painel).
+- [x] Deploy dev e prod do scheduler validados pela API pública e PR #152 mergeado em 31/10/2026; site publicado pela Vercel (Nobre: 06/11 com 25 horários; Essência: 5 datas até dezembro).
