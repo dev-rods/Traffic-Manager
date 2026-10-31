@@ -56,11 +56,18 @@ class TestPodeIniciar(unittest.TestCase):
 class TestNaoPode(unittest.TestCase):
     """Cada caso é uma mensagem que não pode sair."""
 
-    def test_origem_que_nao_e_landing_page(self):
-        for origem in ("whatsapp", "harmonizacao", None, ""):
+    def test_origem_whatsapp_ou_vazia_nao_pode(self):
+        for origem in ("whatsapp", None, ""):
             with self.subTest(origem=origem):
                 self.assertEqual(por_que_nao_pode(lead(source=origem), CLINICA_ABERTA),
                                  "ORIGEM")
+
+    def test_qualquer_outra_origem_pode(self):
+        """Decisão de 31/10/2026 (PRD 031): lead cadastrado por qualquer caminho
+        que não o WhatsApp dá direito ao bot."""
+        for origem in ("landing-page", "painel", "harmonizacao", "indicacao"):
+            with self.subTest(origem=origem):
+                self.assertIsNone(por_que_nao_pode(lead(source=origem), CLINICA_ABERTA))
 
     def test_a_pessoa_ja_escreveu(self):
         self.assertEqual(
@@ -121,6 +128,10 @@ class TestPoliticaValeParaOBotao(unittest.TestCase):
     def test_leads_only_pode_para_landing_page(self):
         self.assertIsNone(
             por_que_nao_pode(lead(), {"bot_autoreply_policy": "LEADS_ONLY"}))
+
+    def test_leads_only_pode_para_lead_do_painel(self):
+        self.assertIsNone(
+            por_que_nao_pode(lead(source="painel"), {"bot_autoreply_policy": "LEADS_ONLY"}))
 
 
 class TestOrdemDosMotivos(unittest.TestCase):

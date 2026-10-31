@@ -21,7 +21,7 @@ from src.services import atendimento
 # Motivos, na ordem em que são conferidos. O painel mostra o texto ao lado do
 # botão desabilitado: "indisponível" sem explicação vira chamado de suporte.
 MOTIVOS = {
-    "ORIGEM": "Só leads da landing page podem ser iniciados pelo bot.",
+    "ORIGEM": "Quem chegou pelo WhatsApp não pode ser iniciado pelo bot.",
     "JA_RESPONDEU": "A pessoa já escreveu para a clínica.",
     "JA_CONTATADA": "Alguém já iniciou esta conversa.",
     "TEM_CONVERSA": "Já existe conversa com este número no WhatsApp.",
@@ -29,7 +29,16 @@ MOTIVOS = {
     "SEM_TELEFONE": "Lead sem telefone.",
 }
 
-ORIGENS_PERMITIDAS = {"landing-page"}
+# A única origem que NÃO dá direito ao bot: quem escreveu direto no WhatsApp
+# sem passar por cadastro algum (o webhook cria o lead com esta origem). Toda
+# outra origem (landing-page, painel, integrações) é "lead cadastrado".
+# Decisão do André em 31/10/2026 (PRD 031). Origem vazia também não dá direito:
+# lead sem origem é lead que ninguém cadastrou de propósito.
+ORIGEM_SEM_DIREITO = "whatsapp"
+
+
+def origem_da_direito_ao_bot(source) -> bool:
+    return bool(source) and source != ORIGEM_SEM_DIREITO
 
 
 def por_que_nao_pode(lead, clinic):
@@ -52,7 +61,7 @@ def por_que_nao_pode(lead, clinic):
     if not lead.get("phone"):
         return "SEM_TELEFONE"
 
-    if lead.get("source") not in ORIGENS_PERMITIDAS:
+    if not origem_da_direito_ao_bot(lead.get("source")):
         return "ORIGEM"
 
     if lead.get("conversation_started_at"):
@@ -72,7 +81,7 @@ def por_que_nao_pode(lead, clinic):
     # lista. Sem isto o clique enfileiraria um item que nunca sai, e a atendente
     # ficaria olhando um "na fila" que não anda.
     #
-    # `bot_enabled=True` porque a origem landing-page ja foi conferida acima, e
+    # `bot_enabled=True` porque a origem ja foi conferida acima, e
     # e exatamente o que a politica LEADS_ONLY exige da conversa.
     # `pode_responder`, nao `pode_iniciar`: o botao enfileira para a proxima
     # abertura, entao a janela de silencio de agora nao e motivo para
