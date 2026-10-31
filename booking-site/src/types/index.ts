@@ -92,6 +92,19 @@ export interface CreateAppointmentPayload extends CartPayload {
   // O número já tem agendamento futuro e a pessoa confirmou que quer manter
   // os dois. Sem isto, a criação responde 409 HAS_FUTURE_APPOINTMENT.
   confirmDuplicate?: boolean
+  // Cadastro de quem ainda não é paciente (PRD 032): só os que faltam, e o
+  // backend exige (400 CADASTRO_INCOMPLETO) quando não vêm.
+  cpf?: string // só dígitos
+  birthDate?: string // YYYY-MM-DD
+  email?: string
+}
+
+export type CampoDoCadastro = 'cpf' | 'birth_date' | 'email'
+
+/** O que falta no cadastro do celular cotado. Só nomes de campos, nunca valores. */
+export interface CadastroDoSite {
+  completo: boolean
+  faltam: CampoDoCadastro[]
 }
 
 export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'personalizado'
@@ -110,6 +123,8 @@ export interface Quote {
   finalPriceCents: number | null
   areaCount: number
   combos: ComboApplied[]
+  /** null sem celular; ausente no backend antigo. */
+  cadastro?: CadastroDoSite | null
 }
 
 // Status de um dia no seletor de semana — mesma lógica da AvailabilityEngine
