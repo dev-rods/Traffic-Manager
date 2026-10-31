@@ -8,7 +8,7 @@ from src.utils.http import http_response, require_api_key, extract_path_param, p
 from src.utils.phone import normalize_phone
 from src.services.db.postgres import PostgresService
 from src.services.desconto_personalizado import normaliza_entrada as normaliza_desconto
-from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
+from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento, normaliza_email
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -70,7 +70,9 @@ def handler(event, context):
         if birth_date is False:
             return http_response(400, {"status": "ERROR",
                                        "message": "Data de nascimento invalida"})
-        email = (body.get("email") or "").strip() or None
+        email = normaliza_email(body.get("email"))
+        if email is False:
+            return http_response(400, {"status": "ERROR", "message": "E-mail inválido"})
 
         if not name:
             return http_response(400, {

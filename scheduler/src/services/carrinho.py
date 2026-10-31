@@ -22,7 +22,8 @@ from typing import Dict, List, NamedTuple, Optional
 from src.services.combos import troca_no_catalogo
 from src.services.duration_rules import duracao_do_carrinho, normaliza_pares
 from src.services.politica_de_desconto import Decisao, aplica_desconto, decide, preco_de_tabela
-from src.utils.phone import normalize_phone
+from src.services.identificacao_de_paciente import campos_faltantes
+from src.utils.phone import normalize_phone, variantes_do_numero
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,34 @@ def duracao(db, clinic_id: str, service_ids: List[str], service_area_pairs: List
     """A duração que a agenda vai gravar para este carrinho (já com combos)."""
     pares, _ = troca_no_catalogo(db, clinic_id, service_area_pairs)
     return duracao_do_carrinho(db, clinic_id, service_ids, pares)
+
+
+def paciente_do_telefone(db, clinic_id: str, phone: str) -> Optional[Dict]:
+    """O paciente deste celular, ou None.
+
+    Casa pelas variantes do número (com e sem o nono dígito), como
+    `identificacao_de_paciente.identificar`. Mais de um casamento é tratado
+    como nenhum: é ambíguo, o site não tem como perguntar o nome, e pedir o
+    cadastro é o lado seguro.
+    """
+    linhas = db.execute_query(
+        "SELECT id, name, birth_date, cpf, email FROM scheduler.patients "
+        "WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL",
+        (clinic_id, sorted(variantes_do_numero(phone))),
+    )
+    return linhas[0] if len(linhas) == 1 else None
+
+
+def cadastro_para_o_site(paciente: Optional[Dict]) -> Dict:
+    """O que o site precisa saber do cadastro: se está completo e o que falta.
+
+    Só nomes de campos, nunca valores - a rota é pública e não pede OTP. `name`
+    sai da lista porque o site sempre pede o nome. A mesma função serve à
+    cotação (que mostra os campos) e à criação (que os exige), para a tela e o
+    servidor não divergirem (PRD 032).
+    """
+    faltam = [c for c in campos_faltantes(paciente) if c != "name"]
+    return {"completo": not faltam, "faltam": faltam}
 
 
 def cota(db, clinic_id: str, service_ids: List[str], service_area_pairs: List[Dict],

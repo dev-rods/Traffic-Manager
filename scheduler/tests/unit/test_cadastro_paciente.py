@@ -8,7 +8,7 @@ CPF depender de a pessoa ter digitado com ponto ou sem.
 import unittest
 from datetime import date, timedelta
 
-from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
+from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento, normaliza_email
 
 
 class TestCpf(unittest.TestCase):
@@ -70,6 +70,21 @@ class TestDataDeNascimento(unittest.TestCase):
         clara: hoje passa, amanhã não."""
         self.assertEqual(normaliza_data_nascimento(date.today().isoformat()),
                          date.today().isoformat())
+
+
+class TestEmail(unittest.TestCase):
+    """Até o PRD 032 ninguém validava e-mail; o painel só tirava espaços."""
+
+    def test_minusculo_sem_espacos(self):
+        self.assertEqual(normaliza_email(" Ana@Exemplo.COM "), "ana@exemplo.com")
+
+    def test_vazio_vira_none(self):
+        self.assertIsNone(normaliza_email(""))
+        self.assertIsNone(normaliza_email(None))
+
+    def test_invalido_e_false(self):
+        self.assertIs(normaliza_email("ana@"), False)
+        self.assertIs(normaliza_email("ana.exemplo.com"), False)
 
 
 if __name__ == "__main__":
