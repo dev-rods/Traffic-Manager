@@ -17,7 +17,7 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from src.providers.payment_provider import METODOS_DO_CAIXA, cobranca_de_teste
-from src.services import mes_vigente
+from src.services import relogio
 
 MAX_DIAS = 92
 
@@ -40,8 +40,8 @@ def _iso(v) -> Optional[str]:
 def _fuso(db, clinic_id: str) -> str:
     rows = db.execute_query("SELECT timezone FROM scheduler.clinics WHERE clinic_id = %s", (clinic_id,))
     tz = rows[0].get("timezone") if rows else None
-    # Mesmo critério de `mes_vigente.agora_na_clinica`: fuso inválido vira SP.
-    return mes_vigente.agora_na_clinica(tz).tzinfo.zone
+    # Mesmo critério de `relogio.agora_na_clinica`: fuso inválido vira SP.
+    return relogio.agora_na_clinica(tz).tzinfo.zone
 
 
 def resumo(db, clinic_id: str, date_from: Optional[str], date_to: Optional[str]) -> Dict[str, Any]:
@@ -52,7 +52,7 @@ def resumo(db, clinic_id: str, date_from: Optional[str], date_to: Optional[str])
         raise PeriodoInvalido(f"Período máximo de {MAX_DIAS} dias")
 
     tz = _fuso(db, clinic_id)
-    hoje = mes_vigente.agora_na_clinica(tz).date()
+    hoje = relogio.agora_na_clinica(tz).date()
 
     previsto = db.execute_query(
         """

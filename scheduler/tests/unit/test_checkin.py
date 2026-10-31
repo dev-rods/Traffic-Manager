@@ -163,7 +163,7 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.db = Db(cpf_cadastro=CPF_OK)
         self.prov = Provedor()
-        p = mock.patch("src.services.mes_vigente.agora_na_clinica", return_value=AGORA)
+        p = mock.patch("src.services.relogio.agora_na_clinica", return_value=AGORA)
         p.start()
         self.addCleanup(p.stop)
 
@@ -414,7 +414,7 @@ class TestHandler(unittest.TestCase):
             mock.patch(f"{self.modulo}.PostgresService", return_value=self.db),
             mock.patch(f"{self.modulo}.provedor_ativo", return_value=self.prov),
             mock.patch(f"{self.modulo}.verify_token", side_effect=lambda c, ph, t: t == "ok"),
-            mock.patch("src.services.mes_vigente.agora_na_clinica", return_value=AGORA),
+            mock.patch("src.services.relogio.agora_na_clinica", return_value=AGORA),
         ):
             p.start()
             self.addCleanup(p.stop)

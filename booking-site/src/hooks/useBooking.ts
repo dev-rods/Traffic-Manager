@@ -12,8 +12,8 @@ export const bookingKeys = {
   all: ['booking'] as const,
   bootstrap: (clinicId: string) => [...bookingKeys.all, 'bootstrap', clinicId] as const,
   availabilityAll: (clinicId: string) => [...bookingKeys.all, 'availability', clinicId] as const,
-  availability: (clinicId: string, dates: string[], cart: CartPayload) =>
-    [...bookingKeys.availabilityAll(clinicId), dates.join(','), cartKey(cart)] as const,
+  availability: (clinicId: string, cart: CartPayload) =>
+    [...bookingKeys.availabilityAll(clinicId), cartKey(cart)] as const,
   quote: (clinicId: string, cart: CartPayload, phone: string | undefined) =>
     [...bookingKeys.all, 'quote', clinicId, cartKey(cart), phone ?? ''] as const,
   myAppointments: (clinicId: string, phone: string) =>
@@ -34,16 +34,11 @@ export function useClinicBootstrap(clinicId: string) {
  * área pendente de escolha — sem ela a duração (e a grade) ainda não existe.
  * `staleTime` curto: a agenda muda enquanto o cliente decide.
  */
-export function useMonthAvailability(
-  clinicId: string,
-  dates: string[],
-  cart: CartPayload,
-  enabled: boolean
-) {
+export function useAvailability(clinicId: string, cart: CartPayload, enabled: boolean) {
   return useQuery({
-    queryKey: bookingKeys.availability(clinicId, dates, cart),
-    queryFn: () => bookingService.availability(clinicId, dates, cart),
-    enabled: enabled && dates.length > 0 && cart.serviceIds.length > 0,
+    queryKey: bookingKeys.availability(clinicId, cart),
+    queryFn: () => bookingService.availability(clinicId, cart),
+    enabled: enabled && cart.serviceIds.length > 0,
     staleTime: 1000 * 30,
   })
 }

@@ -1,0 +1,86 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Booking-site 030 (próximas datas)",
+    "description": "PRD 030. O site público oferece as próximas N datas com horário (N = max_future_dates da clínica), atravessando a virada do mês, e a criação recusa o que a grade não ofereceu. Preencha clinicId, serviceId e areaId.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "BOOKING_API_KEY", "value": "YOUR_BOOKING_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "serviceId", "value": "", "type": "string" },
+    { "key": "areaId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Grade - próximas datas com horário",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/availability?serviceIds={{serviceId}}&serviceAreaPairs={{serviceId}}:{{areaId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "availability"],
+          "query": [
+            { "key": "serviceIds", "value": "{{serviceId}}" },
+            { "key": "serviceAreaPairs", "value": "{{serviceId}}:{{areaId}}" }
+          ]
+        },
+        "description": "As próximas N datas AVAILABLE com slots, em ordem, sem window. N = max_future_dates (5 por padrão)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var r = pm.response.json();",
+              "pm.test(\"Sem window\", function () { pm.expect(r).to.not.have.property(\"window\"); });",
+              "pm.test(\"Só datas com horário, no máximo 5 por padrão\", function () {",
+              "    var ds = Object.keys(r.days); pm.expect(ds.length).to.be.at.most(5);",
+              "    ds.forEach(function (d) { pm.expect(r.days[d].status).to.eql(\"AVAILABLE\"); pm.expect(r.days[d].slots.length).to.be.above(0); });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criação fora da grade -> 400",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "appointments"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"5511999990000\", \"fullName\": \"Teste 030\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"2030-01-01\", \"time\": \"10:00\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+        },
+        "description": "Data que a grade não ofereceu: recusada antes de tocar a agenda."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });",
+              "pm.test(\"Mensagem\", function () { pm.expect(pm.response.json().message).to.include(\"não está disponível\"); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -27,7 +27,7 @@ from src.providers.payment_provider import (
     AGUARDANDO_DINHEIRO, CANCELADO, DINHEIRO, ESTORNADO, LINK, METODOS, PAGO, PENDENTE, PIX,
     ErroDoProvedor, Pagador, PaymentProvider, cobranca_de_teste,
 )
-from src.services import mes_vigente
+from src.services import relogio
 from src.services.appointment_service import AppointmentService
 from src.utils.cadastro import cpf_valido, normaliza_cpf
 from src.utils.phone import normalize_phone, variantes_do_numero
@@ -224,7 +224,7 @@ def cobra(db, provider: PaymentProvider, clinic_id: str, phone: str, appointment
 
     nome = appt.get("full_name") or appt.get("patient_name") or "Paciente"
     tz = _fuso(db, clinic_id)
-    hoje = mes_vigente.agora_na_clinica(tz).date()
+    hoje = relogio.agora_na_clinica(tz).date()
     payment_id = str(uuid.uuid4())
     data_sessao = appt.get("appointment_date")
     descricao = f"Sessão de {data_sessao.strftime('%d/%m/%Y') if hasattr(data_sessao, 'strftime') else data_sessao}"
@@ -365,7 +365,7 @@ def marca_recebido_em_dinheiro(db, provider: PaymentProvider, clinic_id: str, pa
         raise CheckinInvalido("Este pagamento não está aguardando dinheiro.")
     if row["provider"] == provider.nome and row.get("provider_payment_id"):
         provider.recebe_em_dinheiro(row["provider_payment_id"], row["amount_cents"],
-                                    mes_vigente.agora_na_clinica(_fuso(db, clinic_id)).date())
+                                    relogio.agora_na_clinica(_fuso(db, clinic_id)).date())
     _marca(db, payment_id, PAGO)
     logger.info(f"[Checkin] dinheiro recebido {payment_id} {clinic_id}")
     rows = db.execute_query("SELECT * FROM scheduler.appointment_payments WHERE id = %s::uuid", (payment_id,))
@@ -548,14 +548,14 @@ def _link_vencido(clinica: Dict, row: Dict) -> bool:
     if not isinstance(criado, datetime):
         return False
     tz = clinica.get("timezone")
-    emitido = mes_vigente.agora_na_clinica(tz, criado).date()
-    return emitido + VENCIMENTO_DO_LINK < mes_vigente.agora_na_clinica(tz).date()
+    emitido = relogio.agora_na_clinica(tz, criado).date()
+    return emitido + VENCIMENTO_DO_LINK < relogio.agora_na_clinica(tz).date()
 
 
 def _cria_link(db, provider: PaymentProvider, clinic_id: str, appointment_id: str, appt: Dict,
                valor: int, cpf: str) -> Optional[Dict]:
     nome = appt.get("full_name") or appt.get("patient_name") or "Paciente"
-    hoje = mes_vigente.agora_na_clinica(_fuso(db, clinic_id)).date()
+    hoje = relogio.agora_na_clinica(_fuso(db, clinic_id)).date()
     payment_id = str(uuid.uuid4())
     data_sessao = appt.get("appointment_date")
     descricao = f"Sessão de {data_sessao.strftime('%d/%m/%Y') if hasattr(data_sessao, 'strftime') else data_sessao}"

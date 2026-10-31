@@ -55,7 +55,7 @@ class Db:
 
 class TestResumo(unittest.TestCase):
     def setUp(self):
-        p = mock.patch("src.services.mes_vigente.agora_na_clinica", return_value=AGORA)
+        p = mock.patch("src.services.relogio.agora_na_clinica", return_value=AGORA)
         p.start()
         self.addCleanup(p.stop)
 
@@ -113,7 +113,7 @@ class TestRotas(unittest.TestCase):
     def test_resumo(self):
         with mock.patch(f"{self.modulo}.require_api_key", return_value=("k", None)), \
                 mock.patch(f"{self.modulo}.PostgresService", return_value=Db()), \
-                mock.patch("src.services.mes_vigente.agora_na_clinica", return_value=AGORA):
+                mock.patch("src.services.relogio.agora_na_clinica", return_value=AGORA):
             s, b = self.chama("GET", "resumo", {"date_from": "2026-10-19", "date_to": "2026-10-20"})
         self.assertEqual((s, b["totals"]["receivedCents"]), (200, 39500))
 

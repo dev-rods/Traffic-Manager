@@ -39,10 +39,9 @@ por `clinic_id` (via path, ou via domínio próprio — ver §3).
 4. **Não escolhe profissional** — o backend atribui se houver um ativo; sem
    nenhum, o agendamento fica sem profissional e o fluxo segue normal (o
    horário é da clínica inteira, não de alguém).
-5. Escolhe o dia numa lista que mostra **só os dias com horário**, de hoje até
-   o fim do mês vigente (fuso da clínica), e depois o horário. Sem vaga no
-   resto do mês, a tela diz quando o próximo mês abre e oferece o WhatsApp da
-   clínica.
+5. Escolhe o dia numa lista com **as próximas N datas com horário** (N =
+   "Datas futuras" da clínica, o mesmo limite do bot), agrupadas por mês, e
+   depois o horário. Sem nenhuma data, a tela oferece o WhatsApp da clínica.
 6. Informa nome e celular. Ao digitar o celular, o resumo é recalculado:
    **Total**, **Desconto** (percentual) e **Valor final** aparecem antes de
    confirmar. Com celular a cotação não diz o motivo do desconto — a rota é
@@ -102,7 +101,7 @@ porta de entrada para o **mesmo** motor que o bot usa:
 | Disponibilidade | `AvailabilityEngine.get_days_status` | Chama `janelas_livres`, a mesma agenda do bot; só preserva o motivo de "sem horário" (fechado × lotado) |
 | Carrinho | `carrinho.py` | Combos (`combos.troca_no_catalogo`) → duração (`duration_rules.duracao_do_carrinho`) → preço (`politica_de_desconto.preco_de_tabela`) → desconto (`politica_de_desconto.decide`), na ordem do agente. Cotação, disponibilidade e criação chamam este módulo |
 | Desconto | `politica_de_desconto.decide` | A mesma decisão que a tool `calculate_discount` do agente: personalizado > maior entre primeira sessão e faixa de áreas |
-| Janela | `mes_vigente.py` | Hoje até o fim do mês, no fuso da clínica — **só o site** usa |
+| Janela | `janela_do_site.py` | As próximas N datas com horário, de hoje (fuso da clínica) — **só o site** usa |
 | Criação/cancelamento | `AppointmentService.completo(db)` | Mesma regra de negócio, inclusive a conversão de gclid pro Google Ads (por isso é sempre `.completo()`, nunca o construtor cru) |
 | Confirmação | `TemplateService` + template `BOOKED` + `orientacoes_pos_sessao` | A mensagem que chega no WhatsApp do cliente é a mesma customizável por clínica que o bot manda, e as orientações pré-sessão vão logo depois, como no agente |
 | Envio | `ZApiProvider` | Mesmo provedor de WhatsApp, mesmo allowlist de telefones em dev |
@@ -126,7 +125,7 @@ entrar ali, não como função própria.
 | POST | `/public/clinics/{clinicId}/quote` | Total, desconto e valor final do carrinho (com `phone`, também primeira sessão e personalizado, mas `discountReason` vem null) — o mesmo que a criação grava |
 | POST | `/public/clinics/{clinicId}/verify/send` | Envia código por WhatsApp — só usado por "Meus agendamentos" |
 | POST | `/public/clinics/{clinicId}/verify/confirm` | Confirma o código, devolve token de sessão — idem |
-| POST | `/public/clinics/{clinicId}/appointments` | Cria o agendamento (sem token/verificação), com desconto da política e pares pós-combo; recusa data fora do mês vigente e horário que já passou; 409 `HAS_FUTURE_APPOINTMENT` se o número já tem agendamento futuro e falta `confirmDuplicate: true` |
+| POST | `/public/clinics/{clinicId}/appointments` | Cria o agendamento (sem token/verificação), com desconto da política e pares pós-combo; recusa data ou horário fora da grade oferecida (inclui o que já passou hoje); 409 `HAS_FUTURE_APPOINTMENT` se o número já tem agendamento futuro e falta `confirmDuplicate: true` |
 | GET | `/public/clinics/{clinicId}/my-appointments?phone=&token=` | Lista agendamentos futuros do número, com `full_name` de cada um (exige token; telefone normalizado e tolerante ao nono dígito) |
 | POST | `/public/clinics/{clinicId}/appointments/{id}/cancel` | Cancela (exige token) |
 
@@ -184,8 +183,9 @@ que diverge do painel autenticado.
 - Skip automático da etapa de serviço quando o catálogo tem 1 item.
 - Profissional atribuído pelo backend (o conflito de horário é da clínica
   inteira, então a escolha não reservava a agenda de ninguém).
-- Agenda do mês vigente: só os dias com horário aparecem; horários que já
-  passaram hoje não são oferecidos; a criação recusa data fora da janela.
+- Agenda das próximas N datas: só os dias com horário aparecem; horários que
+  já passaram hoje não são oferecidos; a criação recusa o que a grade não
+  ofereceu.
 - Horário ocupado enquanto o cliente preenchia (409): volta para a agenda com
   aviso e grade atualizada.
 - Carrinho multi-serviço no mesmo atendimento (não é "um agendamento por
@@ -235,9 +235,9 @@ Da feature de domínio customizado (`prd/021-...`):
 - **Profissional:** deixou de ser escolhido pelo cliente, em todas as clínicas.
 - **Duração:** deixou de ser exibida.
 - **Calendário:** de grade semanal com dias desabilitados para lista dos dias
-  com horário, só no mês vigente. O mês seguinte abre na virada — e no fim do
-  mês, sem vaga, o cliente fica sem dia (a tela explica e oferece contato).
-  A regra mora inteira em `scheduler/src/services/mes_vigente.py`.
+  com horário. Foi "só o mês vigente" (PRD 023) até 30/10/2026; desde o PRD
+  030 são as próximas N datas, atravessando a virada do mês. A regra mora
+  inteira em `scheduler/src/services/janela_do_site.py`.
 - **Preço:** deixou de ser calculado no navegador. Antes o site cobrava sem
   primeira sessão, sem faixas e sem combos — mais caro que o WhatsApp para o
   mesmo pedido — e pedia horário com uma duração diferente da gravada.

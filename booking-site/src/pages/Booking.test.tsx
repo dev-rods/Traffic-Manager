@@ -52,7 +52,6 @@ const TODAY = toISODate(new Date())
 function availability(): AvailabilityResponse {
   return {
     days: { [TODAY]: { status: 'AVAILABLE', slots: ['23:59'] } },
-    window: { start: TODAY, end: TODAY, nextOpensOn: TODAY },
   }
 }
 
@@ -167,36 +166,9 @@ describe('Booking - serviço único', () => {
   it('pede a agenda pelo carrinho - a duração é calculada pelo backend', async () => {
     renderBooking()
     await screen.findByText('Escolha o dia')
-    const [clinicId, dates, cart] = vi.mocked(bookingService.availability).mock.calls[0]
+    const [clinicId, cart] = vi.mocked(bookingService.availability).mock.calls[0]
     expect(clinicId).toBe('c1')
-    expect(dates[0]).toBe(TODAY)
     expect(cart).toEqual({ serviceIds: ['svc-1'], serviceAreaPairs: [] })
-  })
-
-  it('pergunta de novo pela janela do backend quando o "hoje" do navegador não é o da clínica', async () => {
-    // Navegador ainda no mês passado; na clínica já é dia 1º do mês seguinte.
-    const now = new Date()
-    const clinicToday = toISODate(new Date(now.getFullYear(), now.getMonth() + 1, 1))
-    vi.mocked(bookingService.availability).mockImplementation(async (_c, dates) => ({
-      days: Object.fromEntries(
-        dates.map((d) => [
-          d,
-          d === clinicToday
-            ? { status: 'AVAILABLE', slots: ['10:00'] }
-            : { status: 'CLOSED', slots: [] },
-        ])
-      ),
-      window: { start: clinicToday, end: clinicToday, nextOpensOn: clinicToday },
-    }))
-    renderBooking()
-
-    expect(await screen.findByRole('button', { name: / 1 de / })).toBeInTheDocument()
-    const requested = vi.mocked(bookingService.availability).mock.calls.map((c) => c[1])
-    expect(requested[0][0]).toBe(toISODate(now))
-    expect(requested[requested.length - 1]).toEqual([clinicToday])
-    const calls = vi.mocked(bookingService.availability).mock.calls.length
-    await new Promise((r) => setTimeout(r, 50))
-    expect(vi.mocked(bookingService.availability).mock.calls.length).toBe(calls)
   })
 
   it('não mostra duração em nenhum lugar', async () => {

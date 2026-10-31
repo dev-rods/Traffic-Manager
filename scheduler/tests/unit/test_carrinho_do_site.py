@@ -65,15 +65,16 @@ def _pares_dos_params(params):
 class Db:
     """Responde por conteúdo do SQL, com o catálogo acima."""
 
-    def __init__(self, personalizado=None, clinica=True):
+    def __init__(self, personalizado=None, clinica=True, datas_futuras=None):
         self.personalizado = personalizado
         self.clinica = clinica
+        self.datas_futuras = datas_futuras
 
     def execute_query(self, sql, params=None):
         if "FROM scheduler.clinics" in sql:
             if not self.clinica:
                 return []
-            return [{"clinic_id": CLINIC, "timezone": "America/Sao_Paulo",
+            return [{"clinic_id": CLINIC, "timezone": "America/Sao_Paulo", "max_future_dates": self.datas_futuras,
                      "zapi_instance_id": "i", "zapi_instance_token": "t", "buffer_minutes": 10}]
         if "FROM scheduler.areas WHERE clinic_id" in sql:
             return AREAS
@@ -238,6 +239,26 @@ def corpo(resposta):
     return json.loads(resposta["body"])
 
 
+def motor_falso():
+    """Agenda de 20/10 (hoje, 14h) em diante: dias 20, 22, 25, 28, 31/10 e 3/11
+    com 13:30, 14:00 e 15:00; o corte de hoje tira o que já passou."""
+    engine = mock.MagicMock()
+    engine.datas_com_regra.return_value = [
+        "2026-10-20", "2026-10-22", "2026-10-25", "2026-10-28", "2026-10-31", "2026-11-03"]
+
+    def status(c, ds, dur, a_partir_de=None):
+        out = {}
+        for d in ds:
+            slots = ["13:30", "14:00", "15:00"]
+            minimo = (a_partir_de or {}).get(d)
+            if minimo is not None:
+                slots = [x for x in slots if int(x[:2]) * 60 + int(x[3:]) >= minimo]
+            out[d] = {"status": "AVAILABLE" if slots else "FULL", "slots": slots}
+        return out
+    engine.get_days_status.side_effect = status
+    return engine
+
+
 class _Handler(unittest.TestCase):
     modulo = None
 
@@ -246,7 +267,7 @@ class _Handler(unittest.TestCase):
         patches = [
             mock.patch(f"{self.modulo}.require_booking_intake_api_key", return_value=("k", None)),
             mock.patch(f"{self.modulo}.PostgresService", side_effect=lambda: self.db),
-            mock.patch("src.services.mes_vigente.agora_na_clinica", return_value=AGORA),
+            mock.patch("src.services.relogio.agora_na_clinica", return_value=AGORA),
             mock.patch("src.services.politica_de_desconto.e_primeira_visita", return_value=False),
         ]
         for p in patches:
@@ -300,52 +321,54 @@ class TestQuote(_Handler):
 class TestAvailability(_Handler):
     modulo = "src.functions.public_booking.availability"
 
-    def chama(self, query):
+    def chama(self, query, db=None):
         from src.functions.public_booking.availability import handler
-        engine = mock.MagicMock()
-        engine.get_days_status.side_effect = lambda c, ds, dur, a_partir_de=None: {
-            d: {"status": "AVAILABLE", "slots": ["15:00"]} for d in ds}
+        if db is not None:
+            self.db = db
+        engine = motor_falso()
         with mock.patch(f"{self.modulo}.AvailabilityEngine", return_value=engine):
             return handler(evento(query=query), None), engine
 
-    def test_duracao_vem_do_carrinho_e_fora_do_mes_fecha(self):
+    def test_duracao_vem_do_carrinho_e_as_datas_sao_as_proximas_com_horario(self):
         r, engine = self.chama({
-            "dates": "2026-10-19,2026-10-20,2026-10-31,2026-11-02",
             "serviceIds": SVC,
             "serviceAreaPairs": f"{SVC}:{VIRILHA},{SVC}:{PERIANAL},{SVC}:{AXILAS}",
         })
         self.assertEqual(r["statusCode"], 200)
         args, kwargs = engine.get_days_status.call_args
-        self.assertEqual(args[1], ["2026-10-20", "2026-10-31"])  # ontem e novembro nem são consultados
         self.assertEqual(args[2], 25)
         self.assertEqual(kwargs["a_partir_de"], {"2026-10-20": 840})
         dias = corpo(r)["days"]
-        self.assertEqual(dias["2026-10-19"]["status"], "CLOSED")
-        self.assertEqual(dias["2026-11-02"]["status"], "CLOSED")
-        self.assertEqual(dias["2026-10-31"]["status"], "AVAILABLE")
-        self.assertEqual(corpo(r)["window"], {"start": "2026-10-20", "end": "2026-10-31", "nextOpensOn": "2026-11-01"})
+        # 5 por padrão (o mesmo do bot), atravessando a virada do mês; hoje sem o que passou.
+        self.assertEqual(list(dias), ["2026-10-20", "2026-10-22", "2026-10-25", "2026-10-28", "2026-10-31"])
+        self.assertEqual(dias["2026-10-20"]["slots"], ["14:00", "15:00"])
+        self.assertNotIn("window", corpo(r))
+
+    def test_respeita_as_datas_futuras_da_clinica(self):
+        r, _ = self.chama({"serviceIds": SVC, "serviceAreaPairs": f"{SVC}:{AXILAS}"}, db=Db(datas_futuras=6))
+        self.assertEqual(list(corpo(r)["days"])[-1], "2026-11-03")
+
+    def test_dates_do_front_antigo_e_ignorado(self):
+        r, _ = self.chama({"dates": "2026-10-21,2026-10-22", "serviceIds": SVC, "serviceAreaPairs": f"{SVC}:{AXILAS}"})
+        self.assertEqual(r["statusCode"], 200)
+        self.assertEqual(len(corpo(r)["days"]), 5)
 
     def test_carrinho_misto_pede_horario_com_o_servico_sem_area(self):
-        r, engine = self.chama({"dates": "2026-10-21", "serviceIds": f"{SVC},{SVC_SEM_AREA}",
-                                "serviceAreaPairs": f"{SVC}:{AXILAS}"})
+        r, engine = self.chama({"serviceIds": f"{SVC},{SVC_SEM_AREA}", "serviceAreaPairs": f"{SVC}:{AXILAS}"})
         self.assertEqual(r["statusCode"], 200)
         self.assertEqual(engine.get_days_status.call_args[0][2], 35)
 
     def test_total_duration_legado_continua_aceito(self):
-        r, engine = self.chama({"dates": "2026-10-21", "totalDuration": "40"})
+        r, engine = self.chama({"totalDuration": "40"})
         self.assertEqual(r["statusCode"], 200)
         self.assertEqual(engine.get_days_status.call_args[0][2], 40)
 
     def test_sem_carrinho_nem_duracao(self):
-        r, _ = self.chama({"dates": "2026-10-21"})
-        self.assertEqual(r["statusCode"], 400)
-
-    def test_data_mal_formada(self):
-        r, _ = self.chama({"dates": "21/10/2026", "serviceIds": SVC})
+        r, _ = self.chama({})
         self.assertEqual(r["statusCode"], 400)
 
     def test_carrinho_de_outra_clinica(self):
-        r, _ = self.chama({"dates": "2026-10-21", "serviceIds": OUTRA_CLINICA})
+        r, _ = self.chama({"serviceIds": OUTRA_CLINICA})
         self.assertEqual(r["statusCode"], 400)
 
 
@@ -371,6 +394,7 @@ class _Criacao(_Handler):
             mock.patch(f"{self.modulo}.ZApiProvider", return_value=self.provider),
             mock.patch(f"{self.modulo}.TemplateService", return_value=self.template),
             mock.patch(f"{self.modulo}.orientacoes_da_clinica", return_value="Não tome sol 48h antes."),
+            mock.patch(f"{self.modulo}.AvailabilityEngine", return_value=motor_falso()),
         ):
             p.start()
             self.addCleanup(p.stop)
@@ -412,8 +436,15 @@ class TestCreate(_Criacao):
         self.assertEqual(r["statusCode"], 201)
         self.assertEqual(self.provider.send_text.call_count, 2)
 
-    def test_fora_do_mes(self):
+    def test_data_fora_da_grade_oferecida(self):
+        """03/11 tem horário, mas é a 6ª data e o site só oferece 5: a criação
+        recusa o que a tela não oferece - uma requisição direta não passa pelo calendário."""
         self.assertEqual(self.chama(date="2026-11-03")["statusCode"], 400)
+        self.assertEqual(self.chama(date="2026-10-21")["statusCode"], 400)
+        self.service.create_appointment.assert_not_called()
+
+    def test_horario_fora_da_grade_do_dia(self):
+        self.assertEqual(self.chama(date="2026-10-22", time="16:00")["statusCode"], 400)
         self.service.create_appointment.assert_not_called()
 
     def test_horario_que_ja_passou_hoje(self):
