@@ -35,7 +35,7 @@ webhook, enquanto a Nobre Laser se preparava para ligar o WhatsApp:
 |---|---|---|
 | 1 | O webhook procura um lead com o telefone e `source = 'landing-page'`; achando, marca `bot_enabled` e o bot responde | Só landing page conta. Lead criado pelo painel ou por outra integração fica mudo. |
 | 2 | "Iniciar pelo Bot" enfileira a abordagem e marca `bot_enabled` | `elegibilidade_do_bot.ORIGENS_PERMITIDAS = {"landing-page"}`: a mesma restrição. |
-| 3 | A mensagem cria um lead `source = 'whatsapp'`, o bot não responde; ao abrir a conversa o painel mostra "Fora da regra de resposta automática" e o botão "Ativar bot" | A lista de conversas não distingue essas conversas: é preciso abrir uma a uma. "Ativar bot" libera a conversa mas o bot só fala quando a pessoa escrever de novo; a primeira pergunta fica sem resposta. |
+| 3 | A mensagem cria um lead `source = 'whatsapp'`, o bot não responde; ao abrir a conversa o painel mostra "Fora da regra de resposta automática" e o botão "Ativar bot" | A lista de conversas não distingue essas conversas: é preciso abrir uma a uma. **Correção na fase Spec:** "Ativar bot" JÁ responde a pergunta pendente (`_agendar_retomada` + `conversation_resume`); o levantamento inicial estava errado nesse ponto. Sobra um desencontro: a resposta HTTP promete "respondendo" antes de conferir a porta (janela de silêncio), e nada sai. |
 
 O André decidiu, em 31/10/2026:
 
@@ -63,10 +63,10 @@ A política continua sendo `LEADS_ONLY`. `ALL`, `PILOT` e `OFF` não mudam.
   - `elegibilidade_do_bot.ORIGENS_PERMITIDAS` (botão "Iniciar pelo Bot").
 - Texto do motivo `ORIGEM` muda para "Quem chegou pelo WhatsApp não pode ser
   iniciado pelo bot."
-- Um lead que nasceu `whatsapp` e depois preenche o formulário do site: o
-  `upsert_lead` já existe; a Spec define se a origem é atualizada para a
-  nova (recomendação: sim, a origem mais forte vence, e a conversa passa a
-  ser elegível na próxima mensagem).
+- Um lead que nasceu `whatsapp` e depois preenche o formulário do site não
+  precisa de "promoção de origem": a chave do `upsert_lead` é `(clinic_id,
+  phone, first_name)`, então o formulário (com nome) cria uma segunda linha,
+  com a origem nova, e é ela que a consulta encontra. Esclarecido na Spec.
 
 **B. Lista de conversas (cenário 3)**
 
@@ -82,22 +82,20 @@ A política continua sendo `LEADS_ONLY`. `ALL`, `PILOT` e `OFF` não mudam.
 
 **C. "Ativar bot" responde a pergunta pendente (cenário 3)**
 
-- Ao clicar "Ativar bot" (ou "Retomar bot") numa conversa cujo **último evento
-  é INBOUND** (a pessoa escreveu e ninguém respondeu), o backend, depois de
-  liberar a conversa, aciona o agente com as mensagens INBOUND desde o último
-  OUTBOUND, juntas, como se tivessem acabado de chegar.
-- Mecanismo: `POST /attendant/deactivate` invoca a Lambda `WhatsAppWebhook`
-  de forma assíncrona com um payload interno (`internal_task =
-  "responder_pendente"`), reaproveitando `_processar_mensagem`. A fonte das
-  mensagens é `MessageEvents` (`INBOUND` após o último `OUTBOUND` do
-  telefone).
-- Se o último evento for OUTBOUND (a atendente já respondeu pelo celular, ou
-  o bot já falou), nada é enviado. É o que impede resposta em dobro.
-- A resposta do agente passa pelas mesmas portas de sempre
-  (`pode_responder`), já com a conversa liberada. A janela de silêncio não
-  barra: quem clicou está respondendo a uma pessoa que escreveu.
-- Resposta do endpoint ganha `respondeu_pendente: true | false` para o painel
-  mostrar "Bot respondendo..." ou nada.
+- **Já existe.** `POST /attendant/deactivate` chama `_agendar_retomada`: lê os
+  últimos eventos, decide por `ha_pergunta_em_aberto` (a última fala com texto
+  é da pessoa) e dispara `conversation_resume.responder_se_ficou_em_aberto`
+  numa invocação assíncrona. Se a atendente já respondeu pelo celular, não
+  manda nada. O painel já mostra "Bot respondendo..." via
+  `answering_open_question`.
+- O que esta entrega faz: cobrir o caso `not_eligible` com teste direto, e
+  corrigir o desencontro em que a resposta HTTP diz `answering_open_question:
+  true` antes de a execução assíncrona conferir `pode_iniciar`. Na janela de
+  silêncio o painel mostra "respondendo" e nada sai. Passa a devolver `false`
+  com `motivo_sem_resposta: "fora_do_horario"`.
+- A janela de silêncio continua valendo (decisão do PRD 020: vale sempre,
+  inclusive para o transacional). O bot responde quando a pessoa escrever de
+  novo, dentro do horário.
 
 ### Fora do escopo
 
@@ -114,14 +112,14 @@ A política continua sendo `LEADS_ONLY`. `ALL`, `PILOT` e `OFF` não mudam.
 |---|---|---|
 | `scheduler/src/services/elegibilidade_do_bot.py` | modificar | `ORIGENS_PERMITIDAS` vira `origem_da_direito_ao_bot(source)`: tudo menos `whatsapp`; texto de `ORIGEM` |
 | `scheduler/src/functions/webhook/handler.py` | modificar | Consulta do lead sem `source = 'landing-page'`, usando a mesma função; `internal_task = "responder_pendente"` |
-| `scheduler/src/services/lead_service.py` | modificar | `upsert_lead` promove a origem quando a nova não é `whatsapp` (se a Spec confirmar) |
-| `scheduler/src/functions/attendant/handler.py` | modificar | `_handle_deactivate` lê o último evento em `MessageEvents` e dispara `responder_pendente` quando é INBOUND; devolve `respondeu_pendente` |
-| `scheduler/src/services/message_tracker.py` | modificar | Consulta "INBOUND desde o último OUTBOUND" para um telefone |
-| `scheduler/sls/functions/attendant/interface.yml` | modificar | IAM para `lambda:InvokeFunction` do webhook e env com o nome da função |
+| `scheduler/src/services/atendimento.py` | modificar | `motivo_da_pausa`, a função única do motivo que hoje está inline em três handlers |
+| `scheduler/src/functions/attendant/conversations.py` | modificar | Anexa `bot_paused` e `pause_reason` a cada conversa recente |
+| `scheduler/src/functions/attendant/list_active.py` | modificar | Usa `motivo_da_pausa` |
+| `scheduler/src/functions/attendant/handler.py` | modificar | `_handle_status` usa `motivo_da_pausa`; `_agendar_retomada` confere `pode_iniciar` antes de prometer resposta |
 | `frontend/src/pages/bot/components/ConversationList.tsx` | modificar | Selo por `pause_reason`; botão "Ativar bot" na linha |
 | `frontend/src/pages/bot/BotPage.tsx` | modificar | Filtro Todas / Fora da regra / Com atendente / Bot ativo |
-| `frontend/src/pages/bot/components/ConversationThread.tsx` | modificar | "Bot respondendo..." quando `respondeu_pendente` |
-| `frontend/src/types/index.ts` | modificar | Resposta de `deactivate` |
+| `frontend/src/lib/motivoDaPausa.ts` | criar | Rótulos e filtro de `PauseReason` (fonte única no front) |
+| `frontend/src/types/index.ts` | modificar | `ConversationPreview` com `pause_reason` |
 | `scheduler/tests/unit/` | criar/modificar | `test_elegibilidade_do_bot`, `test_webhook_*` (origem), `test_attendant_responder_pendente` |
 | `frontend/src/pages/bot/components/*.test.tsx` | criar/modificar | Selo, filtro, ação na linha |
 | `scheduler/tests/integration/031-quem-o-bot-responde.md`, `tests/postman/031-*.json` | criar | Casos dos três cenários |
@@ -131,16 +129,14 @@ A política continua sendo `LEADS_ONLY`. `ALL`, `PILOT` e `OFF` não mudam.
 ## 5. Dependências e riscos
 
 - **Dependências:** `MessageEvents` (TTL 60 dias, PRD 022) é a fonte do
-  "pendente". Conversa mais velha que isso não tem pendente a responder, o
-  que é aceitável.
+  "pendente" na retomada que já existe.
 - **Risco - resposta em dobro:** a atendente respondeu pelo celular, o
   webhook ainda não registrou o `fromMe`, e alguém clica "Ativar bot". Janela
-  de segundos; o critério "último evento é INBOUND" é a mitigação. A Spec
-  define se vale esperar a janela de agrupamento do webhook antes de
-  responder.
-- **Risco - origem promovida:** promover `whatsapp` para a origem nova no
-  `upsert_lead` muda relatórios por origem. Registrar a origem anterior em
-  `metadata` para não perder o rastro.
+  de segundos; `ha_pergunta_em_aberto` (última fala com texto é da pessoa) é a
+  mitigação, já em vigor.
+- **Risco - lista mais cara:** `GET conversations` passa a ler as sessões da
+  clínica (uma query no DynamoDB) e a clínica (um SELECT). Falha nesses dois
+  não derruba a lista, só tira o selo.
 - **Risco - PILOT:** o lead fora da lista piloto continua sem bot; o selo
   "Fora da regra" vai aparecer para ele também, e está certo.
 - **Deploy:** backend e frontend independentes; sem migration. O frontend
@@ -157,7 +153,8 @@ A política continua sendo `LEADS_ONLY`. `ALL`, `PILOT` e `OFF` não mudam.
 - [ ] Mensagem avulsa não recebe resposta; a conversa aparece na lista com o
       selo "Fora da regra" e o filtro a isola.
 - [ ] "Ativar bot" na linha ou na conversa aberta faz o bot responder a
-      mensagem pendente em até alguns segundos, uma vez só.
+      mensagem pendente em até alguns segundos, uma vez só; fora do horário,
+      a resposta HTTP não promete o que não vai sair.
 - [ ] Depois de a atendente responder pelo celular, "Retomar bot" não manda
       nada até a pessoa escrever de novo.
 - [ ] Selos "Com atendente" e "Bot pausado" aparecem nos respectivos casos.
@@ -178,6 +175,6 @@ A política continua sendo `LEADS_ONLY`. `ALL`, `PILOT` e `OFF` não mudam.
 ## Status
 
 - [x] Pendente
-- [ ] Spec gerada: `spec/031-quem-o-bot-responde.md`
+- [x] Spec gerada: `spec/031-quem-o-bot-responde.md` (31/10/2026)
 - [ ] Implementado em:
 - [ ] Registrado em `TASKS_LOG.md`
