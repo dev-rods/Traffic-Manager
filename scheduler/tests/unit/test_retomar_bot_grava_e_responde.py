@@ -27,6 +27,12 @@ from src.services.session_store import grava_atendimento
 
 ENTREGA = 1791652625  # 2026-10-10T17:17:05Z
 
+# Clinica cuja janela de silencio nunca acontece (inicio == fim): a porta esta
+# sempre aberta, e o teste nao depende da hora em que roda.
+PORTA_ABERTA = {"bot_autoreply_policy": "ALL", "janela_de_silencio": {"start": "00:00", "end": "00:00"}}
+# Clinica em silencio o dia inteiro.
+EM_SILENCIO = {"bot_autoreply_policy": "ALL", "janela_de_silencio": {"start": "00:00", "end": "23:59"}}
+
 
 def ev(direction, content, quando, **extra):
     import time
@@ -151,7 +157,12 @@ class TestHandlerLevaOInstante(unittest.TestCase):
         evento = {"httpMethod": "POST", "path": "/attendant/deactivate", "headers": {"x-api-key": "k"},
                   "body": '{"clinic_id": "c1", "phone": "5511999990000"}'}
         sessao = {at.CAMPO: {"handler": at.HUMAN_ACTIVE, "versao": Decimal(1), "entregue_em": Decimal(ENTREGA)}}
-        with mock.patch.object(modulo, "require_api_key", return_value=("k", None)),              mock.patch.object(modulo, "_get_sessions_table"),              mock.patch.object(modulo, "_load_session", return_value={"session": sessao}),              mock.patch.object(modulo, "grava_atendimento", return_value=True),              mock.patch.object(modulo, "_agendar_retomada", return_value=True) as agenda:
+        with mock.patch.object(modulo, "require_api_key", return_value=("k", None)), \
+             mock.patch.object(modulo, "_get_sessions_table"), \
+             mock.patch.object(modulo, "_load_session", return_value={"session": sessao}), \
+             mock.patch.object(modulo, "grava_atendimento", return_value=True), \
+             mock.patch.object(modulo, "_get_clinic_completa", return_value=PORTA_ABERTA), \
+             mock.patch.object(modulo, "_agendar_retomada", return_value=True) as agenda:
             resposta = modulo.handler(evento, mock.MagicMock())
         self.assertEqual(resposta["statusCode"], 200)
         entregue = agenda.call_args.args[3]
@@ -172,6 +183,51 @@ class TestHandlerLevaOInstante(unittest.TestCase):
             resposta = modulo.handler(evento, mock.MagicMock())
         self.assertEqual(resposta["statusCode"], 500)
         agenda.assert_not_called()
+
+
+class TestPortaAntesDePrometer(unittest.TestCase):
+    """A resposta HTTP nao pode dizer "respondendo" quando a execucao assincrona
+    vai calar. Na janela de silencio o painel mostrava o bot escrevendo e nada
+    saia (PRD 031)."""
+
+    EVENTO = {"httpMethod": "POST", "path": "/attendant/deactivate", "headers": {"x-api-key": "k"},
+              "body": '{"clinic_id": "c1", "phone": "5511999990000"}'}
+
+    def _deactivate(self, clinica, sessao):
+        import json
+        from src.functions.attendant import handler as modulo
+        with mock.patch.object(modulo, "require_api_key", return_value=("k", None)), \
+             mock.patch.object(modulo, "_get_sessions_table"), \
+             mock.patch.object(modulo, "_load_session", return_value={"session": sessao}), \
+             mock.patch.object(modulo, "grava_atendimento", return_value=True) as grava, \
+             mock.patch.object(modulo, "_get_clinic_completa", return_value=clinica), \
+             mock.patch.object(modulo, "_agendar_retomada", return_value=True) as agenda:
+            resposta = modulo.handler(self.EVENTO, mock.MagicMock())
+        return json.loads(resposta["body"]), agenda, grava
+
+    def test_em_silencio_ativa_mas_nao_promete_resposta(self):
+        corpo, agenda, _ = self._deactivate(EM_SILENCIO, {at.CAMPO: {"handler": at.HUMAN_ACTIVE, "versao": 1}})
+        self.assertFalse(corpo["answering_open_question"])
+        self.assertEqual(corpo["motivo_sem_resposta"], "fora_do_horario")
+        agenda.assert_not_called()
+
+    def test_clinica_pausada_idem(self):
+        corpo, agenda, _ = self._deactivate(dict(PORTA_ABERTA, bot_paused=True), {})
+        self.assertFalse(corpo["answering_open_question"])
+        self.assertEqual(corpo["motivo_sem_resposta"], "bot_pausado")
+        agenda.assert_not_called()
+
+    def test_fora_da_regra_ativa_marca_e_responde(self):
+        """Cenario 3 do PRD 031: mensagem avulsa em LEADS_ONLY. 'Ativar bot' grava
+        bot_enabled e dispara a resposta ao que ficou pendente."""
+        clinica = dict(PORTA_ABERTA, bot_autoreply_policy="LEADS_ONLY")
+        corpo, agenda, grava = self._deactivate(clinica, {})
+        self.assertTrue(corpo["answering_open_question"])
+        self.assertIsNone(corpo["motivo_sem_resposta"])
+        agenda.assert_called_once()
+        sessao_gravada = grava.call_args.args[3]
+        self.assertTrue(sessao_gravada["bot_enabled"])
+        self.assertEqual(grava.call_args.kwargs["extras"], {"bot_enabled": True})
 
 
 if __name__ == "__main__":

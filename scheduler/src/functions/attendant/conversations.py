@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from collections import OrderedDict
 
 import boto3
@@ -11,6 +12,22 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 TABLE_NAME = os.environ.get("MESSAGE_EVENTS_TABLE", "")
+
+
+def _get_clinic(clinic_id):
+    """Politica de resposta da clinica. Falha vira dict vazio (politica ALL)."""
+    try:
+        from src.services.db.postgres import PostgresService
+
+        rows = PostgresService().execute_query(
+            "SELECT bot_autoreply_policy, bot_pilot_phones, bot_paused "
+            "FROM scheduler.clinics WHERE clinic_id = %s",
+            (clinic_id,),
+        )
+        return rows[0] if rows else {}
+    except Exception as e:
+        logger.warning(f"[Conversations] Não consegui ler a política de {clinic_id}: {e}")
+        return {}
 
 
 def handler(event, context):
@@ -81,6 +98,25 @@ def handler(event, context):
 
             if len(conversations) >= limit:
                 break
+
+        # Por que o bot esta calado em cada conversa (PRD 031). A lista vinha
+        # so do MessageEvents e nao sabia distinguir "fora da regra" de "com
+        # atendente": a recepcao abria uma a uma. Falha aqui nao derruba a
+        # lista, so tira o selo.
+        if conversations:
+            try:
+                from src.services import atendimento
+                from src.services.session_store import carrega_sessoes_da_clinica
+
+                clinic = _get_clinic(clinic_id)
+                sessoes = carrega_sessoes_da_clinica(clinic_id)
+                now = int(time.time())
+                for phone, conv in conversations.items():
+                    motivo = atendimento.motivo_da_pausa(clinic, sessoes.get(phone), phone, now)
+                    conv["pause_reason"] = motivo
+                    conv["bot_paused"] = motivo is not None
+            except Exception as e:
+                logger.warning(f"[Conversations] Sem motivo da pausa: {e}")
 
         # Enrich with patient names from PostgreSQL
         if conversations:
