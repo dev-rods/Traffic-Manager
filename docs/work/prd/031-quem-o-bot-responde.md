@@ -176,5 +176,5 @@ A política continua sendo `LEADS_ONLY`. `ALL`, `PILOT` e `OFF` não mudam.
 
 - [x] Pendente
 - [x] Spec gerada: `spec/031-quem-o-bot-responde.md` (31/10/2026)
-- [ ] Implementado em:
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 31/10/2026 (branch `feat/031-quem-o-bot-responde`)
+- [x] Registrado em `TASKS_LOG.md`

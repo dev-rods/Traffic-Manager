@@ -83,6 +83,8 @@ Use para rastrear o que foi implementado, refatorado ou removido.
 
 - **030** Site público oferece as próximas N datas (2026-10-30) — Substitui a regra do mês vigente (PRD 023): o site passa a oferecer as próximas N datas com horário, N = "Datas futuras" da clínica (`max_future_dates`, o mesmo limite do bot), atravessando a virada do mês. Hoje entra sem o que já passou; fechado e lotado não contam. `GET /public/.../availability` deixa de receber `dates` e de devolver `window`; a criação só aceita data e horário da grade oferecida. `mes_vigente.py` saiu: relógio da clínica em `relogio.py`, janela em `janela_do_site.py`. Site agrupa os dias por mês. Motivo: a Nobre Laser abre em 06/11 e em 30/10 o site não tinha nada a oferecer. Deploy do scheduler antes do merge. PRD: `prd/030-site-proximas-datas.md`.
 
+- **031** Quem o bot responde (2026-10-31) — Fecha os três cenários de resposta automática em `LEADS_ONLY`. Lead cadastrado por qualquer origem que não `whatsapp` dá direito ao bot (`ORIGEM_SEM_DIREITO` em `elegibilidade_do_bot`, usado pelo webhook e por "Iniciar pelo Bot"). `atendimento.motivo_da_pausa` substitui o cálculo inline em três handlers e passa a vir em `GET conversations`; o painel mostra selo (Fora da regra / Com atendente / Bot pausado), filtro e "Ativar bot" direto na linha. `attendant/deactivate` confere a porta antes de prometer resposta (`motivo_sem_resposta`). Achado: a retomada da pergunta pendente já existia; o PRD foi corrigido. PRD: `prd/031-quem-o-bot-responde.md`, Spec: `spec/031-quem-o-bot-responde.md`.
+
 (Adicione novas linhas acima desta.)
 
 ---

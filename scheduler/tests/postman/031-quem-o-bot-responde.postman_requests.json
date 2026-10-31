@@ -1,0 +1,89 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 031 (quem o bot responde)",
+    "description": "PRD/Spec 031. A lista de conversas diz por que o bot está calado em cada uma (pause_reason) e 'Ativar bot' (attendant/deactivate) responde a pergunta pendente sem prometer o que não vai sair. Preencha clinicId e phoneAvulso (número sem lead, que já escreveu para a clínica).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "API_KEY", "value": "YOUR_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "phoneAvulso", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Conversas recentes com motivo da pausa",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/conversations?limit=20",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "conversations"],
+          "query": [{ "key": "limit", "value": "20" }]
+        },
+        "description": "Cada conversa traz bot_paused e pause_reason (attendant | clinic_paused | not_eligible | null)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var r = pm.response.json();",
+              "pm.test(\"Toda conversa tem motivo (ou null)\", function () {",
+              "    r.conversations.forEach(function (c) {",
+              "        pm.expect(c).to.have.property(\"pause_reason\");",
+              "        pm.expect([\"attendant\", \"clinic_paused\", \"not_eligible\", null]).to.include(c.pause_reason);",
+              "        pm.expect(c.bot_paused).to.eql(c.pause_reason !== null);",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ativar bot numa conversa fora da regra",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/attendant/deactivate",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "attendant", "deactivate"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"clinic_id\": \"{{clinicId}}\", \"phone\": \"{{phoneAvulso}}\"}"
+        },
+        "description": "Grava bot_enabled e responde a pergunta pendente. Fora do horário ou com o bot pausado, answering_open_question é false e motivo_sem_resposta explica."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var r = pm.response.json();",
+              "pm.test(\"Diz se vai responder\", function () { pm.expect(r.answering_open_question).to.be.a(\"boolean\"); });",
+              "pm.test(\"Motivo coerente\", function () {",
+              "    if (r.answering_open_question) { pm.expect(r.motivo_sem_resposta).to.eql(null); }",
+              "    else { pm.expect([null, \"fora_do_horario\", \"bot_pausado\"]).to.include(r.motivo_sem_resposta); }",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
