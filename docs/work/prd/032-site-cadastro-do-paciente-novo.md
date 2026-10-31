@@ -183,6 +183,6 @@ site passa a usar a mesma.
 ## Status
 
 - [x] Pendente
-- [ ] Spec gerada: `spec/032-site-cadastro-do-paciente-novo.md`
+- [x] Spec gerada: `spec/032-site-cadastro-do-paciente-novo.md` (31/10/2026)
 - [ ] Implementado em:
 - [ ] Registrado em `TASKS_LOG.md`
