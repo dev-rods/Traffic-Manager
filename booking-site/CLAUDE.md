@@ -17,6 +17,11 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
   direto e a confirmação chega pelo WhatsApp do cliente (template `BOOKED`,
   o mesmo que o bot usa — ver `_send_confirmation_whatsapp` em
   `scheduler/src/functions/public_booking/create_appointment.py`).
+- **Quem ainda não é paciente completa o cadastro** (PRD 032): a cotação com
+  o celular devolve `quote.cadastro.faltam`, o `CustomerInfoForm` mostra só
+  esses campos (CPF, nascimento, e-mail) e a criação os exige
+  (`400 CADASTRO_INCOMPLETO`). A régua é a do bot
+  (`identificacao_de_paciente.CAMPOS_DO_CADASTRO`); o site só exibe.
 - **"Meus agendamentos" continua exigindo verificação** — um código de 6
   dígitos por WhatsApp (não SMS), já que sem isso qualquer pessoa veria/
   cancelaria agendamento de outra só digitando o telefone dela. Ver

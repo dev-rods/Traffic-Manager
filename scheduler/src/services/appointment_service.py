@@ -104,6 +104,9 @@ class AppointmentService:
         full_name: Optional[str] = None,
         notes: Optional[str] = None,
         is_first_visit: Optional[bool] = None,
+        cpf: Optional[str] = None,
+        birth_date: Optional[str] = None,
+        email: Optional[str] = None,
     ) -> Dict[str, Any]:
         """`is_first_visit=None` deixa o sistema decidir; um booleano manda.
 
@@ -113,7 +116,7 @@ class AppointmentService:
         veio antes do sistema existir, ou que remarcou por fora.
         """
         # 1. Get or create patient
-        patient = self._get_or_create_patient(clinic_id, phone, full_name)
+        patient = self._get_or_create_patient(clinic_id, phone, full_name, cpf, birth_date, email)
         patient_id = str(patient["id"])
 
         # 2. Resolve service list and duration
@@ -1021,17 +1024,19 @@ class AppointmentService:
         )
 
     def _get_or_create_patient(self, clinic_id: str, phone: str,
-                               full_name: Optional[str] = None) -> Dict[str, Any]:
+                               full_name: Optional[str] = None, cpf: Optional[str] = None,
+                               birth_date: Optional[str] = None, email: Optional[str] = None) -> Dict[str, Any]:
         """O paciente do agendamento, criado se ainda não existir.
 
-        O nome entra junto. Antes o INSERT levava só clínica e telefone, e todo
-        paciente novo nascia anônimo: a agenda mostrava a linha sem nome, e o
-        painel de pacientes também. Isso valia para o bot e para o painel - o
-        `full_name` chegava até aqui e era descartado na porta.
+        Nome, CPF, nascimento e e-mail entram juntos (os três últimos vêm do
+        site, PRD 032; bot e painel passam None). Antes o INSERT levava só
+        clínica e telefone, e todo paciente novo nascia anônimo: a agenda
+        mostrava a linha sem nome, e o painel de pacientes também.
 
-        Nome já cadastrado NÃO é sobrescrito. Quem está no sistema pode ter sido
-        corrigido à mão, e o que vem no agendamento é o que a pessoa digitou no
-        WhatsApp naquele dia - não é mais confiável que a clínica.
+        O que já está cadastrado NÃO é sobrescrito: só o que está vazio é
+        preenchido (COALESCE). Quem está no sistema pode ter sido corrigido à
+        mão, e o que vem no agendamento é o que a pessoa digitou naquele dia -
+        não é mais confiável que a clínica.
         """
         from src.utils.phone import normalize_phone
         phone = normalize_phone(phone)
@@ -1047,26 +1052,42 @@ class AppointmentService:
         if patients:
             existing = patients[0]
             if existing.get("deleted_at") is None:
-                # Cadastro sem nome é o rastro do defeito antigo. Preencher na
-                # primeira oportunidade evita que ele fique anônimo para sempre.
-                if nome and not (existing.get("name") or "").strip():
+                # Preenche só o que está vazio, e só se veio algo para preencher.
+                # Cadastro sem nome é o rastro do defeito antigo; CPF, nascimento
+                # e e-mail vazios são o paciente que nasceu pelo site antes do
+                # PRD 032. Nada existente é tocado.
+                if _completa_algo(existing, nome, cpf, birth_date, email):
                     atualizado = self.db.execute_write_returning(
-                        "UPDATE scheduler.patients SET name = %s, updated_at = NOW() "
-                        "WHERE id = %s::uuid RETURNING *",
-                        (nome, str(existing["id"])),
+                        """
+                        UPDATE scheduler.patients
+                           SET name = COALESCE(NULLIF(name, ''), %s),
+                               cpf = COALESCE(NULLIF(cpf, ''), %s),
+                               birth_date = COALESCE(birth_date, %s::date),
+                               email = COALESCE(NULLIF(email, ''), %s),
+                               updated_at = NOW()
+                         WHERE id = %s::uuid
+                        RETURNING *
+                        """,
+                        (nome, cpf, birth_date, email, str(existing["id"])),
                     )
                     return atualizado or existing
                 return existing
 
-            # Soft-deleted patient came back — restore in place
+            # Soft-deleted patient came back — restore in place, completing
+            # what is empty with what came along.
             restored = self.db.execute_write_returning(
                 """
                 UPDATE scheduler.patients
-                SET deleted_at = NULL, updated_at = NOW()
-                WHERE id = %s::uuid
+                   SET deleted_at = NULL,
+                       name = COALESCE(NULLIF(name, ''), %s),
+                       cpf = COALESCE(NULLIF(cpf, ''), %s),
+                       birth_date = COALESCE(birth_date, %s::date),
+                       email = COALESCE(NULLIF(email, ''), %s),
+                       updated_at = NOW()
+                 WHERE id = %s::uuid
                 RETURNING *
                 """,
-                (str(existing["id"]),),
+                (nome, cpf, birth_date, email, str(existing["id"])),
             )
             logger.info(
                 f"[AppointmentService] Patient restored from soft-delete: id={existing['id']} phone={phone}"
@@ -1075,11 +1096,20 @@ class AppointmentService:
 
         result = self.db.execute_write_returning(
             """
-            INSERT INTO scheduler.patients (clinic_id, phone, name, created_at, updated_at)
-            VALUES (%s, %s, %s, NOW(), NOW())
+            INSERT INTO scheduler.patients (clinic_id, phone, name, cpf, birth_date, email, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s::date, %s, NOW(), NOW())
             RETURNING *
             """,
-            (clinic_id, phone, nome),
+            (clinic_id, phone, nome, cpf, birth_date, email),
         )
 
         return result
+
+
+def _completa_algo(existente: Dict[str, Any], nome, cpf, birth_date, email) -> bool:
+    """Veio algum dado para um campo que está vazio no cadastro?"""
+    def vazio(campo):
+        v = existente.get(campo)
+        return v is None or (isinstance(v, str) and not v.strip())
+    return any(novo and vazio(campo) for campo, novo in (
+        ("name", nome), ("cpf", cpf), ("birth_date", birth_date), ("email", email)))

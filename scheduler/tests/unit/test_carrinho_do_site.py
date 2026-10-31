@@ -27,6 +27,8 @@ from src.services.duration_rules import calcula_duracao
 
 CLINIC = "clinica-teste-0001"
 FONE = "5511999990000"
+PACIENTE_COMPLETO = {"id": "00000000-0000-4000-8000-00000000p001", "name": "Maria Silva",
+                     "cpf": "52998224725", "birth_date": "1990-01-01", "email": "maria@x.com"}
 
 SVC = "11111111-1111-1111-1111-111111111111"
 SVC_SEM_AREA = "22222222-2222-2222-2222-222222222222"
@@ -65,12 +67,20 @@ def _pares_dos_params(params):
 class Db:
     """Responde por conteúdo do SQL, com o catálogo acima."""
 
-    def __init__(self, personalizado=None, clinica=True, datas_futuras=None):
+    def __init__(self, personalizado=None, clinica=True, datas_futuras=None, paciente="completo",
+                 dono_do_cpf=None):
         self.personalizado = personalizado
         self.clinica = clinica
         self.datas_futuras = datas_futuras
+        # "completo": FONE e de um paciente com os quatro dados (os testes
+        # antigos nao mudam); None: numero novo; dict: cadastro parcial.
+        self.paciente = paciente
+        # id de outro paciente que ja tem o CPF informado (PRD 032).
+        self.dono_do_cpf = dono_do_cpf
+        self.consultas = []
 
     def execute_query(self, sql, params=None):
+        self.consultas.append((sql, params))
         if "FROM scheduler.clinics" in sql:
             if not self.clinica:
                 return []
@@ -90,6 +100,12 @@ class Db:
             return [DURACAO_REGRAS]
         if "discount_rules" in sql:
             return [REGRAS]
+        if "FROM scheduler.patients" in sql and "cpf = %s" in sql:
+            return [{"id": self.dono_do_cpf}] if self.dono_do_cpf else []
+        if "FROM scheduler.patients" in sql:
+            if self.paciente == "completo":
+                return [PACIENTE_COMPLETO]
+            return [self.paciente] if self.paciente else []
         if "FROM scheduler.professionals" in sql:
             return [{"id": params[0]}] if params[0] == PROFISSIONAL and params[1] == CLINIC else []
         if "custom_discount_pct" in sql:

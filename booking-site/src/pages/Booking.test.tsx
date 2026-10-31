@@ -255,6 +255,97 @@ describe('Booking - preço e desconto', () => {
   })
 })
 
+describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
+  const SEM_CADASTRO: Quote = {
+    ...NO_DISCOUNT,
+    cadastro: { completo: false, faltam: ['birth_date', 'cpf', 'email'] },
+  }
+
+  beforeEach(() => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap())
+    vi.mocked(bookingService.availability).mockResolvedValue(availability())
+    vi.mocked(bookingService.createAppointment).mockResolvedValue({
+      final_price_cents: 15000,
+    } as Appointment)
+  })
+
+  it('número novo: os campos aparecem depois do celular e vão no payload normalizados', async () => {
+    vi.mocked(bookingService.quote).mockImplementation(async (_c, _cart, phone) =>
+      phone ? SEM_CADASTRO : NO_DISCOUNT
+    )
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+
+    // Antes do celular, nada de cadastro na tela.
+    expect(screen.queryByLabelText(/cpf/i)).not.toBeInTheDocument()
+    await fillCustomer()
+
+    await userEvent.type(await screen.findByLabelText(/cpf/i), '52998224725')
+    await userEvent.type(screen.getByLabelText(/nascimento/i), '31101990')
+    await userEvent.type(screen.getByLabelText(/e-mail/i), 'Maria@X.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+
+    await waitFor(() => expect(bookingService.createAppointment).toHaveBeenCalled())
+    const payload = vi.mocked(bookingService.createAppointment).mock.calls.at(-1)![1]
+    expect(payload).toMatchObject({ cpf: '52998224725', birthDate: '1990-10-31', email: 'Maria@X.com' })
+  })
+
+  it('paciente completo: só nome e celular, e nada de cadastro no payload', async () => {
+    vi.mocked(bookingService.quote).mockResolvedValue({
+      ...NO_DISCOUNT,
+      cadastro: { completo: true, faltam: [] },
+    })
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    expect(screen.queryByLabelText(/cpf/i)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+
+    await waitFor(() => expect(bookingService.createAppointment).toHaveBeenCalled())
+    const payload = vi.mocked(bookingService.createAppointment).mock.calls.at(-1)![1]
+    expect(payload.cpf).toBeUndefined()
+    expect(payload.birthDate).toBeUndefined()
+    expect(payload.email).toBeUndefined()
+  })
+
+  it('servidor pediu o cadastro que a tela não mostrou: avisa o que falta', async () => {
+    vi.mocked(bookingService.quote).mockResolvedValue(NO_DISCOUNT)
+    vi.mocked(bookingService.createAppointment).mockRejectedValue(
+      new ApiError('Para a primeira sessão precisamos de CPF, data de nascimento e e-mail.', 400, {
+        code: 'CADASTRO_INCOMPLETO',
+        faltam: ['cpf', 'email'],
+      })
+    )
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Precisamos completar seu cadastro: CPF e e-mail.')
+  })
+
+  it('CPF de outro paciente: mostra a mensagem do servidor', async () => {
+    vi.mocked(bookingService.quote).mockResolvedValue(NO_DISCOUNT)
+    vi.mocked(bookingService.createAppointment).mockRejectedValue(
+      new ApiError('Este CPF já está cadastrado com outro celular. Fale com a clínica.', 409, {
+        code: 'CPF_EM_USO',
+      })
+    )
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Este CPF já está cadastrado com outro celular')
+    // Não é "horário ocupado": continua na tela de dados.
+    expect(screen.queryByText('Escolha o dia')).not.toBeInTheDocument()
+  })
+})
+
 describe('Booking - agendamento futuro no mesmo número', () => {
   const duplicate = new ApiError('Este número já tem agendamento futuro nesta clínica.', 409, {
     code: 'HAS_FUTURE_APPOINTMENT',

@@ -16,6 +16,8 @@ interface ApiErrorBody {
   message?: string
   code?: string
   existingCount?: number
+  /** 400 CADASTRO_INCOMPLETO: os campos do cadastro que faltaram (PRD 032). */
+  faltam?: string[]
 }
 
 /**

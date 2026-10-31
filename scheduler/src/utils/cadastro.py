@@ -49,6 +49,23 @@ def normaliza_data_nascimento(valor):
     return False
 
 
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def normaliza_email(valor):
+    """Minúsculo e sem espaços, ou None quando vazio, ou False quando inválido.
+
+    Mesma convenção de `normaliza_cpf`: False é erro, None é ausência. Até o
+    PRD 032 ninguém validava e-mail; o painel só tirava espaços.
+    """
+    if valor is None:
+        return None
+    texto = str(valor).strip().lower()
+    if not texto:
+        return None
+    return texto if _EMAIL.match(texto) else False
+
+
 def cpf_valido(digitos):
     """Os dígitos verificadores batem.
 

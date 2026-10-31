@@ -3,6 +3,7 @@ import logging
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
 from src.utils.phone import is_valid_br_phone
 from src.services.db.postgres import PostgresService
+from src.services import carrinho
 from src.services.carrinho import CarrinhoInvalido, cota, pares_do_corpo, valida_carrinho
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,10 @@ def handler(event, context):
         "serviceAreaPairs": [{"serviceId": "uuid", "areaId": "uuid"}],  // opcional
         "phone": "5511999999999"                                         // opcional
     }
+
+    Com telefone, `quote.cadastro` diz se o cadastro do paciente está completo
+    e quais campos faltam (`cpf`, `birth_date`, `email`), para o site pedir só
+    o que falta antes de criar (PRD 032). Sem telefone, `cadastro` é null.
 
     O valor que o site mostra antes de confirmar - total pela tabela, desconto
     e valor final -, calculado pelas MESMAS funções que a criação usa para
@@ -73,6 +78,13 @@ def handler(event, context):
 
         cotacao = cota(db, clinic_id, service_ids, pares, phone)
 
+        # O que falta no cadastro deste celular, para o site pedir só isso
+        # (PRD 032). Só nomes de campos: "tem cadastro completo" é do mesmo
+        # tamanho do que esta rota já revela com "primeira sessão", e nunca
+        # traz valores.
+        cadastro = carrinho.cadastro_para_o_site(
+            carrinho.paciente_do_telefone(db, clinic_id, phone)) if phone else None
+
         logger.info(
             f"[PublicBooking][quote] {clinic_id} tel={_final_do_telefone(phone)}: "
             f"pares={len(pares)}->{cotacao.qtd_areas} combos={len(cotacao.combos)} "
@@ -88,6 +100,7 @@ def handler(event, context):
                 "discountReason": None if phone else cotacao.desconto.razao,
                 "finalPriceCents": cotacao.final_cents,
                 "areaCount": cotacao.qtd_areas,
+                "cadastro": cadastro,
                 "combos": [
                     {"from": t["de"], "to": t["para"], "savingsCents": t["economia_cents"]}
                     for t in cotacao.combos
