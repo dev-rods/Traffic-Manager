@@ -23,7 +23,6 @@ import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorState } from '@/components/ui/ErrorState'
-import { EmptyState } from '@/components/ui/EmptyState'
 import { IconCheckCircle, IconChevronLeft } from '@/components/ui/icons'
 import { ApiError } from '@/services/api'
 import { formatCurrencyBRL, formatDateLong, formatPhoneDisplay, toApiPhone } from '@/utils/format'
@@ -67,7 +66,6 @@ export function Booking() {
   const slotsRef = useRef<HTMLDivElement>(null)
 
   const serviceAreas = bootstrap.data?.serviceAreas ?? []
-  const professionals = bootstrap.data?.professionals ?? []
   const pendingAreas = cartPendingAreaSelection(cart.items, serviceAreas)
   const cartReady = bootstrap.isSuccess && cart.items.length > 0 && pendingAreas.length === 0
   const cartPayload = toCartPayload(cart.items, serviceAreas)
@@ -144,18 +142,6 @@ export function Booking() {
       <ErrorState
         message="Não foi possível carregar este salão."
         onRetry={() => bootstrap.refetch()}
-      />
-    )
-  }
-
-  // Sem profissional cadastrado não há quem receber o agendamento - a
-  // AvailabilityEngine nunca abre um horário, e sem isto o cliente veria o
-  // calendário inteiro "fechado" sem entender por quê.
-  if (professionals.length === 0) {
-    return (
-      <EmptyState
-        title="Agendamento online indisponível no momento"
-        description="Este salão ainda não está aceitando agendamentos pela internet. Entre em contato diretamente para marcar seu horário."
       />
     )
   }
