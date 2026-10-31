@@ -15,7 +15,7 @@ os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "t")
 
 from src.functions.attendant import conversations as C
 from src.services import atendimento as at
-from src.services.session_store import carrega_sessoes_da_clinica
+from src.services.sessoes_da_clinica import carrega_sessoes_da_clinica
 
 COM_PESSOA = "5511999990001"
 AVULSO = "5511999990002"
@@ -53,7 +53,7 @@ def chama(clinica, sessoes=None):
     with mock.patch.object(C, "require_api_key", return_value=("k", None)), \
          mock.patch.object(C, "boto3") as boto, \
          mock.patch("src.services.db.postgres.PostgresService", return_value=db), \
-         mock.patch("src.services.session_store.carrega_sessoes_da_clinica",
+         mock.patch("src.services.sessoes_da_clinica.carrega_sessoes_da_clinica",
                     side_effect=sessoes or (lambda c: carrega_sessoes_da_clinica(c, table=TabelaDeSessoes()))):
         boto.resource.return_value.Table.return_value = TabelaDeEventos()
         r = C.handler(evento_http, None)

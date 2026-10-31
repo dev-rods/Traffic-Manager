@@ -106,7 +106,7 @@ def handler(event, context):
         if conversations:
             try:
                 from src.services import atendimento
-                from src.services.session_store import carrega_sessoes_da_clinica
+                from src.services.sessoes_da_clinica import carrega_sessoes_da_clinica
 
                 clinic = _get_clinic(clinic_id)
                 sessoes = carrega_sessoes_da_clinica(clinic_id)
