@@ -508,6 +508,9 @@ export interface ConversationPreview {
   last_direction: 'INBOUND' | 'OUTBOUND'
   last_message_at: string
   sender_name: string
+  /** Por que o bot está calado nesta conversa (PRD 031). Ausente no backend antigo. */
+  bot_paused?: boolean
+  pause_reason?: PauseReason
 }
 
 export type MessageStatus =
