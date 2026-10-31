@@ -10,7 +10,8 @@ from src.services.appointment_service import AppointmentService, ConflictError, 
 from src.services.template_service import TemplateService
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.politica_de_desconto import texto_do_preco
-from src.services import carrinho, mes_vigente
+from src.services import carrinho, janela_do_site, relogio
+from src.services.availability_engine import AvailabilityEngine
 from src.providers.zapi_provider import ZApiProvider
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,7 @@ def handler(event, context):
         db = PostgresService()
 
         clinics = db.execute_query(
-            "SELECT clinic_id, timezone, zapi_instance_id, zapi_instance_token FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
+            "SELECT clinic_id, timezone, max_future_dates, zapi_instance_id, zapi_instance_token FROM scheduler.clinics WHERE clinic_id = %s AND active = TRUE",
             (clinic_id,),
         )
         if not clinics:
@@ -179,21 +180,24 @@ def handler(event, context):
         pares = carrinho.pares_do_corpo(body.get("serviceAreaPairs"))
         service_ids = carrinho.valida_carrinho(db, clinic_id, service_ids, pares)
 
-        # A janela do site vale aqui também, não só na tela: o calendário não
-        # oferece fora dela, mas uma requisição direta não passa pelo calendário.
-        agora = mes_vigente.agora_na_clinica(clinics[0].get("timezone"))
-        hh, mm = (int(x) for x in str(appt_time).split(":"))
-        passou = data == agora.date() and hh * 60 + mm < mes_vigente.minutos_de_agora(agora)
-        if not mes_vigente.dentro(data, agora) or passou:
-            return http_response(400, {
-                "status": "ERROR",
-                "message": "Esta data não está disponível para agendamento online.",
-            })
-
         # Combos, duração e desconto pelas mesmas funções do agente. Os pares
         # que seguem para a criação são os de DEPOIS do combo: duração, preço e
         # o que fica gravado são os que o WhatsApp gravaria para o mesmo pedido.
         cotacao = carrinho.cota(db, clinic_id, service_ids, pares, phone)
+
+        # A janela do site vale aqui também, não só na tela: o calendário só
+        # oferece as próximas datas com horário, mas uma requisição direta não
+        # passa pelo calendário. Data e horário têm de estar na grade oferecida
+        # (a mesma função de `availability`), o que já exclui o que passou hoje.
+        agora = relogio.agora_na_clinica(clinics[0].get("timezone"))
+        oferecidos = janela_do_site.dias_oferecidos(
+            AvailabilityEngine(db), clinic_id, cotacao.duracao_minutos, agora,
+            janela_do_site.quantas(clinics[0]))
+        if str(appt_time) not in oferecidos.get(data.isoformat(), {}).get("slots", []):
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "Esta data não está disponível para agendamento online.",
+            })
 
         logger.info(
             f"[PublicBooking][create] {clinic_id} {appt_date} {appt_time} "

@@ -102,7 +102,7 @@ export function ConfiguracoesPage() {
               onChange={(v) => set('max_future_dates', v)}
               min={1}
               max={90}
-              help="Máx. dias que o paciente vê"
+              help="Datas com horário que o bot e o site oferecem"
             />
           </div>
         </Section>

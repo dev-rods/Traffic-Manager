@@ -38,8 +38,9 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
   409 `HAS_FUTURE_APPOINTMENT` (só a contagem) e o site reenvia com
   `confirmDuplicate: true` se a pessoa quiser manter os dois. O 409 sem `code`
   continua sendo horário ocupado.
-- **Agenda só do mês vigente**, no fuso da clínica — a regra mora no backend
-  (`scheduler/src/services/mes_vigente.py`); o front só exibe `window`.
+- **Agenda = as próximas N datas com horário** (N = "Datas futuras" da
+  clínica), no fuso da clínica — a regra mora no backend
+  (`scheduler/src/services/janela_do_site.py`); o front só exibe `days`.
 - Multi-tenant por `clinic_id` na URL: `/:clinicId` (lista de serviços) e
   `/:clinicId/agendar` (wizard).
 

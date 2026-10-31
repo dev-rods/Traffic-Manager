@@ -122,17 +122,10 @@ export interface DayAvailability {
   slots: string[]
 }
 
-// Janela do site (hoje até o fim do mês, no fuso da clínica) — a regra mora no
-// backend; o front só a exibe.
-export interface AvailabilityWindow {
-  start: string
-  end: string
-  nextOpensOn: string
-}
-
+// As próximas N datas com horário, em ordem (N = "Datas futuras" da clínica,
+// no fuso dela) — a regra mora no backend; o front só exibe.
 export interface AvailabilityResponse {
   days: Record<string, DayAvailability>
-  window: AvailabilityWindow
 }
 
 // Item do carrinho: um serviço + as áreas escolhidas (vazio se o serviço não

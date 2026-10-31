@@ -2,13 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DayList } from './DayList'
-import type { AvailabilityWindow, DayAvailability } from '@/types'
-
-const WINDOW: AvailabilityWindow = {
-  start: '2026-10-28',
-  end: '2026-10-31',
-  nextOpensOn: '2026-11-01',
-}
+import type { DayAvailability } from '@/types'
 
 const DAYS: Record<string, DayAvailability> = {
   '2026-10-28': { status: 'AVAILABLE', slots: ['09:00'] },
@@ -23,7 +17,6 @@ function renderList(props: Partial<Parameters<typeof DayList>[0]> = {}) {
   render(
     <DayList
       days={DAYS}
-      bookingWindow={WINDOW}
       isLoading={false}
       isError={false}
       onRetry={onRetry}
@@ -55,10 +48,22 @@ describe('DayList', () => {
     expect(onSelectDate).toHaveBeenCalledWith('2026-10-28')
   })
 
-  it('mês sem vaga explica quando o próximo abre e oferece contato', () => {
+  it('atravessa a virada do mês, com um título por mês', () => {
+    renderList({
+      days: {
+        '2026-10-30': { status: 'AVAILABLE', slots: ['09:00'] },
+        '2026-11-02': { status: 'AVAILABLE', slots: ['09:00'] },
+        '2026-11-04': { status: 'AVAILABLE', slots: ['09:00'] },
+      },
+    })
+    expect(screen.getByText('outubro 2026')).toBeInTheDocument()
+    expect(screen.getByText('novembro 2026')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'SEG 2 de novembro' })).toBeInTheDocument()
+  })
+
+  it('sem nenhuma data oferece contato', () => {
     renderList({ days: { '2026-10-29': { status: 'FULL', slots: [] } } })
-    expect(screen.getByText('Não há mais horários disponíveis em outubro.')).toBeInTheDocument()
-    expect(screen.getByText('A agenda de novembro abre em 01/11.')).toBeInTheDocument()
+    expect(screen.getByText('Não há horários disponíveis no momento.')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Falar com a clínica/ })).toHaveAttribute(
       'href',
       'https://wa.me/5511999990000'

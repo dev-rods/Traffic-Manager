@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 
 # Horizonte de busca por dias disponíveis, em dias corridos a partir de hoje.
 MAX_SEARCH_DAYS = 90
+# Quantos dias com horário o bot e o site oferecem quando a clínica não configurou.
+PADRAO_DATAS_FUTURAS = 5
 
 
 class AvailabilityEngine:
@@ -39,7 +41,13 @@ class AvailabilityEngine:
             self._buffer_clinica[clinic_id] = rows[0]["buffer_minutes"] if rows else 10
         return self._buffer_clinica[clinic_id]
 
-    def _candidate_dates(self, clinic_id: str, start: date, horizon_days: int) -> List[str]:
+    def datas_com_regra(self, clinic_id: str, inicio: date, horizonte_dias: int) -> List[str]:
+        """Como `_candidate_dates`, mas `inicio` (hoje) entra: o site oferece
+        hoje com os horários que ainda não passaram; o bot começa em amanhã."""
+        return self._candidate_dates(clinic_id, inicio, horizonte_dias, inclui_inicio=True)
+
+    def _candidate_dates(self, clinic_id: str, start: date, horizon_days: int,
+                         inclui_inicio: bool = False) -> List[str]:
         """Datas do horizonte que têm alguma regra de disponibilidade.
 
         Resolve numa única query quais dias sequer podem ter horário, em vez de
@@ -64,7 +72,7 @@ class AvailabilityEngine:
         dias_semana = {r["day_of_week"] for r in rows if r.get("day_of_week") is not None}
 
         candidatas = []
-        for i in range(1, horizon_days + 1):
+        for i in range(0 if inclui_inicio else 1, horizon_days + 1):
             alvo = start + timedelta(days=i)
             # day_of_week no banco: 0=domingo ... 6=sábado
             if alvo in datas_fixas or (alvo.isoweekday() % 7) in dias_semana:
@@ -369,7 +377,7 @@ class AvailabilityEngine:
             "SELECT max_future_dates FROM scheduler.clinics WHERE clinic_id = %s",
             (clinic_id,),
         )
-        return (clinic[0].get("max_future_dates") or 5) if clinic else 5
+        return (clinic[0].get("max_future_dates") or PADRAO_DATAS_FUTURAS) if clinic else PADRAO_DATAS_FUTURAS
 
 
 def _time_to_minutes(t) -> int:

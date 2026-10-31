@@ -1,4 +1,4 @@
-import type { AvailabilityWindow, DayAvailability } from '@/types'
+import type { DayAvailability } from '@/types'
 import { cx } from '@/utils/cx'
 import { toApiPhone } from '@/utils/format'
 import { ErrorState } from './ui/ErrorState'
@@ -6,7 +6,6 @@ import { IconChat } from './ui/icons'
 
 interface DayListProps {
   days: Record<string, DayAvailability> | undefined
-  bookingWindow: AvailabilityWindow | undefined
   isLoading: boolean
   isError: boolean
   onRetry: () => void
@@ -36,19 +35,34 @@ function parseISO(iso: string): Date {
   return new Date(y, m - 1, d)
 }
 
-function formatDayMonth(iso: string): string {
-  const [, m, d] = iso.split('-')
-  return `${d}/${m}`
+interface MonthGroup {
+  label: string
+  dates: string[]
+}
+
+/** Os dias em ordem, agrupados por mês — a lista pode atravessar a virada. */
+function groupByMonth(dates: string[]): MonthGroup[] {
+  const groups: MonthGroup[] = []
+  for (const iso of dates) {
+    const d = parseISO(iso)
+    const label = `${MONTH_LONG[d.getMonth()]} ${d.getFullYear()}`
+    const last = groups[groups.length - 1]
+    if (last && last.label === label) {
+      last.dates.push(iso)
+    } else {
+      groups.push({ label, dates: [iso] })
+    }
+  }
+  return groups
 }
 
 /**
- * Só os dias com horário, dentro do mês vigente. Fechado e lotado não são
- * opção — nem aparecem. A janela (até quando, e quando o próximo mês abre)
- * vem do backend, no fuso da clínica.
+ * Só os dias com horário: as próximas N datas que o backend oferece, no fuso
+ * da clínica. Fechado e lotado não são opção — nem aparecem. Quantas e quais
+ * é decisão do backend; aqui só se exibe.
  */
 export function DayList({
   days,
-  bookingWindow,
   isLoading,
   isError,
   onRetry,
@@ -66,7 +80,7 @@ export function DayList({
     )
   }
 
-  if (isError || !days || !bookingWindow) {
+  if (isError || !days) {
     return (
       <ErrorState message="Não foi possível carregar as datas disponíveis." onRetry={onRetry} />
     )
@@ -75,17 +89,15 @@ export function DayList({
   const available = Object.keys(days)
     .filter((iso) => days[iso].status === 'AVAILABLE')
     .sort()
-  const month = MONTH_LONG[parseISO(bookingWindow.start).getMonth()]
-  const nextMonth = MONTH_LONG[parseISO(bookingWindow.nextOpensOn).getMonth()]
 
   if (available.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-2xl border border-ink-200 bg-surface px-5 py-8 text-center">
         <p className="font-display text-lg text-ink-800">
-          Não há mais horários disponíveis em {month}.
+          Não há horários disponíveis no momento.
         </p>
         <p className="max-w-sm text-sm text-ink-500">
-          A agenda de {nextMonth} abre em {formatDayMonth(bookingWindow.nextOpensOn)}.
+          A agenda é atualizada com frequência. Se preferir, fale direto com a clínica.
         </p>
         {clinicPhone ? (
           <a
@@ -103,53 +115,58 @@ export function DayList({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-center font-medium capitalize text-ink-800">
-        {month} {parseISO(bookingWindow.start).getFullYear()}
-      </p>
-      {/* Faixa compacta como a da referência: rola na horizontal quando não
-          cabe e fica centralizada quando cabe. O mês fica no título, não em
-          cada dia (PRD 025, V4). */}
-      <div className="-mx-5 snap-x overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">
-        <div className="mx-auto flex w-max gap-2">
-          {available.map((iso) => {
-            const d = parseISO(iso)
-            const isSelected = iso === selectedDate
-            return (
-              <button
-                key={iso}
-                type="button"
-                onClick={() => onSelectDate(iso)}
-                aria-pressed={isSelected}
-                aria-label={`${WEEKDAY_SHORT[d.getDay()]} ${d.getDate()} de ${MONTH_LONG[d.getMonth()]}`}
-                className={cx(
-                  'relative flex h-16 w-14 shrink-0 cursor-pointer snap-start flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg transition-colors duration-150',
-                  isSelected
-                    ? 'bg-accent-100 text-ink-900'
-                    : 'bg-ink-100 text-ink-700 hover:bg-ink-200'
-                )}
-              >
-                <span
-                  className={cx(
-                    'text-xs font-semibold',
-                    isSelected ? 'text-accent-700' : 'text-ink-500'
-                  )}
-                >
-                  {WEEKDAY_SHORT[d.getDay()]}
-                </span>
-                <span
-                  className={cx('text-xl tabular-nums', isSelected ? 'font-bold' : 'font-medium')}
-                >
-                  {d.getDate()}
-                </span>
-                {isSelected ? (
-                  <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-accent-400" />
-                ) : null}
-              </button>
-            )
-          })}
+    <div className="flex flex-col gap-5">
+      {groupByMonth(available).map((group) => (
+        <div key={group.label} className="flex flex-col gap-3">
+          <p className="text-center font-medium capitalize text-ink-800">{group.label}</p>
+          {/* Faixa compacta como a da referência: rola na horizontal quando não
+              cabe e fica centralizada quando cabe. O mês fica no título, não em
+              cada dia (PRD 025, V4). */}
+          <div className="-mx-5 snap-x overflow-x-auto px-5 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0">
+            <div className="mx-auto flex w-max gap-2">
+              {group.dates.map((iso) => {
+                const d = parseISO(iso)
+                const isSelected = iso === selectedDate
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => onSelectDate(iso)}
+                    aria-pressed={isSelected}
+                    aria-label={`${WEEKDAY_SHORT[d.getDay()]} ${d.getDate()} de ${MONTH_LONG[d.getMonth()]}`}
+                    className={cx(
+                      'relative flex h-16 w-14 shrink-0 cursor-pointer snap-start flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg transition-colors duration-150',
+                      isSelected
+                        ? 'bg-accent-100 text-ink-900'
+                        : 'bg-ink-100 text-ink-700 hover:bg-ink-200'
+                    )}
+                  >
+                    <span
+                      className={cx(
+                        'text-xs font-semibold',
+                        isSelected ? 'text-accent-700' : 'text-ink-500'
+                      )}
+                    >
+                      {WEEKDAY_SHORT[d.getDay()]}
+                    </span>
+                    <span
+                      className={cx(
+                        'text-xl tabular-nums',
+                        isSelected ? 'font-bold' : 'font-medium'
+                      )}
+                    >
+                      {d.getDate()}
+                    </span>
+                    {isSelected ? (
+                      <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-accent-400" />
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
-      </div>
+      ))}
     </div>
   )
 }

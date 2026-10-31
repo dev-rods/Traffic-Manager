@@ -81,6 +81,8 @@ Use para rastrear o que foi implementado, refatorado ou removido.
 
 - **029** Link de cobrança pelo WhatsApp (2026-10-28) — Para quem não pagou no check-in: botão "Enviar link pelo WhatsApp" na agenda e em "Falta receber" do Caixa. `POST caixa/agendamentos/{id}/link` (recepção) cria cobrança `LINK` no Asaas com forma livre (`UNDEFINED`, vence em 7 dias), manda pela z-api da clínica e devolve `{payment, invoiceUrl, sent}`. Um pagamento vivo por agendamento: link pendente é reenviado, outra cobrança pendente é cancelada antes, pago não envia. CPF do cadastro (titular) ou pedido pelo painel (`CPF_REQUIRED`). WhatsApp falhou: a cobrança fica e o painel mostra o link para copiar. Migration: CHECK de `appointment_payments.method` aceita `LINK`. iPad mostra o link pendente como QR da fatura. PRD: `prd/029-link-de-cobranca-whatsapp.md`, Spec: `spec/029-link-de-cobranca-whatsapp.md`.
 
+- **030** Site público oferece as próximas N datas (2026-10-30) — Substitui a regra do mês vigente (PRD 023): o site passa a oferecer as próximas N datas com horário, N = "Datas futuras" da clínica (`max_future_dates`, o mesmo limite do bot), atravessando a virada do mês. Hoje entra sem o que já passou; fechado e lotado não contam. `GET /public/.../availability` deixa de receber `dates` e de devolver `window`; a criação só aceita data e horário da grade oferecida. `mes_vigente.py` saiu: relógio da clínica em `relogio.py`, janela em `janela_do_site.py`. Site agrupa os dias por mês. Motivo: a Nobre Laser abre em 06/11 e em 30/10 o site não tinha nada a oferecer. Deploy do scheduler antes do merge. PRD: `prd/030-site-proximas-datas.md`.
+
 (Adicione novas linhas acima desta.)
 
 ---

@@ -22,17 +22,16 @@ export const bookingService = {
   // Status (CLOSED | FULL | AVAILABLE) + horários livres para uma lista de datas —
   // mesma AvailabilityEngine do bot de WhatsApp. A duração da sessão é calculada
   // pelo backend a partir do carrinho (a mesma que a criação grava), nunca aqui.
-  availability: (clinicId: string, dates: string[], cart: CartPayload) =>
+  availability: (clinicId: string, cart: CartPayload) =>
     api
       .get<AvailabilityResponse>(`/public/clinics/${clinicId}/availability`, {
         params: {
-          dates: dates.join(','),
           serviceIds: cart.serviceIds.join(','),
           serviceAreaPairs:
             cart.serviceAreaPairs.map((p) => `${p.serviceId}:${p.areaId}`).join(',') || undefined,
         },
       })
-      .then((r) => ({ days: r.data.days, window: r.data.window })),
+      .then((r) => ({ days: r.data.days })),
 
   // Total, desconto e valor final — com o telefone, também primeira sessão e
   // desconto personalizado. POST para o telefone não ir na URL.
