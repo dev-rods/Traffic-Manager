@@ -184,5 +184,5 @@ site passa a usar a mesma.
 
 - [x] Pendente
 - [x] Spec gerada: `spec/032-site-cadastro-do-paciente-novo.md` (31/10/2026)
-- [ ] Implementado em:
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 31/10/2026 (branch `feat/032-site-cadastro-do-paciente-novo`)
+- [x] Registrado em `TASKS_LOG.md`
