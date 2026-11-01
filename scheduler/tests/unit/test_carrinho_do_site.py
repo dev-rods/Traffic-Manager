@@ -407,7 +407,8 @@ class _Criacao(_Handler):
         self.renderizado = lambda: self.template.get_and_render.call_args[0][2]
         for p in (
             mock.patch(f"{self.modulo}.AppointmentService.completo", return_value=self.service),
-            mock.patch(f"{self.modulo}.ZApiProvider", return_value=self.provider),
+            mock.patch("src.services.envio_do_sistema.get_provider", return_value=self.provider),
+            mock.patch("src.services.envio_do_sistema._tracker", return_value=None),
             mock.patch(f"{self.modulo}.TemplateService", return_value=self.template),
             mock.patch(f"{self.modulo}.orientacoes_da_clinica", return_value="Não tome sol 48h antes."),
             mock.patch(f"{self.modulo}.AvailabilityEngine", return_value=motor_falso()),

@@ -11,6 +11,15 @@ PublicBooking:
         - dynamodb:UpdateItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-booking-otp-codes"
+    # PRD 034: OTP, confirmacao do site e link do check-in passam a ser
+    # rastreados no MessageEvents. Sem este PutItem o put falha, o
+    # MessageTracker engole, e o eco do z-api volta a parecer atendente no
+    # webhook - que pausa o bot por 24h.
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup

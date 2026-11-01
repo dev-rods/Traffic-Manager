@@ -135,6 +135,11 @@ export function ConversationThread({ phone, senderName, botPaused, pauseReason, 
                   : 'bg-brand-500 text-white ml-auto rounded-br-sm',
               ].join(' ')}
             >
+              {msg.direction === 'OUTBOUND' && msg.autor && msg.autor !== 'BOT' ? (
+                <p className="text-[10px] uppercase tracking-wide text-brand-200 mb-0.5">
+                  {msg.autor === 'HUMANO' ? 'atendente' : 'automática'}
+                </p>
+              ) : null}
               <p>{msg.content}</p>
               <div className={[
                 'flex items-center gap-1 mt-1',

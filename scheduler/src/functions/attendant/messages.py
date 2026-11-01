@@ -5,6 +5,7 @@ from typing import Dict, List, Set
 import boto3
 from boto3.dynamodb.conditions import Key
 
+from src.services.autoria_mensagem import autor_da_mensagem
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,9 @@ def handler(event, context):
                 "provider_message_id": item.get("providerMessageId", ""),
                 "created_at": item.get("createdAt", ""),
                 "sender_name": item.get("senderName", ""),
+                # Quem mandou: BOT, HUMANO (celular) ou SISTEMA (site,
+                # check-in). O painel rotula atendente e automática (PRD 034).
+                "autor": autor_da_mensagem(item),
             }
 
             existing = by_msgid.get(mid)
@@ -102,6 +106,13 @@ def handler(event, context):
                     existing["status"] = msg["status"]
                 if not existing["provider_message_id"] and msg["provider_message_id"]:
                     existing["provider_message_id"] = msg["provider_message_id"]
+                # A linha QUEUED do bot ainda não tem id e pareceria HUMANO;
+                # a linha SENT, com id, decide. SISTEMA e HUMANO vêm do
+                # metadata e valem de qualquer linha.
+                if msg["autor"] in ("SISTEMA", "HUMANO") or (
+                    msg["autor"] == "BOT" and msg["provider_message_id"]
+                ):
+                    existing["autor"] = msg["autor"]
 
             if direction == "OUTBOUND":
                 pmid = msg["provider_message_id"]

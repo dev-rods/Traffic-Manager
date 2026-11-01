@@ -27,7 +27,7 @@ from typing import Optional
 
 import boto3
 
-from src.providers.zapi_provider import ZApiProvider
+from src.services.envio_do_sistema import SITE_OTP, envia_texto
 from src.utils.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
@@ -89,13 +89,13 @@ def generate_and_send_code(clinic: dict, phone: str) -> Optional[str]:
         }
     )
 
-    provider = ZApiProvider(
-        instance_id=clinic.get("zapi_instance_id") or "",
-        instance_token=clinic.get("zapi_instance_token") or "",
-        client_token=os.environ.get("ZAPI_CLIENT_TOKEN", ""),
-    )
+    # Rastreado com origem SITE_OTP, senão o eco vira "atendente" no webhook
+    # e pausa o bot (PRD 034). O que fica gravado é o aviso, não o código.
     message = f"Seu código de confirmação é {code}. Ele expira em 5 minutos."
-    result = provider.send_text(phone, message)
+    result = envia_texto(
+        clinic, phone, message, SITE_OTP,
+        conteudo_registrado="Código de confirmação enviado (expira em 5 minutos).",
+    )
     if not result.success:
         logger.error(f"[BookingVerification] Falha ao enviar código via WhatsApp: {result.error}")
         if os.environ.get("STAGE") == "dev":

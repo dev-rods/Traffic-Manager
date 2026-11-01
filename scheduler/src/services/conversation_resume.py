@@ -29,14 +29,8 @@ EVENTOS_PARA_CONTEXTO = 20
 _FOLGA_DO_AVISO = 120
 
 
-def _foi_de_pessoa_da_clinica(evento):
-    """OUTBOUND digitado no celular (metadata.autor = HUMANO desde a fase 3;
-    antes, SENT sem providerMessageId). Ver conversation_agent."""
-    if evento.get("direction") != "OUTBOUND":
-        return False
-    if (evento.get("metadata") or {}).get("autor") == "HUMANO":
-        return True
-    return evento.get("status") == "SENT" and not evento.get("providerMessageId")
+# A regra de autoria mora em autoria_mensagem (PRD 034): era a terceira cópia.
+from src.services.autoria_mensagem import foi_de_pessoa_da_clinica as _foi_de_pessoa_da_clinica  # noqa: E402
 
 
 def ha_pergunta_em_aberto(eventos, entregue_em=None):
