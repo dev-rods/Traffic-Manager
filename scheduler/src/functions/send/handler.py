@@ -213,11 +213,12 @@ def handler(event, context):
             # commits, so every UPDATE raised "no results to fetch" into the except below
             # and last_message_at stayed NULL for every patient.
             try:
+                from src.utils.phone import formas_do_numero
                 db.execute_write(
                     """UPDATE scheduler.patients
                        SET last_message_at = NOW(), updated_at = NOW()
-                       WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL""",
-                    (clinic_id, phone),
+                       WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL""",
+                    (clinic_id, formas_do_numero(phone)),
                 )
             except Exception as e:
                 logger.warning(f"Falha ao atualizar last_message_at para {phone}: {e}")

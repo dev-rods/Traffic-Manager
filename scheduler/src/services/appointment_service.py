@@ -953,9 +953,10 @@ class AppointmentService:
     def get_active_appointment_by_phone(
         self, clinic_id: str, phone: str
     ) -> Optional[Dict[str, Any]]:
+        from src.utils.phone import formas_do_numero
         patients = self.db.execute_query(
-            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL",
-            (clinic_id, phone),
+            "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL",
+            (clinic_id, formas_do_numero(phone)),
         )
 
         if not patients:
@@ -1038,15 +1039,21 @@ class AppointmentService:
         mão, e o que vem no agendamento é o que a pessoa digitou naquele dia -
         não é mais confiável que a clínica.
         """
-        from src.utils.phone import normalize_phone
+        from src.utils.phone import formas_do_numero, normalize_phone
         phone = normalize_phone(phone)
         nome = (full_name or "").strip() or None
 
         # Lookup includes soft-deleted records so we can restore in place
         # and avoid violating the UNIQUE(clinic_id, phone) constraint.
+        # Casa pelas variantes (com e sem o nono dígito), a mesma régua da
+        # cotação do site e da identificação do bot: casando exato, a Paula
+        # (gravada `553591328559`) ganhou um segundo cadastro quando digitou
+        # o número com o 9 no site, em 21/10/2026. Havendo mais de um, o
+        # exato vence; entre iguais, o ativo vence o apagado.
         patients = self.db.execute_query(
-            "SELECT * FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
-            (clinic_id, phone),
+            "SELECT * FROM scheduler.patients WHERE clinic_id = %s AND phone = ANY(%s) "
+            "ORDER BY (phone = %s) DESC, (deleted_at IS NULL) DESC, created_at",
+            (clinic_id, formas_do_numero(phone), phone),
         )
 
         if patients:

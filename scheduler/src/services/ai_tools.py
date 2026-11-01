@@ -949,12 +949,12 @@ class ToolExecutor:
     def _nascimento_do_cadastro(self, clinic_id, phone):
         """A data de nascimento gravada, ou None. Nunca levanta."""
         try:
-            from src.utils.phone import normalize_phone
+            from src.utils.phone import formas_do_numero
 
             linhas = self.db.execute_query(
                 "SELECT birth_date FROM scheduler.patients "
-                "WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL LIMIT 1",
-                (clinic_id, normalize_phone(phone)),
+                "WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL LIMIT 1",
+                (clinic_id, formas_do_numero(phone)),
             )
             return linhas[0].get("birth_date") if linhas else None
         except Exception as e:
@@ -993,7 +993,7 @@ class ToolExecutor:
         if not any([birth_date, cpf, email]):
             return
         try:
-            from src.utils.phone import normalize_phone
+            from src.utils.phone import formas_do_numero
 
             cpf_digitos = re.sub(r"\D", "", cpf) if cpf else None
             linhas = self.db.execute_write(
@@ -1003,10 +1003,10 @@ class ToolExecutor:
                     cpf = COALESCE(%s, cpf),
                     email = COALESCE(%s, email),
                     updated_at = NOW()
-                WHERE clinic_id = %s AND phone = %s
+                WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL
                 """,
                 (birth_date or None, cpf_digitos or None, email or None,
-                 clinic_id, normalize_phone(phone)),
+                 clinic_id, formas_do_numero(phone)),
             )
             if not linhas:
                 # Zero linhas significa que o paciente nao existe. Era o defeito

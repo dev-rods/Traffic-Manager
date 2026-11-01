@@ -59,7 +59,9 @@ class TestLeitura(unittest.TestCase):
         sql, params = db.execute_query.call_args[0]
 
         self.assertIn("deleted_at IS NULL", sql)
-        self.assertEqual(params, (CLINIC, FONE))
+        # Pelas variantes do numero (PRD 033): a lista traz o proprio FONE.
+        self.assertEqual(params[0], CLINIC)
+        self.assertIn(FONE, params[1])
 
 
 class TestFalhaFechada(unittest.TestCase):

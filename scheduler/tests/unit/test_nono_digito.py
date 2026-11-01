@@ -44,7 +44,8 @@ class TestVariantes(unittest.TestCase):
     def test_lixo_nao_explode(self):
         self.assertEqual(variantes_do_numero(""), set())
         self.assertEqual(variantes_do_numero(None), set())
-        self.assertEqual(variantes_do_numero("123"), {"55123"})
+        # Três dígitos não são telefone de lugar nenhum: fica como veio.
+        self.assertEqual(variantes_do_numero("123"), {"123"})
 
 
 class TestMesmoNumero(unittest.TestCase):
