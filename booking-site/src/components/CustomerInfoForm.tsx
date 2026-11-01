@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { Input } from './ui/Input'
 import { Button } from './ui/Button'
 import { CadastroFields } from './CadastroFields'
-import { formatPhoneInput, isValidBrPhone } from '@/utils/format'
+import { formatPhoneInput, isValidPhone } from '@/utils/format'
 import { isValidBirthDate, isValidCpf, isValidEmail } from '@/utils/cadastro'
 import type { CampoDoCadastro } from '@/types'
 
@@ -17,7 +17,7 @@ import type { CampoDoCadastro } from '@/types'
 function schemaPara(faltam: CampoDoCadastro[]) {
   return z.object({
     fullName: z.string().min(2, 'Digite seu nome completo'),
-    phone: z.string().refine(isValidBrPhone, 'Celular inválido'),
+    phone: z.string().refine(isValidPhone, 'Celular inválido'),
     cpf: faltam.includes('cpf')
       ? z.string().refine(isValidCpf, 'CPF inválido')
       : z.string().optional(),
@@ -89,11 +89,12 @@ export function CustomerInfoForm({
         inputMode="tel"
         value={phoneDisplay}
         error={errors.phone?.message}
+        hint="Número de fora do Brasil? Comece com + e o código do país."
         onChange={(e) => {
           const formatted = formatPhoneInput(e.target.value)
           setPhoneDisplay(formatted)
           setValue('phone', formatted, { shouldValidate: true })
-          onPhoneChange?.(isValidBrPhone(formatted) ? formatted : null)
+          onPhoneChange?.(isValidPhone(formatted) ? formatted : null)
         }}
       />
       <CadastroFields faltam={camposFaltantes} register={register} setValue={setValue} errors={errors} />

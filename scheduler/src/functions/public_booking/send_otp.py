@@ -1,7 +1,7 @@
 import logging
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
-from src.utils.phone import is_valid_br_phone
+from src.utils.phone import is_valid_phone
 from src.services.db.postgres import PostgresService
 from src.utils.booking_verification import generate_and_send_code, SendFailedError
 
@@ -28,7 +28,7 @@ def handler(event, context):
 
         body = parse_body(event) or {}
         phone = body.get("phone")
-        if not phone or not is_valid_br_phone(phone):
+        if not phone or not is_valid_phone(phone):
             return http_response(400, {"status": "ERROR", "message": "Celular inválido"})
 
         db = PostgresService()

@@ -5,10 +5,12 @@ import { cx } from '@/utils/cx'
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
   error?: string
+  /** Orientação curta abaixo do campo; some quando há erro, para não competir. */
+  hint?: string
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, error, id, className, ...props },
+  { label, error, hint, id, className, ...props },
   ref
 ) {
   // Sem id nem name o label ficava solto: leitor de tela anunciava o campo
@@ -33,9 +35,16 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           className
         )}
         aria-invalid={Boolean(error)}
+        aria-describedby={hint && !error ? `${inputId}-hint` : undefined}
         {...props}
       />
-      {error ? <span className="text-sm text-danger-500">{error}</span> : null}
+      {error ? (
+        <span className="text-sm text-danger-500">{error}</span>
+      ) : hint ? (
+        <span id={`${inputId}-hint`} className="text-xs text-ink-500">
+          {hint}
+        </span>
+      ) : null}
     </div>
   )
 })

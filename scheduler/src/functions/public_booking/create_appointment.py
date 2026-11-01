@@ -4,7 +4,7 @@ import re
 from datetime import datetime, date, time
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
-from src.utils.phone import is_valid_br_phone, normalize_phone
+from src.utils.phone import is_valid_phone, normalize_phone
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
 from src.services.template_service import TemplateService
@@ -175,7 +175,7 @@ def handler(event, context):
                 "status": "ERROR",
                 "message": "Campos obrigatorios: phone, serviceIds, date, time, fullName",
             })
-        if not is_valid_br_phone(str(phone)):
+        if not is_valid_phone(str(phone)):
             return http_response(400, {"status": "ERROR", "message": "Telefone inválido"})
         phone = normalize_phone(str(phone))
 

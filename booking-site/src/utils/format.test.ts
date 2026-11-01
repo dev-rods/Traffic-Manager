@@ -6,9 +6,33 @@ import {
   hasPrice,
   formatPhoneInput,
   isValidBrPhone,
+  isValidPhone,
   normalizePhoneDigits,
   toApiPhone,
 } from './format'
+
+describe('telefone de fora do Brasil (PRD 033)', () => {
+  it('preserva o + e não aplica a máscara nacional', () => {
+    expect(formatPhoneInput('+31 6 1722 3202')).toBe('+31617223202')
+    expect(formatPhoneInput('+49')).toBe('+49')
+  })
+
+  it('valida pelo tamanho E.164 quando começa com +', () => {
+    expect(isValidPhone('+31 617223202')).toBe(true)
+    expect(isValidPhone('+1')).toBe(false)
+    expect(isValidPhone('(11) 98765-4321')).toBe(true)
+    expect(isValidPhone('12345')).toBe(false)
+  })
+
+  it('manda o + para a API e não prefixa 55', () => {
+    expect(toApiPhone('+31 617223202')).toBe('+31617223202')
+    expect(toApiPhone('+55 11 98765-4321')).toBe('5511987654321')
+  })
+
+  it('mostra o internacional como +N', () => {
+    expect(formatPhoneDisplay('+31617223202')).toBe('+31617223202')
+  })
+})
 
 describe('formatCurrencyBRL', () => {
   it('formata centavos como moeda BRL', () => {

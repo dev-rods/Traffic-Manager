@@ -1481,10 +1481,11 @@ class ConversationAgent:
         datas = datas_da_campanha(session)
         nome = ""
         try:
+            from src.utils.phone import formas_do_numero
             linhas = self.db.execute_query(
                 "SELECT name FROM scheduler.patients "
-                "WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL LIMIT 1",
-                (clinic_id, phone),
+                "WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL LIMIT 1",
+                (clinic_id, formas_do_numero(phone)),
             )
             if linhas:
                 nome = (linhas[0].get("name") or "").strip()

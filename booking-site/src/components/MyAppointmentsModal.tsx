@@ -12,7 +12,7 @@ import {
   formatCurrencyBRL,
   formatDateLong,
   formatPhoneInput,
-  isValidBrPhone,
+  isValidPhone,
   toApiPhone,
 } from '@/utils/format'
 
@@ -46,7 +46,7 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
 
   function handlePhoneSubmit(e: FormEvent) {
     e.preventDefault()
-    if (isValidBrPhone(phone)) setStep('otp')
+    if (isValidPhone(phone)) setStep('otp')
   }
 
   function handleVerified(newToken: string) {
@@ -72,9 +72,10 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
             placeholder="Digite seu celular"
             inputMode="tel"
             value={phone}
+            hint="Número de fora do Brasil? Comece com + e o código do país."
             onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
           />
-          <Button type="submit" disabled={!isValidBrPhone(phone)}>
+          <Button type="submit" disabled={!isValidPhone(phone)}>
             Continuar
           </Button>
         </form>
