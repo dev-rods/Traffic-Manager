@@ -531,8 +531,13 @@ def envia_link(db, provider: PaymentProvider, clinic_id: str, appointment_id: st
     nome_clinica = clinica.get("display_name") or clinica.get("name") or "clínica"
     enviado = False
     try:
-        resposta = whatsapp_de(clinica).send_text(
-            appt["patient_phone"], _mensagem_do_link(appt, nome_clinica, int(row["amount_cents"]), link))
+        # Rastreado com origem CHECKIN (PRD 034): o eco não pode virar
+        # "atendente" e pausar o bot. O provedor continua vindo de fora.
+        from src.services.envio_do_sistema import CHECKIN, envia_texto
+        resposta = envia_texto(
+            clinica, appt["patient_phone"],
+            _mensagem_do_link(appt, nome_clinica, int(row["amount_cents"]), link),
+            CHECKIN, provider=whatsapp_de(clinica))
         enviado = bool(resposta.success)
         if not enviado:
             logger.error(f"[Checkin] link {row['id']} não foi pelo WhatsApp: {resposta.error}")

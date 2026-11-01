@@ -13,7 +13,7 @@ from src.services.politica_de_desconto import texto_do_preco
 from src.services import carrinho, janela_do_site, relogio
 from src.utils.cadastro import cpf_valido, normaliza_cpf, normaliza_data_nascimento, normaliza_email
 from src.services.availability_engine import AvailabilityEngine
-from src.providers.zapi_provider import ZApiProvider
+from src.services.envio_do_sistema import SITE_AGENDAMENTO, envia_texto
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -70,11 +70,8 @@ def _send_confirmation_whatsapp(db: PostgresService, clinic: dict, phone: str, a
     try: falha num não impede o outro, e nenhuma derruba a criação - o
     agendamento já está persistido.
     """
-    provider = ZApiProvider(
-        instance_id=clinic.get("zapi_instance_id") or "",
-        instance_token=clinic.get("zapi_instance_token") or "",
-        client_token=os.environ.get("ZAPI_CLIENT_TOKEN", ""),
-    )
+    # Rastreado com origem SITE_AGENDAMENTO: sem o rastro, o eco do z-api
+    # virava "atendente" no webhook e pausava o bot por 24h (PRD 034).
     template_service = TemplateService(db)
 
     try:
@@ -98,7 +95,7 @@ def _send_confirmation_whatsapp(db: PostgresService, clinic: dict, phone: str, a
             ),
         }
         content = template_service.get_and_render(clinic["clinic_id"], "BOOKED", variables)
-        result = provider.send_text(phone, content)
+        result = envia_texto(clinic, phone, content, SITE_AGENDAMENTO)
         if not result.success:
             logger.error(f"[PublicBooking] Falha ao enviar confirmação por WhatsApp: {result.error}")
     except Exception as e:
@@ -107,7 +104,7 @@ def _send_confirmation_whatsapp(db: PostgresService, clinic: dict, phone: str, a
     try:
         orientacoes = orientacoes_da_clinica(template_service, clinic["clinic_id"])
         if orientacoes:
-            result = provider.send_text(phone, orientacoes)
+            result = envia_texto(clinic, phone, orientacoes, SITE_AGENDAMENTO)
             if not result.success:
                 logger.error(f"[PublicBooking] Falha ao enviar orientações pré-sessão: {result.error}")
     except Exception as e:

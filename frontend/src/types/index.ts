@@ -528,6 +528,8 @@ export interface ConversationMessage {
   status: MessageStatus
   created_at: string
   sender_name: string
+  /** Só em OUTBOUND: BOT (agente), HUMANO (celular da atendente) ou SISTEMA (OTP, confirmação do site, check-in). */
+  autor?: 'BOT' | 'HUMANO' | 'SISTEMA' | null
 }
 
 export interface BotMetrics {

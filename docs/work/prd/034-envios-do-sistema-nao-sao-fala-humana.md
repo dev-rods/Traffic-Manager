@@ -142,7 +142,7 @@ Por que foi assim: o site e o check-in nasceram depois da regra de autoria
 
 ## Status
 
-- [x] Pendente
+- [ ] Pendente
 - [x] Spec gerada: `spec/034-envios-do-sistema-nao-sao-fala-humana.md`
-- [ ] Implementado em:
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 01/11/2026
+- [x] Registrado em `TASKS_LOG.md`
