@@ -287,7 +287,8 @@ describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
 
     await waitFor(() => expect(bookingService.createAppointment).toHaveBeenCalled())
-    const payload = vi.mocked(bookingService.createAppointment).mock.calls.at(-1)![1]
+    const calls = vi.mocked(bookingService.createAppointment).mock.calls
+    const payload = calls[calls.length - 1][1]
     expect(payload).toMatchObject({ cpf: '52998224725', birthDate: '1990-10-31', email: 'Maria@X.com' })
   })
 
@@ -304,7 +305,8 @@ describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
 
     await waitFor(() => expect(bookingService.createAppointment).toHaveBeenCalled())
-    const payload = vi.mocked(bookingService.createAppointment).mock.calls.at(-1)![1]
+    const calls = vi.mocked(bookingService.createAppointment).mock.calls
+    const payload = calls[calls.length - 1][1]
     expect(payload.cpf).toBeUndefined()
     expect(payload.birthDate).toBeUndefined()
     expect(payload.email).toBeUndefined()
