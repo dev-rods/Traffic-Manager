@@ -44,7 +44,7 @@ curl -s -X POST "${HS[@]}" -d "{\"phone\":\"$FONE\",\"token\":\"$TOKEN\",\"date\
 `GET /clinics/$CLINIC/appointments?date=D1` (painel) não há nenhum `CANCELLED`
 para esse telefone.
 
-Erros: token de outro número -> `404`; token expirado -> `401`; horário já
+Erros: token que não bate com o telefone, ou expirado -> `401`; agendamento de outro número ou já cancelado -> `404`; horário já
 ocupado -> `409 "Esse horário acabou de ser ocupado. Escolha outro."`; data
 passada -> `400`.
 
@@ -107,4 +107,4 @@ conversa de dev respondendo "quero mudar o dia" ao lembrete: o bot manda o link.
 
 Depois do deploy em dev: `aws cloudformation describe-stack-resources
 --stack-name clinic-scheduler-infra-dev --query 'length(StackResources)'`
-abaixo de 500 (estava em 435 antes da rota nova).
+abaixo de 500 (estava em 435 antes da rota nova; ficou em 466 em dev em 02/11/2026).

@@ -108,6 +108,27 @@ class TestBackfill(unittest.TestCase):
         self.assertTrue(any(l.startswith("LIGARIA 2026-10-21 -> 2026-10-22") for l in linhas))
         self.assertIn("a ligar: 1  (dry-run; use --aplicar para gravar)", linhas[-1])
 
+    def test_um_antecessor_liga_a_um_novo_so_tambem_no_dry_run(self):
+        db = BancoDeMentira([
+            ag("antigo", "CANCELLED", date(2026, 10, 21), T0 - timedelta(days=3), updated=T0),
+            ag("novo-1", "CONFIRMED", date(2026, 10, 22), T0 + timedelta(minutes=1)),
+            ag("novo-2", "CONFIRMED", date(2026, 10, 23), T0 + timedelta(minutes=2)),
+        ])
+        seco = mod.roda(db, CLINIC, aplicar=False, saida=lambda *_: None)
+        aplicado = mod.roda(db, CLINIC, aplicar=True, saida=lambda *_: None)
+        self.assertEqual(seco, [("antigo", "novo-1")])
+        self.assertEqual(aplicado, seco)
+        self.assertIsNone(db.linhas["novo-2"].get("rescheduled_from"))
+
+    def test_dois_cancelados_vizinhos_nao_apontam_um_para_o_outro(self):
+        db = BancoDeMentira([
+            ag("a", "CANCELLED", date(2026, 10, 29), T0, updated=T0 + timedelta(minutes=1)),
+            ag("b", "CANCELLED", date(2026, 10, 30), T0 + timedelta(minutes=1), updated=T0 + timedelta(minutes=2)),
+        ])
+        pares = mod.roda(db, CLINIC, aplicar=True, saida=lambda *_: None)
+        self.assertEqual(len(pares), 1)
+        self.assertFalse(db.linhas["a"]["rescheduled_to_id"] and db.linhas["b"]["rescheduled_to_id"])
+
     def test_argumentos(self):
         self.assertEqual(mod._argumentos(["c1"]), (["c1"], False, mod.DESDE_PADRAO))
         self.assertEqual(mod._argumentos(["c1", "--aplicar", "--desde", "2026-10-01"]),

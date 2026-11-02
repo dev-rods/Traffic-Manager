@@ -51,17 +51,27 @@ def _argumentos(argv):
 def roda(db, clinic_id, aplicar, desde=DESDE_PADRAO, saida=print):
     """Devolve a lista de pares (antecessor, novo) encontrados ou ligados."""
     pares = []
+    ligados = {}  # antecessor -> novo, nesta execução
     for novo in db.execute_query(NOVOS, (clinic_id, desde)):
         candidato = candidato_a_antecessor(db, novo)
         if not candidato:
             continue
         if candidato["appointment_date"] < DATA_MINIMA_DO_ANTECESSOR:
             continue
+        # Um antecessor só liga a um novo. No apply o UPDATE já garante isso
+        # (`rescheduled_to_id IS NULL`); no dry-run precisa ser dito aqui, senão
+        # o mesmo cancelado aparece para cada novo criado na janela.
+        if str(candidato["id"]) in ligados:
+            continue
+        # Dois cancelados criados perto um do outro apontariam um para o outro.
+        if ligados.get(str(novo["id"])) == str(candidato["id"]):
+            continue
         if aplicar:
             ligado = vincula_antecessor(db, novo)
             if not ligado:
                 continue
         delta = (novo["created_at"] - candidato["updated_at"]).total_seconds() / 60
+        ligados[str(candidato["id"])] = str(novo["id"])
         pares.append((str(candidato["id"]), str(novo["id"])))
         saida(f"{'LIGADO ' if aplicar else 'LIGARIA'} {candidato['appointment_date']} -> "
               f"{novo['appointment_date']} ({novo['status']}, {delta:+.0f} min) "
