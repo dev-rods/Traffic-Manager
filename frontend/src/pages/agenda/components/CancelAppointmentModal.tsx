@@ -7,9 +7,11 @@ import type { Appointment } from '@/types'
 interface CancelAppointmentModalProps {
   appointment: Appointment | null
   onClose: () => void
+  /** A pessoa vai remarcar: editar a data mantém o mesmo registro (PRD 035). */
+  onReschedule: (appointment: Appointment) => void
 }
 
-export function CancelAppointmentModal({ appointment, onClose }: CancelAppointmentModalProps) {
+export function CancelAppointmentModal({ appointment, onClose, onReschedule }: CancelAppointmentModalProps) {
   const cancelMutation = useCancelAppointment()
   const [error, setError] = useState<string | null>(null)
 
@@ -46,6 +48,19 @@ export function CancelAppointmentModal({ appointment, onClose }: CancelAppointme
         <p className="text-xs text-gray-400">
           Essa acao nao pode ser desfeita.
         </p>
+
+        {/* Um terço dos cancelamentos eram remarcações feitas como cancelar +
+            criar (PRD 035). O caminho certo fica aqui, onde a mão já está. */}
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700 space-y-2">
+          <p>A pessoa vai remarcar? Então não cancele: edite a data e o agendamento continua o mesmo.</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => { if (appointment) onReschedule(appointment) }}
+          >
+            Remarcar em vez de cancelar
+          </Button>
+        </div>
 
         {/* Pago pelo iPad: cancelar não devolve o dinheiro (PRD 028, M7). */}
         {appointment?.payment_status === 'PAID' && (
