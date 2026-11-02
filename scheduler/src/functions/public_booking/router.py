@@ -15,6 +15,7 @@ from src.functions.public_booking import (
     availability,
     bootstrap,
     cancel_appointment,
+    reschedule_appointment,
     checkin,
     confirm_otp,
     create_appointment,
@@ -39,6 +40,7 @@ ROUTES = {
     ("POST", "public/clinics/{clinicId}/appointments"): create_appointment.handler,
     ("GET", "public/clinics/{clinicId}/my-appointments"): list_appointments.handler,
     ("POST", "public/clinics/{clinicId}/appointments/{appointmentId}/cancel"): cancel_appointment.handler,
+    ("POST", "public/clinics/{clinicId}/appointments/{appointmentId}/reschedule"): reschedule_appointment.handler,
     ("GET", "public/resolve-domain"): resolve_domain.handler,
     # Check-in do iPad (PRD 026): uma rota coringa para todas as sub-rotas,
     # que `checkin.handler` distingue pelo `proxy`.

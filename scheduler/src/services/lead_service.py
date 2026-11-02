@@ -401,7 +401,10 @@ class LeadService:
                     WHERE lc.uploaded_at IS NOT NULL
                       AND lc.retracted_at IS NULL), 0)          AS enviadas_cents,
                 COUNT(*) FILTER (WHERE lc.retracted_at IS NOT NULL) AS retratadas,
-                COUNT(*) FILTER (WHERE a.status = 'CANCELLED')  AS canceladas,
+                -- Reagendado nao e cancelado (PRD 035); a conversao dele
+                -- ja foi movida, mas a regra fica escrita por inteiro.
+                COUNT(*) FILTER (WHERE a.status = 'CANCELLED'
+                                   AND a.rescheduled_to_id IS NULL) AS canceladas,
                 MAX(lc.uploaded_at)                             AS ultimo_envio,
 
                 -- O evento de AGENDAMENTO. Sem filtro de status de proposito:
@@ -470,6 +473,33 @@ class LeadService:
             elif l["retratadas"]:
                 estados[str(l["lead_id"])] = "RETRATADO"
         return estados
+
+    def move_conversion(self, old_appointment_id: str, new_appointment_id: str,
+                        conversion_date: str) -> bool:
+        """Reagendamento com registro novo (PRD 035): a conversão acompanha a
+        pessoa, não o id. Compra ainda não enviada passa a esperar a sessão
+        nova; compra já enviada mantém a data, porque é a chave no Google;
+        evento de agendamento já enviado não sobe de novo; retratação não
+        dispara, porque o id apontado está CONFIRMED. True se havia o que mover.
+        """
+        linha = self.db.execute_write_returning(
+            """
+            UPDATE scheduler.lead_conversions
+               SET appointment_id = %s::uuid,
+                   conversion_date = CASE WHEN uploaded_at IS NULL
+                        THEN GREATEST(%s::timestamptz, click_date + INTERVAL '1 minute')
+                        ELSE conversion_date END
+             WHERE appointment_id = %s::uuid
+            RETURNING id
+            """,
+            (new_appointment_id, conversion_date, old_appointment_id),
+        )
+        movida = bool(linha)
+        if movida:
+            logger.info(
+                f"[LeadService] Conversao movida: de={old_appointment_id} "
+                f"para={new_appointment_id}")
+        return movida
 
     def update_conversion_date(self, appointment_id: str, conversion_date: str) -> None:
         """Refresh a pending conversion's date after a reschedule (clamped to click).
