@@ -164,6 +164,14 @@ Ao virar `CANCELLED`, o agendamento antigo deixa a conversão do Google Ads para
 
 ---
 
+## Ajustes feitos pela Spec
+
+- A operação "substituir" transacional (item B) não é viável: os métodos do service abrem e commitam conexões próprias. A Spec troca por **criar primeiro, vincular depois**, dentro de `create_appointment`, com a janela de 30 min como regra única para painel, site e bot.
+- A conversão do Google Ads é **movida** para o agendamento novo (`move_conversion`), não re-datada e duplicada: o uploader sobe o evento de agendamento sem filtro de status e retrataria a compra do antigo.
+- Critério "operação transacional" dos aceites fica substituído por: falha na criação não cancela nada; falha no vínculo deixa o estado de hoje e o backfill corrige.
+
+---
+
 ## 7. Referências
 
 - `CLAUDE.md` (padrões do projeto, migrations idempotentes)
@@ -178,7 +186,7 @@ Ao virar `CANCELLED`, o agendamento antigo deixa a conversão do Google Ads para
 
 ## Status (preencher após conclusão)
 
-- [x] Pendente
-- [ ] Spec gerada: `spec/035-reagendamento-nao-e-cancelamento.md`
+- [ ] Pendente
+- [x] Spec gerada: `spec/035-reagendamento-nao-e-cancelamento.md` (01/11/2026)
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
