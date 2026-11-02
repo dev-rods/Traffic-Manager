@@ -188,5 +188,5 @@ Ao virar `CANCELLED`, o agendamento antigo deixa a conversão do Google Ads para
 
 - [ ] Pendente
 - [x] Spec gerada: `spec/035-reagendamento-nao-e-cancelamento.md` (01/11/2026)
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 02/11/2026 (branch `docs/035-reagendamento-nao-e-cancelamento`, dev pendente de deploy)
+- [x] Registrado em `TASKS_LOG.md`
