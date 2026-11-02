@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MyAppointmentsModal } from './MyAppointmentsModal'
 import { bookingService } from '@/services/booking.service'
-import type { Appointment } from '@/types'
+import type { Appointment, BootstrapResponse } from '@/types'
 
 vi.mock('@/services/booking.service')
 
@@ -52,6 +52,26 @@ describe('MyAppointmentsModal', () => {
   it('mostra o nome de quem agendou, porque o telefone pode ser de mais de uma pessoa', async () => {
     await verify()
     expect(await screen.findByText('Maria Silva')).toBeInTheDocument()
+  })
+
+  // Cancelar e marcar de novo virava "cancelamento" no relatório da clínica
+  // (PRD 035). Remarcar vem primeiro e fecha o bloco de cancelar.
+  it('Remarcar abre o seletor de dia e fecha o de cancelar', async () => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue({
+      clinic: { phone: '11999990000' },
+    } as BootstrapResponse)
+    vi.mocked(bookingService.availability).mockResolvedValue({
+      days: { '2026-10-28': { status: 'AVAILABLE', slots: ['09:00'] } },
+    })
+    await verify()
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar agendamento' }))
+    expect(screen.getByRole('button', { name: 'Confirmar cancelamento' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remarcar' }))
+    expect(await screen.findByRole('button', { name: 'QUA 28 de outubro' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Confirmar cancelamento' })).not.toBeInTheDocument()
+    expect(bookingService.availability).toHaveBeenCalledWith('c1', expect.anything(), 'ap1')
   })
 
   it('cancela pelo telefone no formato da API', async () => {

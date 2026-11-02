@@ -69,11 +69,24 @@ export interface Appointment {
   original_price_cents: number | null
   full_name: string | null
   status: string
+  // O carrinho deste agendamento, para remarcar com a mesma duração e as
+  // mesmas áreas (PRD 035).
+  service_ids: string[]
+  service_area_pairs: ServiceAreaPair[]
 }
 
 export interface ServiceAreaPair {
   serviceId: string
   areaId: string
+}
+
+// Remarcar pelo site (PRD 035): mesmo registro, nova data. Exige o token de
+// "Meus agendamentos", como o cancelar.
+export interface RescheduleAppointmentPayload {
+  phone: string
+  token: string
+  date: string // YYYY-MM-DD
+  time: string // HH:MM
 }
 
 // O carrinho como o backend o recebe — duração, preço e desconto são sempre
