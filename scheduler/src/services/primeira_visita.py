@@ -29,7 +29,8 @@ def e_primeira_visita(db, clinic_id: str, phone: str, ignorar_id=None) -> bool:
     de marcar uma estreia.
     """
     try:
-        parametros = [clinic_id, phone]
+        from src.utils.phone import formas_do_numero
+        parametros = [clinic_id, formas_do_numero(phone)]
         filtro = ""
         if ignorar_id:
             filtro = "AND a.id <> %s::uuid"
@@ -40,7 +41,7 @@ def e_primeira_visita(db, clinic_id: str, phone: str, ignorar_id=None) -> bool:
             SELECT COUNT(*) AS total
             FROM scheduler.appointments a
             JOIN scheduler.patients p ON p.id = a.patient_id
-            WHERE a.clinic_id = %s AND p.phone = %s
+            WHERE a.clinic_id = %s AND p.phone = ANY(%s)
               AND a.status = 'CONFIRMED' {filtro}
             """,
             tuple(parametros),

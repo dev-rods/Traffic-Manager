@@ -91,12 +91,12 @@ def afirmacao_sem_respaldo(texto: str, respaldo_das_tools) -> bool:
 def _nascimento(db, clinic_id, phone):
     """A data de nascimento no cadastro, ou None se não temos."""
     try:
-        from src.utils.phone import normalize_phone
+        from src.utils.phone import formas_do_numero
 
         linhas = db.execute_query(
             "SELECT birth_date FROM scheduler.patients "
-            "WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL LIMIT 1",
-            (clinic_id, normalize_phone(phone)),
+            "WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL LIMIT 1",
+            (clinic_id, formas_do_numero(phone)),
         )
         return linhas[0].get("birth_date") if linhas else None
     except Exception as e:

@@ -4,15 +4,16 @@ import re
 from datetime import datetime, date, time
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
-from src.utils.phone import is_valid_br_phone, normalize_phone
+from src.utils.phone import is_valid_phone, normalize_phone
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
 from src.services.template_service import TemplateService
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.politica_de_desconto import texto_do_preco
 from src.services import carrinho, janela_do_site, relogio
+from src.utils.cadastro import cpf_valido, normaliza_cpf, normaliza_data_nascimento, normaliza_email
 from src.services.availability_engine import AvailabilityEngine
-from src.providers.zapi_provider import ZApiProvider
+from src.services.envio_do_sistema import SITE_AGENDAMENTO, envia_texto
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -38,6 +39,17 @@ def _format_date_br(iso_date: str) -> str:
 
 _HORA = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
+# Cadastro do paciente pelo site (PRD 032). O site distingue pelo `code`; o
+# 409 sem code continua sendo horário ocupado.
+CADASTRO_INCOMPLETO = "CADASTRO_INCOMPLETO"
+CPF_EM_USO = "CPF_EM_USO"
+MENSAGEM_CADASTRO = "Para a primeira sessão precisamos de CPF, data de nascimento e e-mail."
+
+
+def _cadastro_invalido(campo, mensagem):
+    return http_response(400, {"status": "ERROR", "code": CADASTRO_INCOMPLETO,
+                               "faltam": [campo], "message": mensagem})
+
 
 HAS_FUTURE_APPOINTMENT = "HAS_FUTURE_APPOINTMENT"
 
@@ -58,11 +70,8 @@ def _send_confirmation_whatsapp(db: PostgresService, clinic: dict, phone: str, a
     try: falha num não impede o outro, e nenhuma derruba a criação - o
     agendamento já está persistido.
     """
-    provider = ZApiProvider(
-        instance_id=clinic.get("zapi_instance_id") or "",
-        instance_token=clinic.get("zapi_instance_token") or "",
-        client_token=os.environ.get("ZAPI_CLIENT_TOKEN", ""),
-    )
+    # Rastreado com origem SITE_AGENDAMENTO: sem o rastro, o eco do z-api
+    # virava "atendente" no webhook e pausava o bot por 24h (PRD 034).
     template_service = TemplateService(db)
 
     try:
@@ -86,7 +95,7 @@ def _send_confirmation_whatsapp(db: PostgresService, clinic: dict, phone: str, a
             ),
         }
         content = template_service.get_and_render(clinic["clinic_id"], "BOOKED", variables)
-        result = provider.send_text(phone, content)
+        result = envia_texto(clinic, phone, content, SITE_AGENDAMENTO)
         if not result.success:
             logger.error(f"[PublicBooking] Falha ao enviar confirmação por WhatsApp: {result.error}")
     except Exception as e:
@@ -95,7 +104,7 @@ def _send_confirmation_whatsapp(db: PostgresService, clinic: dict, phone: str, a
     try:
         orientacoes = orientacoes_da_clinica(template_service, clinic["clinic_id"])
         if orientacoes:
-            result = provider.send_text(phone, orientacoes)
+            result = envia_texto(clinic, phone, orientacoes, SITE_AGENDAMENTO)
             if not result.success:
                 logger.error(f"[PublicBooking] Falha ao enviar orientações pré-sessão: {result.error}")
     except Exception as e:
@@ -117,8 +126,14 @@ def handler(event, context):
         "serviceAreaPairs": [          // opcional — quando os serviços têm áreas
             {"serviceId": "uuid", "areaId": "uuid"}
         ],
-        "confirmDuplicate": false      // true = já avisado do agendamento futuro
+        "confirmDuplicate": false,     // true = já avisado do agendamento futuro
+        "cpf": "000.000.000-00",       // PRD 032: obrigatórios quando o celular
+        "birthDate": "YYYY-MM-DD",     //   não é de um paciente com cadastro
+        "email": "a@b.com"             //   completo; só os que faltam
     }
+
+    Sem os campos que faltam: 400 `code: CADASTRO_INCOMPLETO` com `faltam`.
+    CPF que já é de outro paciente da clínica: 409 `code: CPF_EM_USO`.
 
     Número que já tem agendamento futuro confirmado recebe 409 com
     `code: HAS_FUTURE_APPOINTMENT` e a contagem, e o site pergunta se a pessoa
@@ -157,7 +172,7 @@ def handler(event, context):
                 "status": "ERROR",
                 "message": "Campos obrigatorios: phone, serviceIds, date, time, fullName",
             })
-        if not is_valid_br_phone(str(phone)):
+        if not is_valid_phone(str(phone)):
             return http_response(400, {"status": "ERROR", "message": "Telefone inválido"})
         phone = normalize_phone(str(phone))
 
@@ -179,6 +194,41 @@ def handler(event, context):
 
         pares = carrinho.pares_do_corpo(body.get("serviceAreaPairs"))
         service_ids = carrinho.valida_carrinho(db, clinic_id, service_ids, pares)
+
+        # Cadastro do paciente (PRD 032): o que vier é validado; o que falta no
+        # cadastro deste celular é exigido, pela MESMA função que a cotação usa
+        # para mostrar os campos. Uma requisição direta não passa pela tela.
+        cpf = normaliza_cpf(body.get("cpf"))
+        if cpf is False or (cpf and not cpf_valido(cpf)):
+            return _cadastro_invalido("cpf", "CPF inválido")
+        birth_date = normaliza_data_nascimento(body.get("birthDate"))
+        if birth_date is False:
+            return _cadastro_invalido("birth_date", "Data de nascimento inválida")
+        email = normaliza_email(body.get("email"))
+        if email is False:
+            return _cadastro_invalido("email", "E-mail inválido")
+
+        paciente = carrinho.paciente_do_telefone(db, clinic_id, phone)
+        informados = {"cpf": cpf, "birth_date": birth_date, "email": email}
+        faltam = [c for c in carrinho.cadastro_para_o_site(paciente)["faltam"] if not informados.get(c)]
+        if faltam:
+            return http_response(400, {"status": "ERROR", "code": CADASTRO_INCOMPLETO,
+                                       "faltam": faltam, "message": MENSAGEM_CADASTRO})
+
+        if cpf:
+            # O mesmo CPF em dois telefones viraria dois pacientes, e o check-in
+            # cobraria no cadastro errado.
+            proprio = str(paciente["id"]) if paciente else None
+            dono = db.execute_query(
+                "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND cpf = %s "
+                "AND deleted_at IS NULL AND (%s::uuid IS NULL OR id <> %s::uuid) LIMIT 1",
+                (clinic_id, cpf, proprio, proprio),
+            )
+            if dono:
+                return http_response(409, {
+                    "status": "ERROR", "code": CPF_EM_USO,
+                    "message": "Este CPF já está cadastrado com outro celular. Fale com a clínica.",
+                })
 
         # Combos, duração e desconto pelas mesmas funções do agente. Os pares
         # que seguem para a criação são os de DEPOIS do combo: duração, preço e
@@ -240,6 +290,9 @@ def handler(event, context):
                 discount_pct=cotacao.desconto.pct,
                 discount_reason=cotacao.desconto.razao,
                 full_name=full_name,
+                cpf=cpf,
+                birth_date=birth_date,
+                email=email,
             )
         except ConflictError:
             # Sem este log o 409 não deixava rastro: era o "agendamento que

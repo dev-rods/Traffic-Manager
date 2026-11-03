@@ -6,6 +6,7 @@ import type {
   CartPayload,
   CreateAppointmentPayload,
   Quote,
+  RescheduleAppointmentPayload,
 } from '@/types'
 
 export const bookingService = {
@@ -22,13 +23,16 @@ export const bookingService = {
   // Status (CLOSED | FULL | AVAILABLE) + horários livres para uma lista de datas —
   // mesma AvailabilityEngine do bot de WhatsApp. A duração da sessão é calculada
   // pelo backend a partir do carrinho (a mesma que a criação grava), nunca aqui.
-  availability: (clinicId: string, cart: CartPayload) =>
+  // `excludeAppointmentId`: a grade para REMARCAR esse agendamento, sem que
+  // ele ocupe o próprio horário (PRD 035).
+  availability: (clinicId: string, cart: CartPayload, excludeAppointmentId?: string) =>
     api
       .get<AvailabilityResponse>(`/public/clinics/${clinicId}/availability`, {
         params: {
           serviceIds: cart.serviceIds.join(','),
           serviceAreaPairs:
             cart.serviceAreaPairs.map((p) => `${p.serviceId}:${p.areaId}`).join(',') || undefined,
+          excludeAppointmentId,
         },
       })
       .then((r) => ({ days: r.data.days })),
@@ -61,6 +65,17 @@ export const bookingService = {
         params: { phone, token },
       })
       .then((r) => r.data.appointments),
+
+  rescheduleAppointment: (
+    clinicId: string,
+    appointmentId: string,
+    body: RescheduleAppointmentPayload
+  ) =>
+    api
+      .post<{
+        appointment: Appointment
+      }>(`/public/clinics/${clinicId}/appointments/${appointmentId}/reschedule`, body)
+      .then((r) => r.data.appointment),
 
   cancelAppointment: (clinicId: string, appointmentId: string, phone: string, token: string) =>
     api

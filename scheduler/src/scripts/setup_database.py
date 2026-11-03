@@ -176,6 +176,9 @@ SQL_STATEMENTS = [
         confirmado_em TIMESTAMPTZ,
         confirmado_por VARCHAR(16),
         checked_in_at TIMESTAMPTZ,
+        -- Reagendamento (PRD 035): gravado no registro ANTIGO, aponta para o
+        -- que o substituiu. Reagendado = CANCELLED + rescheduled_to_id.
+        rescheduled_to_id UUID REFERENCES scheduler.appointments(id),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -1083,6 +1086,23 @@ SQL_STATEMENTS = [
            CHECK (status IS NULL OR status IN ('CONFIRMED', 'CANCELLED', 'NO_SHOW'));
        END IF;
        END $$""",
+
+    # -- Reagendamento nao e status (PRD 035) ---------------------------------
+    #
+    # Um terco dos CANCELLED de prod (37 de 117 em 60 dias, medido em
+    # 01/11/2026) eram pessoas que remarcaram: o site so tinha "cancelar", e a
+    # recepcao cancela e recria. O relatorio contava tudo como cancelamento.
+    #
+    # Nao existe um quarto status RESCHEDULED de proposito. `status` governa
+    # motor de horarios, lembretes e uploader de conversao, e todos leem
+    # `= 'CONFIRMED'` / `= 'CANCELLED'`; um valor novo exigiria reauditar cada
+    # um. O vinculo fica numa coluna do registro ANTIGO, apontando para o que o
+    # substituiu. Quem precisa distinguir usa src/services/reagendamento.py:
+    # reagendado = CANCELLED com vinculo; cancelado = CANCELLED sem vinculo.
+    "ALTER TABLE scheduler.appointments "
+    "ADD COLUMN IF NOT EXISTS rescheduled_to_id UUID REFERENCES scheduler.appointments(id)",
+    "CREATE INDEX IF NOT EXISTS idx_appointments_rescheduled_to "
+    "ON scheduler.appointments(rescheduled_to_id) WHERE rescheduled_to_id IS NOT NULL",
 
     # -- Segunda conversion action: "Agendou pelo WhatsApp" (PRD 017) ---------
     #

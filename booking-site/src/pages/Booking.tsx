@@ -27,11 +27,15 @@ import { IconCheckCircle, IconChevronLeft } from '@/components/ui/icons'
 import { ApiError } from '@/services/api'
 import { formatCurrencyBRL, formatDateLong, formatPhoneDisplay, toApiPhone } from '@/utils/format'
 import { cartHasAreas, cartPendingAreaSelection, toCartPayload } from '@/utils/cartTotals'
-import type { CreateAppointmentPayload, WizardStep } from '@/types'
+import { brDateToIso, listaDeCampos, onlyDigits } from '@/utils/cadastro'
+import type { CampoDoCadastro, CreateAppointmentPayload, WizardStep } from '@/types'
 
 // A criação responde 409 por dois motivos: horário ocupado (sem code) e
 // número com agendamento futuro (este code, pede confirmação).
 const HAS_FUTURE_APPOINTMENT = 'HAS_FUTURE_APPOINTMENT'
+// O cadastro do paciente faltou ou está errado (PRD 032); o CPF já é de outro.
+const CADASTRO_INCOMPLETO = 'CADASTRO_INCOMPLETO'
+const CPF_EM_USO = 'CPF_EM_USO'
 
 interface PendingDuplicate {
   payload: CreateAppointmentPayload
@@ -69,6 +73,12 @@ export function Booking() {
   // fuso da clínica); o site só pergunta pelo carrinho e exibe.
   const availability = useAvailability(clinicId, cartPayload, cartReady)
   const quote = useQuote(clinicId, cartPayload, quotePhone, cartReady)
+
+  // O que falta no cadastro do celular digitado (PRD 032). Vem do backend pela
+  // cotação; enquanto a cotação com o celular não volta, o formulário espera,
+  // senão a pessoa finalizaria sem ver os campos e levaria um 400.
+  const camposFaltantes: CampoDoCadastro[] = quotePhone ? (quote.data?.cadastro?.faltam ?? []) : []
+  const aguardandoCadastro = quotePhone !== undefined && (quote.isFetching || quote.isPlaceholderData)
 
   // Com um único serviço no catálogo não existe outro pra escolher - o
   // carrinho não é uma decisão, é um fato. A etapa de revisão (e o botão
@@ -217,6 +227,9 @@ export function Booking() {
       fullName: data.fullName,
       date: cart.date,
       time: cart.time,
+      cpf: onlyDigits(data.cpf ?? '') || undefined,
+      birthDate: data.birthDate ? (brDateToIso(data.birthDate) ?? undefined) : undefined,
+      email: data.email?.trim() || undefined,
     })
   }
 
@@ -231,6 +244,22 @@ export function Booking() {
         // O número já tem agendamento futuro: pergunta antes de criar outro.
         if (err instanceof ApiError && err.code === HAS_FUTURE_APPOINTMENT) {
           setPendingDuplicate({ payload, existingCount: err.body?.existingCount ?? 1 })
+          return
+        }
+        // O servidor pediu o cadastro que a tela não mostrou (front em cache,
+        // ou cotação antiga): refaz a cotação para os campos aparecerem.
+        if (err instanceof ApiError && err.code === CADASTRO_INCOMPLETO) {
+          const faltam = (err.body?.faltam ?? []) as CampoDoCadastro[]
+          setSubmitError(
+            faltam.length > 0
+              ? `Precisamos completar seu cadastro: ${listaDeCampos(faltam)}.`
+              : err.message
+          )
+          void quote.refetch()
+          return
+        }
+        if (err instanceof ApiError && err.code === CPF_EM_USO) {
+          setSubmitError(err.message)
           return
         }
         // O horário foi ocupado enquanto o cliente preenchia os dados. A
@@ -406,6 +435,8 @@ export function Booking() {
             onPhoneChange={handlePhoneChange}
             submitting={createAppointment.isPending}
             submitLabel="Confirmar agendamento"
+            camposFaltantes={camposFaltantes}
+            aguardandoCadastro={aguardandoCadastro}
           />
           {submitError ? (
             <p role="alert" className="mt-3 text-sm text-danger-500">

@@ -1,0 +1,255 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 035 Reagendamento",
+    "description": "Reagendamento nao e cancelamento: remarcar pelo site (mesmo id), vinculo automatico ao cancelar e criar, relatorios com rescheduled.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "API_KEY", "value": "YOUR_API_KEY_HERE", "type": "string" },
+    { "key": "BOOKING_API_KEY", "value": "YOUR_BOOKING_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "phone", "value": "5511999990035", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "appointmentId", "value": "", "type": "string" },
+    { "key": "serviceId", "value": "", "type": "string" },
+    { "key": "areaId", "value": "", "type": "string" },
+    { "key": "newDate", "value": "2026-11-20", "type": "string" },
+    { "key": "newTime", "value": "14:00", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Site - Meus agendamentos (traz o carrinho)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" }],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/my-appointments?phone={{phone}}&token={{token}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "my-appointments"],
+          "query": [
+            { "key": "phone", "value": "{{phone}}" },
+            { "key": "token", "value": "{{token}}" }
+          ]
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+          "pm.test('Cada agendamento traz o carrinho', function () {",
+          "    var j = pm.response.json();",
+          "    pm.expect(j.status).to.eql('SUCCESS');",
+          "    if (j.appointments.length) {",
+          "        pm.expect(j.appointments[0].service_ids).to.be.an('array');",
+          "        pm.expect(j.appointments[0].service_area_pairs).to.be.an('array');",
+          "        pm.collectionVariables.set('appointmentId', j.appointments[0].id);",
+          "    }",
+          "});"
+        ] }
+      }],
+      "response": [{
+        "name": "Success", "status": "OK", "code": 200,
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": "{\n  \"status\": \"SUCCESS\",\n  \"appointments\": [{\n    \"id\": \"11111111-1111-1111-1111-111111111111\",\n    \"appointment_date\": \"2026-11-18\",\n    \"start_time\": \"10:00:00\",\n    \"total_duration_minutes\": 30,\n    \"service_ids\": [\"<serviceId>\"],\n    \"service_area_pairs\": [{\"serviceId\": \"<serviceId>\", \"areaId\": \"<areaId>\"}],\n    \"status\": \"CONFIRMED\"\n  }]\n}"
+      }]
+    },
+    {
+      "name": "Site - Disponibilidade ignorando o proprio agendamento",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" }],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/availability?serviceIds={{serviceId}}&serviceAreaPairs={{serviceId}}:{{areaId}}&excludeAppointmentId={{appointmentId}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "availability"],
+          "query": [
+            { "key": "serviceIds", "value": "{{serviceId}}" },
+            { "key": "serviceAreaPairs", "value": "{{serviceId}}:{{areaId}}" },
+            { "key": "excludeAppointmentId", "value": "{{appointmentId}}" }
+          ]
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+          "pm.test('Devolve days', function () { pm.expect(pm.response.json().days).to.be.an('object'); });"
+        ] }
+      }],
+      "response": [{
+        "name": "Success", "status": "OK", "code": 200,
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": "{\n  \"status\": \"SUCCESS\",\n  \"days\": {\n    \"2026-11-18\": {\"status\": \"AVAILABLE\", \"slots\": [\"10:00\", \"10:35\"]}\n  }\n}"
+      }]
+    },
+    {
+      "name": "Site - Remarcar (mesmo id, nova data)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"token\": \"{{token}}\",\n  \"date\": \"{{newDate}}\",\n  \"time\": \"{{newTime}}\"\n}" },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments/{{appointmentId}}/reschedule",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "appointments", "{{appointmentId}}", "reschedule"]
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+          "pm.test('Mesmo id, nova data', function () {",
+          "    var j = pm.response.json();",
+          "    pm.expect(j.status).to.eql('SUCCESS');",
+          "    pm.expect(j.appointment.id).to.eql(pm.collectionVariables.get('appointmentId'));",
+          "    pm.expect(j.appointment.appointment_date).to.eql(pm.collectionVariables.get('newDate'));",
+          "    pm.expect(j.appointment.status).to.eql('CONFIRMED');",
+          "});"
+        ] }
+      }],
+      "response": [
+        {
+          "name": "Success", "status": "OK", "code": 200,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": "{\n  \"status\": \"SUCCESS\",\n  \"message\": \"Agendamento remarcado com sucesso\",\n  \"appointment\": {\"id\": \"11111111-1111-1111-1111-111111111111\", \"appointment_date\": \"2026-11-20\", \"start_time\": \"14:00:00\", \"status\": \"CONFIRMED\"}\n}"
+        },
+        {
+          "name": "Horario ocupado", "status": "Conflict", "code": 409,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": "{\n  \"status\": \"ERROR\",\n  \"message\": \"Esse horário acabou de ser ocupado. Escolha outro.\"\n}"
+        },
+        {
+          "name": "Token expirado", "status": "Unauthorized", "code": 401,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": "{\n  \"status\": \"ERROR\",\n  \"message\": \"Verificação por WhatsApp expirada. Confirme o código novamente.\"\n}"
+        },
+        {
+          "name": "Nao e deste telefone", "status": "Not Found", "code": 404,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": "{\n  \"status\": \"ERROR\",\n  \"message\": \"Agendamento não encontrado para este telefone\"\n}"
+        },
+        {
+          "name": "Horario passado ou ilegivel", "status": "Bad Request", "code": 400,
+          "header": [{ "key": "Content-Type", "value": "application/json" }],
+          "body": "{\n  \"status\": \"ERROR\",\n  \"message\": \"Escolha um horário futuro.\"\n}"
+        }
+      ]
+    },
+    {
+      "name": "Painel - Criar logo apos cancelar (vinculo automatico)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Teste 035\",\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}],\n  \"date\": \"{{newDate}}\",\n  \"time\": \"{{newTime}}\"\n}" },
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "appointments"]
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+          "pm.test('Aponta o antecessor quando houve cancelamento recente', function () {",
+          "    var j = pm.response.json();",
+          "    pm.expect(j.appointment).to.have.property('rescheduled_from_id');",
+          "});"
+        ] }
+      }],
+      "response": [{
+        "name": "Success (vinculado)", "status": "Created", "code": 201,
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": "{\n  \"status\": \"SUCCESS\",\n  \"id\": \"22222222-2222-2222-2222-222222222222\",\n  \"rescheduled_from_id\": \"11111111-1111-1111-1111-111111111111\"\n}"
+      }]
+    },
+    {
+      "name": "Painel - Lista traz rescheduled_to_id e rescheduled_to_date",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" }],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/appointments?date={{newDate}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "appointments"],
+          "query": [{ "key": "date", "value": "{{newDate}}" }]
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+          "pm.test('Campos do vinculo presentes', function () {",
+          "    var j = pm.response.json();",
+          "    if (j.appointments.length) {",
+          "        pm.expect(j.appointments[0]).to.have.property('rescheduled_to_id');",
+          "        pm.expect(j.appointments[0]).to.have.property('rescheduled_to_date');",
+          "    }",
+          "});"
+        ] }
+      }],
+      "response": []
+    },
+    {
+      "name": "Painel - Dashboard com rescheduled_appointments",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" }],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/dashboard?date={{newDate}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "dashboard"],
+          "query": [{ "key": "date", "value": "{{newDate}}" }]
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+          "pm.test('Resumo separa cancelado de reagendado', function () {",
+          "    var s = pm.response.json().summary;",
+          "    pm.expect(s).to.have.property('cancelled_appointments');",
+          "    pm.expect(s).to.have.property('rescheduled_appointments');",
+          "});"
+        ] }
+      }],
+      "response": []
+    },
+    {
+      "name": "Painel - Agenda por data com rescheduled",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" }],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/agenda-summary?start={{newDate}}&end={{newDate}}",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "agenda-summary"],
+          "query": [
+            { "key": "start", "value": "{{newDate}}" },
+            { "key": "end", "value": "{{newDate}}" }
+          ]
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": { "type": "text/javascript", "exec": [
+          "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+          "pm.test('Total e dias trazem rescheduled', function () {",
+          "    var j = pm.response.json();",
+          "    pm.expect(j.total).to.have.property('rescheduled');",
+          "    if (j.days.length) { pm.expect(j.days[0]).to.have.property('rescheduled'); }",
+          "});"
+        ] }
+      }],
+      "response": []
+    }
+  ]
+}

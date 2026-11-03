@@ -27,7 +27,7 @@ describe('CustomerInfoForm', () => {
     await userEvent.click(screen.getByRole('button', { name: /finalizar/i }))
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
-    expect(onSubmit.mock.calls[0][0]).toEqual({ fullName: 'Maria Silva', phone: '(11) 98765-4321' })
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ fullName: 'Maria Silva', phone: '(11) 98765-4321' })
   })
 
   it('avisa quando o celular fica válido (para refazer a cotação) e quando deixa de ser', async () => {

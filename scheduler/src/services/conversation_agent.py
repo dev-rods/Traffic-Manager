@@ -170,19 +170,9 @@ def limpar_gatilhos(history):
     return limpo
 
 
-def foi_de_pessoa_da_clinica(event):
-    """OUTBOUND digitado no celular, nao enviado pelo bot.
-
-    O webhook marca `metadata.autor = HUMANO` desde a fase 3. Antes disso o
-    sinal era a ausencia de providerMessageId num SENT (ver autoria_mensagem):
-    o bot sempre guarda o id que o provider devolve.
-    """
-    if event.get("direction") != "OUTBOUND":
-        return False
-    meta = event.get("metadata") or {}
-    if isinstance(meta, dict) and meta.get("autor") == "HUMANO":
-        return True
-    return event.get("status") == "SENT" and not event.get("providerMessageId")
+# A regra de autoria mora em autoria_mensagem (PRD 034); o nome continua
+# exportado daqui porque é assim que os testes e a retomada o importam.
+from src.services.autoria_mensagem import foi_de_pessoa_da_clinica, origem_do_sistema  # noqa: E402
 
 
 def events_to_history(events):
@@ -200,11 +190,21 @@ def events_to_history(events):
         if not content:
             continue
         papel = "assistant" if event.get("direction") == "OUTBOUND" else "user"
+        origem = origem_do_sistema(event)
+        # O OTP do site e segredo de 5 minutos e nao e conversa: fora do
+        # historico. O resto do que o sistema mandou (confirmacao do site, link
+        # do check-in) entra como fato comunicado pela clinica, no papel do
+        # usuario, pela mesma razao da fala da atendente abaixo. PRD 034.
+        if origem == "SITE_OTP":
+            continue
+        if papel == "assistant" and origem:
+            papel = "user"
+            content = f"[sistema]: {content}"
         # Fala da ATENDENTE pelo celular nao e fala do bot. Virava turno
         # `assistant` e o bot "continuava" promessas que nao fez - desconto,
         # encaixe, excecao. Entra como turno do usuario, rotulada: o prompt
         # diz que e compromisso da clinica, nao dele. PRD 020 §3.4.
-        if papel == "assistant" and foi_de_pessoa_da_clinica(event):
+        elif papel == "assistant" and foi_de_pessoa_da_clinica(event):
             papel = "user"
             content = f"[atendente da clínica]: {content}"
         if history and history[-1]["role"] == papel:
@@ -1481,10 +1481,11 @@ class ConversationAgent:
         datas = datas_da_campanha(session)
         nome = ""
         try:
+            from src.utils.phone import formas_do_numero
             linhas = self.db.execute_query(
                 "SELECT name FROM scheduler.patients "
-                "WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL LIMIT 1",
-                (clinic_id, phone),
+                "WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL LIMIT 1",
+                (clinic_id, formas_do_numero(phone)),
             )
             if linhas:
                 nome = (linhas[0].get("name") or "").strip()

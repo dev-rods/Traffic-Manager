@@ -42,7 +42,10 @@ por `clinic_id` (via path, ou via domínio próprio — ver §3).
 5. Escolhe o dia numa lista com **as próximas N datas com horário** (N =
    "Datas futuras" da clínica, o mesmo limite do bot), agrupadas por mês, e
    depois o horário. Sem nenhuma data, a tela oferece o WhatsApp da clínica.
-6. Informa nome e celular. Ao digitar o celular, o resumo é recalculado:
+6. Informa nome e celular. Se o celular ainda não é de um paciente com
+   cadastro completo, o site pede também CPF, data de nascimento e e-mail
+   (só o que falta; a lista vem da cotação, PRD 032). Ao digitar o celular,
+   o resumo é recalculado:
    **Total**, **Desconto** (percentual) e **Valor final** aparecem antes de
    confirmar. Com celular a cotação não diz o motivo do desconto — a rota é
    pública e sem verificação, e o motivo revelaria a quem digitasse um número

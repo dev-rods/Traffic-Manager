@@ -7,7 +7,7 @@ from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
 from src.utils.phone import normalize_phone
 from src.services.desconto_personalizado import normaliza_entrada as normaliza_desconto
-from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
+from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento, normaliza_email
 from src.services.db.postgres import PostgresService
 
 logger = logging.getLogger(__name__)
@@ -121,7 +121,10 @@ def handler(event, context):
                             "status": "ERROR",
                             "message": "custom_discount_pct deve ser de 0 a 100, com ate duas casas decimais"})
                 if field == "email":
-                    val = (str(val).strip() or None) if val else None
+                    val = normaliza_email(val)
+                    if val is False:
+                        return http_response(400, {
+                            "status": "ERROR", "message": "E-mail inválido"})
                 sets.append(f"{field} = %s")
                 params.append(val)
 

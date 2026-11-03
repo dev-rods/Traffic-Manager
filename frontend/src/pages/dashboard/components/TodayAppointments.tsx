@@ -62,7 +62,9 @@ export function TodayAppointments({ appointments }: TodayAppointmentsProps) {
                     <PriceCell appointment={apt} />
                   </td>
                   <td className="px-3 py-3">
-                    <StatusBadge status={apt.status} />
+                    <StatusBadge
+                      status={apt.status === 'cancelled' && apt.rescheduled_to_id ? 'rescheduled' : apt.status}
+                    />
                   </td>
                 </tr>
               ))}

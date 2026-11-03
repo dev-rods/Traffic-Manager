@@ -82,7 +82,59 @@ class TestPacienteNasceComNome(unittest.TestCase):
         import inspect
         fonte = inspect.getsource(AppointmentService.create_appointment)
 
-        self.assertIn("_get_or_create_patient(clinic_id, phone, full_name)", fonte)
+        self.assertIn("_get_or_create_patient(clinic_id, phone, full_name, cpf, birth_date, email)", fonte)
+
+
+class TestCadastroPeloSite(unittest.TestCase):
+    """PRD 032: CPF, nascimento e e-mail entram junto; o que existe não é tocado."""
+
+    def setUp(self):
+        self.db = mock.MagicMock()
+        self.db.execute_write_returning.return_value = {"id": "p1"}
+        self.service = AppointmentService(self.db)
+
+    def test_paciente_novo_nasce_com_os_quatro(self):
+        self.db.execute_query.return_value = []
+        self.service._get_or_create_patient("c1", "5511999990000", "Maria", "52998224725", "1990-01-01", "m@x.com")
+        sql, params = self.db.execute_write_returning.call_args[0]
+        self.assertIn("INSERT INTO scheduler.patients", sql)
+        for coluna in ("cpf", "birth_date", "email"):
+            self.assertIn(coluna, sql)
+        self.assertEqual(params, ("c1", "5511999990000", "Maria", "52998224725", "1990-01-01", "m@x.com"))
+
+    def test_existente_so_completa_o_vazio(self):
+        self.db.execute_query.return_value = [
+            {"id": "p1", "name": "Maria S.", "cpf": "11122233344", "birth_date": None, "email": "", "deleted_at": None}]
+        self.service._get_or_create_patient("c1", "5511999990000", "maria", "52998224725", "1990-01-01", "m@x.com")
+        sql, params = self.db.execute_write_returning.call_args[0]
+        self.assertIn("UPDATE scheduler.patients", sql)
+        # COALESCE(existente, novo): o SQL decide, e o teste confere que o
+        # existente vem primeiro em cada coluna.
+        for coluna in ("name", "cpf", "email"):
+            self.assertIn(f"COALESCE(NULLIF({coluna}, ''), %s)", sql)
+        self.assertIn("COALESCE(birth_date, %s::date)", sql)
+        self.assertEqual(params[:4], ("maria", "52998224725", "1990-01-01", "m@x.com"))
+
+    def test_existente_completo_nao_e_tocado(self):
+        self.db.execute_query.return_value = [
+            {"id": "p1", "name": "Maria", "cpf": "11122233344", "birth_date": "1990-01-01",
+             "email": "m@x.com", "deleted_at": None}]
+        self.service._get_or_create_patient("c1", "5511999990000", "Outra", "52998224725", "2000-01-01", "o@x.com")
+        self.db.execute_write_returning.assert_not_called()
+
+    def test_sem_dados_novos_nao_toca(self):
+        self.db.execute_query.return_value = [
+            {"id": "p1", "name": "Maria", "cpf": None, "birth_date": None, "email": None, "deleted_at": None}]
+        self.service._get_or_create_patient("c1", "5511999990000", "Maria", None, None, None)
+        self.db.execute_write_returning.assert_not_called()
+
+    def test_restaurado_tambem_completa(self):
+        self.db.execute_query.return_value = [
+            {"id": "p1", "name": None, "cpf": None, "birth_date": None, "email": None, "deleted_at": "2026-01-01"}]
+        self.service._get_or_create_patient("c1", "5511999990000", "Maria", "52998224725", "1990-01-01", "m@x.com")
+        sql, params = self.db.execute_write_returning.call_args[0]
+        self.assertIn("deleted_at = NULL", sql)
+        self.assertEqual(params[:4], ("Maria", "52998224725", "1990-01-01", "m@x.com"))
 
 
 if __name__ == "__main__":

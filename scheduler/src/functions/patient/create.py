@@ -5,10 +5,10 @@ from datetime import datetime, date, time
 from src.utils.acesso import require_acesso
 from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param, parse_body
-from src.utils.phone import normalize_phone
+from src.utils.phone import formas_do_numero, normalize_phone
 from src.services.db.postgres import PostgresService
 from src.services.desconto_personalizado import normaliza_entrada as normaliza_desconto
-from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento
+from src.utils.cadastro import normaliza_cpf, normaliza_data_nascimento, normaliza_email
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -70,7 +70,9 @@ def handler(event, context):
         if birth_date is False:
             return http_response(400, {"status": "ERROR",
                                        "message": "Data de nascimento invalida"})
-        email = (body.get("email") or "").strip() or None
+        email = normaliza_email(body.get("email"))
+        if email is False:
+            return http_response(400, {"status": "ERROR", "message": "E-mail inválido"})
 
         if not name:
             return http_response(400, {
@@ -95,9 +97,12 @@ def handler(event, context):
         db = PostgresService()
 
         # Check if phone already exists for this clinic (active or soft-deleted)
+        # Pelas variantes do número (com e sem o nono dígito): a mesma pessoa
+        # não pode nascer duas vezes só porque o painel digitou o 9.
         existing = db.execute_query(
-            "SELECT id, deleted_at FROM scheduler.patients WHERE clinic_id = %s AND phone = %s",
-            (clinic_id, phone),
+            "SELECT id, deleted_at FROM scheduler.patients WHERE clinic_id = %s AND phone = ANY(%s) "
+            "ORDER BY (phone = %s) DESC, (deleted_at IS NULL) DESC",
+            (clinic_id, formas_do_numero(phone), phone),
         )
 
         if existing:

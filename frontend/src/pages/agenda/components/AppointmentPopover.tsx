@@ -25,6 +25,14 @@ interface AppointmentPopoverProps {
    *  que so mostram o popover. */
   onConfirmar?: (appointment: Appointment) => void
   onDesconfirmar?: (appointment: Appointment) => void
+  /** "Ver novo" de um agendamento remarcado (PRD 035): leva a agenda ao dia novo. */
+  onNavigateToDate?: (isoDate: string) => void
+}
+
+/** "2026-10-22" -> "22/10". */
+function diaMes(iso: string) {
+  const [, m, d] = iso.split('-')
+  return `${d}/${m}`
 }
 
 /** O estado do lembrete em uma linha, para a atendente saber se a mensagem saiu. */
@@ -58,7 +66,7 @@ function estadoDoLembrete(a: Appointment): string {
  * já está.
  */
 export function AppointmentPopover({
-  appointment, anchorRect, onClose, onEdit, onCancel, onMarcarFalta, onDesmarcarFalta,
+  appointment, anchorRect, onClose, onEdit, onCancel, onMarcarFalta, onDesmarcarFalta, onNavigateToDate,
   onConfirmar, onDesconfirmar,
 }: AppointmentPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -95,6 +103,9 @@ export function AppointmentPopover({
   const timeSlot = `${a.start_time.slice(0, 5)}–${a.end_time.slice(0, 5)}`
   const isCancelled = a.status === 'CANCELLED'
   const faltou = a.status === 'NO_SHOW'
+  // Reagendado nao e cancelado (PRD 035): a pessoa continua marcada, noutro
+  // registro. Cor neutra, nao vermelha.
+  const remarcado = isCancelled && !!a.rescheduled_to_id
 
 
   // Position the popover near the anchor (desktop)
@@ -194,8 +205,15 @@ export function AppointmentPopover({
           )}
           <div className="flex justify-between">
             <span className="text-gray-400">Status</span>
-            <span className={isCancelled ? 'font-medium text-red-500' : 'font-medium text-emerald-600'}>
-              {isCancelled ? 'Cancelado' : 'Confirmado'}
+            <span className={
+              remarcado ? 'font-medium text-gray-600'
+                : isCancelled ? 'font-medium text-red-500'
+                : 'font-medium text-emerald-600'
+            }>
+              {remarcado && a.rescheduled_to_date
+                ? `Remarcado para ${diaMes(a.rescheduled_to_date)}`
+                : remarcado ? 'Remarcado'
+                : isCancelled ? 'Cancelado' : 'Confirmado'}
             </span>
           </div>
           {/* Presenca (PRD 027): so faz sentido depois de o lembrete sair.
@@ -317,6 +335,15 @@ export function AppointmentPopover({
                 Cancelar agendamento
               </button>
             </>
+          )}
+
+          {remarcado && a.rescheduled_to_date && onNavigateToDate && (
+            <button
+              onClick={() => { onNavigateToDate(a.rescheduled_to_date as string); onClose() }}
+              className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              Ver novo
+            </button>
           )}
 
           {/* O caminho de volta. Sem ele, marcar errado seria permanente - e é

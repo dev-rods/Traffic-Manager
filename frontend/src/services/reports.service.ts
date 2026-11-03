@@ -6,6 +6,8 @@ export interface ReportSummary {
   total_appointments: number
   confirmed_appointments: number
   cancelled_appointments: number
+  /** Reagendados saem de `cancelled_appointments` (PRD 035). */
+  rescheduled_appointments: number
   new_patients: number
   gross_revenue_cents: number
   total_discount_cents: number
@@ -62,7 +64,10 @@ export interface DashboardAppointment {
   professional: string
   scheduled_at: string
   duration_minutes: number
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'
+  /** Reagendamento (PRD 035): o registro antigo aponta para o novo. */
+  rescheduled_to_id: string | null
+  rescheduled_to_date: string | null
   original_price_cents: number
   discount_pct: number
   discount_reason: 'first_session' | 'tier_2' | 'tier_3' | null
@@ -90,6 +95,8 @@ export interface AgendaDay {
   date: string
   confirmed: number
   cancelled: number
+  /** Mudaram de dia e continuam marcados noutro registro (PRD 035). */
+  rescheduled: number
   patients: number
   gross_cents: number
   discount_cents: number

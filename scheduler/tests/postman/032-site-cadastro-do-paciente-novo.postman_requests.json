@@ -1,0 +1,124 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Booking-site 032 (cadastro do paciente novo)",
+    "description": "PRD/Spec 032. A cotação com celular diz o que falta no cadastro (quote.cadastro); a criação exige o que falta (400 CADASTRO_INCOMPLETO), valida e recusa CPF de outro paciente (409 CPF_EM_USO). Preencha clinicId, serviceId, areaId, phoneNovo (sem paciente), dataLivre e horaLivre.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "BOOKING_API_KEY", "value": "YOUR_BOOKING_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "serviceId", "value": "", "type": "string" },
+    { "key": "areaId", "value": "", "type": "string" },
+    { "key": "phoneNovo", "value": "", "type": "string" },
+    { "key": "dataLivre", "value": "", "type": "string" },
+    { "key": "horaLivre", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Cotação diz o que falta no cadastro",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "quote"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"serviceIds\": [\"{{serviceId}}\"], \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}], \"phone\": \"{{phoneNovo}}\"}"
+        },
+        "description": "Número sem paciente: faltam birth_date, cpf e email. Só nomes de campos, nunca valores."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+              "var q = pm.response.json().quote;",
+              "pm.test(\"Tem cadastro\", function () { pm.expect(q.cadastro).to.have.keys([\"completo\", \"faltam\"]); });",
+              "pm.test(\"Número novo falta tudo menos o nome\", function () {",
+              "    pm.expect(q.cadastro.completo).to.eql(false);",
+              "    pm.expect(q.cadastro.faltam).to.eql([\"birth_date\", \"cpf\", \"email\"]);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criação sem o cadastro -> 400 CADASTRO_INCOMPLETO",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "appointments"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phoneNovo}}\", \"fullName\": \"Teste 032\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}]}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 400\", function () { pm.response.to.have.status(400); });",
+              "var r = pm.response.json();",
+              "pm.test(\"Código e lista\", function () {",
+              "    pm.expect(r.code).to.eql(\"CADASTRO_INCOMPLETO\");",
+              "    pm.expect(r.faltam).to.eql([\"birth_date\", \"cpf\", \"email\"]);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Criação com o cadastro -> 201",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": ["{{BASE_URL}}"],
+          "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "appointments"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"phone\": \"{{phoneNovo}}\", \"fullName\": \"Teste 032\", \"serviceIds\": [\"{{serviceId}}\"], \"date\": \"{{dataLivre}}\", \"time\": \"{{horaLivre}}\", \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}], \"cpf\": \"529.982.247-25\", \"birthDate\": \"31/10/1990\", \"email\": \" Teste@X.com \"}"
+        },
+        "description": "CPF com pontuação, data brasileira e e-mail com espaços: o backend normaliza."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status 201\", function () { pm.response.to.have.status(201); });",
+              "pm.test(\"Criou\", function () { pm.expect(pm.response.json().status).to.eql(\"SUCCESS\"); });"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

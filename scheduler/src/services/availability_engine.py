@@ -14,8 +14,16 @@ PADRAO_DATAS_FUTURAS = 5
 
 class AvailabilityEngine:
 
-    def __init__(self, db: PostgresService):
+    def __init__(self, db: PostgresService, ignorar_agendamento: Optional[str] = None):
         self.db = db
+        # Remarcacao pelo site (PRD 035): o proprio agendamento nao ocupa a
+        # agenda que esta sendo oferecida a ele, senao mover 10:00 para 10:30
+        # no mesmo dia colide consigo mesmo. `reschedule_appointment` ja
+        # exclui o proprio id ao conferir conflito; aqui e a grade que a
+        # pessoa ve. Atributo da instancia, e nao parametro de cada metodo,
+        # porque a instancia vive uma requisicao e a grade passa por
+        # `janela_do_site` -> `get_days_status` -> `_janelas_das_regras`.
+        self.ignorar_agendamento = ignorar_agendamento
         # Duração do serviço e buffer da clínica não mudam entre as datas de uma
         # mesma busca, mas eram relidos a cada dia verificado. Memorizar por
         # instância corta 2 das 5 queries por data. A instância vive o tempo de
@@ -246,13 +254,15 @@ class AvailabilityEngine:
 
     def _janelas_das_regras(self, clinic_id: str, target_date: str, rules: list, buffer_minutes: int) -> List[tuple]:
         """Os intervalos do dia menos os agendamentos confirmados."""
-        appointments = self.db.execute_query(
-            """
+        sql = """
             SELECT start_time, end_time FROM scheduler.appointments
             WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
-            """,
-            (clinic_id, target_date),
-        )
+            """
+        params = (clinic_id, target_date)
+        if self.ignorar_agendamento:
+            sql += " AND id <> %s::uuid"
+            params += (self.ignorar_agendamento,)
+        appointments = self.db.execute_query(sql, params)
         return self._calculate_free_windows(rules, appointments, buffer_minutes)
 
     def janelas_livres(self, clinic_id: str, target_date: str):

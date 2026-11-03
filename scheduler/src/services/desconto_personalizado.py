@@ -82,10 +82,11 @@ def do_paciente(db, clinic_id: str, phone: str) -> Optional[Decimal]:
     clinica por causa de uma consulta que falhou.
     """
     try:
+        from src.utils.phone import formas_do_numero
         linhas = db.execute_query(
             "SELECT custom_discount_pct FROM scheduler.patients "
-            "WHERE clinic_id = %s AND phone = %s AND deleted_at IS NULL LIMIT 1",
-            (clinic_id, phone),
+            "WHERE clinic_id = %s AND phone = ANY(%s) AND deleted_at IS NULL LIMIT 1",
+            (clinic_id, formas_do_numero(phone)),
         )
     except Exception as e:
         logger.error(f"[DescontoPersonalizado] falha ao ler {phone}: {e}")

@@ -22,7 +22,8 @@ class TestCodigoDeTeste(unittest.TestCase):
         self.provider = mock.MagicMock()
         for p in (
             mock.patch.object(bv, "_table", return_value=self.tabela),
-            mock.patch.object(bv, "ZApiProvider", return_value=self.provider),
+            mock.patch("src.services.envio_do_sistema.get_provider", return_value=self.provider),
+            mock.patch("src.services.envio_do_sistema._tracker", return_value=None),
         ):
             p.start()
             self.addCleanup(p.stop)
@@ -63,7 +64,9 @@ class TestSemLimiteDeEnvios(unittest.TestCase):
         tabela.get_item.return_value = {"Item": {"send_count": 99, "window_started_at": 10 ** 12}}
         provider = mock.MagicMock()
         provider.send_text.return_value = mock.MagicMock(success=True)
-        with mock.patch.object(bv, "_table", return_value=tabela),                 mock.patch.object(bv, "ZApiProvider", return_value=provider):
+        with (mock.patch.object(bv, "_table", return_value=tabela),
+              mock.patch("src.services.envio_do_sistema.get_provider", return_value=provider),
+              mock.patch("src.services.envio_do_sistema._tracker", return_value=None)):
             for _ in range(10):
                 bv.generate_and_send_code(CLINIC, "5511999990000")
         self.assertEqual(provider.send_text.call_count, 10)

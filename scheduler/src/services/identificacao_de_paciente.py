@@ -34,10 +34,17 @@ logger = logging.getLogger(__name__)
 CAMPOS_DO_CADASTRO = ("name", "birth_date", "cpf", "email")
 
 
+def campos_faltantes(paciente: Optional[Dict]) -> List[str]:
+    """Os campos do cadastro ainda vazios, na ordem de CAMPOS_DO_CADASTRO.
+    Paciente ausente: faltam todos. É o que o site usa para pedir só o que
+    falta (PRD 032)."""
+    paciente = paciente or {}
+    return [c for c in CAMPOS_DO_CADASTRO if not _preenchido(paciente.get(c))]
+
+
 def cadastro_completo(paciente: Optional[Dict]) -> bool:
     """Os quatro campos do cadastro estão preenchidos?"""
-    paciente = paciente or {}
-    return all(_preenchido(paciente.get(campo)) for campo in CAMPOS_DO_CADASTRO)
+    return not campos_faltantes(paciente)
 
 
 def _preenchido(valor) -> bool:

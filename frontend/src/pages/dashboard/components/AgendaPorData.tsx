@@ -124,11 +124,13 @@ function TotaisDoPeriodo({ total }: { total: NonNullable<ReturnType<typeof useAg
     { rotulo: 'Perdido em cancelamentos', valor: formatCurrency(total.lost_cents) },
     { rotulo: 'Sessões', valor: String(total.confirmed) },
     { rotulo: 'Cancelamentos', valor: String(total.cancelled) },
+    // Mudaram de dia e seguem marcados (PRD 035): nao e perda.
+    { rotulo: 'Reagendamentos', valor: String(total.rescheduled) },
     { rotulo: 'Sala ocupada', valor: horas(total.booked_minutes) },
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-3 lg:grid-cols-6 border-y border-gray-100 py-4">
+    <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4 lg:grid-cols-7 border-y border-gray-100 py-4">
       {itens.map((i) => (
         <div key={i.rotulo}>
           <p className="text-[11px] uppercase tracking-wide text-gray-400">{i.rotulo}</p>
@@ -158,7 +160,8 @@ function TabelaDeDias({ dias }: { dias: AgendaDay[] }) {
             <th className="py-2 px-3 text-right">A faturar</th>
             <th className="py-2 px-3 text-right">Desconto</th>
             <th className="py-2 px-3 text-right">Ticket médio</th>
-            <th className="py-2 pl-3 text-right">Cancelam.</th>
+            <th className="py-2 px-3 text-right">Cancelam.</th>
+            <th className="py-2 pl-3 text-right">Remarc.</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
@@ -180,7 +183,7 @@ function TabelaDeDias({ dias }: { dias: AgendaDay[] }) {
               <td className="py-2.5 px-3 text-right tabular-nums text-gray-500">
                 {d.confirmed > 0 ? formatCurrency(d.avg_ticket_cents) : '—'}
               </td>
-              <td className="py-2.5 pl-3 text-right">
+              <td className="py-2.5 px-3 text-right">
                 {d.cancelled === 0 ? (
                   <span className="text-gray-300">—</span>
                 ) : (
@@ -195,6 +198,9 @@ function TabelaDeDias({ dias }: { dias: AgendaDay[] }) {
                     </Badge>
                   </span>
                 )}
+              </td>
+              <td className="py-2.5 pl-3 text-right tabular-nums text-gray-500">
+                {d.rescheduled === 0 ? <span className="text-gray-300">—</span> : d.rescheduled}
               </td>
             </tr>
           ))}
