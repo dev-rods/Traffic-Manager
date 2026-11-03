@@ -7,6 +7,7 @@ from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import razao_de as razao_do_personalizado
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
+from src.services.reagendamento import vincula_antecessor
 from src.services.politica_de_desconto import preco_de_tabela
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, duracao_do_carrinho, get_duration_rules)
@@ -332,6 +333,26 @@ class AppointmentService:
         # 8. O lembrete de sessao e por DIA da agenda (PRD 027), enfileirado
         # pelo botao do painel ou pelo lote automatico - nao na criacao.
 
+        # 8b. Reagendamento (PRD 035). Se esta pessoa teve um cancelamento ha
+        # pouco nesta clinica, o antigo passa a apontar para este: e remarcacao,
+        # nao cancelamento. Aqui, e nao no chamador, porque painel, site e bot
+        # chegam todos por esta funcao. A conversao do Google Ads acompanha a
+        # pessoa: muda de registro em vez de nascer outra (o uploader sobe o
+        # evento de agendamento sem filtro de status e retrataria a compra do
+        # antigo). `is True` de proposito: o retorno e bool, e um duble
+        # qualquer nao pode passar por "movida".
+        antecessor = vincula_antecessor(self.db, result)
+        if antecessor == appointment_id:
+            antecessor = None
+        conversao_movida = False
+        if antecessor and self.lead_service:
+            try:
+                conversao_movida = self.lead_service.move_conversion(
+                    antecessor, appointment_id, f"{date} {time}-03:00") is True
+            except Exception as e:
+                logger.error(f"[AppointmentService] Erro ao mover conversao: {e}")
+        result["rescheduled_from_id"] = antecessor
+
         # 9. Mark lead as booked (if lead exists for this phone+clinic)
         if self.lead_service:
             try:
@@ -349,6 +370,9 @@ class AppointmentService:
             # (recurring return: every appointment counts). No-op if no gclid lead.
             # conversion_date carries the appointment start time in clinic tz (BRT, -03:00)
             # so Google gets the real moment, not midnight.
+            # Remarcacao com registro novo ja trouxe a conversao do antigo.
+            if conversao_movida:
+                return result
             try:
                 self.lead_service.record_conversion(
                     clinic_id=clinic_id,
@@ -1007,7 +1031,11 @@ class AppointmentService:
         return self.db.execute_query(
             """
             SELECT a.*, s.name as service_name,
-                   areas_q.areas_display
+                   areas_q.areas_display,
+                   -- O carrinho do agendamento, para o site remarcar com a
+                   -- mesma duracao e as mesmas areas (PRD 035).
+                   COALESCE(svc.ids, ARRAY[a.service_id::text]) AS service_ids,
+                   COALESCE(pares.lista, '[]'::json)            AS service_area_pairs
             FROM scheduler.appointments a
             JOIN scheduler.patients p ON p.id = a.patient_id
             LEFT JOIN scheduler.services s ON a.service_id = s.id
@@ -1016,6 +1044,18 @@ class AppointmentService:
                 FROM scheduler.appointment_service_areas asa
                 WHERE asa.appointment_id = a.id
             ) areas_q ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT array_agg(aps.service_id::text ORDER BY aps.created_at) AS ids
+                FROM scheduler.appointment_services aps
+                WHERE aps.appointment_id = a.id
+            ) svc ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT json_agg(json_build_object('serviceId', asa.service_id,
+                                                  'areaId', asa.area_id)
+                                ORDER BY asa.created_at) AS lista
+                FROM scheduler.appointment_service_areas asa
+                WHERE asa.appointment_id = a.id
+            ) pares ON TRUE
             WHERE p.clinic_id = %s AND p.phone = ANY(%s) AND p.deleted_at IS NULL
             AND a.clinic_id = %s AND a.status = 'CONFIRMED'
             AND a.appointment_date >= CURRENT_DATE

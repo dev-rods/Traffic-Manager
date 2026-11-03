@@ -224,6 +224,10 @@ export interface Appointment {
   updated_at: string
   /** Check-in feito pela paciente no iPad da recepção (PRD 026). */
   checked_in_at: string | null
+  /** Reagendamento (PRD 035): gravado no registro ANTIGO, aponta para o que
+   *  o substituiu. Reagendado = CANCELLED + rescheduled_to_id; não é cancelamento. */
+  rescheduled_to_id: string | null
+  rescheduled_to_date: string | null   // YYYY-MM-DD
   /** O pagamento vivo do agendamento (pendente, aguardando dinheiro ou pago). */
   payment_id: string | null
   payment_method: PaymentMethod | null

@@ -12,8 +12,8 @@ export const bookingKeys = {
   all: ['booking'] as const,
   bootstrap: (clinicId: string) => [...bookingKeys.all, 'bootstrap', clinicId] as const,
   availabilityAll: (clinicId: string) => [...bookingKeys.all, 'availability', clinicId] as const,
-  availability: (clinicId: string, cart: CartPayload) =>
-    [...bookingKeys.availabilityAll(clinicId), cartKey(cart)] as const,
+  availability: (clinicId: string, cart: CartPayload, excludeAppointmentId?: string) =>
+    [...bookingKeys.availabilityAll(clinicId), cartKey(cart), excludeAppointmentId ?? ''] as const,
   quote: (clinicId: string, cart: CartPayload, phone: string | undefined) =>
     [...bookingKeys.all, 'quote', clinicId, cartKey(cart), phone ?? ''] as const,
   myAppointments: (clinicId: string, phone: string) =>
@@ -34,10 +34,15 @@ export function useClinicBootstrap(clinicId: string) {
  * área pendente de escolha — sem ela a duração (e a grade) ainda não existe.
  * `staleTime` curto: a agenda muda enquanto o cliente decide.
  */
-export function useAvailability(clinicId: string, cart: CartPayload, enabled: boolean) {
+export function useAvailability(
+  clinicId: string,
+  cart: CartPayload,
+  enabled: boolean,
+  excludeAppointmentId?: string
+) {
   return useQuery({
-    queryKey: bookingKeys.availability(clinicId, cart),
-    queryFn: () => bookingService.availability(clinicId, cart),
+    queryKey: bookingKeys.availability(clinicId, cart, excludeAppointmentId),
+    queryFn: () => bookingService.availability(clinicId, cart, excludeAppointmentId),
     enabled: enabled && cart.serviceIds.length > 0,
     staleTime: 1000 * 30,
   })
@@ -93,6 +98,33 @@ export function useMyAppointments(clinicId: string, phone: string, token: string
     queryKey: bookingKeys.myAppointments(clinicId, phone),
     queryFn: () => bookingService.myAppointments(clinicId, phone, token as string),
     enabled: Boolean(token && phone),
+  })
+}
+
+/**
+ * Remarcar sem cancelar (PRD 035). A lista da pessoa muda; a grade de todo
+ * mundo também, porque o horário antigo voltou a ficar livre.
+ */
+export function useRescheduleAppointment(clinicId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      appointmentId,
+      ...body
+    }: {
+      appointmentId: string
+      phone: string
+      token: string
+      date: string
+      time: string
+    }) => bookingService.rescheduleAppointment(clinicId, appointmentId, body),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: bookingKeys.myAppointments(clinicId, variables.phone),
+      })
+    },
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: bookingKeys.availabilityAll(clinicId) }),
   })
 }
 

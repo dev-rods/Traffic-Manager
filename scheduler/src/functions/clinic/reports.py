@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
+from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_REAGENDADO
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -80,11 +81,15 @@ def handler(event, context):
         start, end, prev_start, prev_end, label = _period_range(period, today)
 
         # ── Summary (current period) ──────────────────────────────
-        summary_row = db.execute_query("""
+        # Reagendado nao e cancelado (PRD 035). O registro novo ja esta em
+        # total_appointments; o antigo nao conta em lugar nenhum alem de
+        # rescheduled_appointments.
+        summary_row = db.execute_query(f"""
             SELECT
                 COUNT(*) FILTER (WHERE status != 'CANCELLED') as total_appointments,
                 COUNT(*) FILTER (WHERE status = 'CONFIRMED') as confirmed_appointments,
-                COUNT(*) FILTER (WHERE status = 'CANCELLED') as cancelled_appointments,
+                COUNT(*) FILTER (WHERE {E_CANCELADO_DE_VERDADE.format(a='appointments')}) as cancelled_appointments,
+                COUNT(*) FILTER (WHERE {E_REAGENDADO.format(a='appointments')}) as rescheduled_appointments,
                 COALESCE(SUM(original_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as gross_revenue_cents,
                 COALESCE(SUM(final_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as net_revenue_cents,
                 COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND discount_pct > 0), 0) as total_discount_cents
@@ -96,6 +101,7 @@ def handler(event, context):
         total = s.get("total_appointments", 0) or 0
         confirmed = s.get("confirmed_appointments", 0) or 0
         cancelled = s.get("cancelled_appointments", 0) or 0
+        rescheduled = s.get("rescheduled_appointments", 0) or 0
         gross = s.get("gross_revenue_cents", 0) or 0
         discounts = s.get("total_discount_cents", 0) or 0
 
@@ -139,6 +145,7 @@ def handler(event, context):
             "total_appointments": total,
             "confirmed_appointments": confirmed,
             "cancelled_appointments": cancelled,
+            "rescheduled_appointments": rescheduled,
             "new_patients": new_patients,
             "gross_revenue_cents": gross,
             "total_discount_cents": discounts,

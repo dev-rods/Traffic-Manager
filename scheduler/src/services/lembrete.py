@@ -106,8 +106,8 @@ def bloco_de_prompt(session, clinic, agora: Optional[int] = None) -> str:
     link = link_de_autoatendimento(clinic)
     if link:
         saida = (
-            f"Se ela quiser CANCELAR ou REMARCAR, NÃO execute nada: envie o link {link} e diga "
-            "que ela resolve em um minuto por lá, com o mesmo número de WhatsApp. "
+            f"Se ela quiser REMARCAR ou CANCELAR, NÃO execute nada: envie o link {link} e diga "
+            "que por lá ela remarca ou cancela em um minuto, com o mesmo número de WhatsApp. "
             "Se disser que não vai poder ir sem pedir nada, pergunte se prefere remarcar ou "
             "cancelar e então envie o link.\n"
         )

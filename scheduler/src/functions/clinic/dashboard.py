@@ -4,6 +4,7 @@ from datetime import datetime, date, time, timedelta
 
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
+from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_REAGENDADO
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -69,11 +70,14 @@ def handler(event, context):
         month_start, month_end = _get_month_bounds(today)
 
         # ── Summary (today) ──────────────────────────────────────
-        summary_rows = db.execute_query("""
+        # Reagendado nao e cancelado (PRD 035): a pessoa continua com sessao
+        # marcada, so que noutro registro. A regra vem de reagendamento.py.
+        summary_rows = db.execute_query(f"""
             SELECT
                 COUNT(*) as total_appointments,
                 COUNT(*) FILTER (WHERE status = 'CONFIRMED') as confirmed_appointments,
-                COUNT(*) FILTER (WHERE status = 'CANCELLED') as cancelled_appointments,
+                COUNT(*) FILTER (WHERE {E_CANCELADO_DE_VERDADE.format(a='appointments')}) as cancelled_appointments,
+                COUNT(*) FILTER (WHERE {E_REAGENDADO.format(a='appointments')}) as rescheduled_appointments,
                 COALESCE(SUM(final_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as net_revenue_cents,
                 COALESCE(SUM(original_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as gross_revenue_cents,
                 COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND discount_pct > 0), 0) as total_discount_cents,
@@ -86,11 +90,13 @@ def handler(event, context):
         total = s.get("total_appointments", 0) or 0
         confirmed = s.get("confirmed_appointments", 0) or 0
         cancelled = s.get("cancelled_appointments", 0) or 0
+        rescheduled = s.get("rescheduled_appointments", 0) or 0
 
         summary = {
             "total_appointments": total,
             "confirmed_appointments": confirmed,
             "cancelled_appointments": cancelled,
+            "rescheduled_appointments": rescheduled,
             "new_patients": 0,
             "gross_revenue_cents": s.get("gross_revenue_cents", 0) or 0,
             "total_discount_cents": s.get("total_discount_cents", 0) or 0,
@@ -116,10 +122,13 @@ def handler(event, context):
                 a.final_price_cents,
                 p.phone as patient_phone,
                 p.name as patient_db_name,
-                pr.name as professional
+                pr.name as professional,
+                a.rescheduled_to_id,
+                rt.appointment_date as rescheduled_to_date
             FROM scheduler.appointments a
             LEFT JOIN scheduler.patients p ON p.id = a.patient_id
             LEFT JOIN scheduler.professionals pr ON pr.id = a.professional_id
+            LEFT JOIN scheduler.appointments rt ON rt.id = a.rescheduled_to_id
             WHERE a.clinic_id = %s AND a.appointment_date = %s
             ORDER BY a.start_time ASC
         """, (clinic_id, today))
@@ -159,6 +168,8 @@ def handler(event, context):
                 "discount_pct": row.get("discount_pct") or 0,
                 "discount_reason": row.get("discount_reason"),
                 "final_price_cents": row.get("final_price_cents") or 0,
+                "rescheduled_to_id": str(row["rescheduled_to_id"]) if row.get("rescheduled_to_id") else None,
+                "rescheduled_to_date": row["rescheduled_to_date"].isoformat() if row.get("rescheduled_to_date") else None,
             })
 
         # ── Daily counts (current week) ─────────────────────────

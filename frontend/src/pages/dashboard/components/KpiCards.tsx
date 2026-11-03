@@ -27,9 +27,13 @@ function buildKpis(s: ReportSummary): KpiItem[] {
       color: 'text-emerald-600',
     },
     {
+      // Reagendado nao conta como cancelamento (PRD 035); aparece no detalhe
+      // para a gerencia ver que a troca existiu.
       label: 'Cancelamentos',
       value: String(s.cancelled_appointments),
-      detail: `${s.cancellation_rate}% taxa`,
+      detail: s.rescheduled_appointments > 0
+        ? `${s.rescheduled_appointments} ${s.rescheduled_appointments === 1 ? 'reagendado' : 'reagendados'}`
+        : `${s.cancellation_rate}% taxa`,
       color: 'text-red-500',
     },
     {

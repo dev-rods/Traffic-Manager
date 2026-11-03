@@ -333,6 +333,7 @@ export function AgendaPage() {
         onClose={() => { setPopoverAppointment(null); setPopoverRect(null) }}
         onEdit={(a) => setEditing(a)}
         onCancel={(a) => setCancelling(a)}
+        onNavigateToDate={(d) => setDiaExpandido(d)}
         onMarcarFalta={marcarFalta}
         onDesmarcarFalta={desmarcarFalta}
         onConfirmar={confirmarPresenca}
@@ -352,6 +353,7 @@ export function AgendaPage() {
       <CancelAppointmentModal
         appointment={cancelling}
         onClose={() => setCancelling(null)}
+        onReschedule={(a) => { setCancelling(null); setEditing(a) }}
       />
 
       {/* Create appointment modal — key forces remount to reset form */}

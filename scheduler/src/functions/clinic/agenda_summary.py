@@ -18,6 +18,7 @@ import logging
 from datetime import date, datetime, timedelta
 
 from src.services.db.postgres import PostgresService
+from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_REAGENDADO
 from src.utils.http import (
     extract_path_param,
     extract_query_param,
@@ -63,12 +64,17 @@ def handler(event, context):
             fim = inicio + timedelta(days=MAX_DIAS)
 
         db = PostgresService()
+        # Reagendado nao e cancelado (PRD 035): nao e perda, e a sessao
+        # continua marcada noutro registro. A regra vem de reagendamento.py.
+        cancelado = E_CANCELADO_DE_VERDADE.format(a="ap")
+        reagendado = E_REAGENDADO.format(a="ap")
         linhas = db.execute_query(
-            """
+            f"""
             SELECT
                 ap.appointment_date AS dia,
                 COUNT(*) FILTER (WHERE ap.status = 'CONFIRMED')            AS confirmados,
-                COUNT(*) FILTER (WHERE ap.status = 'CANCELLED')            AS cancelados,
+                COUNT(*) FILTER (WHERE {cancelado})                        AS cancelados,
+                COUNT(*) FILTER (WHERE {reagendado})                       AS reagendados,
                 COUNT(DISTINCT ap.patient_id) FILTER (WHERE ap.status = 'CONFIRMED') AS pacientes,
                 COALESCE(SUM(ap.original_price_cents) FILTER (WHERE ap.status = 'CONFIRMED'), 0) AS bruto_cents,
                 COALESCE(SUM(ap.final_price_cents)    FILTER (WHERE ap.status = 'CONFIRMED'), 0) AS liquido_cents,
@@ -76,7 +82,7 @@ def handler(event, context):
                 -- Receita que deixou de entrar por cancelamento. A gerência
                 -- precisa ver isso separado do desconto: uma é escolha da
                 -- clínica, a outra é perda.
-                COALESCE(SUM(ap.final_price_cents) FILTER (WHERE ap.status = 'CANCELLED'), 0) AS perdido_cents
+                COALESCE(SUM(ap.final_price_cents) FILTER (WHERE {cancelado}), 0) AS perdido_cents
             FROM scheduler.appointments ap
             WHERE ap.clinic_id = %s AND ap.appointment_date BETWEEN %s AND %s
             GROUP BY ap.appointment_date
@@ -95,6 +101,7 @@ def handler(event, context):
                 "date": r["dia"].isoformat(),
                 "confirmed": confirmados,
                 "cancelled": cancelados,
+                "rescheduled": int(r.get("reagendados") or 0),
                 "patients": int(r["pacientes"] or 0),
                 "gross_cents": bruto,
                 "discount_cents": bruto - liquido,
@@ -113,6 +120,7 @@ def handler(event, context):
         total = {
             "confirmed": sum(d["confirmed"] for d in dias),
             "cancelled": sum(d["cancelled"] for d in dias),
+            "rescheduled": sum(d["rescheduled"] for d in dias),
             "gross_cents": sum(d["gross_cents"] for d in dias),
             "discount_cents": sum(d["discount_cents"] for d in dias),
             "net_cents": sum(d["net_cents"] for d in dias),

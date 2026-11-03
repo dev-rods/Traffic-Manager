@@ -64,6 +64,10 @@ PublicBooking:
         method: post
         cors: true
     - http:
+        path: public/clinics/{clinicId}/appointments/{appointmentId}/reschedule
+        method: post
+        cors: true
+    - http:
         path: public/resolve-domain
         method: get
         cors: true

@@ -15,6 +15,7 @@ function dia(over: Partial<AgendaSummary['days'][number]> = {}) {
     date: '2026-09-23',
     confirmed: 4,
     cancelled: 0,
+    rescheduled: 0,
     patients: 4,
     gross_cents: 80000,
     discount_cents: 8000,
@@ -37,6 +38,7 @@ function resposta(days = [dia()]) {
       total: {
         confirmed: days.reduce((s, d) => s + d.confirmed, 0),
         cancelled: days.reduce((s, d) => s + d.cancelled, 0),
+        rescheduled: days.reduce((s, d) => s + d.rescheduled, 0),
         gross_cents: days.reduce((s, d) => s + d.gross_cents, 0),
         discount_cents: days.reduce((s, d) => s + d.discount_cents, 0),
         net_cents: days.reduce((s, d) => s + d.net_cents, 0),
@@ -85,6 +87,18 @@ describe('AgendaPorData', () => {
     const tabela = within(screen.getByRole('table'))
     expect(tabela.getByText('- R$ 300,00')).toBeInTheDocument()
     expect(tabela.getByText('2')).toBeInTheDocument()
+  })
+
+  it('reagendamento aparece na própria coluna, não como cancelamento', () => {
+    mockUseAgendaSummary.mockReturnValue(resposta([dia({ rescheduled: 3, discount_cents: 0 })]))
+    render(<AgendaPorData />)
+
+    const tabela = within(screen.getByRole('table'))
+    expect(tabela.getByText('Remarc.')).toBeInTheDocument()
+    expect(tabela.getByText('3')).toBeInTheDocument()
+    expect(screen.getByText('Reagendamentos')).toBeInTheDocument()
+    // Nenhuma perda em reais: reagendar nao e cancelar.
+    expect(tabela.queryByText(/- R\$/)).not.toBeInTheDocument()
   })
 
   it('dia sem desconto e sem cancelamento não polui a linha', () => {

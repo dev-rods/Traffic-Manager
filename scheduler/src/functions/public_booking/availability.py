@@ -27,6 +27,9 @@ def handler(event, context):
     sem piso, teto, passo nem combos, e a criação recusava horário que a tela
     tinha oferecido.
 
+    `excludeAppointmentId` (PRD 035): a grade para REMARCAR esse agendamento,
+    sem que ele ocupe o próprio horário.
+
     Compatibilidade: `dates` (front antigo, que pedia o mês) é ignorado; sem
     `serviceIds` e com `totalDuration`, usa a duração informada. Logado como
     legado; sai quando o log zerar.
@@ -68,8 +71,10 @@ def handler(event, context):
             logger.warning(f"[PublicBooking][availability] {clinic_id}: totalDuration legado ({duracao})")
 
         agora = relogio.agora_na_clinica(clinics[0].get("timezone"))
+        engine = AvailabilityEngine(
+            db, ignorar_agendamento=extract_query_param(event, "excludeAppointmentId") or None)
         days = janela_do_site.dias_oferecidos(
-            AvailabilityEngine(db), clinic_id, duracao, agora, janela_do_site.quantas(clinics[0]))
+            engine, clinic_id, duracao, agora, janela_do_site.quantas(clinics[0]))
 
         return http_response(200, {"status": "SUCCESS", "days": days})
 

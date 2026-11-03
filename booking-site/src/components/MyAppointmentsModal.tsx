@@ -7,6 +7,7 @@ import { EmptyState } from './ui/EmptyState'
 import { ErrorState } from './ui/ErrorState'
 import { Spinner } from './ui/Spinner'
 import { OtpCodeForm } from './OtpCodeForm'
+import { RescheduleInline } from './RescheduleInline'
 import { useCancelAppointment, useMyAppointments } from '@/hooks/useBooking'
 import {
   formatCurrencyBRL,
@@ -29,6 +30,7 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
   const [phone, setPhone] = useState('')
   const [token, setToken] = useState<string | null>(null)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [reschedulingId, setReschedulingId] = useState<string | null>(null)
 
   // O campo mostra `(11) 99999-0000`; a API recebe `5511999990000`. Mandar o
   // formatado deixou a lista vazia para quem tinha acabado de agendar.
@@ -41,6 +43,7 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
     setPhone('')
     setToken(null)
     setCancelingId(null)
+    setReschedulingId(null)
     onClose()
   }
 
@@ -113,7 +116,16 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
                     ? ` · ${formatCurrencyBRL(appt.final_price_cents)}`
                     : ''}
                 </p>
-                {cancelingId === appt.id ? (
+                {reschedulingId === appt.id && token ? (
+                  <RescheduleInline
+                    clinicId={clinicId}
+                    appointment={appt}
+                    phone={apiPhone}
+                    token={token}
+                    onDone={() => setReschedulingId(null)}
+                    onBack={() => setReschedulingId(null)}
+                  />
+                ) : cancelingId === appt.id ? (
                   <div className="mt-3 flex gap-2">
                     <Button
                       size="sm"
@@ -128,13 +140,34 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
                     </Button>
                   </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => setCancelingId(appt.id)}
-                    className="mt-3 text-sm font-medium text-danger-500 underline underline-offset-2"
-                  >
-                    Cancelar agendamento
-                  </button>
+                  // Remarcar vem primeiro: é o que queremos que a pessoa
+                  // faça. Cancelar e marcar de novo virava "cancelamento"
+                  // no relatório da clínica (PRD 035).
+                  <div className="mt-3 flex items-center gap-2 text-sm font-medium">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancelingId(null)
+                        setReschedulingId(appt.id)
+                      }}
+                      className="text-accent-700 underline underline-offset-2"
+                    >
+                      Remarcar
+                    </button>
+                    <span aria-hidden="true" className="text-ink-300">
+                      ·
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReschedulingId(null)
+                        setCancelingId(appt.id)
+                      }}
+                      className="text-danger-500 underline underline-offset-2"
+                    >
+                      Cancelar agendamento
+                    </button>
+                  </div>
                 )}
               </div>
             ))

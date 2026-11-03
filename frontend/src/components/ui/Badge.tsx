@@ -28,6 +28,9 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   confirmed: { label: 'Confirmado', variant: 'success' },
   cancelled: { label: 'Cancelado', variant: 'danger' },
   pending: { label: 'Pendente', variant: 'warning' },
+  no_show: { label: 'Falta', variant: 'danger' },
+  /* Reagendado nao e cancelado (PRD 035). */
+  rescheduled: { label: 'Remarcado', variant: 'neutral' },
 }
 
 export function StatusBadge({ status }: { status: string }) {
