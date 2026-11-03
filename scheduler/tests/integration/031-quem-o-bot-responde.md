@@ -19,7 +19,7 @@ silêncio. Dois números de teste: `LEAD` (vai ser cadastrado) e `AVULSO`.
 ## 1. Lead cadastrado fora da landing page escreve primeiro (cenário 1)
 
 ```bash
-curl -s -X POST "${H[@]}" -d "{\"phone\":\"$LEAD\",\"name\":\"Teste 031\",\"source\":\"painel\"}" "$BASE/clinics/$CLINIC/leads"
+curl -s -X POST "${H[@]}" -d "{\"clinicId\":\"$CLINIC\",\"phone\":\"$LEAD\",\"name\":\"Teste 031\",\"source\":\"painel\"}" "$BASE/leads"
 ```
 
 Mande "oi" do `LEAD` para o WhatsApp da clínica.
@@ -30,8 +30,9 @@ do `LEAD` vem com `pause_reason: null` e `bot_paused: false`.
 ## 2. "Iniciar pelo Bot" acende para origem `painel` (cenário 2)
 
 `GET /clinics/$CLINIC/leads`: o lead de origem `painel` que ainda não escreveu
-vem com `pode_iniciar_pelo_bot: true`. Um lead de origem `whatsapp` vem com
-`false` e motivo "Quem chegou pelo WhatsApp não pode ser iniciado pelo bot."
+vem com `can_start_bot: true`. Um lead de origem `whatsapp` vem com `false`,
+`bot_block_reason: "ORIGEM"` e `bot_block_message` "Quem chegou pelo WhatsApp
+não pode ser iniciado pelo bot." (conferido em dev em 03/11/2026).
 
 ## 3. Mensagem avulsa fica fora da regra (cenário 3)
 
