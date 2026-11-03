@@ -247,8 +247,13 @@ sobrescreve; o que foi ao documento está no snapshot.
 - **Rotas**: Lambda nova `Consentimento` com coringa
   `clinics/{clinicId}/consents/{proxy+}`: `GET ?patientId=`,
   `POST appointments/{id}/waive`, `POST patients/{id}/paper`,
-  `GET {id}/pdf-url`, `GET {id}/audit-url`. Ler segue `agenda.ler`; dispensar
-  e papel seguem `agenda.escrever`.
+  `GET {id}/pdf-url`, `GET {id}/zip-url`. Ler segue `prontuario.ler` (é
+  documento da paciente, como o histórico); dispensar e papel seguem
+  `agenda.escrever`. As permissões são impostas no servidor
+  (`src/utils/acesso.py`); o painel não checa no cliente, como no caixa.
+- **Registro no conselho**: não existe endpoint de atualização de
+  profissional. Entra a Lambda `UpdateProfessional`
+  (`PUT clinics/{clinicId}/professionals/{id}`).
 
 ---
 
@@ -310,6 +315,7 @@ sobrescreve; o que foi ao documento está no snapshot.
 | `scheduler/src/functions/public_booking/clicksign_webhook.py` | criar | HMAC, dedup, fechamento |
 | `scheduler/src/functions/public_booking/router.py` | modificar | Rota do webhook |
 | `scheduler/src/functions/consent/` | criar | Lambda `Consentimento` (painel) |
+| `scheduler/src/functions/professional/update.py` | criar | Lambda `UpdateProfessional` (registro no conselho) |
 | `scheduler/sls/functions/public_booking/interface.yml` | modificar | Rota do webhook, IAM do bucket |
 | `scheduler/sls/functions/consent/interface.yml` | criar | Lambda e coringa |
 | `scheduler/sls/resources/s3/documentos-bucket.yml` | criar | Bucket privado |
@@ -405,6 +411,6 @@ sobrescreve; o que foi ao documento está no snapshot.
 ## Status
 
 - [x] Pendente
-- [ ] Spec gerada: `spec/036-termo-de-consentimento.md`
+- [x] Spec gerada: `spec/036-termo-de-consentimento.md` (03/11/2026)
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
