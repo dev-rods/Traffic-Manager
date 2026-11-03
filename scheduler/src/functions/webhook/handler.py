@@ -12,6 +12,7 @@ from src.services.db.postgres import PostgresService
 from src.services.template_service import TemplateService
 from src.services.message_tracker import MessageTracker
 from src.services.lead_service import LeadService, extract_gclid
+from src.services.elegibilidade_do_bot import ORIGEM_SEM_DIREITO
 from src.services.agregador_de_mensagens import (
     JANELA_PADRAO_SEGUNDOS,
     chegou_mensagem_nova,
@@ -329,22 +330,28 @@ def handler(event, context):
         # e o caso que importa.
         primeira_vez = not session
 
-        # Quem veio da landing page tem direito a resposta automática mesmo com a
-        # política LEADS_ONLY, tenha o bot falado primeiro ou não. A marca é gravada
-        # uma vez só: nas mensagens seguintes ela já está na sessão.
+        # Quem foi cadastrado por qualquer caminho que não o próprio WhatsApp
+        # (landing page, painel, integrações) tem direito a resposta automática
+        # mesmo com a política LEADS_ONLY, tenha o bot falado primeiro ou não
+        # (PRD 031). A marca é gravada uma vez só: nas mensagens seguintes ela já
+        # está na sessão.
         if not session.get("bot_enabled"):
             # Mesma variante da marcação acima, e pela MESMA razão - só que
             # aqui o preço é maior: sem achar o lead, `bot_enabled` não é
             # marcado, a política LEADS_ONLY cala o bot, e quem escreveu fica
             # sem resposta. Em 18/09/2026 a Ana Clara esperou 3 horas.
-            leads_lp = db.execute_query(
+            # A ordem existe porque pode haver mais de uma linha (painel e
+            # landing page, por exemplo): a mais recente carrega o
+            # `first_contact_channel` que importa.
+            leads_cadastrados = db.execute_query(
                 "SELECT id, first_contact_channel FROM scheduler.leads "
-                "WHERE clinic_id = %s AND phone = ANY(%s) AND source = 'landing-page' LIMIT 1",
-                (clinic_id, variantes),
+                "WHERE clinic_id = %s AND phone = ANY(%s) AND source <> %s "
+                "ORDER BY created_at DESC LIMIT 1",
+                (clinic_id, variantes, ORIGEM_SEM_DIREITO),
             )
-            if leads_lp:
+            if leads_cadastrados:
                 mark_conversation_eligible(
-                    _get_sessions_table(), clinic_id, incoming.phone, str(leads_lp[0]["id"])
+                    _get_sessions_table(), clinic_id, incoming.phone, str(leads_cadastrados[0]["id"])
                 )
                 session["bot_enabled"] = True
 
@@ -352,7 +359,7 @@ def handler(event, context):
                 # conversa. Sem isto o botao era decorativo: ele registrava o
                 # fato e nao governava nada, e o bot respondia por cima da
                 # atendente assim que a pessoa escrevesse.
-                if leads_lp[0].get("first_contact_channel") == "HUMANO":
+                if leads_cadastrados[0].get("first_contact_channel") == "HUMANO":
                     atendimento.entrega_a_humano(session, por=atendimento.POR_CONTATO_MANUAL)
                     grava_atendimento(_get_sessions_table(), clinic_id, incoming.phone, session)
 

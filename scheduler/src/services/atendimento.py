@@ -220,6 +220,34 @@ def pode_responder(clinic: Optional[Dict], session: Optional[Dict], phone: str,
     return _politica_permite(clinic, session, phone, agora)
 
 
+# Por que o bot NÃO responde, no vocabulário que o painel exibe (PRD 031).
+PAUSA_ATENDENTE = "attendant"
+PAUSA_CLINICA = "clinic_paused"
+PAUSA_FORA_DA_REGRA = "not_eligible"
+
+
+def motivo_da_pausa(clinic: Optional[Dict], session: Optional[Dict], phone: str,
+                    agora: Optional[int] = None) -> Optional[str]:
+    """Por que o bot NÃO responde esta conversa, ou None quando responde.
+
+    As mesmas três portas de `pode_responder`, ditas em palavras para o painel:
+    alguém da clínica está na conversa; a clínica pausou o bot; a política não
+    cobre este número. "Com atendente" vem antes de "clínica pausada" porque é
+    o que a recepção pode agir. Era calculado inline em três handlers, que
+    tinham de concordar entre si e com `pode_responder`.
+    """
+    clinic = clinic or {}
+    session = session or {}
+    agora = _agora(agora)
+    if esta_com_pessoa(session, agora):
+        return PAUSA_ATENDENTE
+    if clinic.get("bot_paused"):
+        return PAUSA_CLINICA
+    if not _politica_permite(clinic, session, phone, agora):
+        return PAUSA_FORA_DA_REGRA
+    return None
+
+
 def pode_iniciar(clinic: Optional[Dict], session: Optional[Dict], phone: str,
                  agora: Optional[int] = None, *, transacional: bool = False) -> bool:
     """Ninguém escreveu. O bot pode falar primeiro?

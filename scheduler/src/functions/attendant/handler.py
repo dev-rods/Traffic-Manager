@@ -33,6 +33,21 @@ def _get_clinic(clinic_id):
         return {}
 
 
+def _get_clinic_completa(clinic_id):
+    """A linha inteira: a janela de silencio mora em colunas que `_get_clinic`
+    nao traz, e `pode_iniciar` precisa dela. Falha vira dict vazio."""
+    try:
+        from src.services.db.postgres import PostgresService
+
+        rows = PostgresService().execute_query(
+            "SELECT * FROM scheduler.clinics WHERE clinic_id = %s", (clinic_id,)
+        )
+        return rows[0] if rows else {}
+    except Exception as e:
+        logger.warning(f"[Attendant] Não consegui ler a clinica {clinic_id}: {e}")
+        return {}
+
+
 def _get_sessions_table():
     dynamodb = boto3.resource("dynamodb")
     return dynamodb.Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
@@ -150,13 +165,33 @@ def _handle_deactivate(event, context):
         return http_response(500, {"status": "ERROR", "message": "Não consegui retomar o bot; tente de novo"})
     logger.info(f"[Attendant] Bot retomado para {phone} na clinica {clinic_id}")
 
-    respondendo = _agendar_retomada(clinic_id, phone, context, entregue_em)
+    # A execucao assincrona confere a porta por conta propria
+    # (`responder_se_ficou_em_aberto`), mas a resposta HTTP nao pode prometer
+    # "respondendo" quando ela vai calar: na janela de silencio o painel
+    # mostrava o bot escrevendo e nada saia (PRD 031).
+    clinic = _get_clinic_completa(clinic_id)
+    motivo_sem_resposta = None
+    if not atendimento.pode_iniciar(clinic, session, phone):
+        motivo_sem_resposta = "fora_do_horario" if _em_silencio(clinic) else "bot_pausado"
+        logger.info(f"[Attendant] {phone}: porta fechada agora ({motivo_sem_resposta}); bot só ativado")
+        respondendo = False
+    else:
+        respondendo = _agendar_retomada(clinic_id, phone, context, entregue_em)
 
     return http_response(200, {
         "status": "OK",
         "message": f"Bot retomado para {phone}",
         "answering_open_question": respondendo,
+        "motivo_sem_resposta": motivo_sem_resposta,
     })
+
+
+def _em_silencio(clinic):
+    from datetime import datetime, timezone
+
+    from src.services.business_hours import em_silencio
+
+    return em_silencio(clinic, datetime.now(timezone.utc))
 
 
 def _agendar_retomada(clinic_id, phone, context, entregue_em=None):
@@ -229,12 +264,7 @@ def _handle_status(event):
         "status": "OK",
         "handler": atendimento.estado(session, now),
         "bot_paused": not responde,
-        "pause_reason": (
-            "attendant" if atendente_ativo
-            else "clinic_paused" if clinic.get("bot_paused", False)
-            else "not_eligible" if not responde
-            else None
-        ),
+        "pause_reason": atendimento.motivo_da_pausa(clinic, session, phone, now),
         "attendant_active_until": ttl if atendente_ativo and ttl else None,
         "ttl_remaining_seconds": max(0, ttl - now) if atendente_ativo and ttl else 0,
     })

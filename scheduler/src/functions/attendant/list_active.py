@@ -78,10 +78,6 @@ def handler(event, context):
             handoff_at = b.get("entregue_em")
             updated_at = item.get("updatedAt", "")
 
-            # A conversa esta com uma pessoa (atendente, handoff, pausa no
-            # painel)? Fonte unica: o estado de atendimento derivado do bloco.
-            atendente_ativo = atendimento.esta_com_pessoa(session, now)
-
             # Mesma decisão que o webhook toma ao receber mensagem: é a única
             # forma de o painel não mentir sobre o que vai acontecer.
             responde = atendimento.pode_responder(clinic, session, phone, now)
@@ -103,12 +99,7 @@ def handler(event, context):
                 "bot_paused": not responde,
                 # Distingue "alguém pausou" de "a política não cobre esta conversa":
                 # o primeiro se resolve retomando, o segundo é o padrão da clínica.
-                "pause_reason": (
-                    "attendant" if atendente_ativo
-                    else "clinic_paused" if clinic.get("bot_paused", False)
-                    else "not_eligible" if not responde
-                    else None
-                ),
+                "pause_reason": atendimento.motivo_da_pausa(clinic, session, phone, now),
                 "attendant_active_until": attendant_until,
                 # Desde quando espera. A fila do painel ordena por isto: quem
                 # espera há mais tempo é quem a recepção precisa ver primeiro,

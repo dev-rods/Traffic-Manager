@@ -3,6 +3,7 @@ import { useConversationMessages } from '@/hooks/useBot'
 import { formatPhone } from '@/utils/formatPhone'
 import { Button } from '@/components/ui/Button'
 import type { MessageStatus, PauseReason } from '@/types'
+import { MOTIVO_DA_PAUSA } from '@/lib/motivoDaPausa'
 
 interface ConversationThreadProps {
   phone: string
@@ -19,16 +20,9 @@ interface ConversationThreadProps {
   resumeLoading?: boolean
 }
 
-/**
- * "Pausado" e "não elegível" parecem iguais na tela mas têm causas diferentes:
- * o primeiro alguém fez, o segundo é o padrão da clínica para quem não veio da
- * landing page. Sem distinguir, o botão prometia uma ação que não teria efeito.
- */
-const MOTIVO_DA_PAUSA: Record<NonNullable<PauseReason>, string> = {
-  attendant: 'Atendimento humano em andamento',
-  clinic_paused: 'Bot desligado para toda a clínica',
-  not_eligible: 'Fora da regra de resposta automática',
-}
+// "Pausado" e "não elegível" parecem iguais na tela mas têm causas diferentes:
+// o primeiro alguém fez, o segundo é o padrão da clínica para quem chegou pelo
+// WhatsApp sem cadastro. Os rótulos moram em `lib/motivoDaPausa` (PRD 031).
 
 const READ_STATUSES: MessageStatus[] = ['READ', 'READ_BY_ME', 'PLAYED']
 const DELIVERED_STATUSES: MessageStatus[] = ['RECEIVED']

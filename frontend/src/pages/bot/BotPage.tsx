@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { ConversationList } from './components/ConversationList'
 import { FilaDeAtendimento } from './components/FilaDeAtendimento'
 import { ConversationThread } from './components/ConversationThread'
+import { FILTROS, ROTULO_DO_FILTRO, passaNoFiltro, type Filtro } from '@/lib/motivoDaPausa'
 
 type MetricsPeriod = 'today' | 'week' | 'month'
 
@@ -28,14 +29,34 @@ export function BotPage() {
 
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
   const [selectedName, setSelectedName] = useState('')
-  // Telefone que o bot está respondendo agora. Guardar o telefone, e não um
-  // booleano, evita mostrar o indicador na conversa errada se o usuário trocar
-  // de conversa enquanto a resposta é escrita.
+  // Telefone que o bot está respondendo agora (ver `ativarBot`).
   const [answeringPhone, setAnsweringPhone] = useState<string | null>(null)
 
   // A conversa selecionada carrega o motivo da pausa; sem ela o botão não sabe
   // se deve dizer "Retomar" (alguém pausou) ou "Ativar" (nunca foi elegível).
   const selectedConversation = (activeData?.conversations ?? []).find((c) => c.phone === selectedPhone)
+
+  // Filtro da lista de recentes, só de exibição: o motivo vem do servidor.
+  const [filtro, setFiltro] = useState<Filtro>('todas')
+  const recentes = recentData?.conversations ?? []
+  const recentesFiltradas = recentes.filter((c) => passaNoFiltro(c.pause_reason, filtro))
+  const contagem = (f: Filtro) => recentes.filter((c) => passaNoFiltro(c.pause_reason, f)).length
+
+  // "Ativar bot" / "Retomar bot": a mesma ação no cabeçalho da conversa e na
+  // linha da lista. Guardar o telefone evita mostrar "respondendo" na conversa
+  // errada se o usuário trocar de conversa enquanto a resposta é escrita.
+  const ativarBot = (phone: string) => {
+    resumeBot.mutate(phone, {
+      onSuccess: (data) => {
+        if (!data.answering_open_question) return
+        setAnsweringPhone(phone)
+        window.setTimeout(
+          () => setAnsweringPhone((atual) => (atual === phone ? null : atual)),
+          ESPERA_RESPOSTA_RETOMADA_MS,
+        )
+      },
+    })
+  }
 
   const handleToggleBotGlobal = async (active: boolean) => {
     await updateClinic.mutateAsync({ bot_paused: !active })
@@ -120,7 +141,27 @@ export function BotPage() {
 
       {/* Conversations */}
       <section>
-        <h2 className="text-sm font-semibold text-gray-800 mb-3">Conversas recentes</h2>
+        <div className="flex items-center justify-between mb-3 gap-4">
+          <h2 className="text-sm font-semibold text-gray-800">Conversas recentes</h2>
+          {/* Quem está fora da regra precisa aparecer sem abrir conversa por
+              conversa (PRD 031). O filtro é só de exibição. */}
+          <div className="flex gap-1" role="group" aria-label="Filtrar conversas">
+            {FILTROS.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFiltro(f)}
+                aria-pressed={filtro === f}
+                className={[
+                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer',
+                  filtro === f ? 'bg-brand-500 text-white' : 'text-gray-500 hover:bg-gray-100',
+                ].join(' ')}
+              >
+                {ROTULO_DO_FILTRO[f]} ({contagem(f)})
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="rounded-lg border border-gray-200 bg-white overflow-hidden h-[calc(100vh-280px)] min-h-96">
           <div className="flex h-full">
             {/* Conversation list */}
@@ -132,9 +173,12 @@ export function BotPage() {
                 <div className="p-4"><SkeletonTable rows={5} /></div>
               ) : (
                 <ConversationList
-                  conversations={recentData?.conversations ?? []}
+                  conversations={recentesFiltradas}
                   selectedPhone={selectedPhone}
                   onSelect={(phone, name) => { setSelectedPhone(phone); setSelectedName(name) }}
+                  onResume={ativarBot}
+                  resumeLoadingPhone={resumeBot.isPending ? resumeBot.variables ?? null : null}
+                  emptyMessage={filtro === 'todas' ? 'Nenhuma conversa recente' : 'Nenhuma conversa neste filtro'}
                 />
               )}
             </div>
@@ -149,19 +193,7 @@ export function BotPage() {
                   pauseReason={selectedConversation?.pause_reason ?? null}
                   onPause={() => pauseBot.mutate(selectedPhone)}
                   answering={answeringPhone === selectedPhone}
-                  onResume={() => {
-                    const phone = selectedPhone
-                    resumeBot.mutate(phone, {
-                      onSuccess: (data) => {
-                        if (!data.answering_open_question) return
-                        setAnsweringPhone(phone)
-                        window.setTimeout(
-                          () => setAnsweringPhone((atual) => (atual === phone ? null : atual)),
-                          ESPERA_RESPOSTA_RETOMADA_MS,
-                        )
-                      },
-                    })
-                  }}
+                  onResume={() => ativarBot(selectedPhone)}
                   onClose={() => setSelectedPhone(null)}
                   pauseLoading={pauseBot.isPending}
                   resumeLoading={resumeBot.isPending}

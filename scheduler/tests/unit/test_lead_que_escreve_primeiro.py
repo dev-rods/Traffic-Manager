@@ -112,8 +112,8 @@ class TestAsConsultasDoWebhookUsamVariante(unittest.TestCase):
             "sumiu a marcação de que o lead respondeu",
         )
         self.assertTrue(
-            any("landing-page" in q for q in consultas),
-            "sumiu a busca do lead da landing page que habilita o bot",
+            any("source <> %s" in q for q in consultas),
+            "sumiu a busca do lead cadastrado que habilita o bot",
         )
         for q in consultas:
             with self.subTest(sql=q[:60]):
@@ -131,6 +131,23 @@ class TestAsConsultasDoWebhookUsamVariante(unittest.TestCase):
                 importados += [a.name for a in no.names]
 
         self.assertIn("variantes_do_numero", importados)
+
+    def test_o_webhook_importa_a_origem_sem_direito_da_fonte_unica(self):
+        """A regra "quem chegou pelo WhatsApp não tem direito ao bot" vive em
+        `elegibilidade_do_bot` (PRD 031). Se o webhook escrever 'whatsapp' por
+        conta própria, as duas regras divergem em silêncio."""
+        import ast
+        import inspect
+
+        import src.functions.webhook.handler as handler
+
+        importados = []
+        for no in ast.walk(ast.parse(inspect.getsource(handler))):
+            if isinstance(no, ast.ImportFrom) and no.module == "src.services.elegibilidade_do_bot":
+                importados += [a.name for a in no.names]
+
+        self.assertIn("ORIGEM_SEM_DIREITO", importados)
+        self.assertNotIn("'landing-page'", inspect.getsource(handler))
 
 
 if __name__ == "__main__":
