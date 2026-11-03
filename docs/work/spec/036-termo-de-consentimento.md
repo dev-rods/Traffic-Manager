@@ -49,6 +49,12 @@ Achados da pesquisa que mudam o plano do PRD:
   grava no S3. O log de auditoria da ClickSign já vem como páginas finais
   do PDF assinado; o `.zip` (original + assinado) é guardado quando a API o
   oferecer, em `audit_s3_key`.
+- **A ClickSign v3 não cancela envelope ativo** (sondado no sandbox em
+  03/11): `DELETE` só em draft, `PATCH status` só `draft`/`running`. Um
+  `SIGNING` abandonado morre pelo `deadline_at` (2 dias). E o vencimento, por
+  padrão, FECHA o envelope sem assinatura (`deadline_partial_signature_action:
+  closed`); o provedor manda `canceled`, para `closed` significar assinado.
+  Detalhes em `scheduler/tests/integration/036-termo-de-consentimento.md`.
 - **Runtime python3.8**: sem `match`, sem `X | Y` em tipos, sem
   `dict | dict`.
 - **Stack em 466/500.** Consentimento (~6) + UpdateProfessional (~6) +
