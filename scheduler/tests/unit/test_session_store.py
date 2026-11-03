@@ -9,7 +9,7 @@ import unittest
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
-from src.services.session_store import mark_conversation_eligible
+from src.services.session_store import mark_conversation_eligible, telefone_canonico
 
 
 class FakeTable:
@@ -103,3 +103,55 @@ class TestFalha(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TabelaComSessoes:
+    """Dublê com várias sessões gravadas, para a escolha da forma do número."""
+
+    def __init__(self, *telefones):
+        self.itens = {f"PHONE#{t}": {"phone": t} for t in telefones}
+
+    def get_item(self, Key):
+        item = self.itens.get(Key["sk"])
+        return {"Item": item} if item else {}
+
+
+class TestTelefoneCanonico(unittest.TestCase):
+    """O eco do bot e a resposta da pessoa têm que cair na MESMA sessão que o
+    bot abriu, mesmo quando o WhatsApp devolve o número sem o nono dígito."""
+
+    def test_sem_sessao_nenhuma_fica_como_veio(self):
+        self.assertEqual(
+            telefone_canonico(TabelaComSessoes(), "nobre", "553194157070"),
+            "553194157070",
+        )
+
+    def test_variante_com_sessao_vence(self):
+        """Caso de 03/11/2026: lead gravado com 13 dígitos, eco chegou com 12."""
+        table = TabelaComSessoes("5531994157070")
+        self.assertEqual(
+            telefone_canonico(table, "nobre", "553194157070"), "5531994157070"
+        )
+
+    def test_o_inverso_tambem(self):
+        table = TabelaComSessoes("553194157070")
+        self.assertEqual(
+            telefone_canonico(table, "nobre", "5531994157070"), "553194157070"
+        )
+
+    def test_forma_exata_com_sessao_nao_muda(self):
+        table = TabelaComSessoes("553194157070", "5531994157070")
+        self.assertEqual(
+            telefone_canonico(table, "nobre", "553194157070"), "553194157070"
+        )
+
+    def test_ddd_de_sao_paulo_nao_tem_variante(self):
+        """Em 11-28 tirar o 9 é número de outra pessoa: não se consulta nada."""
+        self.assertEqual(
+            telefone_canonico(TableQuebrada(), "x", "5511999990000"), "5511999990000"
+        )
+
+    def test_falha_no_dynamo_segue_com_o_numero_como_veio(self):
+        self.assertEqual(
+            telefone_canonico(TableQuebrada(), "x", "553194157070"), "553194157070"
+        )
