@@ -172,11 +172,13 @@ Espelha o pagamento, peça por peça.
 - **Variáveis do modelo** (`template.data`): `nome_completo`, `cpf`,
   `data_nascimento`, `telefone`, `email`, `autoriza_imagem` ("Autorizo" /
   "Não autorizo"), `menor_nome` (vazio se maior), `responsavel_nome`,
-  `responsavel_cpf`, `profissional_nome`, `profissional_titulo`,
-  `profissional_registro`, `clinica_nome`, `cidade`, `data`. A assinatura
-  posiciona-se pela tag `{{~position_sign_1}}` do modelo. Rubrica por página
-  e a linha da profissional deixam de existir: a ClickSign anexa a própria
-  página de assinaturas e o log.
+  `responsavel_cpf` (vazios se maior), `signatario_nome`, `signatario_cpf`
+  (a paciente ou o responsável, quem de fato assina), `profissional_nome`,
+  `profissional_titulo`, `profissional_registro`, `clinica_nome`, `cidade`,
+  `data`. A assinatura posiciona-se pela tag `{{~position_sign_1}}`.
+  Rubrica por página e a linha da profissional deixam de existir: a
+  ClickSign anexa a própria página de assinaturas e o log. O modelo e o
+  script que o gera estão em `docs/work/assets/036-tcle/`.
 
 ---
 
