@@ -1,0 +1,179 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 037 Areas em conversa",
+    "description": "Conferência do PRD 037: prompt no banco com o bloco novo de áreas e FAQ INTIMATE_AREA_SCOPE da Nobre corrigido",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "nobrelaser-sjc",
+      "type": "string"
+    },
+    {
+      "key": "faqId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get AI_SYSTEM_PROMPT (bloco de áreas novo)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/templates",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "templates"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Prompt tem a regra de áreas em texto', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "    var p = jsonData.data.find(t => t.template_key === 'AI_SYSTEM_PROMPT');",
+              "    if (p) { pm.expect(p.content).to.include('Nunca use present_options'); }",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "List FAQ (captura id do INTIMATE_AREA_SCOPE)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/faq",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "faq"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Response has SUCCESS status', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "    var f = jsonData.data.find(x => x.question_key === 'INTIMATE_AREA_SCOPE');",
+              "    if (f) { pm.collectionVariables.set('faqId', f.id); }",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Update FAQ INTIMATE_AREA_SCOPE (Nobre)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/faq/{{faqId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "faq",
+            "{{faqId}}"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"answer\": \"Não. A Virilha Completa e a região perianal são áreas diferentes, com valores diferentes. Se quiser incluir o perianal, é a área Perianal / Ânus, somada à Virilha Completa.\"\n}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+              "pm.test('Resposta não cita área desativada', function () {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData.status).to.eql('SUCCESS');",
+              "    pm.expect(JSON.stringify(jsonData)).to.not.include('Virilha Comp.');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
