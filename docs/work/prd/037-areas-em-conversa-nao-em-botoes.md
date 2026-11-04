@@ -128,7 +128,7 @@ A retomada rodou numa sessão sem histórico de agente e a abertura do bot entro
 
 ## Status (preencher após conclusão)
 
-- [x] Pendente
-- [ ] Spec gerada: `spec/037-areas-em-conversa-nao-em-botoes.md`
+- [ ] Pendente
+- [x] Spec gerada: `spec/037-areas-em-conversa-nao-em-botoes.md` (03/11/2026)
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
