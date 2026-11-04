@@ -15,6 +15,7 @@ import time
 from typing import Optional
 
 from src.services import retencao
+from src.utils.phone import variantes_do_numero
 
 logger = logging.getLogger(__name__)
 
@@ -268,3 +269,37 @@ def telefone_do_lid(table, clinic_id: str, chat_lid: str) -> Optional[str]:
     except Exception as e:
         logger.warning(f"[SessionStore] Não consegui resolver o LID {chat_lid}: {e}")
         return None
+
+
+def telefone_canonico(table, clinic_id: str, phone: str) -> str:
+    """A forma do número sob a qual esta conversa JÁ existe na tabela de sessões.
+
+    O lead do site grava `5531994157070` e o WhatsApp devolve `553194157070`:
+    fora da faixa de DDD 11-28 o nono dígito não vem. Em 03/11/2026 o bot abriu
+    a conversa pelo número de 13 dígitos, o eco voltou com 12, o webhook não
+    achou o envio do bot sob esse pk e tomou o eco por atendente humana: pausou
+    o bot 24h numa segunda sessão, onde a resposta da pessoa caiu em silêncio.
+
+    Devolve o próprio `phone` quando ele já tem sessão ou quando nenhuma
+    variante tem - aí a conversa é nova e a forma que chegou vira a canônica.
+    Nunca levanta: na dúvida, segue com o número como veio.
+    """
+    variantes = variantes_do_numero(phone)
+    if len(variantes) <= 1:
+        return phone
+    try:
+        if _tem_sessao(table, clinic_id, phone):
+            return phone
+        for variante in sorted(variantes - {phone}):
+            if _tem_sessao(table, clinic_id, variante):
+                return variante
+    except Exception as e:
+        logger.warning(f"[SessionStore] Não consegui resolver a forma de {phone}: {e}")
+    return phone
+
+
+def _tem_sessao(table, clinic_id: str, phone: str) -> bool:
+    item = table.get_item(
+        Key={"pk": f"CLINIC#{clinic_id}", "sk": f"PHONE#{phone}"}
+    ).get("Item")
+    return bool(item)

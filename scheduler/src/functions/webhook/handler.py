@@ -26,7 +26,7 @@ from src.services import retencao
 from src.services.session_store import grava_atendimento, mark_conversation_eligible
 from src.services.autoria_mensagem import foi_enviada_pelo_bot
 from src.services.identidade_whatsapp import chat_lid, deve_vincular_lid, telefone_da_conversa
-from src.services.session_store import telefone_do_lid, vincula_lid
+from src.services.session_store import telefone_canonico, telefone_do_lid, vincula_lid
 from src.providers.whatsapp_provider import get_provider
 
 logger = logging.getLogger(__name__)
@@ -140,10 +140,25 @@ def handler(event, context):
             )
             return http_response(200, {"status": "OK"})
 
+        # O número que o WhatsApp manda e o que o lead gravou podem diferir no
+        # nono dígito (DDD fora de 11-28). Tudo daqui para baixo - eco do bot,
+        # pausa por atendente, sessão, lead - casa pelo telefone, então a forma
+        # é escolhida UMA vez: a que já tem sessão nesta clínica.
+        if clinica_do_webhook:
+            canonico = telefone_canonico(
+                _get_sessions_table(), clinica_do_webhook, phone_resolvido
+            )
+            if canonico != phone_resolvido:
+                logger.info(
+                    f"[Webhook] {phone_resolvido} já conversa como {canonico}; usando essa forma"
+                )
+                phone_resolvido = canonico
+
         if phone_resolvido != raw_phone:
-            logger.info(f"[Webhook] LID {lid} resolvido para {phone_resolvido}")
+            if lid and "@" in raw_phone:
+                logger.info(f"[Webhook] LID {lid} resolvido para {phone_resolvido}")
             body["phone"] = phone_resolvido
-        elif clinica_do_webhook and deve_vincular_lid(body):
+        if clinica_do_webhook and deve_vincular_lid(body):
             # Mensagem que traz número e chatLid: é ela que ensina o vínculo
             # usado quando a atendente responder pelo celular.
             vincula_lid(_get_sessions_table(), clinica_do_webhook, lid, phone_resolvido)
