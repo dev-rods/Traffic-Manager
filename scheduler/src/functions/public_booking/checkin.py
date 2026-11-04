@@ -10,6 +10,10 @@ do CloudFormation e cada rota HTTP custa ~4; a coringa custa ~4 no total.
     POST appointments/{id}/payments       {phone, token, method, cpf?}
     GET  payments/{id}                    ?phone&token
     POST payments/{id}/simulate           {phone, token}       só provedor simulado (dev)
+    POST appointments/{id}/consent        {phone, token, fullName, cpf?, birthDate, email,
+                                           imageAuthorized, guardian?}   termo (PRD 036)
+    GET  consents/{id}                    ?phone&token
+    POST consents/{id}/simulate           {phone, token}       só provedor simulado (dev)
 
 A baixa em dinheiro é da recepção e mora no painel (`functions/caixa`), não
 aqui. Tudo exige a chave do booking-site E o token do código de WhatsApp (o mesmo de "Meus agendamentos"): sem ele, quem digitasse
@@ -19,7 +23,10 @@ import logging
 import re
 
 from src.providers.payment_provider import ErroDoProvedor, PagamentoIndisponivel, provedor_ativo
-from src.services import checkin
+from src.providers.signature_provider import (
+    AssinaturaIndisponivel, ErroDoProvedor as ErroDeAssinatura, provedor_ativo as provedor_de_assinatura,
+)
+from src.services import checkin, consentimento
 from src.services.db.postgres import PostgresService
 from src.utils.booking_verification import verify_token
 from src.utils.http import (
@@ -37,7 +44,11 @@ ROTAS = (
     ("POST", re.compile(rf"^appointments/({UUID})/payments$"), "cobra"),
     ("GET", re.compile(rf"^payments/({UUID})$"), "status"),
     ("POST", re.compile(rf"^payments/({UUID})/simulate$"), "simula"),
+    ("POST", re.compile(rf"^appointments/({UUID})/consent$"), "consent"),
+    ("GET", re.compile(rf"^consents/({UUID})$"), "consent_status"),
+    ("POST", re.compile(rf"^consents/({UUID})/simulate$"), "consent_simula"),
 )
+CONSENTIMENTO = ("consent", "consent_status", "consent_simula")
 
 
 def _rota(metodo, caminho):
@@ -83,6 +94,19 @@ def handler(event, context):
         if nome == "confirma":
             return http_response(200, {"status": "SUCCESS", **checkin.confirma(db, clinic_id, phone, recurso_id)})
 
+        if nome in CONSENTIMENTO:
+            # O provedor de assinatura só é exigido aqui: lista e confirma não
+            # dependem de chave da ClickSign.
+            assinatura = provedor_de_assinatura()
+            if nome == "consent":
+                return http_response(201, {"status": "SUCCESS", **consentimento.inicia(
+                    db, assinatura, clinic_id, phone, recurso_id, body)})
+            if nome == "consent_status":
+                return http_response(200, {"status": "SUCCESS", **consentimento.status(
+                    db, assinatura, clinic_id, phone, recurso_id)})
+            return http_response(200, {"status": "SUCCESS", **consentimento.simula(
+                db, assinatura, clinic_id, phone, recurso_id)})
+
         provider = provedor_ativo()
         if nome == "cobra":
             pagamento = checkin.cobra(db, provider, clinic_id, phone, recurso_id,
@@ -98,8 +122,16 @@ def handler(event, context):
 
     except checkin.NaoEncontrado:
         return _erro(404, "Agendamento não encontrado")
-    except checkin.CheckinInvalido as e:
+    except consentimento.NaoEncontrado:
+        return _erro(404, "Termo não encontrado")
+    except (checkin.CheckinInvalido, consentimento.ConsentimentoInvalido) as e:
         return _erro(400, str(e))
+    except AssinaturaIndisponivel:
+        logger.error(f"[Checkin] sem provedor de assinatura configurado ({clinic_id})")
+        return _erro(503, "Assinatura indisponível no momento. Chame a recepção.")
+    except ErroDeAssinatura as e:
+        logger.error(f"[Checkin] ClickSign recusou ({clinic_id} {nome}): {e}")
+        return _erro(502, "Não conseguimos preparar o termo agora. Tente de novo ou chame a recepção.")
     except PagamentoIndisponivel:
         logger.error(f"[Checkin] sem provedor de pagamento configurado ({clinic_id})")
         return _erro(503, "Pagamento pelo tablet indisponível no momento. Pague na recepção.")

@@ -17,3 +17,14 @@ ListProfessionals:
         path: clinics/{clinicId}/professionals
         method: get
         cors: true
+
+# PRD 036: registro no conselho (e nome/cargo/ativo) pelo painel.
+UpdateProfessional:
+  handler: src.functions.professional.update.handler
+  memorySize: 512
+  timeout: 30
+  events:
+    - http:
+        path: clinics/{clinicId}/professionals/{professionalId}
+        method: put
+        cors: true

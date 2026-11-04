@@ -27,7 +27,7 @@ from src.providers.payment_provider import (
     AGUARDANDO_DINHEIRO, CANCELADO, DINHEIRO, ESTORNADO, LINK, METODOS, PAGO, PENDENTE, PIX,
     ErroDoProvedor, Pagador, PaymentProvider, cobranca_de_teste,
 )
-from src.services import relogio
+from src.services import consentimento, relogio
 from src.services.appointment_service import AppointmentService
 from src.utils.cadastro import cpf_valido, normaliza_cpf
 from src.utils.phone import normalize_phone, variantes_do_numero
@@ -117,6 +117,8 @@ def agendamentos_do_numero(db, clinic_id: str, phone: str) -> List[Dict[str, Any
             "discountPct": float(r.get("discount_pct") or 0),
             "checkedInAt": _iso(r.get("checked_in_at")),
             "payment": pagamento_para_tela(vivos.get(str(r["id"]))),
+            # Termo de consentimento (PRD 036): quem decide é o serviço.
+            **consentimento.resumo_para_o_ipad(db, clinic_id, r),
         }
         for r in linhas
     ]
@@ -165,7 +167,8 @@ def confirma(db, clinic_id: str, phone: str, appointment_id: str) -> Dict[str, A
             (appointment_id,),
         )
         logger.info(f"[Checkin] check-in {clinic_id} {appointment_id} tel={_final(phone)}")
-    return {"checkedIn": True, "payerCpfKnown": _cpf_conhecido(appt) is not None}
+    return {"checkedIn": True, "payerCpfKnown": _cpf_conhecido(appt) is not None,
+            **consentimento.resumo_para_o_ipad(db, clinic_id, appt)}
 
 
 def _vivo(db, appointment_id: str) -> Optional[Dict]:

@@ -5,6 +5,7 @@ from datetime import datetime, date, time
 from src.utils.http import http_response, extract_path_param, extract_query_param
 from src.utils.acesso import require_acesso
 from src.services.db.postgres import PostgresService
+from src.services import consentimento
 from src.services.visao_do_staff import limita_intervalo, para_o_staff
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,12 @@ def handler(event, context):
                 rt.appointment_date AS rescheduled_to_date,
                 vivo.id AS payment_id, vivo.method AS payment_method,
                 vivo.status AS payment_status, vivo.paid_at AS payment_paid_at,
-                vivo.amount_cents AS payment_price_cents
+                vivo.amount_cents AS payment_price_cents,
+                -- Termo de consentimento (PRD 036). Aqui so se EXPOE o estado;
+                -- quem decide "precisa assinar" e consentimento.precisa_assinar.
+                -- NULL = nenhum termo da versao vigente (pendente).
+                a.consent_waived_at, a.consent_waived_reason, a.consent_waived_by,
+                ct.consent_status
             FROM scheduler.appointments a
             LEFT JOIN scheduler.patients p ON a.patient_id = p.id
             LEFT JOIN scheduler.services s ON a.service_id = s.id
@@ -115,9 +121,17 @@ def handler(event, context):
                 WHERE pay.appointment_id = a.id AND pay.status IN ('PENDING', 'AWAITING_CASH', 'PAID')
                 LIMIT 1
             ) vivo ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT CASE WHEN pc.status IN ('SIGNED', 'PAPER') THEN pc.status ELSE 'SIGNING' END AS consent_status
+                FROM scheduler.patient_consents pc
+                WHERE pc.clinic_id = a.clinic_id AND pc.patient_id = a.patient_id
+                  AND pc.term_version = %s AND pc.status IN ('SIGNED', 'PAPER', 'SIGNING')
+                ORDER BY CASE pc.status WHEN 'SIGNED' THEN 0 WHEN 'PAPER' THEN 0 ELSE 1 END
+                LIMIT 1
+            ) ct ON TRUE
             WHERE a.clinic_id = %s
         """
-        params = [clinic_id]
+        params = [consentimento.versao(), clinic_id]
 
         if date_filter:
             query += " AND a.appointment_date = %s"
@@ -144,6 +158,8 @@ def handler(event, context):
             "clinicId": clinic_id,
             "appointments": appointments,
             "total": len(appointments),
+            # O painel so mostra "Termo pendente" com uma versao configurada.
+            "consent_enabled": bool(consentimento.versao()),
         }))
 
     except Exception as e:

@@ -1,0 +1,27 @@
+# Termo de consentimento no painel (PRD 036). Uma rota coringa para as
+# sub-rotas de src/functions/consent/router.py: a stack está perto do limite
+# de 500 recursos do CloudFormation. Role própria só pelo GetObject: a URL
+# assinada do PDF é gerada pela credencial desta Lambda, e sem a permissão na
+# role o link abre com AccessDenied.
+Consentimento:
+  handler: src.functions.consent.router.handler
+  memorySize: 512
+  timeout: 30
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-Consentimento-lambdaRole
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - s3:GetObject
+      Resource:
+        - "arn:aws:s3:::${self:custom.resourcePrefix}-documentos/clinics/*"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - http:
+        path: clinics/{clinicId}/consents/{proxy+}
+        method: any
+        cors: true
