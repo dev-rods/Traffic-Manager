@@ -24,6 +24,9 @@ export interface Clinic {
   favicon_url: string | null
   custom_domain: string | null
   custom_domain_status?: CustomDomainStatus
+  /** Termo de consentimento (PRD 036): a responsável técnica e a cidade impressas no termo. */
+  responsible_professional_id: string | null
+  cidade: string | null
 }
 
 export interface CustomDomainStatus {
@@ -51,6 +54,8 @@ export interface UpdateClinicPayload {
   logo_url?: string
   favicon_url?: string
   custom_domain?: string | null
+  responsible_professional_id?: string | null
+  cidade?: string | null
 }
 
 // ── Booking site assets (upload) ────────────────────────────────
@@ -235,6 +240,42 @@ export interface Appointment {
   payment_paid_at: string | null
   /** Ausente para quem não vê valores: o servidor remove. */
   payment_price_cents?: number | null
+  /** Termo de consentimento (PRD 036). O estado vem do servidor; a regra
+   *  "precisa assinar" mora lá. null = nenhum termo da versão vigente. */
+  consent_status: ConsentStatus | null
+  consent_waived_at: string | null
+  consent_waived_reason: ConsentWaiveReason | null
+  consent_waived_by: string | null
+  /** Há uma versão do termo configurada: sem ela nada é pendente. */
+  consent_enabled: boolean
+}
+
+// ── Termo de consentimento (PRD 036) ──────────────────────────
+export type ConsentStatus = 'SIGNED' | 'PAPER' | 'SIGNING'
+export type ConsentWaiveReason = 'SEM_CELULAR' | 'RECUSOU' | 'SISTEMA_FORA' | 'OUTRO'
+
+export interface PatientConsent {
+  id: string
+  appointment_id: string | null
+  term_version: string
+  status: 'SIGNING' | 'SIGNED' | 'CANCELLED' | 'EXPIRED' | 'PAPER'
+  signer_kind: 'PATIENT' | 'GUARDIAN'
+  signer_name: string | null
+  image_authorized: boolean | null
+  signed_at: string | null
+  paper_signed_at: string | null
+  paper_registered_by: string | null
+  has_pdf: boolean
+  has_zip: boolean
+  /** Assinado no sandbox ou no provedor simulado: sem valor jurídico. */
+  test: boolean
+  created_at: string
+}
+
+export interface ListConsentsResponse {
+  consents: PatientConsent[]
+  consent_enabled: boolean
+  term_version: string | null
 }
 
 /** Resposta do botao "Lembrar agenda do dia" (previa ou envio). */
@@ -274,6 +315,7 @@ export interface ListAppointmentsResponse {
   clinicId: string
   appointments: Appointment[]
   total: number
+  consent_enabled: boolean
 }
 
 export interface CreateAppointmentPayload {

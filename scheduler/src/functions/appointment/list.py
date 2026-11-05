@@ -152,6 +152,10 @@ def handler(event, context):
 
         results = db.execute_query(query, tuple(params))
         appointments = [_serialize_row(r) for r in results]
+        # Por linha tambem: o selo "TERMO" da agenda recebe so o agendamento.
+        consent_enabled = bool(consentimento.versao())
+        for a in appointments:
+            a["consent_enabled"] = consent_enabled
 
         return http_response(200, para_o_staff(identidade, {
             "status": "SUCCESS",
@@ -159,7 +163,7 @@ def handler(event, context):
             "appointments": appointments,
             "total": len(appointments),
             # O painel so mostra "Termo pendente" com uma versao configurada.
-            "consent_enabled": bool(consentimento.versao()),
+            "consent_enabled": consent_enabled,
         }))
 
     except Exception as e:

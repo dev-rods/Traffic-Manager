@@ -8,6 +8,7 @@ import {
 } from '@/lib/expediente'
 import type { Appointment, AvailabilityRule } from '@/types'
 import { ConfirmacaoBadge } from './ConfirmacaoBadge'
+import { TermoPendenteBadge } from './TermoPendenteBadge'
 
 interface AgendaDoDiaProps {
   dia: string
@@ -195,6 +196,7 @@ function LinhaDaAgenda({
               </span>
             )}
             <ConfirmacaoBadge appointment={a} />
+            <TermoPendenteBadge appointment={a} />
             {daParceria && (
               <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                 PARCERIA
