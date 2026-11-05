@@ -69,11 +69,18 @@ automático no merge):
   VERCEL_PROJECT_ID=prj_5DMFqCPTYk7bFZFYAKCikdPfUaol npx vercel deploy --prod --yes`.
   Sem `/prod/ASAAS_API_KEY`, o pagamento responde "indisponível" (503).
 
-Dev:
+Dev. Sem login interativo: o token é o `/dev/VERCEL_API_TOKEN` do SSM (o
+mesmo do domínio customizado, PRD 021), e o projeto vai pelo id. Nunca
+`--yes` sem o id: em 04/11/2026 a CLI criou um projeto `checkin` novo em vez
+de publicar no `checkin-dev`.
 
 ```bash
-cd checkin && npx vercel deploy --prod --yes --scope team_ZLFt6HlpGbYXZsEloIbOVq96
+cd checkin && MSYS_NO_PATHCONV=1   VERCEL_TOKEN=$(aws ssm get-parameter --name /dev/VERCEL_API_TOKEN --with-decryption --query Parameter.Value --output text --profile dev-andre)   VERCEL_ORG_ID=team_ZLFt6HlpGbYXZsEloIbOVq96 VERCEL_PROJECT_ID=prj_SJRfcdvZvjCcxFcZccTgfUy0rJg7   npx vercel deploy --prod --yes --scope team_ZLFt6HlpGbYXZsEloIbOVq96
 ```
+
+Para o `checkin-prod`, o mesmo comando com `/prod/VERCEL_API_TOKEN` e o
+`VERCEL_PROJECT_ID` de cima. Conferir depois: a URL serve o bundle novo
+(`curl` no `index-*.js` procurando um texto da tela nova).
 
 URL: https://checkin-dev-ten.vercel.app/{clinicId}. Env vars do projeto:
 `VITE_API_BASE_URL` (dev) e `VITE_BOOKING_API_KEY` (a mesma chave pública do
