@@ -7,9 +7,9 @@ Criar um termo é uma sequência de cinco chamadas, que a API impõe:
 1. envelope (a "pasta" do processo);
 2. documento gerado do MODELO `.docx` com as variáveis (`template.data`);
 3. signatário (nome, e-mail, celular, CPF, nascimento);
-4. requisitos: qualificação (`agree`/`sign`) e evidências (`provide_evidence`
-   com `whatsapp` e `handwritten`, mais o que `REQUISITOS_DE_EVIDENCIA`
-   listar);
+4. requisitos: qualificação (`agree`/`sign`) e a evidência de
+   `REQUISITOS_DE_EVIDENCIA` (`embedded_signature`, a única que o widget
+   embedded aceita);
 5. ativação (`status: running`).
 
 Se qualquer passo depois do 1 falhar, o envelope é cancelado antes de relançar:
@@ -47,11 +47,15 @@ from src.providers.signature_provider import (
 logger = logging.getLogger(__name__)
 
 TIMEOUT = 20
-# O que a signatária prova dentro do widget: token no WhatsApp e assinatura
-# desenhada na tela. Decisão 2 do PRD 036. A doc do v3 lista também
-# `embedded_signature`; se o sandbox exigir para o widget, entra aqui, e a
-# decisão fica registrada em tests/integration/036-termo-de-consentimento.md.
-REQUISITOS_DE_EVIDENCIA = ("whatsapp", "handwritten")
+# A evidência de autenticação do signatário. No v3 o widget embedded só
+# carrega (pelo id do signatário) com o requisito `embedded_signature`, e a
+# ClickSign RECUSA ativar o envelope se houver qualquer outra evidência junto
+# (422 "assinatura incorporada e adicional"; sondado no sandbox em 04/11/2026
+# com whatsapp e com handwritten). A decisão 2 do PRD 036 (token no WhatsApp
+# + manuscrita) fica substituída pela autenticação do próprio check-in: a
+# paciente já entrou com o código do WhatsApp. Registrado em
+# tests/integration/036-termo-de-consentimento.md.
+REQUISITOS_DE_EVIDENCIA = ("embedded_signature",)
 
 STATUS = {
     "running": ASSINANDO,

@@ -35,14 +35,18 @@ Conferidos com o provedor real (`src/providers/clicksign_provider.py`) contra
 | Arquivos do documento | `data.links.files.original` (docx) antes de assinar; o assinado deve aparecer em `links.files.signed`, URL válida por ~5 min (`X-Amz-Expires=299`). A confirmar com o primeiro envelope assinado |
 | Limite de requisições | 20 req / 10 s no sandbox. Criar um termo gasta 6 chamadas |
 
+## Achados do E2E de 04/11/2026 (widget)
+
+| Ponto | Resultado |
+|---|---|
+| Chave do widget | É o `id` do signatário (v3), como o backend devolve em `signerId`. Confirmado na doc "Instalação de Widget para Assinatura Incorporada" |
+| Widget não carregou no 1º teste | Faltava o requisito `provide_evidence` com `auth: embedded_signature`. No v3 é ele que autoriza o widget embedded |
+| `embedded_signature` + `whatsapp` (+ `handwritten`) | **Recusado** ao ativar: 422 "há signatário(s) com requisito(s) de autenticação assinatura incorporada e adicional". Testado com whatsapp e só com handwritten |
+| `embedded_signature` sozinho | Aceito. É a configuração em `REQUISITOS_DE_EVIDENCIA`. Muda a decisão 2 do PRD: a autenticação passa a ser a do próprio check-in (código do WhatsApp no login do iPad); a manuscrita depende do que o widget oferecer |
+| Envelopes de sonda | `20044ee4-...` (aceito) ficou `running` e vence em 1 dia; os recusados ficaram em draft e foram apagados |
+
 ## Pendências a confirmar no E2E (o código já lê os dois jeitos)
 
-1. **Chave do widget.** `new Clicksign(<chave>)`: o backend devolve `signerId`
-   (o `id` do signatário no v3). Se o widget pedir outra chave (no v1 era
-   `request_signature_key`), trocar o que `_para_tela` devolve em
-   `consentimento.py`, e nada mais muda.
-2. **`embedded_signature`.** Se o widget recusar carregar sem esse `auth`,
-   acrescentar em `REQUISITOS_DE_EVIDENCIA` (`clicksign_provider.py`).
 3. **Formato do webhook v3.** `aplica_evento` lê `event.name` (ou `event.type`,
    ou `event` string) e procura `document.key|id` e `envelope.key|id` em
    qualquer nível do payload. Nomes aceitos como "fechado": `auto_close`,
