@@ -59,7 +59,7 @@ def handler(event, context):
             params.append(valor)
         if not set_clauses:
             return _erro(400, "Nenhum campo válido fornecido para atualização")
-        set_clauses.append("updated_at = NOW()")
+        # `professionals` não tem updated_at (só created_at): nada a carimbar.
         params.extend([professional_id, clinic_id])
 
         row = PostgresService().execute_write_returning(
@@ -69,7 +69,7 @@ def handler(event, context):
         )
         if not row:
             return _erro(404, "Profissional não encontrado")
-        logger.info(f"[UpdateProfessional] {clinic_id} {professional_id}: {sorted(c.split(' ')[0] for c in set_clauses[:-1])}")
+        logger.info(f"[UpdateProfessional] {clinic_id} {professional_id}: {sorted(c.split(' ')[0] for c in set_clauses)}")
         return http_response(200, {"status": "SUCCESS", "professional": _serialize_row(row)})
     except Exception as e:
         logger.error(f"[UpdateProfessional] erro: {e}", exc_info=True)
