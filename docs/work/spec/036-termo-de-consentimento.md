@@ -58,9 +58,23 @@ Achados da pesquisa que mudam o plano do PRD:
 - **Runtime python3.8**: sem `match`, sem `X | Y` em tipos, sem
   `dict | dict`.
 - **Stack em 466/500.** Consentimento (~6) + UpdateProfessional (~6) +
-  rota do webhook (~4) ≈ 482. Conferir
-  `aws cloudformation describe-stack-resources --stack-name clinic-scheduler-infra-dev | grep -c LogicalResourceId`
-  no deploy de dev antes de prod.
+  rota do webhook (~4) ≈ 482. Conferido no deploy de dev em 04/11: **482**
+  (`aws cloudformation list-stack-resources --stack-name clinic-scheduler-infra-dev --query "length(StackResourceSummaries)"`;
+  o `describe-stack-resources` para em 100).
+
+Desvios da implementação (04/11/2026), todos registrados no código:
+
+- A lista do painel é `GET consents/patients/{patientId}` (não `?patientId=`):
+  a coringa `{proxy+}` exige pelo menos um segmento.
+- Os campos numéricos da tela de dados do iPad usam o teclado do iPad
+  (`TextField` com `inputMode`), não o `Keypad`: são cinco a dez campos numa
+  tela só, e nome e e-mail já exigem o teclado.
+- `appointment/list.py` manda `consent_enabled` também por linha, para o selo
+  da agenda receber só o agendamento.
+- O widget recebe o `id` do signatário (`signerId`); se o embedded pedir outra
+  chave, muda-se só `_para_tela`. A confirmar no E2E, junto com
+  `embedded_signature` e o nome real do evento do webhook v3 (doc de
+  integração, "Pendências a confirmar").
 
 ---
 

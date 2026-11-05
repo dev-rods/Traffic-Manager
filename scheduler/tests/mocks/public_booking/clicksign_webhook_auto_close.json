@@ -1,0 +1,8 @@
+{
+  "resource": "/public/clicksign/webhook",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Hmac": "sha256=<hmac sha256 do corpo cru com CLICKSIGN_WEBHOOK_SECRET>"
+  },
+  "body": "{\"event\": {\"name\": \"auto_close\", \"occurred_at\": \"2026-11-04T15:00:00Z\"}, \"document\": {\"key\": \"<provider_document_id>\"}, \"envelope\": {\"key\": \"<provider_envelope_id>\"}}"
+}

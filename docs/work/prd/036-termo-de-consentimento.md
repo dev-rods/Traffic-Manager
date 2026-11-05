@@ -412,5 +412,5 @@ sobrescreve; o que foi ao documento está no snapshot.
 
 - [x] Pendente
 - [x] Spec gerada: `spec/036-termo-de-consentimento.md` (03/11/2026)
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 04/11/2026 (branch `feat/036-termo-de-consentimento`; backend em dev, iPad e painel aguardando deploy; prod pendente, ver spec §5 passo 9 e `scheduler/tests/integration/036-termo-de-consentimento.md`)
+- [x] Registrado em `TASKS_LOG.md`
