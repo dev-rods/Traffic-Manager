@@ -3,13 +3,15 @@ import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
 import { ErrorMessage, StepHeader } from '@/components/StepHeader'
 import { useAppointments, useConfirmAppointment } from '@/hooks/useCheckin'
-import type { CheckinAppointment, Session } from '@/types'
+import type { CheckinAppointment, ConfirmResponse, Session } from '@/types'
 import { capitalize, formatCurrencyBRL, formatDateLong, isToday } from '@/utils/format'
 
 interface AppointmentStepProps {
   clinicId: string
   session: Session
-  onConfirmed: (appointment: CheckinAppointment, payerCpfKnown: boolean) => void
+  // O backend responde se o CPF do pagador é conhecido e se o termo de
+  // consentimento é exigido nesta sessão (PRD 036).
+  onConfirmed: (appointment: CheckinAppointment, confirmed: ConfirmResponse) => void
   // Agendamento já pago: não há o que confirmar nem cobrar (PRD 028, M1).
   onAlreadyPaid: (appointment: CheckinAppointment) => void
   onRestart: () => void
@@ -155,7 +157,7 @@ export function AppointmentStep({
   function handleConfirm() {
     if (!chosen) return
     confirm.mutate(chosen.id, {
-      onSuccess: (r) => onConfirmed(chosen, r.payerCpfKnown),
+      onSuccess: (r) => onConfirmed(chosen, r),
     })
   }
 

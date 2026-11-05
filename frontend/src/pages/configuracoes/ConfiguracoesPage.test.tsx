@@ -16,6 +16,10 @@ vi.mock('@/hooks/useClinic', () => ({
   }),
   useUpdateClinic: () => ({ mutateAsync, isPending: false, isError: false }),
 }))
+vi.mock('@/hooks/useProfessionals', () => ({
+  useProfessionals: () => ({ data: [], isLoading: false, isError: false }),
+  useUpdateProfessional: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
+}))
 vi.mock('@/hooks/useTemplates', () => ({
   useTemplate: () => ({ data: null, isLoading: false, isError: false }),
   useSalvaTemplate: () => ({ mutate: vi.fn(), isPending: false, isError: false }),

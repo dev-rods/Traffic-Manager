@@ -67,6 +67,12 @@ SQL_STATEMENTS = [
         logo_url VARCHAR(500),
         favicon_url VARCHAR(500),
         custom_domain VARCHAR(255),
+        -- Termo de consentimento (PRD 036): quem assina como responsavel
+        -- tecnica no documento e a cidade do "Local:". A FK para
+        -- professionals vem por migration, porque professionals e criada
+        -- depois desta tabela.
+        responsible_professional_id UUID,
+        cidade VARCHAR(120),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -96,6 +102,9 @@ SQL_STATEMENTS = [
         role VARCHAR(100),
         active BOOLEAN DEFAULT TRUE,
         photo_url VARCHAR(500),
+        -- Registro no conselho (PRD 036), ex. "CRBM-SP 44657". Sai no termo
+        -- ao lado do nome e do titulo (`role`).
+        registro_conselho VARCHAR(60),
         created_at TIMESTAMP DEFAULT NOW()
     )
     """,
@@ -179,6 +188,12 @@ SQL_STATEMENTS = [
         -- Reagendamento (PRD 035): gravado no registro ANTIGO, aponta para o
         -- que o substituiu. Reagendado = CANCELLED + rescheduled_to_id.
         rescheduled_to_id UUID REFERENCES scheduler.appointments(id),
+        -- Termo de consentimento (PRD 036): dispensa da assinatura NESTA
+        -- sessao, pela recepcao. Na proxima o iPad pede de novo.
+        consent_waived_at TIMESTAMPTZ,
+        consent_waived_by VARCHAR(120),
+        consent_waived_reason VARCHAR(20),
+        consent_waived_note VARCHAR(200),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -1226,6 +1241,98 @@ SQL_STATEMENTS = [
             ADD CONSTRAINT appointment_payments_method_check
             CHECK (method IN ('PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH', 'LINK'));
     END $$""",
+
+    # -- Termo de consentimento assinado no check-in (PRD 036) ---------------
+    #
+    # Quem assina como responsável técnica e a cidade do documento. A FK vem
+    # num DO porque ADD COLUMN IF NOT EXISTS não aceita REFERENCES de forma
+    # idempotente quando a coluna já existe.
+    "ALTER TABLE scheduler.professionals ADD COLUMN IF NOT EXISTS registro_conselho VARCHAR(60)",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS responsible_professional_id UUID",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS cidade VARCHAR(120)",
+    """DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                        WHERE conname = 'clinics_responsible_professional_fk') THEN
+            ALTER TABLE scheduler.clinics
+                ADD CONSTRAINT clinics_responsible_professional_fk
+                FOREIGN KEY (responsible_professional_id) REFERENCES scheduler.professionals(id);
+        END IF;
+    END $$""",
+
+    # Dispensa por sessão. O motivo não tem CHECK no banco de propósito: o
+    # enum vive em src/services/consentimento.py, para acrescentar motivo sem
+    # migration.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_waived_at TIMESTAMPTZ",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_waived_by VARCHAR(120)",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_waived_reason VARCHAR(20)",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_waived_note VARCHAR(200)",
+
+    # Responsável legal de paciente menor: anexo do termo, não cadastro. Um
+    # por paciente; o CPF fica em 11 dígitos normalizados (patients.cpf é
+    # livre, com 14).
+    """CREATE TABLE IF NOT EXISTS scheduler.patient_guardians (
+        patient_id UUID PRIMARY KEY REFERENCES scheduler.patients(id),
+        name VARCHAR(255) NOT NULL,
+        cpf VARCHAR(11) NOT NULL,
+        birth_date DATE NOT NULL,
+        phone VARCHAR(20) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+
+    # Uma linha por tentativa de termo. Os snapshots são o que foi ao
+    # documento; o cadastro em patients pode divergir e não é reescrito.
+    """CREATE TABLE IF NOT EXISTS scheduler.patient_consents (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        patient_id UUID NOT NULL REFERENCES scheduler.patients(id),
+        appointment_id UUID REFERENCES scheduler.appointments(id),
+        term_version VARCHAR(20) NOT NULL,
+        status VARCHAR(12) NOT NULL
+            CHECK (status IN ('SIGNING', 'SIGNED', 'CANCELLED', 'EXPIRED', 'PAPER')),
+        signer_kind VARCHAR(10) NOT NULL CHECK (signer_kind IN ('PATIENT', 'GUARDIAN')),
+        signer_name VARCHAR(255),
+        signer_cpf VARCHAR(11),
+        signer_birth_date DATE,
+        signer_phone VARCHAR(20),
+        signer_email VARCHAR(255),
+        patient_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+        image_authorized BOOLEAN,
+        responsible_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+        provider VARCHAR(20),
+        provider_envelope_id VARCHAR(80),
+        provider_document_id VARCHAR(80),
+        provider_signer_id VARCHAR(80),
+        pdf_s3_key VARCHAR(300),
+        pdf_sha256 CHAR(64),
+        audit_s3_key VARCHAR(300),
+        signed_at TIMESTAMPTZ,
+        paper_signed_at DATE,
+        paper_registered_by VARCHAR(120),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
+    # Um termo vigente (assinado ou em papel) por paciente, clínica e versão;
+    # e um só "assinando" por vez, para dois toques não abrirem dois envelopes.
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_consents_vigente
+       ON scheduler.patient_consents (clinic_id, patient_id, term_version)
+       WHERE status IN ('SIGNED', 'PAPER')""",
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_consents_assinando
+       ON scheduler.patient_consents (clinic_id, patient_id)
+       WHERE status = 'SIGNING'""",
+    """CREATE INDEX IF NOT EXISTS idx_patient_consents_provider_doc
+       ON scheduler.patient_consents (provider_document_id)""",
+
+    # A ClickSign entrega webhook "pelo menos uma vez".
+    """CREATE TABLE IF NOT EXISTS scheduler.consent_webhook_events (
+        event_id VARCHAR(120) PRIMARY KEY,
+        provider VARCHAR(20) NOT NULL,
+        event VARCHAR(60) NOT NULL,
+        provider_document_id VARCHAR(80),
+        payload JSONB,
+        received_at TIMESTAMPTZ DEFAULT NOW()
+    )""",
 ]
 
 

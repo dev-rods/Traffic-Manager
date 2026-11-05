@@ -32,6 +32,18 @@ pode ser afetado por mudanças daqui.
   tela mostra o cartão de teste aprovado (4444 4444 4444 4444, validade
   futura, CVV 123) para pagar a fatura pelo QR. Sem chave, dev cai no
   provedor simulado; prod sem chave responde 503 (nunca simula).
+- **Termo de consentimento (PRD 036).** Entre confirmar o agendamento e
+  escolher o pagamento, quem ainda não assinou a versão vigente do TCLE
+  passa por `ConsentDataStep` (confere nome, CPF, nascimento, e-mail, uso de
+  imagem; menor de idade informa o responsável, que é quem assina) e
+  `ConsentSignStep` (widget embedded da ClickSign, `lib/clicksignWidget.ts`:
+  código no WhatsApp e assinatura manuscrita na tela). Quem decide "precisa
+  assinar" é o backend (`consentRequired` na resposta de `confirm`); o iPad
+  nunca pula o termo, só a recepção dispensa pelo painel. O "assinado" vem do
+  backend (webhook ou polling de 3 s), nunca do evento do widget. Em dev sem
+  `CLICKSIGN_API_KEY` o provedor simulado troca o widget por "Simular
+  assinatura (teste)". Os campos do termo usam o teclado do iPad
+  (`TextField`), não o `Keypad`: são cinco a dez campos numa tela só.
 - Rota: `/:clinicId`.
 
 ## Comandos
@@ -57,11 +69,18 @@ automático no merge):
   VERCEL_PROJECT_ID=prj_5DMFqCPTYk7bFZFYAKCikdPfUaol npx vercel deploy --prod --yes`.
   Sem `/prod/ASAAS_API_KEY`, o pagamento responde "indisponível" (503).
 
-Dev:
+Dev. Sem login interativo: o token é o `/dev/VERCEL_API_TOKEN` do SSM (o
+mesmo do domínio customizado, PRD 021), e o projeto vai pelo id. Nunca
+`--yes` sem o id: em 04/11/2026 a CLI criou um projeto `checkin` novo em vez
+de publicar no `checkin-dev`.
 
 ```bash
-cd checkin && npx vercel deploy --prod --yes --scope team_ZLFt6HlpGbYXZsEloIbOVq96
+cd checkin && MSYS_NO_PATHCONV=1   VERCEL_TOKEN=$(aws ssm get-parameter --name /dev/VERCEL_API_TOKEN --with-decryption --query Parameter.Value --output text --profile dev-andre)   VERCEL_ORG_ID=team_ZLFt6HlpGbYXZsEloIbOVq96 VERCEL_PROJECT_ID=prj_SJRfcdvZvjCcxFcZccTgfUy0rJg7   npx vercel deploy --prod --yes --scope team_ZLFt6HlpGbYXZsEloIbOVq96
 ```
+
+Para o `checkin-prod`, o mesmo comando com `/prod/VERCEL_API_TOKEN` e o
+`VERCEL_PROJECT_ID` de cima. Conferir depois: a URL serve o bundle novo
+(`curl` no `index-*.js` procurando um texto da tela nova).
 
 URL: https://checkin-dev-ten.vercel.app/{clinicId}. Env vars do projeto:
 `VITE_API_BASE_URL` (dev) e `VITE_BOOKING_API_KEY` (a mesma chave pública do

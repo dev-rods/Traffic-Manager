@@ -20,6 +20,13 @@ PublicBooking:
         - dynamodb:PutItem
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+    # PRD 036: o PDF assinado do termo vai para o bucket privado de documentos.
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+      Resource:
+        - "arn:aws:s3:::${self:custom.resourcePrefix}-documentos/clinics/*"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
@@ -80,4 +87,8 @@ PublicBooking:
     # Chamado pelo Asaas, servidor a servidor: sem CORS.
     - http:
         path: public/asaas/webhook
+        method: post
+    # Chamado pela ClickSign (PRD 036), servidor a servidor: sem CORS.
+    - http:
+        path: public/clicksign/webhook
         method: post

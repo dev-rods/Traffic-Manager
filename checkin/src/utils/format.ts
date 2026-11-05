@@ -80,3 +80,45 @@ export function isValidCpf(value: string): boolean {
   }
   return true
 }
+
+/** `10052010` → `10/05/2010`, conforme a pessoa digita. */
+export function formatDateDigits(digits: string): string {
+  const d = onlyDigits(digits).slice(0, 8)
+  if (d.length <= 2) return d
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`
+}
+
+/** `ddmmaaaa` → `aaaa-mm-dd`, ou null se a data não existe ou não é passado. */
+export function digitsToIsoDate(digits: string, now: Date = new Date()): string | null {
+  const d = onlyDigits(digits)
+  if (d.length !== 8) return null
+  const day = Number(d.slice(0, 2))
+  const month = Number(d.slice(2, 4))
+  const year = Number(d.slice(4))
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day)
+    return null
+  if (year < now.getFullYear() - 120 || date >= now) return null
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+/** `aaaa-mm-dd` → `ddmmaaaa`, para preencher o campo com o que o cadastro já sabe. */
+export function isoDateToDigits(iso: string | null): string {
+  if (!iso) return ''
+  const [y, m, d] = iso.slice(0, 10).split('-')
+  return `${d}${m}${y}`
+}
+
+/** Menor de 18 NA DATA DA SESSÃO, a mesma conta do backend (`idade.py`). */
+export function isMinorAt(birthIso: string, atIso: string): boolean {
+  const [by, bm, bd] = birthIso.slice(0, 10).split('-').map(Number)
+  const [ay, am, ad] = atIso.slice(0, 10).split('-').map(Number)
+  let years = ay - by
+  if (am < bm || (am === bm && ad < bd)) years -= 1
+  return years < 18
+}
+
+export function isValidEmail(value: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value.trim())
+}

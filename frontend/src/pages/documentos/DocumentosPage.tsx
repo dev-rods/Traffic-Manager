@@ -1,16 +1,21 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useSessionRecords } from '@/hooks/useSessionRecords'
 import { HistoricoDeSessao } from './components/HistoricoDeSessao'
+import { TermoDeConsentimento } from './components/TermoDeConsentimento'
+
+type Documento = 'historico' | 'termo'
+
+const ABAS: { id: Documento; label: string }[] = [
+  { id: 'historico', label: 'Histórico por sessão' },
+  { id: 'termo', label: 'Termo de consentimento' },
+]
 
 /**
  * A pasta de documentos do paciente.
  *
  * Abre DIRETO no histórico, com o seletor de documento no topo: com um tipo de
- * documento, uma tela intermediária cobraria um clique que não decide nada. A
- * pasta existe na estrutura, e o segundo documento entra como aba.
- *
- * O termo de consentimento não aparece como "em breve" — anunciar data que não
- * temos é promessa, e a integração depende de terceiro.
+ * documento, uma tela intermediária cobraria um clique que não decide nada. O
+ * termo de consentimento (PRD 036) é a segunda aba, `?doc=termo`.
  *
  * O paciente vem na mesma resposta dos registros: não existe GET de paciente
  * no backend, e criar uma Lambda só para o cabeçalho desta tela seria caro para
@@ -20,8 +25,17 @@ export function DocumentosPage() {
   const { patientId } = useParams<{ patientId: string }>()
   // O atalho da agenda chega com ?agendamento=<id> e abre o modal ja com a
   // sessao escolhida: um clique, os parametros, salvar.
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const agendamentoInicial = searchParams.get('agendamento')
+  const doc: Documento = searchParams.get('doc') === 'termo' ? 'termo' : 'historico'
+
+  function trocarAba(novo: Documento) {
+    // Mantém ?agendamento=: a pessoa pode voltar ao histórico com o atalho vivo.
+    const proximos = new URLSearchParams(searchParams)
+    if (novo === 'historico') proximos.delete('doc')
+    else proximos.set('doc', novo)
+    setSearchParams(proximos, { replace: true })
+  }
   const { data, isLoading, isError, refetch } = useSessionRecords(patientId)
 
   if (isLoading) {
@@ -81,18 +95,36 @@ export function DocumentosPage() {
         </p>
       </header>
 
-      <nav className="mt-6 border-b border-gray-200" aria-label="Documentos">
-        <span className="inline-block border-b-2 border-brand-500 pb-2 text-sm font-medium text-gray-900">
-          Histórico por sessão
-        </span>
+      <nav className="mt-6 flex gap-6 border-b border-gray-200" aria-label="Documentos" role="tablist">
+        {ABAS.map((aba) => (
+          <button
+            key={aba.id}
+            type="button"
+            role="tab"
+            aria-selected={doc === aba.id}
+            onClick={() => trocarAba(aba.id)}
+            className={[
+              '-mb-px border-b-2 pb-2 text-sm font-medium transition-colors duration-150 cursor-pointer',
+              doc === aba.id
+                ? 'border-brand-500 text-gray-900'
+                : 'border-transparent text-gray-500 hover:text-gray-700',
+            ].join(' ')}
+          >
+            {aba.label}
+          </button>
+        ))}
       </nav>
 
-      <section className="mt-6">
-        <HistoricoDeSessao
-          patientId={patientId}
-          skinType={paciente.skin_type}
-          agendamentoInicial={agendamentoInicial}
-        />
+      <section className="mt-6" role="tabpanel">
+        {doc === 'historico' ? (
+          <HistoricoDeSessao
+            patientId={patientId}
+            skinType={paciente.skin_type}
+            agendamentoInicial={agendamentoInicial}
+          />
+        ) : (
+          <TermoDeConsentimento patientId={patientId} />
+        )}
       </section>
     </div>
   )

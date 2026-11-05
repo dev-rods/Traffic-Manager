@@ -4,6 +4,7 @@ import { formatCurrency } from '@/utils/formatCurrency'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
 import type { Appointment } from '@/types'
 import { PagamentoDoAgendamento } from './PagamentoDoAgendamento'
+import { TermoDoAgendamento } from './TermoDoAgendamento'
 
 const DISCOUNT_LABELS: Record<string, string> = {
   first_session: '1a sessao',
@@ -258,6 +259,8 @@ export function AppointmentPopover({
         )}
 
         {/* Check-in e pagamento do iPad (PRD 026). Cancelado não cobra. */}
+        {/* Termo de consentimento (PRD 036) acima do pagamento: é a ordem do iPad. */}
+        {!isCancelled && <TermoDoAgendamento appointment={a} />}
         {!isCancelled && <PagamentoDoAgendamento appointment={a} />}
 
         {/* Notes */}

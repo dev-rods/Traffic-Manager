@@ -1,0 +1,22 @@
+# Documentos assinados das pacientes (PRD 036): o PDF do termo de
+# consentimento e o zip de auditoria da ClickSign. Privado: o painel só
+# recebe URLs assinadas de 5 min, geradas pela Lambda. Sem CORS porque
+# ninguém faz PUT do navegador. `Retain`: termo assinado não some com o stack.
+Resources:
+  DocumentosBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: ${self:custom.resourcePrefix}-documentos
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled

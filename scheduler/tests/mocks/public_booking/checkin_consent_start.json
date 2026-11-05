@@ -1,0 +1,12 @@
+{
+  "resource": "/public/clinics/{clinicId}/checkin/{proxy+}",
+  "headers": {
+    "x-api-key": "test-api-key"
+  },
+  "httpMethod": "POST",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123",
+    "proxy": "appointments/aaaaaaaa-0000-0000-0000-000000000001/consent"
+  },
+  "body": "{\"phone\": \"5511999990000\", \"token\": \"<token de /verify/confirm>\", \"fullName\": \"Ana Souza\", \"cpf\": null, \"birthDate\": \"1990-05-10\", \"email\": \"ana@exemplo.com\", \"imageAuthorized\": true, \"guardian\": null}"
+}

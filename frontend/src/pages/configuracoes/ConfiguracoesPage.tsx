@@ -8,6 +8,7 @@ import { TemplateField } from '@/components/TemplateField'
 import type { UpdateClinicPayload } from '@/types'
 import { buildDefaultMessage } from '@/utils/buildDefaultMessage'
 import { EXEMPLO_DO_LEMBRETE, LEMBRETE_PADRAO } from '@/lib/lembretePadrao'
+import { ResponsavelTecnica } from './components/ResponsavelTecnica'
 
 function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['data']>): UpdateClinicPayload {
   return {
@@ -23,6 +24,8 @@ function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['d
     batch_message_template: clinic.batch_message_template ?? '',
     lembrete_automatico: clinic.lembrete_automatico ?? false,
     lembrete_antecedencia_horas: clinic.lembrete_antecedencia_horas ?? 24,
+    responsible_professional_id: clinic.responsible_professional_id ?? null,
+    cidade: clinic.cidade ?? '',
   }
 }
 
@@ -40,7 +43,7 @@ export function ConfiguracoesPage() {
     setForm(buildFormFromClinic(clinic))
   }
 
-  const set = (key: keyof UpdateClinicPayload, value: string | number | boolean) => {
+  const set = (key: keyof UpdateClinicPayload, value: string | number | boolean | null) => {
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
@@ -178,6 +181,20 @@ export function ConfiguracoesPage() {
             padrao={LEMBRETE_PADRAO}
             exemplo={EXEMPLO_DO_LEMBRETE}
             help="Use {{nome}}, {{areas}}, {{clinic_name}}, {{dia}}, {{hora}} e {{endereco}} (o endereço cadastrado em Dados gerais). Vazio volta ao texto padrão."
+          />
+        </Section>
+
+        <hr className="border-gray-100" />
+
+        {/* Termo de consentimento (PRD 036) */}
+        <Section
+          title="Responsável técnica e termo"
+          description="Vai impresso no termo de consentimento que a paciente assina no check-in: nome, título e registro da responsável, e a cidade."
+        >
+          <ResponsavelTecnica
+            responsibleProfessionalId={(form.responsible_professional_id as string | null | undefined) ?? null}
+            cidade={(form.cidade as string | null | undefined) ?? ''}
+            onChange={(key, value) => set(key, value)}
           />
         </Section>
 

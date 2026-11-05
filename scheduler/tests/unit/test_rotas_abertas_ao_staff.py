@@ -52,6 +52,10 @@ ABERTAS = {
     # recepção. O resumo do caixa, no mesmo arquivo, continua do admin
     # (`require_api_key`), como os relatórios.
     "caixa/router.py": "agenda.escrever",
+    # Termo de consentimento (PRD 036): ler os termos e as URLs do PDF é ler
+    # documento da paciente (prontuario.ler, a última chamada do arquivo);
+    # dispensar e registrar papel pedem agenda.escrever, como o caixa.
+    "consent/router.py": "prontuario.ler",
 }
 
 # Os três itens que o André nomeou, e o resto do que não pode vazar junto.

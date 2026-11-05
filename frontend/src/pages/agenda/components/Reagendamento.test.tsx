@@ -8,6 +8,10 @@ vi.mock('@/hooks/useCaixa', () => ({
   useReceberDinheiro: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false, data: undefined }),
   useEnviarLink: () => ({ mutate: vi.fn(), isPending: false }),
 }))
+vi.mock('@/hooks/useConsents', () => ({
+  useDispensarTermo: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
+  useRegistrarPapel: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
+}))
 vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
 
 /**

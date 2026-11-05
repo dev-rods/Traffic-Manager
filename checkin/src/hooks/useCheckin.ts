@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { checkinService } from '@/services/checkin.service'
-import type { PaymentMethod, Session } from '@/types'
+import type { ConsentStartPayload, PaymentMethod, Session } from '@/types'
 
 export const checkinKeys = {
   bootstrap: (clinicId: string) => ['checkin', 'bootstrap', clinicId] as const,
@@ -8,6 +8,8 @@ export const checkinKeys = {
     ['checkin', 'appointments', clinicId, phone] as const,
   payment: (clinicId: string, paymentId: string) =>
     ['checkin', 'payment', clinicId, paymentId] as const,
+  consent: (clinicId: string, consentId: string) =>
+    ['checkin', 'consent', clinicId, consentId] as const,
 }
 
 export function useClinic(clinicId: string) {
@@ -74,5 +76,35 @@ export function useSimulatePayment(clinicId: string, session: Session | null) {
   return useMutation({
     mutationFn: (paymentId: string) =>
       checkinService.simulate(clinicId, session as Session, paymentId),
+  })
+}
+
+// Termo de consentimento (PRD 036) -------------------------------------------
+
+export function useStartConsent(clinicId: string, session: Session | null) {
+  return useMutation({
+    mutationFn: (v: { appointmentId: string; payload: ConsentStartPayload }) =>
+      checkinService.startConsent(clinicId, session as Session, v.appointmentId, v.payload),
+  })
+}
+
+/** Acompanha a assinatura até sair de SIGNING: o webhook da ClickSign ou a
+ * consulta que o backend faz a cada polling fecham o termo. */
+export function useConsentStatus(clinicId: string, session: Session | null, consentId: string) {
+  return useQuery({
+    queryKey: checkinKeys.consent(clinicId, consentId),
+    queryFn: () => checkinService.consent(clinicId, session as Session, consentId),
+    enabled: session !== null,
+    refetchInterval: (query) =>
+      query.state.data && query.state.data.status !== 'SIGNING' ? false : 3000,
+    refetchIntervalInBackground: true,
+    gcTime: 0,
+  })
+}
+
+export function useSimulateConsent(clinicId: string, session: Session | null) {
+  return useMutation({
+    mutationFn: (consentId: string) =>
+      checkinService.simulateConsent(clinicId, session as Session, consentId),
   })
 }

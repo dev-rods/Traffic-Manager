@@ -38,13 +38,27 @@ ALLOWED_FIELDS = {
     # relacao ao primeiro horario do dia.
     "lembrete_automatico",
     "lembrete_antecedencia_horas",
+    # Termo de consentimento (PRD 036): responsavel tecnica e cidade do termo.
+    "responsible_professional_id",
+    "cidade",
 }
+
+TAMANHO_CIDADE = 120
 
 JSONB_FIELDS = {"business_hours"}
 
 # Antecedencia fora disto nao faz sentido: menos de 1h nao da tempo de ninguem
 # reagir, mais de 72h e a pessoa nem lembra que recebeu.
 ANTECEDENCIA_MIN_HORAS, ANTECEDENCIA_MAX_HORAS = 1, 72
+
+
+def _parece_uuid(valor) -> bool:
+    import uuid
+    try:
+        uuid.UUID(str(valor))
+        return True
+    except ValueError:
+        return False
 
 
 def _serialize_row(row):
@@ -142,6 +156,25 @@ def handler(event, context):
             body["lembrete_antecedencia_horas"] = horas
 
         db = PostgresService()
+
+        # A responsavel tecnica tem de ser profissional ATIVA DESTA clinica:
+        # o nome dela vai impresso no termo (PRD 036).
+        if "cidade" in body:
+            cidade = " ".join(str(body["cidade"] or "").split())[:TAMANHO_CIDADE]
+            body["cidade"] = cidade or None
+        if "responsible_professional_id" in body:
+            responsavel = body["responsible_professional_id"] or None
+            if responsavel is not None:
+                ativa = db.execute_query(
+                    "SELECT 1 FROM scheduler.professionals WHERE id = %s::uuid AND clinic_id = %s AND active = true",
+                    (str(responsavel), clinic_id),
+                ) if _parece_uuid(responsavel) else []
+                if not ativa:
+                    return http_response(400, {
+                        "status": "ERROR",
+                        "message": "responsible_professional_id deve ser uma profissional ativa desta clínica",
+                    })
+            body["responsible_professional_id"] = responsavel
 
         # Precisa do domínio ANTIGO antes de sobrescrever: é o que vai ser
         # removido do projeto Vercel se a clínica trocar ou limpar o domínio.

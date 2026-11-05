@@ -183,7 +183,9 @@ class TestAgendamentosDoNumero(Base):
 class TestConfirma(Base):
     def test_grava_check_in_uma_vez(self):
         r = checkin.confirma(self.db, CLINIC, FONE, APPT)
-        self.assertEqual(r, {"checkedIn": True, "payerCpfKnown": True})
+        # Sem TCLE_VERSION o termo nunca é pedido (PRD 036).
+        self.assertEqual(r, {"checkedIn": True, "payerCpfKnown": True,
+                             "consentRequired": False, "consentPrefill": None})
         self.assertIsNotNone(self.db.agendamentos[APPT]["checked_in_at"])
 
     def test_cpf_do_cadastro_nao_serve_para_outra_pessoa_do_mesmo_numero(self):
@@ -493,11 +495,14 @@ class TestRota(unittest.TestCase):
         self.assertIs(ROUTES[("GET", "public/clinics/{clinicId}/checkin/{proxy+}")], h.handler)
         self.assertIs(ROUTES[("POST", "public/clinics/{clinicId}/checkin/{proxy+}")], h.handler)
         self.assertIs(ROUTES[("POST", "public/asaas/webhook")], asaas_webhook.handler)
+        from src.functions.public_booking import clicksign_webhook
+        self.assertIs(ROUTES[("POST", "public/clicksign/webhook")], clicksign_webhook.handler)
         raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         with open(os.path.join(raiz, "sls", "functions", "public_booking", "interface.yml"), encoding="utf-8") as f:
             yml = f.read()
         self.assertIn("path: public/clinics/{clinicId}/checkin/{proxy+}", yml)
         self.assertIn("path: public/asaas/webhook", yml)
+        self.assertIn("path: public/clicksign/webhook", yml)
 
 
 if __name__ == "__main__":

@@ -7,11 +7,13 @@ import { StartStep } from '@/steps/StartStep'
 import { PhoneStep } from '@/steps/PhoneStep'
 import { CodeStep } from '@/steps/CodeStep'
 import { AppointmentStep } from '@/steps/AppointmentStep'
+import { ConsentDataStep } from '@/steps/ConsentDataStep'
+import { ConsentSignStep } from '@/steps/ConsentSignStep'
 import { MethodStep } from '@/steps/MethodStep'
 import { CpfStep } from '@/steps/CpfStep'
 import { PaymentStep } from '@/steps/PaymentStep'
 import { DoneStep } from '@/steps/DoneStep'
-import type { CheckinAppointment, Payment, PaymentMethod, Session } from '@/types'
+import type { CheckinAppointment, Consent, Payment, PaymentMethod, Session } from '@/types'
 import { formatCurrencyBRL } from '@/utils/format'
 
 type State =
@@ -19,6 +21,8 @@ type State =
   | { step: 'phone' }
   | { step: 'code'; phone: string; devCode: string | null }
   | { step: 'appointment'; session: Session }
+  | ({ step: 'consent-data' } & Paying)
+  | ({ step: 'consent-sign'; consent: Consent } & Paying)
   | ({ step: 'method' } & Paying)
   | ({ step: 'cpf'; method: PaymentMethod } & Paying)
   | ({ step: 'payment'; payment: Payment } & Paying)
@@ -32,6 +36,9 @@ interface Paying {
   appointment: CheckinAppointment
   payerCpfKnown: boolean
   cpf: string | null
+  // Termo de consentimento (PRD 036) já resolvido nesta visita (assinado,
+  // não exigido). Enquanto for falso e o backend exigir, nada de pagamento.
+  consentDone: boolean
 }
 
 type Action = { type: 'go'; state: State } | { type: 'reset' }
@@ -41,9 +48,12 @@ function reducer(_: State, action: Action): State {
 }
 
 // Sem toque por 90 s, volta ao início. Esperando o pagamento, a paciente está
-// no celular dela, sem tocar no iPad: ali o prazo é maior.
+// no celular dela, sem tocar no iPad: ali o prazo é maior. Na assinatura
+// também: o widget da ClickSign é um iframe de outra origem, e os toques nele
+// não chegam ao `useIdleReset`.
 const IDLE_MS = 90_000
 const IDLE_PAYMENT_MS = 5 * 60_000
+const LONG_IDLE_STEPS = new Set(['payment', 'consent-sign'])
 
 function firstNameOf(appointment: CheckinAppointment): string | null {
   return appointment.fullName?.trim().split(/\s+/)[0] || null
@@ -54,6 +64,11 @@ function next(paying: Paying, payment: Payment | null): State {
   const { appointment } = paying
   const firstName = firstNameOf(appointment)
   const amount = formatCurrencyBRL(payment?.amountCents ?? appointment.finalPriceCents)
+  // O termo vem antes do pagamento (decisão 4 do PRD 036). Agendamento já
+  // pago não passa por aqui (`alreadyPaid`): o termo fica para a recepção.
+  if (appointment.consentRequired && !paying.consentDone) {
+    return { step: 'consent-data', ...paying }
+  }
   if (payment?.status === 'PAID') {
     return {
       step: 'done',
@@ -82,8 +97,8 @@ function next(paying: Paying, payment: Payment | null): State {
 }
 
 function paying(state: Paying): Paying {
-  const { session, appointment, payerCpfKnown, cpf } = state
-  return { session, appointment, payerCpfKnown, cpf }
+  const { session, appointment, payerCpfKnown, cpf, consentDone } = state
+  return { session, appointment, payerCpfKnown, cpf, consentDone }
 }
 
 export function CheckinPage() {
@@ -97,11 +112,12 @@ export function CheckinPage() {
     // O que a pessoa anterior viu não fica em cache para a próxima.
     queryClient.removeQueries({ queryKey: ['checkin', 'appointments'] })
     queryClient.removeQueries({ queryKey: ['checkin', 'payment'] })
+    queryClient.removeQueries({ queryKey: ['checkin', 'consent'] })
     dispatch({ type: 'reset' })
   }, [queryClient])
 
   useIdleReset(
-    state.step === 'payment' ? IDLE_PAYMENT_MS : IDLE_MS,
+    LONG_IDLE_STEPS.has(state.step) ? IDLE_PAYMENT_MS : IDLE_MS,
     reset,
     state.step !== 'start' && state.step !== 'done'
   )
@@ -122,7 +138,13 @@ export function CheckinPage() {
   )
 
   return (
-    <div className="flex min-h-dvh flex-col bg-ink-50">
+    <div
+      className={`flex flex-col bg-ink-50 ${
+        // Assinando o termo, a página não rola: o iframe da ClickSign ocupa o
+        // que sobra da tela e rola por dentro (um scroll só, o do termo).
+        state.step === 'consent-sign' ? 'h-dvh overflow-hidden' : 'min-h-dvh'
+      }`}
+    >
       {state.step !== 'start' ? (
         <header className="border-b border-ink-200 bg-surface">
           <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
@@ -167,8 +189,12 @@ export function CheckinPage() {
       ) : null}
 
       <main
-        className={`mx-auto flex w-full flex-1 flex-col justify-center px-6 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] ${
-          state.step === 'payment' ? 'max-w-2xl md:landscape:max-w-4xl' : 'max-w-2xl'
+        className={`mx-auto flex w-full flex-1 flex-col px-6 ${
+          state.step === 'consent-sign'
+            ? 'min-h-0 max-w-6xl justify-start py-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
+            : state.step === 'payment'
+              ? 'max-w-2xl justify-center py-8 pb-[max(2rem,env(safe-area-inset-bottom))] md:landscape:max-w-4xl'
+              : 'max-w-2xl justify-center py-8 pb-[max(2rem,env(safe-area-inset-bottom))]'
         }`}
       >
         {state.step === 'start' ? (
@@ -198,15 +224,51 @@ export function CheckinPage() {
           <AppointmentStep
             clinicId={clinicId}
             session={state.session}
-            onConfirmed={(appointment, payerCpfKnown) =>
+            onConfirmed={(appointment, confirmed) =>
               go(
                 next(
-                  { session: state.session, appointment, payerCpfKnown, cpf: null },
+                  {
+                    session: state.session,
+                    appointment: {
+                      ...appointment,
+                      consentRequired: confirmed.consentRequired,
+                      consentPrefill: confirmed.consentPrefill,
+                    },
+                    payerCpfKnown: confirmed.payerCpfKnown,
+                    cpf: null,
+                    consentDone: false,
+                  },
                   appointment.payment
                 )
               )
             }
             onAlreadyPaid={alreadyPaid}
+            onRestart={reset}
+          />
+        ) : null}
+
+        {state.step === 'consent-data' ? (
+          <ConsentDataStep
+            clinicId={clinicId}
+            session={state.session}
+            appointment={state.appointment}
+            onStarted={(consent) =>
+              consent.status === 'SIGNING'
+                ? go({ ...paying(state), step: 'consent-sign', consent })
+                : go(next({ ...paying(state), consentDone: true }, state.appointment.payment))
+            }
+            onRestart={reset}
+          />
+        ) : null}
+
+        {state.step === 'consent-sign' ? (
+          <ConsentSignStep
+            clinicId={clinicId}
+            session={state.session}
+            consent={state.consent}
+            onSigned={() =>
+              go(next({ ...paying(state), consentDone: true }, state.appointment.payment))
+            }
             onRestart={reset}
           />
         ) : null}

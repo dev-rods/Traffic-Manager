@@ -1,0 +1,829 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Termo de consentimento (PRD 036)",
+    "description": "Termo de consentimento (TCLE) assinado no check-in do iPad pela ClickSign: rotas públicas do iPad, webhook e rotas do painel. Nada de segredo aqui: chaves vão nas variáveis.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "BOOKING_API_KEY",
+      "value": "YOUR_BOOKING_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "phone",
+      "value": "5511999990000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "patientId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "professionalId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "consentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "providerDocumentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "providerEnvelopeId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "hmacDoCorpo",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "iPad (público: chave do booking + token do código)",
+      "item": [
+        {
+          "name": "Confirmar agendamento (devolve consentRequired e consentPrefill)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{BOOKING_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/confirm",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "public",
+                "clinics",
+                "{{clinicId}}",
+                "checkin",
+                "appointments",
+                "{{appointmentId}}",
+                "confirm"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"token\": \"{{token}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});",
+                  "",
+                  "pm.test('consentRequired is boolean', function () {",
+                  "    pm.expect(pm.response.json().consentRequired).to.be.a('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar o termo (paciente maior de idade)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{BOOKING_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/consent",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "public",
+                "clinics",
+                "{{clinicId}}",
+                "checkin",
+                "appointments",
+                "{{appointmentId}}",
+                "consent"
+              ]
+            },
+            "description": "cpf null = manter o CPF já conhecido. 400 se a clínica não tem responsável/registro/cidade ou se algum dado não valida; 503 sem provedor; 502 se a ClickSign recusar.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"token\": \"{{token}}\",\n  \"fullName\": \"Ana Souza\",\n  \"cpf\": null,\n  \"birthDate\": \"1990-05-10\",\n  \"email\": \"ana@exemplo.com\",\n  \"imageAuthorized\": true,\n  \"guardian\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});",
+                  "",
+                  "var c = pm.response.json().consent;",
+                  "pm.collectionVariables.set('consentId', c.id);",
+                  "pm.test('consent is SIGNING or NOT_REQUIRED', function () {",
+                  "    pm.expect(['SIGNING', 'NOT_REQUIRED']).to.include(c.status);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar o termo (menor de idade, responsável assina)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{BOOKING_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/consent",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "public",
+                "clinics",
+                "{{clinicId}}",
+                "checkin",
+                "appointments",
+                "{{appointmentId}}",
+                "consent"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"token\": \"{{token}}\",\n  \"fullName\": \"Bia Souza\",\n  \"cpf\": \"52998224725\",\n  \"birthDate\": \"2010-06-01\",\n  \"email\": \"bia@exemplo.com\",\n  \"imageAuthorized\": false,\n  \"guardian\": {\n    \"name\": \"Carla Souza\",\n    \"cpf\": \"11144477735\",\n    \"birthDate\": \"1980-01-01\",\n    \"phone\": \"5511988887777\",\n    \"email\": \"carla@exemplo.com\"\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Situação do termo (polling de 3 s)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{BOOKING_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/consents/{{consentId}}?phone={{phone}}&token={{token}}",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "public",
+                "clinics",
+                "{{clinicId}}",
+                "checkin",
+                "consents",
+                "{{consentId}}"
+              ],
+              "query": [
+                {
+                  "key": "phone",
+                  "value": "{{phone}}"
+                },
+                {
+                  "key": "token",
+                  "value": "{{token}}"
+                }
+              ]
+            },
+            "description": "SIGNING enquanto assina; SIGNED fecha (baixa o PDF para o S3); CANCELLED/EXPIRED. 404 se o termo não é deste número."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Simular assinatura (só provedor simulado, dev sem chave)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{BOOKING_API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/consents/{{consentId}}/simulate",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "public",
+                "clinics",
+                "{{clinicId}}",
+                "checkin",
+                "consents",
+                "{{consentId}}",
+                "simulate"
+              ]
+            },
+            "description": "400 com a ClickSign: no sandbox assina-se de verdade pelo widget.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"token\": \"{{token}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhook da ClickSign (servidor a servidor)",
+      "item": [
+        {
+          "name": "auto_close (HMAC do corpo cru)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Hmac",
+                "value": "sha256={{hmacDoCorpo}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clicksign/webhook",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "public",
+                "clicksign",
+                "webhook"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": {\n    \"name\": \"auto_close\",\n    \"occurred_at\": \"2026-11-04T15:00:00Z\"\n  },\n  \"document\": {\n    \"key\": \"{{providerDocumentId}}\"\n  },\n  \"envelope\": {\n    \"key\": \"{{providerEnvelopeId}}\"\n  }\n}"
+            },
+            "description": "O HMAC é SHA-256 do corpo exatamente como enviado, com CLICKSIGN_WEBHOOK_SECRET. Errado ou ausente: 401. Repetido: 200 com result 'repetido'."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Painel (clinics/{clinicId}/consents)",
+      "item": [
+        {
+          "name": "Termos da paciente (prontuario.ler)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/consents/patients/{{patientId}}",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "clinics",
+                "{{clinicId}}",
+                "consents",
+                "patients",
+                "{{patientId}}"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});",
+                  "",
+                  "pm.test('consents is an array', function () {",
+                  "    pm.expect(pm.response.json().consents).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Dispensar nesta sessão (agenda.escrever)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/consents/appointments/{{appointmentId}}/waive",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "clinics",
+                "{{clinicId}}",
+                "consents",
+                "appointments",
+                "{{appointmentId}}",
+                "waive"
+              ]
+            },
+            "description": "reason: SEM_CELULAR | RECUSOU | SISTEMA_FORA | OUTRO (OUTRO exige note). 400 motivo inválido; 404 agendamento não confirmado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"SEM_CELULAR\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assinado em papel (agenda.escrever)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/consents/patients/{{patientId}}/paper",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "clinics",
+                "{{clinicId}}",
+                "consents",
+                "patients",
+                "{{patientId}}",
+                "paper"
+              ]
+            },
+            "description": "Idempotente: já vigente devolve o existente. 400 data futura.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signedAt\": \"2026-11-01\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "URL do PDF assinado (5 min)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/consents/{{consentId}}/pdf-url",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "clinics",
+                "{{clinicId}}",
+                "consents",
+                "{{consentId}}",
+                "pdf-url"
+              ]
+            },
+            "description": "404 sem PDF (SIGNING, PAPER)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "URL do zip de auditoria (5 min)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/consents/{{consentId}}/zip-url",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "clinics",
+                "{{clinicId}}",
+                "consents",
+                "{{consentId}}",
+                "zip-url"
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Configuração (admin)",
+      "item": [
+        {
+          "name": "Responsável técnica e cidade da clínica",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "clinics",
+                "{{clinicId}}"
+              ]
+            },
+            "description": "400 se a profissional não é ativa desta clínica.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"responsible_professional_id\": \"{{professionalId}}\",\n  \"cidade\": \"São Paulo\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro no conselho da profissional",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{API_KEY}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/professionals/{{professionalId}}",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "{{ENVIRONMENT}}",
+                "clinics",
+                "{{clinicId}}",
+                "professionals",
+                "{{professionalId}}"
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registro_conselho\": \"CRBM 12345\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

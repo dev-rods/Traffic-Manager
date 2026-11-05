@@ -48,6 +48,70 @@ export interface CheckinAppointment {
   discountPct: number
   checkedInAt: string | null
   payment: Payment | null
+  // Termo de consentimento (PRD 036). Quem decide "precisa assinar" é o
+  // backend; o iPad só pede quando ele manda.
+  consentRequired: boolean
+  consentPrefill: ConsentPrefill | null
+}
+
+export interface ConsentGuardianPrefill {
+  name: string
+  cpfMasked: string | null
+  birthDate: string | null
+  phone: string | null
+  email: string | null
+}
+
+export interface ConsentPrefill {
+  name: string | null
+  // CPF conhecido vem mascarado (`***.***.***-12`); `cpfKnown` diz se a tela
+  // pode pular o campo. `cpf: null` no envio significa "manter o conhecido".
+  cpfMasked: string | null
+  cpfKnown: boolean
+  birthDate: string | null
+  phone: string | null
+  email: string | null
+  isMinor: boolean
+  // Responsável, cidade e registro cadastrados: sem isso o termo não é gerado.
+  clinicReady: boolean
+  guardian: ConsentGuardianPrefill | null
+}
+
+export type ConsentStatus = 'NOT_REQUIRED' | 'SIGNING' | 'SIGNED' | 'CANCELLED' | 'EXPIRED'
+
+export interface Consent {
+  id: string | null
+  status: ConsentStatus
+  signerId: string | null
+  // Onde o widget carrega (sandbox ou produção da ClickSign); vazio no simulado.
+  widgetEndpoint: string
+  // Termo de teste (sandbox ou simulado): sem valor jurídico, a tela marca.
+  test: boolean
+  canSimulate: boolean
+  signedAt: string | null
+}
+
+export interface ConsentGuardianPayload {
+  name: string
+  cpf: string
+  birthDate: string
+  phone: string
+  email: string
+}
+
+export interface ConsentStartPayload {
+  fullName: string
+  cpf: string | null
+  birthDate: string
+  email: string
+  imageAuthorized: boolean
+  guardian: ConsentGuardianPayload | null
+}
+
+export interface ConfirmResponse {
+  payerCpfKnown: boolean
+  consentRequired: boolean
+  consentPrefill: ConsentPrefill | null
 }
 
 export interface Session {

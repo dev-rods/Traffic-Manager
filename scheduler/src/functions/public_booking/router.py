@@ -17,6 +17,7 @@ from src.functions.public_booking import (
     cancel_appointment,
     reschedule_appointment,
     checkin,
+    clicksign_webhook,
     confirm_otp,
     create_appointment,
     list_appointments,
@@ -46,6 +47,7 @@ ROUTES = {
     # que `checkin.handler` distingue pelo `proxy`.
     **{(m, "public/clinics/{clinicId}/checkin/{proxy+}"): checkin.handler for m in ("GET", "POST")},
     ("POST", "public/asaas/webhook"): asaas_webhook.handler,
+    ("POST", "public/clicksign/webhook"): clicksign_webhook.handler,
 }
 
 

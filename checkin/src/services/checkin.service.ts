@@ -2,6 +2,9 @@ import { api } from './api'
 import type {
   BootstrapResponse,
   CheckinAppointment,
+  ConfirmResponse,
+  Consent,
+  ConsentStartPayload,
   Payment,
   PaymentMethod,
   Session,
@@ -34,9 +37,7 @@ export const checkinService = {
 
   confirm: (clinicId: string, s: Session, appointmentId: string) =>
     api
-      .post<{
-        payerCpfKnown: boolean
-      }>(`${base(clinicId)}/checkin/appointments/${appointmentId}/confirm`, s)
+      .post<ConfirmResponse>(`${base(clinicId)}/checkin/appointments/${appointmentId}/confirm`, s)
       .then((r) => r.data),
 
   pay: (clinicId: string, s: Session, appointmentId: string, method: PaymentMethod, cpf?: string) =>
@@ -55,4 +56,31 @@ export const checkinService = {
     api
       .post<{ payment: Payment }>(`${base(clinicId)}/checkin/payments/${paymentId}/simulate`, s)
       .then((r) => r.data.payment),
+
+  // Termo de consentimento (PRD 036).
+  startConsent: (
+    clinicId: string,
+    s: Session,
+    appointmentId: string,
+    payload: ConsentStartPayload
+  ) =>
+    api
+      .post<{ consent: Consent }>(
+        `${base(clinicId)}/checkin/appointments/${appointmentId}/consent`,
+        {
+          ...s,
+          ...payload,
+        }
+      )
+      .then((r) => r.data.consent),
+
+  consent: (clinicId: string, s: Session, consentId: string) =>
+    api
+      .get<{ consent: Consent }>(`${base(clinicId)}/checkin/consents/${consentId}`, { params: s })
+      .then((r) => r.data.consent),
+
+  simulateConsent: (clinicId: string, s: Session, consentId: string) =>
+    api
+      .post<{ consent: Consent }>(`${base(clinicId)}/checkin/consents/${consentId}/simulate`, s)
+      .then((r) => r.data.consent),
 }

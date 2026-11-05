@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CheckinPage } from './CheckinPage'
 import { checkinService } from '@/services/checkin.service'
 import { ApiError } from '@/services/api'
-import type { CheckinAppointment, Payment } from '@/types'
+import type { CheckinAppointment, Consent, ConsentPrefill, Payment } from '@/types'
 
 vi.mock('@/services/checkin.service')
 
@@ -25,6 +25,8 @@ const ANA: CheckinAppointment = {
   discountPct: 10,
   checkedInAt: null,
   payment: null,
+  consentRequired: false,
+  consentPrefill: null,
 }
 const BIA: CheckinAppointment = { ...ANA, id: 'ap-bia', fullName: 'Bia Souza', startTime: '11:00' }
 
@@ -41,6 +43,39 @@ function payment(over: Partial<Payment> = {}): Payment {
     canSimulate: true,
     ...over,
   }
+}
+
+const PREFILL: ConsentPrefill = {
+  name: 'Ana Souza',
+  cpfMasked: '***.***.***-25',
+  cpfKnown: true,
+  birthDate: '1990-05-10',
+  phone: '5511999990000',
+  email: 'ana@exemplo.com',
+  isMinor: false,
+  clinicReady: true,
+  guardian: null,
+}
+
+function consent(over: Partial<Consent> = {}): Consent {
+  return {
+    id: 'cons-1',
+    status: 'SIGNING',
+    signerId: 'sim-signer-1',
+    widgetEndpoint: '',
+    test: true,
+    canSimulate: true,
+    signedAt: null,
+    ...over,
+  }
+}
+
+function withConsent(prefill: Partial<ConsentPrefill> = {}) {
+  vi.mocked(checkinService.confirm).mockResolvedValue({
+    payerCpfKnown: true,
+    consentRequired: true,
+    consentPrefill: { ...PREFILL, ...prefill },
+  })
 }
 
 function renderPage() {
@@ -75,7 +110,14 @@ beforeEach(() => {
   vi.mocked(checkinService.sendCode).mockResolvedValue(null)
   vi.mocked(checkinService.confirmCode).mockResolvedValue('tok')
   vi.mocked(checkinService.appointments).mockResolvedValue([ANA])
-  vi.mocked(checkinService.confirm).mockResolvedValue({ payerCpfKnown: true })
+  vi.mocked(checkinService.confirm).mockResolvedValue({
+    payerCpfKnown: true,
+    consentRequired: false,
+    consentPrefill: null,
+  })
+  vi.mocked(checkinService.startConsent).mockResolvedValue(consent())
+  vi.mocked(checkinService.consent).mockResolvedValue(consent())
+  vi.mocked(checkinService.simulateConsent).mockResolvedValue(consent({ status: 'SIGNED' }))
   vi.mocked(checkinService.pay).mockResolvedValue(payment())
   vi.mocked(checkinService.payment).mockResolvedValue(payment())
   vi.mocked(checkinService.simulate).mockResolvedValue(payment({ status: 'PAID' }))
@@ -137,7 +179,11 @@ describe('Check-in', () => {
   })
 
   it('sem CPF conhecido: pede, valida e usa nas próximas tentativas', async () => {
-    vi.mocked(checkinService.confirm).mockResolvedValue({ payerCpfKnown: false })
+    vi.mocked(checkinService.confirm).mockResolvedValue({
+      payerCpfKnown: false,
+      consentRequired: false,
+      consentPrefill: null,
+    })
     const card = payment({
       method: 'CREDIT_CARD',
       pixPayload: null,
@@ -340,6 +386,203 @@ describe('Check-in', () => {
     await typeDigits('11999990000')
     await userEvent.click(screen.getByRole('button', { name: 'Receber código' }))
     expect(await screen.findByText(/Ambiente de teste/)).toHaveTextContent('654321')
+  })
+
+  it('termo exigido: confere os dados, simula a assinatura e só então paga (PRD 036)', async () => {
+    withConsent()
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Termo de consentimento' })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Pix/ })).toBeNull()
+    expect(screen.getByLabelText('Nome completo')).toHaveValue('Ana Souza')
+    expect(screen.getByText('***.***.***-25')).toBeInTheDocument()
+    expect(screen.getByLabelText('Data de nascimento')).toHaveValue('10/05/1990')
+    expect(screen.getByLabelText('E-mail')).toHaveValue('ana@exemplo.com')
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(checkinService.startConsent).toHaveBeenCalledWith(
+      'c1',
+      { phone: '5511999990000', token: 'tok' },
+      'ap-ana',
+      {
+        fullName: 'Ana Souza',
+        cpf: null,
+        birthDate: '1990-05-10',
+        email: 'ana@exemplo.com',
+        imageAuthorized: true,
+        guardian: null,
+      }
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Assine o termo' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Simular assinatura (teste)' }))
+    expect(checkinService.simulateConsent).toHaveBeenCalledWith('c1', expect.anything(), 'cons-1')
+    expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
+  })
+
+  it('termo: dados obrigatórios e CPF digitado quando não é o conhecido', async () => {
+    withConsent({ cpfKnown: false, cpfMasked: null, birthDate: null, email: null })
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await screen.findByRole('heading', { name: 'Termo de consentimento' })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(checkinService.startConsent).not.toHaveBeenCalled()
+    expect(screen.getByText('Informe o CPF.')).toBeInTheDocument()
+    expect(screen.getByText('Informe a data de nascimento.')).toBeInTheDocument()
+    expect(screen.getByText('Informe um e-mail válido.')).toBeInTheDocument()
+    expect(screen.getByText('Escolha uma das opções.')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('CPF'), '52998224725')
+    await userEvent.type(screen.getByLabelText('Data de nascimento'), '10051990')
+    await userEvent.type(screen.getByLabelText('E-mail'), 'ana@exemplo.com')
+    await userEvent.click(screen.getByRole('radio', { name: 'Não autorizo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(checkinService.startConsent).toHaveBeenLastCalledWith(
+      'c1',
+      expect.anything(),
+      'ap-ana',
+      expect.objectContaining({
+        cpf: '52998224725',
+        birthDate: '1990-05-10',
+        imageAuthorized: false,
+      })
+    )
+  })
+
+  it('termo: menor de idade exige o responsável, que é quem assina', async () => {
+    withConsent({ name: 'Bia Souza', birthDate: '2010-06-01', isMinor: true })
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    expect(await screen.findByRole('heading', { name: 'Responsável legal' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(checkinService.startConsent).not.toHaveBeenCalled()
+
+    await userEvent.type(screen.getByLabelText('Nome completo do responsável'), 'Carla Souza')
+    await userEvent.type(screen.getByLabelText('CPF do responsável'), '11144477735')
+    await userEvent.type(screen.getByLabelText('Nascimento do responsável'), '01011980')
+    await userEvent.type(screen.getByLabelText('Celular do responsável'), '11988887777')
+    await userEvent.type(screen.getByLabelText('E-mail do responsável'), 'carla@exemplo.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(checkinService.startConsent).toHaveBeenLastCalledWith(
+      'c1',
+      expect.anything(),
+      'ap-ana',
+      expect.objectContaining({
+        guardian: {
+          name: 'Carla Souza',
+          cpf: '11144477735',
+          birthDate: '1980-01-01',
+          phone: '5511988887777',
+          email: 'carla@exemplo.com',
+        },
+      })
+    )
+  })
+
+  it('termo: clínica sem responsável cadastrada manda chamar a recepção', async () => {
+    withConsent({ clinicReady: false })
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    expect(await screen.findByText(/A clínica ainda não configurou o termo/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Pix/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continuar para a assinatura' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar ao início' }))
+    expect(await screen.findByRole('button', { name: 'Fazer check-in' })).toBeInTheDocument()
+  })
+
+  it('termo: erro do servidor aparece na tela', async () => {
+    withConsent()
+    vi.mocked(checkinService.startConsent).mockRejectedValue(
+      new ApiError('Confira o CPF da paciente: os números não batem.', 400)
+    )
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await screen.findByRole('heading', { name: 'Termo de consentimento' })
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Confira o CPF da paciente')
+  })
+
+  it('termo já resolvido (NOT_REQUIRED) segue direto para o pagamento', async () => {
+    withConsent()
+    vi.mocked(checkinService.startConsent).mockResolvedValue(
+      consent({ id: null, status: 'NOT_REQUIRED' })
+    )
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await screen.findByRole('heading', { name: 'Termo de consentimento' })
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
+  })
+
+  it('termo: a assinatura confirmada pelo polling segue sozinha', async () => {
+    withConsent()
+    vi.mocked(checkinService.startConsent).mockResolvedValue(
+      consent({ canSimulate: false, widgetEndpoint: 'https://sandbox.clicksign.com' })
+    )
+    vi.mocked(checkinService.consent).mockResolvedValue(
+      consent({ status: 'SIGNED', canSimulate: false })
+    )
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await screen.findByRole('heading', { name: 'Termo de consentimento' })
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
+  })
+
+  it('termo: o widget tem altura definida e abre em tela cheia sem remontar (PRD 036)', async () => {
+    withConsent()
+    vi.mocked(checkinService.startConsent).mockResolvedValue(
+      consent({ canSimulate: false, widgetEndpoint: 'https://sandbox.clicksign.com' })
+    )
+    vi.mocked(checkinService.consent).mockResolvedValue(consent({ canSimulate: false }))
+    const mount = vi.fn()
+    const unmount = vi.fn()
+    window.Clicksign = class {
+      endpoint = ''
+      origin = ''
+      mount = mount
+      unmount = unmount
+      on = vi.fn()
+    }
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await screen.findByRole('heading', { name: 'Termo de consentimento' })
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await screen.findByRole('heading', { name: 'Assine o termo' })
+
+    // O iframe da ClickSign tem height: 100%: o container ocupa o que sobra
+    // da tela (item flex de um pai com altura definida).
+    const container = screen.getByTestId('clicksign-widget')
+    expect(mount).toHaveBeenCalledWith('clicksign-widget')
+    expect(container.className).toContain('flex-1')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }))
+    expect(screen.getByTestId('clicksign-frame').className).toContain('fixed inset-0')
+    expect(unmount).not.toHaveBeenCalled()
+    expect(mount).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reduzir' }))
+    expect(screen.getByTestId('clicksign-frame').className).not.toContain('fixed')
+    delete window.Clicksign
   })
 
   it('"Recomeçar" volta ao início a qualquer momento', async () => {

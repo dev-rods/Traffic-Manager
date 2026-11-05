@@ -17,6 +17,10 @@ custom:
   asaasBaseUrl:
     dev: https://api-sandbox.asaas.com
     prod: https://api.asaas.com
+  # ClickSign (PRD 036): sandbox em dev, produção em prod.
+  clicksignBaseUrl:
+    dev: https://sandbox.clicksign.com
+    prod: https://app.clicksign.com
   pythonRequirements:
     dockerizePip: false
     pythonBin: py -3.8
@@ -98,6 +102,16 @@ provider:
     ASAAS_API_KEY: ${ssm:/${self:custom.stage}/ASAAS_API_KEY, ''}
     ASAAS_WEBHOOK_TOKEN: ${ssm:/${self:custom.stage}/ASAAS_WEBHOOK_TOKEN, ''}
     ASAAS_BASE_URL: ${self:custom.asaasBaseUrl.${self:custom.stage}}
+    # Termo de consentimento assinado no check-in (PRD 036). Sem
+    # CLICKSIGN_API_KEY, dev usa o provedor simulado e prod recusa. Sem
+    # TCLE_VERSION o check-in NÃO pede o termo (gatilho desligado). O segredo
+    # do webhook é o HMAC configurado no painel da ClickSign; vazio, recusa tudo.
+    CLICKSIGN_API_KEY: ${ssm:/${self:custom.stage}/CLICKSIGN_API_KEY, ''}
+    CLICKSIGN_WEBHOOK_SECRET: ${ssm:/${self:custom.stage}/CLICKSIGN_WEBHOOK_SECRET, ''}
+    CLICKSIGN_TCLE_TEMPLATE_KEY: ${ssm:/${self:custom.stage}/CLICKSIGN_TCLE_TEMPLATE_KEY, ''}
+    TCLE_VERSION: ${ssm:/${self:custom.stage}/TCLE_VERSION, ''}
+    CLICKSIGN_BASE_URL: ${self:custom.clicksignBaseUrl.${self:custom.stage}}
+    DOCUMENTOS_BUCKET: ${self:custom.resourcePrefix}-documentos
     # Domínio customizado por clínica no booking-site (ver UpdateClinic e
     # public_booking/resolve_domain). Projeto Vercel é um só pros dois stages -
     # a distinção dev/prod vive no banco, não na Vercel - só o token é secreto.
@@ -137,6 +151,7 @@ functions:
   - ${file(sls/functions/atendimento/interface.yml)}
   - ${file(sls/functions/tarefa/interface.yml)}
   - ${file(sls/functions/clinic_user/interface.yml)}
+  - ${file(sls/functions/consent/interface.yml)}
 
 resources:
   - ${file(sls/resources/dynamodb/conversation-sessions-table.yml)}
@@ -145,6 +160,7 @@ resources:
   - ${file(sls/resources/dynamodb/booking-otp-table.yml)}
   - ${file(sls/resources/s3/clinic-assets-bucket.yml)}
   - ${file(sls/resources/dynamodb/outbound-queue-table.yml)}
+  - ${file(sls/resources/s3/documentos-bucket.yml)}
 
 plugins:
   - serverless-python-requirements
