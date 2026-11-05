@@ -1,16 +1,20 @@
 import type { Appointment } from '@/types'
 
 /**
- * Pendente ou Confirmado, e so DEPOIS do lembrete (PRD 027).
+ * Pendente ou Confirmado (PRD 027).
  *
- * Antes do lembrete nao ha pergunta feita, entao nao ha o que responder: a
- * caixa fica como sempre. Com lembrete enviado, quem respondeu positivamente
- * (bot) ou foi confirmado pela equipe (popover) fica verde; o resto, ambar - e
- * e nessa lista que a recepcao liga na vespera.
+ * "Pendente" so DEPOIS do lembrete: antes nao ha pergunta feita, entao nao ha
+ * o que responder, e a caixa fica como sempre. Com lembrete enviado, quem
+ * respondeu positivamente (bot) ou foi confirmado pela equipe (popover) fica
+ * verde; o resto, ambar - e e nessa lista que a recepcao liga na vespera.
+ *
+ * "Confirmado" aparece sempre: a equipe confirma por telefone antes de o
+ * lembrete sair, e essa confirmacao precisa ficar visivel na agenda.
  */
 export function ConfirmacaoBadge({ appointment: a, compacto = false }: { appointment: Appointment; compacto?: boolean }) {
-  if (!a.lembrete_enviado_em || a.status !== 'CONFIRMED') return null
+  if (a.status !== 'CONFIRMED') return null
   const confirmado = Boolean(a.confirmado_em)
+  if (!confirmado && !a.lembrete_enviado_em) return null
   const cor = confirmado ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
   const titulo = confirmado
     ? `Presença confirmada${a.confirmado_por === 'EQUIPE' ? ' pela equipe' : ' pela paciente'}`

@@ -109,11 +109,17 @@ export function AppointmentPopover({
   const remarcado = isCancelled && !!a.rescheduled_to_id
 
 
-  // Position the popover near the anchor (desktop)
+  // Position the popover near the anchor (desktop). O `top` sobe até sobrar
+  // 400px de tela; o que passar disso (termo, pagamento, observações) rola
+  // DENTRO da caixa, por isso o teto de altura é a tela menos o `top`. Sem o
+  // teto, os últimos botões (confirmar, falta, cancelar) caíam fora da tela e
+  // não havia como chegar neles.
+  const top = ehDesktop && anchorRect ? Math.max(Math.min(anchorRect.top, window.innerHeight - 400), 8) : 0
   const posicao = ehDesktop && anchorRect
     ? {
-        top: `${Math.max(Math.min(anchorRect.top, window.innerHeight - 400), 8)}px`,
+        top: `${top}px`,
         left: `${Math.min(anchorRect.right + 8, window.innerWidth - 340)}px`,
+        maxHeight: `calc(100vh - ${top + 8}px)`,
       }
     : undefined
 
@@ -123,7 +129,7 @@ export function AppointmentPopover({
         ref={ref}
         className={
           ehDesktop
-            ? 'absolute bg-white rounded-xl shadow-xl border border-gray-200 w-80 animate-in fade-in'
+            ? 'absolute bg-white rounded-xl shadow-xl border border-gray-200 w-80 overflow-y-auto animate-in fade-in'
             : // Folha de baixo: largura inteira, presa no rodapé, e com teto de
               // altura para um agendamento com muitas áreas não cobrir a tela.
               'absolute inset-x-0 bottom-0 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white shadow-xl border-t border-gray-200 pb-[env(safe-area-inset-bottom)]'
@@ -217,9 +223,12 @@ export function AppointmentPopover({
                 : isCancelled ? 'Cancelado' : 'Confirmado'}
             </span>
           </div>
-          {/* Presenca (PRD 027): so faz sentido depois de o lembrete sair.
-              Antes nao houve pergunta, e "pendente" sem pergunta e ruido. */}
-          {!isCancelled && !faltou && a.lembrete_enviado_em && (
+          {/* Presenca (PRD 027): "pendente" so faz sentido depois de o
+              lembrete sair - antes nao houve pergunta, e pendente sem pergunta
+              e ruido. Mas a equipe confirma por telefone a qualquer hora, e a
+              confirmacao precisa aparecer mesmo sem lembrete, senao parece
+              que o botao nao fez nada. */}
+          {!isCancelled && !faltou && (a.lembrete_enviado_em || a.confirmado_em) && (
             <div className="flex justify-between">
               <span className="text-gray-400">Presença</span>
               <span className={a.confirmado_em ? 'font-medium text-emerald-600' : 'font-medium text-amber-600'}>
