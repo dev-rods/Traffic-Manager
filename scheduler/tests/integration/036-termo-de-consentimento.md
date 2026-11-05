@@ -54,6 +54,18 @@ Como repetir a sondagem: `scratchpad/sonda_widget.py <signerId>` e
 `e2e_termo.py` desta sessão (cria o termo pela API com token forjado a
 partir de `BOOKING_VERIFICATION_SECRET` e abre o widget headless).
 
+## Primeira assinatura real (05/11/2026, termo `beca0835`, envelope `482535ec`)
+
+| Ponto | Resultado |
+|---|---|
+| Webhook v3 | Chegou com HMAC válido. Eventos recebidos, nesta ordem: `signature_started` (a cada abertura do widget), `sign` e `auto_close`. Os dois primeiros são ignorados; `auto_close` já estava em `EVENTOS_FECHADO` (nome confirmado) |
+| PDF no `auto_close` | **Ainda não existe.** Nos ~30 s seguintes ao evento o documento continua sem `links.files.signed`; o webhook devolve 200 com "pendente: PDF indisponível" e quem fechou foi o polling do iPad, 32 s depois (`[Consentimento] assinado ... sha256=923b54c7`). Comportamento previsto: o webhook não marca sem PDF, e o próximo polling ou evento tenta |
+| `links.files.signed` | Confirmado: após o fechamento o documento (`status: closed`) traz `links.files.original` (docx) e `links.files.signed` (PDF, 446 KB, URL de ~5 min). Zip de auditoria não veio em `links.files` (`has_zip: false`) |
+| Dois pollings simultâneos | Os dois baixaram e gravaram o PDF no S3 (mesma chave, mesmo sha); o `UPDATE ... WHERE status = 'SIGNING'` garante um único SIGNED. Sem efeito além do download em dobro |
+| Painel | `GET /clinics/{c}/consents/patients/{id}` lista o termo como SIGNED com `has_pdf: true`; `pdf-url` devolve URL assinada do S3 que baixa o PDF (`%PDF-`) |
+| Nome editado na tela de dados não entrou no termo | O termo SIGNING ≤ 24 h era reaproveitado sem olhar os dados. Corrigido em 05/11: `inicia` só reaproveita se `patient_snapshot` (paciente, responsável) e `image_authorized` baterem com o que a pessoa acabou de confirmar; senão descarta (EXPIRED + cancela o envelope) e cria outro |
+| Tela "Assine o termo" cortada | Era layout nosso, não o sandbox: o iframe da ClickSign vem com `height: 100%` e precisa de pai com altura definida; em paisagem a página rolava e o PDF encolhia. Agora o passo trava a página em `h-dvh`, o iframe preenche o viewport e há "Tela cheia" (overlay sem remontar o iframe) |
+
 ## Pendências a confirmar no E2E (o código já lê os dois jeitos)
 
 3. **Formato do webhook v3.** `aplica_evento` lê `event.name` (ou `event.type`,
@@ -62,8 +74,9 @@ partir de `BOOKING_VERIFICATION_SECRET` e abre o widget headless).
    `close`, `closed`, `document_closed`, `envelope_closed`, `envelope.closed`,
    `document.closed`. Conferir o nome real no primeiro evento (log
    `[ClicksignWebhook] <event_id>: <resultado>`) e, se vier outro, acrescentar
-   em `EVENTOS_FECHADO`.
-4. **`links.files.signed`** de verdade no documento assinado.
+   em `EVENTOS_FECHADO`. **Confirmado em 05/11: `auto_close`.**
+4. **`links.files.signed`** de verdade no documento assinado. **Confirmado em
+   05/11** (ver acima).
 
 ## Antes do E2E (uma vez, pelo André)
 

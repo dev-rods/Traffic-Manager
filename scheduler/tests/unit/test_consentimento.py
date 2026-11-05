@@ -420,6 +420,20 @@ class TestInicia(Base):
         self.assertEqual(a["id"], b["id"])
         self.assertEqual(len(self.prov.criados), 1)
 
+    def test_signing_com_dados_editados_e_descartado(self):
+        """Editou o nome (ou o CPF, o e-mail, a imagem) antes de gerar: o PDF
+        que já está na ClickSign tem os dados antigos, então é outro termo."""
+        a = self.inicia()
+        b = self.inicia(dados=dict(DADOS, fullName="Ana Souza Editada"))
+        self.assertNotEqual(a["id"], b["id"])
+        self.assertEqual(self.db.termos[a["id"]]["status"], EXPIRADO)
+        self.assertEqual(self.prov.cancelados, ["env-1"])
+        self.assertEqual(self.prov.criados[-1][2]["nome_completo"], "Ana Souza Editada")
+        c = self.inicia(dados=dict(DADOS, fullName="Ana Souza Editada", imageAuthorized=False))
+        self.assertNotEqual(b["id"], c["id"])
+        d = self.inicia(dados=dict(DADOS, fullName="Ana Souza Editada", imageAuthorized=False))
+        self.assertEqual(c["id"], d["id"])
+
     def test_signing_velho_e_descartado(self):
         a = self.inicia()
         self.db.termos[a["id"]]["created_at"] = AGORA - timedelta(hours=30)

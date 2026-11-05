@@ -19,6 +19,7 @@ Regras:
   para o widget que caiu não gerar outro envelope; mais velho é descartado.
 - O provedor nunca recebe `db`; aqui nunca se fala HTTP.
 """
+import json
 import logging
 import os
 import uuid
@@ -250,6 +251,29 @@ def _signing_da_paciente(db, clinic_id: str, patient_id: str) -> Optional[Dict]:
     return rows[0] if rows else None
 
 
+def _pessoa_do_snapshot(p: Optional[Dict]) -> Optional[tuple]:
+    if not p:
+        return None
+    nasc = p.get("nascimento")
+    return (p.get("nome"), p.get("cpf"), nasc.isoformat() if isinstance(nasc, date) else nasc,
+            (p.get("email") or "").lower(), p.get("telefone"))
+
+
+def _mesmos_dados(existente: Dict, paciente: Dict, responsavel: Optional[Dict], autoriza_imagem: bool) -> bool:
+    """O termo em andamento só serve se foi gerado com os mesmos dados que a
+    pessoa acabou de confirmar: o PDF já está pronto na ClickSign com o nome,
+    o CPF e a autorização de imagem de então. Editou algo, é outro termo."""
+    snapshot = existente.get("patient_snapshot") or {}
+    if isinstance(snapshot, str):
+        try:
+            snapshot = json.loads(snapshot)
+        except ValueError:
+            return False
+    return (_pessoa_do_snapshot(snapshot) == _pessoa_do_snapshot(paciente)
+            and _pessoa_do_snapshot(snapshot.get("responsavel")) == _pessoa_do_snapshot(responsavel)
+            and bool(existente.get("image_authorized")) == bool(autoriza_imagem))
+
+
 def _marca(db, consent_id: str, status: str) -> None:
     db.execute_write(
         "UPDATE scheduler.patient_consents SET status = %s, updated_at = NOW() "
@@ -372,9 +396,10 @@ def inicia(db, provider: SignatureProvider, clinic_id: str, phone: str, appointm
         criado = existente.get("created_at")
         recente = isinstance(criado, datetime) and (_agora(criado.tzinfo) - criado) <= REAPROVEITA_SIGNING_ATE
         if (recente and existente.get("term_version") == versao() and existente.get("signer_kind") == signer_kind
-                and existente.get("provider") == provider.nome):
+                and existente.get("provider") == provider.nome
+                and _mesmos_dados(existente, paciente, responsavel, autoriza_imagem)):
             return {"consent": _para_tela(existente, provider)}
-        _descarta_signing(db, provider, existente, "reinício")
+        _descarta_signing(db, provider, existente, "reinício" if recente else "antigo")
 
     _guarda_no_cadastro(db, patient_id, pac, paciente)
     if responsavel:
