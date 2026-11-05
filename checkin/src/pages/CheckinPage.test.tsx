@@ -546,6 +546,47 @@ describe('Check-in', () => {
     expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
   })
 
+  it('termo: o widget tem altura definida e abre em tela cheia sem remontar (PRD 036)', async () => {
+    withConsent()
+    vi.mocked(checkinService.startConsent).mockResolvedValue(
+      consent({ canSimulate: false, widgetEndpoint: 'https://sandbox.clicksign.com' })
+    )
+    vi.mocked(checkinService.consent).mockResolvedValue(consent({ canSimulate: false }))
+    const mount = vi.fn()
+    const unmount = vi.fn()
+    window.Clicksign = class {
+      endpoint = ''
+      origin = ''
+      mount = mount
+      unmount = unmount
+      on = vi.fn()
+    }
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await screen.findByRole('heading', { name: 'Termo de consentimento' })
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await screen.findByRole('heading', { name: 'Assine o termo' })
+
+    // O iframe da ClickSign tem height: 100%: sem altura definida no pai
+    // ele fica nos 150px padrão do Safari, só com o cabeçalho do termo.
+    const container = screen.getByTestId('clicksign-widget')
+    expect(mount).toHaveBeenCalledWith('clicksign-widget')
+    expect(container.style.height).toBe('70vh')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }))
+    expect(screen.getByTestId('clicksign-frame').className).toContain('fixed inset-0')
+    expect(container.className).toContain('100dvh')
+    expect(container.style.height).toBe('')
+    expect(unmount).not.toHaveBeenCalled()
+    expect(mount).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reduzir' }))
+    expect(container.style.height).toBe('70vh')
+    delete window.Clicksign
+  })
+
   it('"Recomeçar" volta ao início a qualquer momento', async () => {
     renderPage()
     await login()

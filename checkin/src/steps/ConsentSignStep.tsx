@@ -38,6 +38,7 @@ export function ConsentSignStep({
   const [widget, setWidget] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [height, setHeight] = useState<number | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [fullscreen, setFullscreen] = useState(false)
 
   useEffect(() => {
     if (consent.status === 'SIGNED') onSigned(consent)
@@ -134,12 +135,63 @@ export function ConsentSignStep({
               Carregando o termo…
             </p>
           ) : null}
+          {/* O iframe da ClickSign vem com `height: 100%`: o container precisa de
+              altura definida (não só min-height), senão o Safari resolve 100% como
+              auto e o iframe fica nos 150px padrão, só com o cabeçalho do termo.
+              Em tela cheia muda só a classe do wrapper: o container é o mesmo nó,
+              e o iframe não remonta (remontar perderia o que a pessoa já fez). */}
           <div
-            id={CONTAINER_ID}
-            data-testid="clicksign-widget"
-            className="w-full overflow-hidden rounded-3xl bg-surface shadow-card"
-            style={{ minHeight: '70vh', height: height ? `${height}px` : undefined }}
-          />
+            data-testid="clicksign-frame"
+            className={
+              fullscreen
+                ? 'fixed inset-0 z-50 flex flex-col bg-surface'
+                : 'flex flex-col overflow-hidden rounded-3xl bg-surface shadow-card'
+            }
+          >
+            <div
+              className={
+                fullscreen
+                  ? 'flex h-16 shrink-0 items-center justify-between border-b border-ink-200 px-4 pt-[env(safe-area-inset-top)]'
+                  : 'flex h-14 shrink-0 items-center justify-between border-b border-ink-100 px-4'
+              }
+            >
+              <span className="font-display text-base font-semibold text-ink-700">
+                Termo de consentimento
+              </span>
+              <button
+                type="button"
+                onClick={() => setFullscreen((f) => !f)}
+                aria-pressed={fullscreen}
+                className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-ink-200 bg-surface px-4 font-display text-base font-semibold text-ink-700 transition-colors duration-150 active:bg-ink-100"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5"
+                  aria-hidden
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {fullscreen ? (
+                    <path d="M8 3v5H3M16 3v5h5M8 21v-5H3M16 21v-5h5" />
+                  ) : (
+                    <path d="M3 8V3h5M21 8V3h-5M3 16v5h5M21 16v5h-5" />
+                  )}
+                </svg>
+                {fullscreen ? 'Reduzir' : 'Tela cheia'}
+              </button>
+            </div>
+            <div
+              id={CONTAINER_ID}
+              data-testid="clicksign-widget"
+              className={
+                fullscreen ? 'h-[calc(100dvh-4rem-env(safe-area-inset-top))] w-full' : 'w-full'
+              }
+              style={fullscreen ? undefined : { height: height ? `${height}px` : '70vh' }}
+            />
+          </div>
         </>
       ) : null}
 
