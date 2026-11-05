@@ -178,6 +178,9 @@ class Db:
                 if campo in ("name", "cpf", "birth_date", "email"):
                     p[campo] = valor
             return 1
+        if "UPDATE scheduler.appointments SET full_name" in sql:
+            self.agendamentos[params[1]]["full_name"] = params[0]
+            return 1
         if "INSERT INTO scheduler.patient_guardians" in sql:
             pid, nome, cpf, nasc, fone, email = params
             self.responsaveis[pid] = {"name": nome, "cpf": cpf, "birth_date": nasc, "phone": fone, "email": email}
@@ -408,11 +411,23 @@ class TestInicia(Base):
         self.assertEqual((p["name"], p["cpf"], p["birth_date"], p["email"]),
                          ("Ana Souza", CPF_OK, date(1990, 5, 10), "ana@exemplo.com"))
 
-    def test_cadastro_com_dois_nomes_e_cpf_nao_e_sobrescrito(self):
-        self.db.pacientes[PAC].update(name="Ana Maria Souza", cpf="52998224725")
+    def test_nome_editado_atualiza_cadastro_e_agendamento(self):
+        # O nome confirmado no termo vale para o cadastro e para o agendamento
+        # (o prefill lê o full_name do agendamento primeiro). CPF e e-mail
+        # preenchidos não são tocados.
+        self.db.pacientes[PAC].update(name="Ana Maria Souza", cpf="52998224725", email="outra@exemplo.com")
+        self.db.agendamentos[APPT]["full_name"] = "Ana Maria Souza"
         self.inicia(dados=dict(DADOS, fullName="Ana M. Souza"))
-        self.assertEqual(self.db.pacientes[PAC]["name"], "Ana Maria Souza")
-        self.assertEqual(self.db.pacientes[PAC]["email"], "ana@exemplo.com")
+        self.assertEqual(self.db.pacientes[PAC]["name"], "Ana M. Souza")
+        self.assertEqual(self.db.agendamentos[APPT]["full_name"], "Ana M. Souza")
+        self.assertEqual(self.db.pacientes[PAC]["email"], "outra@exemplo.com")
+        self.assertEqual(self.db.pacientes[PAC]["cpf"], "52998224725")
+
+    def test_nome_igual_nao_escreve(self):
+        self.db.pacientes[PAC].update(name="Ana Souza")
+        self.db.agendamentos[APPT]["full_name"] = "Ana Souza"
+        self.inicia()
+        self.assertFalse(any("UPDATE scheduler.appointments SET full_name" in e for e in self.db.escritas))
 
     def test_signing_recente_e_reaproveitado(self):
         a = self.inicia()

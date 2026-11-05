@@ -291,13 +291,21 @@ def _descarta_signing(db, provider: SignatureProvider, row: Dict, motivo: str) -
     _marca(db, str(row["id"]), EXPIRADO)
 
 
-def _guarda_no_cadastro(db, patient_id: str, pac: Dict, pessoa: Dict) -> None:
-    """Só campo vazio. Nome de uma palavra conta como vazio."""
+def _guarda_no_cadastro(db, patient_id: str, appointment_id: str, pac: Dict, appt: Dict, pessoa: Dict) -> None:
+    """O nome que a pessoa confirmou vale para o cadastro e para este
+    agendamento (é dele que o prefill lê primeiro). CPF, nascimento e e-mail
+    só entram em campo vazio: num telefone compartilhado, o que a pessoa
+    digita para o termo dela não pode sobrescrever o cadastro de outra."""
     campos = []
     valores = []  # type: List[Any]
-    if not _dois_nomes(pac.get("name")):
+    if (pac.get("name") or "").strip() != pessoa["nome"]:
         campos.append("name = %s")
         valores.append(pessoa["nome"])
+    if (appt.get("full_name") or "").strip() != pessoa["nome"]:
+        db.execute_write(
+            "UPDATE scheduler.appointments SET full_name = %s, updated_at = NOW() WHERE id = %s::uuid",
+            (pessoa["nome"], str(appointment_id)),
+        )
     if not normaliza_cpf(pac.get("cpf")):
         campos.append("cpf = %s")
         valores.append(pessoa["cpf"])
@@ -401,7 +409,7 @@ def inicia(db, provider: SignatureProvider, clinic_id: str, phone: str, appointm
             return {"consent": _para_tela(existente, provider)}
         _descarta_signing(db, provider, existente, "reinício" if recente else "antigo")
 
-    _guarda_no_cadastro(db, patient_id, pac, paciente)
+    _guarda_no_cadastro(db, patient_id, appointment_id, pac, appt, paciente)
     if responsavel:
         _guarda_responsavel(db, patient_id, responsavel)
 
