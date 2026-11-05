@@ -7,9 +7,8 @@ Criar um termo é uma sequência de cinco chamadas, que a API impõe:
 1. envelope (a "pasta" do processo);
 2. documento gerado do MODELO `.docx` com as variáveis (`template.data`);
 3. signatário (nome, e-mail, celular, CPF, nascimento);
-4. requisitos: qualificação (`agree`/`sign`) e a evidência de
-   `REQUISITOS_DE_EVIDENCIA` (`embedded_signature`, a única que o widget
-   embedded aceita);
+4. requisitos: qualificação (`agree`/`sign`) e as evidências de
+   `REQUISITOS_DE_EVIDENCIA` (`whatsapp` e `handwritten`);
 5. ativação (`status: running`).
 
 Se qualquer passo depois do 1 falhar, o envelope é cancelado antes de relançar:
@@ -34,6 +33,7 @@ Decisões que a API impõe:
   dois.
 """
 import logging
+import time
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
@@ -47,15 +47,18 @@ from src.providers.signature_provider import (
 logger = logging.getLogger(__name__)
 
 TIMEOUT = 20
-# A evidência de autenticação do signatário. No v3 o widget embedded só
-# carrega (pelo id do signatário) com o requisito `embedded_signature`, e a
-# ClickSign RECUSA ativar o envelope se houver qualquer outra evidência junto
-# (422 "assinatura incorporada e adicional"; sondado no sandbox em 04/11/2026
-# com whatsapp e com handwritten). A decisão 2 do PRD 036 (token no WhatsApp
-# + manuscrita) fica substituída pela autenticação do próprio check-in: a
-# paciente já entrou com o código do WhatsApp. Registrado em
+# O documento gerado do modelo é processado DEPOIS de criado (o `modified`
+# muda ~9 s depois do `created`, medido em 05/11/2026). O widget aberto antes
+# disso mostra o termo quebrado. `cria_termo` espera até aqui.
+ESPERA_DOCUMENTO_S = 20
+# O que a signatária prova dentro do widget: token no WhatsApp e assinatura
+# desenhada na tela (decisão 2 do PRD 036). O widget embedded do v3 carrega
+# pelo id do signatário SEM `embedded_signature`: conferido em 05/11/2026 num
+# Chromium headless (documento renderizado, botão "Assinar"). Com
+# `embedded_signature` o widget da ClickSign quebra com "ERRO 500" na tela,
+# e a API recusa combiná-lo com qualquer outra evidência. Registrado em
 # tests/integration/036-termo-de-consentimento.md.
-REQUISITOS_DE_EVIDENCIA = ("embedded_signature",)
+REQUISITOS_DE_EVIDENCIA = ("whatsapp", "handwritten")
 
 STATUS = {
     "running": ASSINANDO,
@@ -187,7 +190,28 @@ class ClicksignProvider(SignatureProvider):
             except ErroDoProvedor as e:
                 logger.error("[ClicksignProvider] envelope {} ficou sem cancelar: {}".format(envelope_id, e))
             raise
+        self._espera_documento(envelope_id, document_id)
         return TermoCriado(envelope_id, document_id, signer_id)
+
+    def _espera_documento(self, envelope_id: str, document_id: str) -> None:
+        """Bloqueia até o documento ter sido processado (`modified` depois de
+        `created`) ou até `ESPERA_DOCUMENTO_S`. Nunca falha: no pior caso o
+        widget abre um pouco antes, como abriria sem a espera."""
+        limite = time.monotonic() + ESPERA_DOCUMENTO_S
+        while True:
+            try:
+                atributos = self._chama("GET", "/envelopes/{}/documents/{}".format(envelope_id, document_id))                     .get("data", {}).get("attributes", {})
+            except ErroDoProvedor as e:
+                logger.warning("[ClicksignProvider] espera do documento {}: {}".format(document_id, e))
+                return
+            criado, modificado = atributos.get("created"), atributos.get("modified")
+            if criado and modificado and modificado != criado:
+                return
+            if time.monotonic() >= limite:
+                logger.warning("[ClicksignProvider] documento {} ainda em processamento após {}s".format(
+                    document_id, ESPERA_DOCUMENTO_S))
+                return
+            time.sleep(1)
 
     def consulta(self, envelope_id: str) -> str:
         atributos = self._chama("GET", "/envelopes/{}".format(envelope_id)).get("data", {}).get("attributes", {})

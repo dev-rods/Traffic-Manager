@@ -35,15 +35,24 @@ Conferidos com o provedor real (`src/providers/clicksign_provider.py`) contra
 | Arquivos do documento | `data.links.files.original` (docx) antes de assinar; o assinado deve aparecer em `links.files.signed`, URL válida por ~5 min (`X-Amz-Expires=299`). A confirmar com o primeiro envelope assinado |
 | Limite de requisições | 20 req / 10 s no sandbox. Criar um termo gasta 6 chamadas |
 
-## Achados do E2E de 04/11/2026 (widget)
+## Achados do E2E de 04-05/11/2026 (widget)
+
+Reproduzido num Chromium headless (`playwright`), carregando o script
+embedded com o `id` do signatário e `origin` do iPad, igual ao
+`ConsentSignStep`:
 
 | Ponto | Resultado |
 |---|---|
-| Chave do widget | É o `id` do signatário (v3), como o backend devolve em `signerId`. Confirmado na doc "Instalação de Widget para Assinatura Incorporada" |
-| Widget não carregou no 1º teste | Faltava o requisito `provide_evidence` com `auth: embedded_signature`. No v3 é ele que autoriza o widget embedded |
-| `embedded_signature` + `whatsapp` (+ `handwritten`) | **Recusado** ao ativar: 422 "há signatário(s) com requisito(s) de autenticação assinatura incorporada e adicional". Testado com whatsapp e só com handwritten |
-| `embedded_signature` sozinho | Aceito. É a configuração em `REQUISITOS_DE_EVIDENCIA`. Muda a decisão 2 do PRD: a autenticação passa a ser a do próprio check-in (código do WhatsApp no login do iPad); a manuscrita depende do que o widget oferecer |
-| Envelopes de sonda | `20044ee4-...` (aceito) ficou `running` e vence em 1 dia; os recusados ficaram em draft e foram apagados |
+| Chave do widget | É o `id` do signatário (v3), como o backend devolve em `signerId` |
+| `whatsapp` + `handwritten` (decisão 2 do PRD) | **Funciona.** O widget renderiza o termo com os dados, "0/1 Assinaturas" e o botão "Assinar"; os passos são `federal_data, agree, handwritten, whatsapp` |
+| `embedded_signature` | A doc "Assinatura Incorporada" manda criá-lo, mas o widget quebra com "ERRO 500" dentro do iframe logo após `/steps` (`federal_data, agree, embedded_signature`), e a API recusa ativar o envelope se ele vier junto de outra evidência (422 "assinatura incorporada e adicional"). Descartado |
+| "Imagem do termo quebrada" no 1º teste no iPad | O documento gerado do modelo é processado DEPOIS de criado: `modified` muda ~9 s após `created` (medido duas vezes). O iPad abriu o widget antes. `cria_termo` agora espera o documento processado (até 20 s, `ESPERA_DOCUMENTO_S`) antes de devolver o termo |
+| Erro 500 na tela "Assine o termo" no 2º teste | Era o `embedded_signature` acima; o nosso backend respondeu 200 em tudo (conferido com token forjado em dev) |
+| Envelopes de sonda | `1992f6aa` (1º do iPad, funciona), `880c9a30` e `20044ee4` (embedded, quebram), `beca0835`/termo atual (API, funciona). Todos vencem sozinhos em até 2 dias |
+
+Como repetir a sondagem: `scratchpad/sonda_widget.py <signerId>` e
+`e2e_termo.py` desta sessão (cria o termo pela API com token forjado a
+partir de `BOOKING_VERIFICATION_SECRET` e abre o widget headless).
 
 ## Pendências a confirmar no E2E (o código já lê os dois jeitos)
 

@@ -40,6 +40,10 @@ class Base(unittest.TestCase):
         p = mock.patch("src.providers.clicksign_provider.requests.request", side_effect=self.http)
         p.start()
         self.addCleanup(p.stop)
+        self.dormidas = []
+        p = mock.patch("src.providers.clicksign_provider.time.sleep", side_effect=self.dormidas.append)
+        p.start()
+        self.addCleanup(p.stop)
         g = mock.patch("src.providers.clicksign_provider.requests.get", side_effect=self.download)
         g.start()
         self.addCleanup(g.stop)
@@ -66,7 +70,12 @@ class Base(unittest.TestCase):
             return resposta(json={"data": {"attributes": {"status": self.status_do_envelope,
                                                            "deadline_at": PRAZO.isoformat()}}})
         if metodo == "GET" and caminho == "/envelopes/env-1/documents/doc-1":
-            return resposta(json={"data": {"attributes": {"downloads": self.downloads},
+            self.consultas_do_documento += 1
+            # Processado (modified != created) só a partir da N-ésima consulta.
+            modificado = "2026-11-05T00:08:05-03:00" if self.consultas_do_documento >= self.pronto_na_consulta                 else "2026-11-05T00:07:57-03:00"
+            return resposta(json={"data": {"attributes": {"downloads": self.downloads,
+                                                           "created": "2026-11-05T00:07:57-03:00",
+                                                           "modified": modificado},
                                            "links": {"files": self.arquivos}}})
         if metodo == "DELETE" and caminho == "/envelopes/env-1":
             if self.envelope_ativo:
@@ -77,6 +86,8 @@ class Base(unittest.TestCase):
     downloads = {"signed_file_url": "https://s3/assinado.pdf", "ziped_file_url": "https://s3/tudo.zip"}
     arquivos = {}  # type: dict
     envelope_ativo = False
+    consultas_do_documento = 0
+    pronto_na_consulta = 1
 
     def download(self, url, timeout=None):
         self.chamadas.append(("DOWNLOAD", url, None))
@@ -94,7 +105,8 @@ class TestCriaTermo(Base):
         caminhos = [(m, c) for m, c, _ in self.chamadas]
         self.assertEqual(caminhos[:3], [("POST", "/envelopes"), ("POST", "/envelopes/env-1/documents"),
                                         ("POST", "/envelopes/env-1/signers")])
-        self.assertEqual(caminhos[-1], ("PATCH", "/envelopes/env-1"))
+        # Ativa e, por último, confere que o documento foi processado.
+        self.assertEqual(caminhos[-2:], [("PATCH", "/envelopes/env-1"), ("GET", "/envelopes/env-1/documents/doc-1")])
         requisitos = [j for m, c, j in self.chamadas if c == "/envelopes/env-1/requirements"]
         self.assertEqual(len(requisitos), 1 + len(REQUISITOS_DE_EVIDENCIA))
 
@@ -139,9 +151,28 @@ class TestCriaTermo(Base):
 
     def test_ativa_por_patch_running(self):
         self.cria()
-        patch = self.chamadas[-1][2]["data"]
+        patch = [j for m, c, j in self.chamadas if m == "PATCH"][0]["data"]
         self.assertEqual(patch["attributes"], {"status": "running"})
         self.assertEqual(patch["id"], "env-1")
+
+    def test_espera_o_documento_ser_processado_antes_de_devolver(self):
+        self.pronto_na_consulta = 3
+        self.cria()
+        self.assertEqual(self.consultas_do_documento, 3)
+        self.assertEqual(self.dormidas, [1, 1])
+
+    def test_documento_ja_processado_nao_dorme(self):
+        self.cria()
+        self.assertEqual(self.consultas_do_documento, 1)
+        self.assertEqual(self.dormidas, [])
+
+    def test_espera_desiste_no_limite_sem_falhar(self):
+        self.pronto_na_consulta = 999
+        relogio = iter(range(0, 100))
+        with mock.patch("src.providers.clicksign_provider.time.monotonic", side_effect=lambda: next(relogio)):
+            termo = self.cria()
+        self.assertEqual(termo.envelope_id, "env-1")
+        self.assertLessEqual(len(self.dormidas), 21)
 
     def test_falha_depois_do_envelope_cancela_e_relanca(self):
         self.falha_em = "/signers"
