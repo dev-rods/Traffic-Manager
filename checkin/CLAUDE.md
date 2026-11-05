@@ -32,6 +32,18 @@ pode ser afetado por mudanças daqui.
   tela mostra o cartão de teste aprovado (4444 4444 4444 4444, validade
   futura, CVV 123) para pagar a fatura pelo QR. Sem chave, dev cai no
   provedor simulado; prod sem chave responde 503 (nunca simula).
+- **Termo de consentimento (PRD 036).** Entre confirmar o agendamento e
+  escolher o pagamento, quem ainda não assinou a versão vigente do TCLE
+  passa por `ConsentDataStep` (confere nome, CPF, nascimento, e-mail, uso de
+  imagem; menor de idade informa o responsável, que é quem assina) e
+  `ConsentSignStep` (widget embedded da ClickSign, `lib/clicksignWidget.ts`:
+  código no WhatsApp e assinatura manuscrita na tela). Quem decide "precisa
+  assinar" é o backend (`consentRequired` na resposta de `confirm`); o iPad
+  nunca pula o termo, só a recepção dispensa pelo painel. O "assinado" vem do
+  backend (webhook ou polling de 3 s), nunca do evento do widget. Em dev sem
+  `CLICKSIGN_API_KEY` o provedor simulado troca o widget por "Simular
+  assinatura (teste)". Os campos do termo usam o teclado do iPad
+  (`TextField`), não o `Keypad`: são cinco a dez campos numa tela só.
 - Rota: `/:clinicId`.
 
 ## Comandos

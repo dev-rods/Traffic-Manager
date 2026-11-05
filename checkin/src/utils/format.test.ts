@@ -28,3 +28,21 @@ describe('format', () => {
     expect(isToday('2026-10-21', new Date(2026, 9, 20, 15))).toBe(false)
   })
 })
+
+describe('termo de consentimento', () => {
+  it('formata e interpreta a data digitada', async () => {
+    const { formatDateDigits, digitsToIsoDate, isoDateToDigits } = await import('./format')
+    expect(formatDateDigits('1005')).toBe('10/05')
+    expect(formatDateDigits('10052010')).toBe('10/05/2010')
+    expect(digitsToIsoDate('10052010', new Date(2026, 10, 4))).toBe('2010-05-10')
+    expect(digitsToIsoDate('31022010', new Date(2026, 10, 4))).toBeNull()
+    expect(digitsToIsoDate('10052030', new Date(2026, 10, 4))).toBeNull()
+    expect(isoDateToDigits('2010-05-10')).toBe('10052010')
+  })
+
+  it('menor de idade é medido na data da sessão', async () => {
+    const { isMinorAt } = await import('./format')
+    expect(isMinorAt('2008-11-05', '2026-11-04')).toBe(true)
+    expect(isMinorAt('2008-11-04', '2026-11-04')).toBe(false)
+  })
+})
