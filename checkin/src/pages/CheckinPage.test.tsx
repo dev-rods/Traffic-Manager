@@ -569,21 +569,19 @@ describe('Check-in', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
     await screen.findByRole('heading', { name: 'Assine o termo' })
 
-    // O iframe da ClickSign tem height: 100%: sem altura definida no pai
-    // ele fica nos 150px padrão do Safari, só com o cabeçalho do termo.
+    // O iframe da ClickSign tem height: 100%: o container ocupa o que sobra
+    // da tela (item flex de um pai com altura definida).
     const container = screen.getByTestId('clicksign-widget')
     expect(mount).toHaveBeenCalledWith('clicksign-widget')
-    expect(container.style.height).toBe('70vh')
+    expect(container.className).toContain('flex-1')
 
     await userEvent.click(screen.getByRole('button', { name: 'Tela cheia' }))
     expect(screen.getByTestId('clicksign-frame').className).toContain('fixed inset-0')
-    expect(container.className).toContain('100dvh')
-    expect(container.style.height).toBe('')
     expect(unmount).not.toHaveBeenCalled()
     expect(mount).toHaveBeenCalledTimes(1)
 
     await userEvent.click(screen.getByRole('button', { name: 'Reduzir' }))
-    expect(container.style.height).toBe('70vh')
+    expect(screen.getByTestId('clicksign-frame').className).not.toContain('fixed')
     delete window.Clicksign
   })
 

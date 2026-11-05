@@ -138,7 +138,13 @@ export function CheckinPage() {
   )
 
   return (
-    <div className="flex min-h-dvh flex-col bg-ink-50">
+    <div
+      className={`flex flex-col bg-ink-50 ${
+        // Assinando o termo, a página não rola: o iframe da ClickSign ocupa o
+        // que sobra da tela e rola por dentro (um scroll só, o do termo).
+        state.step === 'consent-sign' ? 'h-dvh overflow-hidden' : 'min-h-dvh'
+      }`}
+    >
       {state.step !== 'start' ? (
         <header className="border-b border-ink-200 bg-surface">
           <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
@@ -183,8 +189,12 @@ export function CheckinPage() {
       ) : null}
 
       <main
-        className={`mx-auto flex w-full flex-1 flex-col justify-center px-6 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] ${
-          state.step === 'payment' ? 'max-w-2xl md:landscape:max-w-4xl' : 'max-w-2xl'
+        className={`mx-auto flex w-full flex-1 flex-col px-6 ${
+          state.step === 'consent-sign'
+            ? 'min-h-0 max-w-6xl justify-start py-4 pb-[max(1rem,env(safe-area-inset-bottom))]'
+            : state.step === 'payment'
+              ? 'max-w-2xl justify-center py-8 pb-[max(2rem,env(safe-area-inset-bottom))] md:landscape:max-w-4xl'
+              : 'max-w-2xl justify-center py-8 pb-[max(2rem,env(safe-area-inset-bottom))]'
         }`}
       >
         {state.step === 'start' ? (
