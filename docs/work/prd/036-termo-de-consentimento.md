@@ -412,5 +412,8 @@ sobrescreve; o que foi ao documento está no snapshot.
 
 - [x] Pendente
 - [x] Spec gerada: `spec/036-termo-de-consentimento.md` (03/11/2026)
-- [x] Implementado em: 04/11/2026 (branch `feat/036-termo-de-consentimento`; backend em dev, iPad e painel aguardando deploy; prod pendente, ver spec §5 passo 9 e `scheduler/tests/integration/036-termo-de-consentimento.md`)
+- [x] Implementado em: 04/11/2026 (PR #167, mergeado em 05/11/2026)
+- [x] E2E em dev em 05/11/2026: assinatura real pelo iPad, webhook `auto_close`, PDF no S3, painel (achados em `scheduler/tests/integration/036-termo-de-consentimento.md`)
+- [x] Prod em 05/11/2026: migrations, scheduler (482/500, Lambda `Consentimento`, bucket `-documentos`), painel, `checkin-prod`, modelo e webhook criados pela API v3 na conta de produção da ClickSign, responsável técnica e cidade na Essência e na Nobre, `/prod/TCLE_VERSION = 2026-11`
+- [x] Ligado e conferido em prod em 05/11/2026: assinatura real na Essência (webhook `document_closed`, PDF no bucket, `consent_status: SIGNED` na agenda). Até cada paciente assinar na próxima visita, a agenda mostra o selo TERMO em todos os agendamentos dela (decisão 3)
 - [x] Registrado em `TASKS_LOG.md`
