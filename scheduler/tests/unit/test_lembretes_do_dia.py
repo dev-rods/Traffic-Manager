@@ -44,7 +44,8 @@ class TestEndpoint(unittest.TestCase):
              mock.patch.object(h, "ReminderService"), \
              mock.patch.object(h, "enfileira", return_value=dict(resultado or RESULTADO)) as enf, \
              mock.patch.object(h, "_acorda_processador") as acorda, \
-             mock.patch.object(h, "_hoje", return_value="2026-11-05"), \n             mock.patch.object(h, "datetime", RelogioFixo):
+             mock.patch.object(h, "_hoje", return_value="2026-11-05"), \
+             mock.patch.object(h, "datetime", RelogioFixo):
             return h.handler(ev, None), enf, acorda
 
     def test_simular_devolve_contagens_e_nao_acorda(self):
