@@ -46,6 +46,19 @@ export function useRegistrarPapel() {
   })
 }
 
+/** "Pedir nova assinatura": a agenda volta a mostrar DOCS para a paciente. */
+export function useRenovarTermo() {
+  const { clinicId } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (consentId: string) => consentsService.renew(clinicId!, consentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: consentKeys.all })
+    },
+  })
+}
+
 /**
  * Abre o PDF (ou o zip) numa aba nova. É mutação, não query: a URL expira em
  * 5 min e não pode ficar em cache.

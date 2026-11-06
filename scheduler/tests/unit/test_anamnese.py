@@ -34,6 +34,16 @@ class TestCatalogo(unittest.TestCase):
         no_modelo |= set(re.findall(r"variavel\('([a-z_0-9]+)'", fonte)) - VARIAVEIS_DO_TERMO
         self.assertEqual(no_modelo, set(anamnese.CHAVES))
 
+    def test_catalogo_do_painel_esta_em_dia(self):
+        """frontend/src/utils/anamnesePerguntas.ts é gerado deste módulo: as
+        chaves, na ordem, têm de bater."""
+        painel = os.path.join(RAIZ, "frontend", "src", "utils", "anamnesePerguntas.ts")
+        fonte = open(painel, encoding="utf-8").read()
+        chaves = re.findall(r"key: '([a-z_0-9]+)'", fonte)
+        self.assertEqual(chaves, list(anamnese.CHAVES))
+        for p in anamnese.PERGUNTAS:
+            self.assertIn(p.secao, fonte)
+
     def test_chaves_unicas_e_telas(self):
         self.assertEqual(len(anamnese.CHAVES), len(set(anamnese.CHAVES)))
         self.assertEqual(len(anamnese.CHAVES), 50)

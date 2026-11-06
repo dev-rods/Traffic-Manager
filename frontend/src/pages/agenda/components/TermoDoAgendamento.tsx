@@ -2,7 +2,13 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/toastContext'
-import { useDispensarTermo, useRegistrarPapel } from '@/hooks/useConsents'
+import {
+  useConsentsDoPaciente,
+  useDispensarTermo,
+  useRegistrarPapel,
+  useRenovarTermo,
+} from '@/hooks/useConsents'
+import { AlertasDaAnamnese } from './AlertasDaAnamnese'
 import { MOTIVO_DA_DISPENSA, situacaoDoTermo } from '@/utils/termo'
 import type { Appointment, ConsentWaiveReason } from '@/types'
 
@@ -39,8 +45,15 @@ interface TermoDoAgendamentoProps {
 export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) {
   const dispensar = useDispensarTermo()
   const papel = useRegistrarPapel()
+  const renovar = useRenovarTermo()
+  // Os alertas da anamnese e o id do documento vigente vêm da pasta da
+  // paciente (PRD 038); a lista de agendamentos só traz o estado.
+  const documentos = useConsentsDoPaciente(
+    a.consent_enabled ? (a.patient_id ?? undefined) : undefined
+  )
   const { showToast } = useToast()
   const [modal, setModal] = useState<'dispensa' | 'papel' | null>(null)
+  const [confirmaRenovar, setConfirmaRenovar] = useState(false)
   const [motivo, setMotivo] = useState<ConsentWaiveReason>('SEM_CELULAR')
   const [nota, setNota] = useState('')
   const [assinadoEm, setAssinadoEm] = useState(hoje)
@@ -53,7 +66,30 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
     ? { label: 'Em papel', tom: 'ok' as const, pendente: false }
     : dispensar.isSuccess
       ? { label: 'Dispensado nesta sessão', tom: 'atencao' as const, pendente: false }
-      : situacaoDoTermo(a)
+      : renovar.isSuccess
+        ? { label: 'Nova assinatura pedida', tom: 'pendente' as const, pendente: false }
+        : situacaoDoTermo(a)
+  const vigente = documentos.data?.consents.find(
+    (c) =>
+      (c.status === 'SIGNED' || c.status === 'PAPER') &&
+      c.term_version === documentos.data?.term_version
+  )
+  const alertas = renovar.isSuccess ? [] : (vigente?.alertas ?? [])
+
+  function confirmarRenovar() {
+    if (!vigente) return
+    renovar.mutate(vigente.id, {
+      onSuccess: () => {
+        setConfirmaRenovar(false)
+        showToast({ message: 'Nova assinatura pedida: o próximo check-in pede termo e ficha' })
+      },
+      onError: (erro) =>
+        showToast({
+          message: mensagemDe(erro) ?? 'Não foi possível pedir a nova assinatura.',
+          variant: 'error',
+        }),
+    })
+  }
 
   function fechar() {
     setModal(null)
@@ -98,9 +134,47 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
   return (
     <div className="px-4 pb-3 space-y-1.5 text-sm">
       <div className="flex justify-between gap-3">
-        <span className="text-gray-400">Termo</span>
+        <span className="text-gray-400">Termo e anamnese</span>
         <span className={`font-medium text-right ${TOM[situacao.tom]}`}>{situacao.label}</span>
       </div>
+
+      <AlertasDaAnamnese alertas={alertas} compacto />
+
+      {situacao.tom === 'ok' &&
+        vigente &&
+        !renovar.isSuccess &&
+        (confirmaRenovar ? (
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <span className="text-xs text-gray-600">
+              Pedir termo e ficha de novo no próximo check-in?
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={confirmarRenovar}
+                disabled={renovar.isPending}
+                className="rounded-lg bg-gray-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-50 cursor-pointer"
+              >
+                Sim, pedir
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmaRenovar(false)}
+                className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
+              >
+                Não
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmaRenovar(true)}
+            className="text-xs font-semibold text-gray-500 hover:text-gray-700 cursor-pointer"
+          >
+            Pedir nova assinatura
+          </button>
+        ))}
 
       {situacao.pendente && (
         <div className="flex gap-2 pt-1">
@@ -122,13 +196,21 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
         </div>
       )}
 
-      <Modal open={modal === 'dispensa'} onClose={fechar} title="Dispensar o termo nesta sessão" width="sm">
+      <Modal
+        open={modal === 'dispensa'}
+        onClose={fechar}
+        title="Dispensar o termo nesta sessão"
+        width="sm"
+      >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
             A sessão segue sem o termo assinado. Na próxima, o iPad pede de novo.
           </p>
           <div>
-            <label htmlFor="motivo-da-dispensa" className="text-xs font-medium text-gray-500 block mb-1.5">
+            <label
+              htmlFor="motivo-da-dispensa"
+              className="text-xs font-medium text-gray-500 block mb-1.5"
+            >
               Motivo
             </label>
             <select
@@ -146,7 +228,10 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
           </div>
           {motivo === 'OUTRO' && (
             <div>
-              <label htmlFor="nota-da-dispensa" className="text-xs font-medium text-gray-500 block mb-1.5">
+              <label
+                htmlFor="nota-da-dispensa"
+                className="text-xs font-medium text-gray-500 block mb-1.5"
+              >
                 Descreva o motivo
               </label>
               <input
@@ -180,7 +265,10 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
             Guarde o papel na pasta da paciente. Aqui fica só o registro, sem PDF.
           </p>
           <div>
-            <label htmlFor="data-do-papel" className="text-xs font-medium text-gray-500 block mb-1.5">
+            <label
+              htmlFor="data-do-papel"
+              className="text-xs font-medium text-gray-500 block mb-1.5"
+            >
               Assinado em
             </label>
             <input

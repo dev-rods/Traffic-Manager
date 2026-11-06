@@ -17,14 +17,14 @@ function agendamento(over: Partial<Appointment> = {}): Appointment {
 }
 
 describe('TermoPendenteBadge', () => {
-  it('pendente confirmado mostra TERMO', () => {
+  it('pendente confirmado mostra DOCS', () => {
     render(<TermoPendenteBadge appointment={agendamento()} />)
-    expect(screen.getByText('TERMO')).toHaveAttribute('title', 'Termo de consentimento pendente')
+    expect(screen.getByText('DOCS')).toHaveAttribute('title', 'Termo e anamnese pendentes')
   })
 
   it('assinando no iPad continua pendente', () => {
     render(<TermoPendenteBadge appointment={agendamento({ consent_status: 'SIGNING' })} />)
-    expect(screen.getByText('TERMO')).toBeInTheDocument()
+    expect(screen.getByText('DOCS')).toBeInTheDocument()
   })
 
   it.each([

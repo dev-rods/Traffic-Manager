@@ -39,6 +39,12 @@ export const consentsService = {
       )
       .then((r) => r.data.consent),
 
+  /** "Pedir nova assinatura" (PRD 038): o documento vigente vira REVOKED e o próximo check-in pede tudo de novo. */
+  renew: (clinicId: string, consentId: string) =>
+    api
+      .post<{ consent: PatientConsent }>(`/clinics/${clinicId}/consents/${consentId}/renew`)
+      .then((r) => r.data.consent),
+
   /** URL assinada do S3, válida por 5 min: pedir na hora de abrir, nunca guardar. */
   pdfUrl: (clinicId: string, consentId: string) =>
     api.get<UrlAssinada>(`/clinics/${clinicId}/consents/${consentId}/pdf-url`).then((r) => r.data),

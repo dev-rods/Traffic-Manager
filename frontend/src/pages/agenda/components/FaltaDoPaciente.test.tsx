@@ -11,8 +11,10 @@ vi.mock('@/hooks/useCaixa', () => ({
   useEnviarLink: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock('@/hooks/useConsents', () => ({
+  useConsentsDoPaciente: () => ({ data: undefined, isLoading: false }),
   useDispensarTermo: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
   useRegistrarPapel: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
+  useRenovarTermo: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
 }))
 vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
 

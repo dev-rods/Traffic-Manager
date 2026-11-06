@@ -48,7 +48,7 @@ describe('DocumentosPage - abas', () => {
     expect(screen.getByRole('tab', { name: 'Histórico por sessão' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('historico aqui')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Termo de consentimento' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Termo e anamnese' }))
     expect(screen.getByText('termo de p1')).toBeInTheDocument()
     expect(screen.getByTestId('url')).toHaveTextContent('agendamento=a9')
     expect(screen.getByTestId('url')).toHaveTextContent('doc=termo')
@@ -60,7 +60,7 @@ describe('DocumentosPage - abas', () => {
 
   it('?doc=termo abre direto na aba do termo', () => {
     renderPage('/pacientes/p1/documentos?doc=termo')
-    expect(screen.getByRole('tab', { name: 'Termo de consentimento' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Termo e anamnese' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('termo de p1')).toBeInTheDocument()
   })
 })
