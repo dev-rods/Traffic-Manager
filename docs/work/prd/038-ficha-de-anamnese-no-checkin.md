@@ -1,131 +1,121 @@
-# PRD - 038 Ficha de anamnese no check-in, na mesma assinatura do termo
+# PRD - 038 Anamnese e consentimento num documento único, no check-in
 
-> Gerado na fase **Research** em 05/11/2026. Use como input para a fase Spec.
-> Substitui o PRD 014 (ficha por link no WhatsApp, app próprio, ZapSign), que
-> foi desenhado antes de existir o check-in no iPad e a ClickSign (PRD 036).
+> Gerado na fase **Research** em 05/11/2026; revisado no mesmo dia com a
+> decisão de **documento único**. Use como input para a fase Spec.
+> Substitui o PRD 014 (ficha por link no WhatsApp, app próprio, ZapSign).
 
 ---
 
 ## 1. Objetivo
 
-Coletar a **Ficha de Anamnese - Epilação a Laser** (Versão 02, revisão
-09/2026, `Documentos Laser/finha anamnese 2026.pdf`) no mesmo lugar e no mesmo
-gesto em que hoje se assina o termo de consentimento: o check-in no iPad.
-Quem ainda não tem ficha vigente responde as perguntas em telas curtas, e
-**uma única assinatura** (token no WhatsApp + manuscrita, como hoje) fecha o
-termo e a ficha de uma vez. As respostas ficam gravadas e legíveis no painel,
-com os alertas que mudam a conduta da profissional em destaque, e o PDF
-assinado vai para a pasta de Documentos da paciente.
+Trocar o termo de consentimento de hoje (PRD 036, em produção) por **um
+documento único**, de 7 a 9 páginas, que reúne a **ficha de anamnese**, o
+**consentimento livre e esclarecido** e a **autorização de uso de imagem**,
+com uma assinatura principal e as três finalidades individualizadas no texto.
+A paciente responde a anamnese em telas curtas no check-in do iPad, e a mesma
+assinatura de hoje (token no WhatsApp + manuscrita) fecha tudo. As respostas
+ficam gravadas e legíveis no painel, com os alertas que mudam a conduta em
+destaque, e o PDF assinado vai para a pasta de Documentos.
 
-Duas perguntas motivaram este PRD, e as duas têm resposta "sim", provada no
-sandbox em 05/11/2026 (seção 2.3):
+Perguntas que motivaram o PRD, respondidas em 05/11/2026:
 
-1. A ficha pode estar no mesmo fluxo do check-in? **Sim.** É o mesmo gatilho
-   do termo (paciente sem documento vigente), as mesmas telas de dados, o mesmo
-   provedor.
-2. Pode fazer parte da mesma assinatura? **Sim.** Um envelope da ClickSign
-   aceita vários documentos e o widget embedded assina todos num fluxo só:
-   um token, uma manuscrita, "Assinar todos (2)".
+1. A ficha pode estar no fluxo do check-in? **Sim**: mesmo gatilho, mesmas
+   telas de dados, mesmo provedor do termo.
+2. Pode ser a mesma assinatura? **Sim**, e melhor que isso: é o **mesmo
+   documento**. O sandbox provou que um envelope assina vários documentos num
+   fluxo só (seção 2.3), mas a ClickSign cobra **por documento finalizado**
+   (seção 2.4), e a ficha repetia as declarações do termo. Um documento custa
+   um crédito, tem uma versão e um PDF.
 
 ---
 
 ## 2. Contexto
 
-### 2.1 O que já existe e o que a ficha aproveita
+### 2.1 O que já existe e o que este PRD aproveita
 
-O PRD 036 (em produção desde 05/11/2026) entregou tudo o que o PRD 014 listava
-como infraestrutura: provedor de assinatura (`SignatureProvider`, ClickSign v3
-por modelo `.docx` com variáveis, simulado em dev), bucket privado
-`-documentos` com URL assinada de 5 min, webhook com HMAC, Lambda
-`Consentimento` (lista, dispensa por sessão, registro em papel, URLs), telas
-de dados e de assinatura no iPad (`ConsentDataStep`, `ConsentSignStep` em
-viewport cheio), responsável técnica e cidade por clínica, selo na agenda,
-linha no popover e aba em Documentos.
+O PRD 036 entregou o provedor de assinatura (`SignatureProvider`, ClickSign v3
+por modelo `.docx` com variáveis, simulado em dev), o bucket privado
+`-documentos` com URL assinada, o webhook com HMAC, a Lambda `Consentimento`
+(lista, dispensa por sessão, registro em papel, URLs), as telas de dados e de
+assinatura no iPad, responsável técnica e cidade por clínica, selo na agenda,
+linha no popover e aba em Documentos. Ligado em prod em 05/11/2026, com uma
+assinatura real (de teste).
 
-A ficha entra **por cima disso**, sem app novo, sem link por WhatsApp, sem
-domínio novo e sem segundo provedor. É a razão de o 014 ficar para trás: ele
-previa criar do zero o que a 036 já criou, e previa uma jornada (link em casa,
-ZapSign) que não é mais a da clínica.
+Este PRD **não cria** app, link, domínio, provedor, bucket nem Lambda. Ele
+troca o conteúdo do documento, acrescenta as telas da anamnese no iPad e a
+leitura das respostas no painel.
 
 ### 2.2 A ficha, lida de ponta a ponta
 
-Onze seções. Contagem feita sobre o PDF:
+Ficha de Anamnese - Epilação a Laser, Versão 02, revisão 09/2026
+(`Documentos Laser/finha anamnese 2026.pdf`). Contagem sobre o PDF:
 
-| Seção | Conteúdo | Perguntas Sim/Não | Campos de texto |
+| Seção | Conteúdo | Sim/Não | Textos condicionais |
 |---|---|---|---|
 | Cabeçalho | nome, CPF, nascimento, telefone, e-mail | - | já vêm do check-in |
 | 1 Queixa principal | o que motivou | - | 1 |
-| 2 Histórico médico | gestante, amamentando, hormonal, pele, controlada, autoimune, imunossupressão, epilepsia, câncer, diabetes (+controlada), alergia | 12 | 6 ("se sim, qual") |
+| 2 Histórico médico | gestante, amamentando, hormonal, pele, controlada, autoimune, imunossupressão, epilepsia, câncer, diabetes (+controlada), alergia | 12 | 6 |
 | 3 Medicamentos | em uso, isotretinoína (+data), fotossensibilizantes, minoxidil | 4 | 4 |
 | 4 Dermatológicas | tatuagem, peeling 30 d, cera/pinça 30 d, foliculite, herpes na área, silicone, procedimentos 30 d, queloide, ácidos, lesões ativas | 10 | 4 |
 | 5 Hábitos | atividade física, fuma, álcool, acompanhamento médico | 4 | 2 |
 | 6 Outras | já fez laser, reação, sessões/equipamento | 1 | 2 |
 | 7 Observações | opcional | - | 1 |
-| 8 Exposição solar e pele hoje | sol/bronzeamento 2 semanas, bronzeada, sensibilizada | 3 | - |
+| 8 Exposição solar e pele hoje | sol 2 semanas, bronzeada, sensibilizada | 3 | - |
 | 9 Fototipo | autodeclaração I a VI | 1 escolha | - |
 | 10 Declarações | 10.1 a 10.9 | - | - |
 | 11 Assinaturas | cliente, responsável legal, profissional | - | - |
 
-Total: **34 Sim/Não, 1 escolha, ~20 textos condicionais**. No iPad, com os
-textos aparecendo só quando a resposta é "Sim", são 5 telas de 6 a 12 toques
-cada. Estimativa de 3 a 5 minutos para quem responde "Não" na maioria, que é a
-maioria.
+**O que sai no documento único** (decisões de 05/11):
 
-**Duas cadências dentro do mesmo papel** (já apontado no 014): as seções 2 a
-7 e 9 quase não mudam; a seção 8 muda a cada sessão, e a cláusula 10.9 obriga
-a paciente a avisar mudanças antes de cada sessão. Este PRD trata a ficha
-inteira como documento **por paciente e por versão**, igual ao termo, e deixa a
-seção 8 recorrente como fase 2 (seção 3).
+- **Seção 8 sai.** Ela muda a cada sessão; a ficha fica só com o que é
+  estável. Vira a triagem por sessão, fase 2 (seção 3).
+- **Seção 10 some como seção**: 10.1 (veracidade), 10.2 e 10.3
+  (intercorrências e riscos), 10.5 (LGPD), 10.6 (sessões avulsas) e 10.9
+  (avisar mudanças) já são cláusulas do termo. O editor unifica.
+- **10.8 perde a marca** (ZapSign®): "plataformas digitais legalmente
+  reconhecidas".
+- **Assinatura da profissional sai** (decisão do 014: a RT é identificada,
+  não assina).
 
-**Redundância com o termo.** A seção 10 da ficha repete o que o TCLE já diz:
-10.1 (veracidade) é a seção 10 do termo; 10.2 e 10.3 (intercorrências e riscos)
-são as 3, 5 e 11; 10.5 (LGPD) é a 9; 10.6 (sessões avulsas) é a 17; 10.9
-(avisar mudanças) é a 13. Não é problema: os dois documentos são assinados
-juntos e cada um se sustenta sozinho no arquivo. O que **precisa mudar** é o
-item 10.8, que cita ZapSign® nominalmente. Como o PDF da ficha passa a ser
-gerado por nós a partir de um modelo, a frase vira "plataformas digitais
-legalmente reconhecidas", sem marca, e a ficha ganha **Versão 03**. Texto a
-revisar com quem assina pela clínica antes de subir o modelo.
+O que fica: **31 Sim/Não, 1 escolha de fototipo e ~20 textos condicionais**,
+em 4 telas no iPad, com os textos aparecendo só quando a resposta é "Sim".
+Estimativa de 3 a 4 minutos para quem responde "Não" na maioria.
 
 ### 2.3 O que foi provado no sandbox da ClickSign (05/11/2026)
 
-Envelope `d0ecd5ae` criado pela API v3 com **dois documentos** do mesmo modelo
-(`TCLE.docx` e `FICHA.docx`), **uma signatária**, requisitos `agree` +
-`whatsapp` + `handwritten` em cada documento, ativado. O widget embedded,
-aberto com o `signerId` num Chromium headless, mostrou:
+Envelope `d0ecd5ae` com dois documentos do mesmo modelo, uma signatária,
+requisitos `agree` + `whatsapp` + `handwritten` nos dois: o widget mostrou "2
+documentos para assinar" e "Assinar todos (2)", e `steps` devolveu os mesmos
+`federal_data, agree, handwritten, whatsapp` de um documento só. Fica
+registrado porque é o caminho de volta caso um dia os documentos precisem
+voltar a ser dois. Com o documento único, o fluxo é literalmente o de hoje.
 
-- "2 documentos para assinar", lista com os dois nomes, botão **"Assinar
-  todos (2)"**.
-- `GET /notarial/widget/signatures/{id}/steps` devolve `federal_data, agree,
-  handwritten, whatsapp`: **os mesmos quatro passos de um documento só**. O
-  token e a manuscrita são colhidos uma vez.
-- `steps/agree` lista um requisito `agree` por documento (`document_key`
-  diferente), preenchidos no mesmo passo.
-- Na assinatura real em prod do dia 05/11 o webhook mandou `document_closed`
-  **por documento** e `auto_close` do envelope; com dois documentos virão dois
-  `document_closed`. O código de hoje já trata os dois nomes como "fechado",
-  mas localiza o termo pelo `document_key`, o que serve exatamente para fechar
-  cada documento do envelope separadamente.
+### 2.4 Custo
 
-Limites documentados: 10 MB por arquivo e 100 MB por envelope; os requisitos
-são por par documento+signatário. Fontes: `developers.clicksign.com/docs/envelope`,
-`/docs/documentos`, `/docs/docs-modelos`.
+A ClickSign cobra **por documento finalizado**; o envelope não é cobrado à
+parte (fontes: página "Envio de múltiplos documentos", página "Envelope" e
+FAQ da API em `developers.clicksign.com`). Documento único = 1 crédito por
+paciente nova, em vez de 2.
 
-**A confirmar antes da spec** (seção 10): o custo de crédito da ClickSign por
-envelope com dois documentos (um ou dois créditos), e se um modelo aceita as
-~70 variáveis da ficha (o do termo tem 17; não há limite documentado).
+### 2.5 O que se aceita em troca do documento único
 
-### 2.4 Por que não "ficha em casa, pelo link"
+- **Qualquer revisão do texto obriga a assinar o documento inteiro de novo**,
+  anamnese incluída. Com dois documentos, mudar o termo não refazia a ficha.
+  Hoje só há uma assinatura real em prod (a de teste), então a transição é
+  de graça; depois, cada revisão custa uma rodada de assinaturas e créditos.
+- **"Pedir nova ficha" é "assinar de novo"**, consentimento junto. Coerente:
+  a paciente reafirma tudo com o estado de saúde atual.
+- **Dispensar é dispensar tudo.** Não há como dispensar a anamnese e manter
+  o consentimento.
+- **7 a 9 páginas no widget**: lê-se rolando, em tela cheia (já existe).
 
-O 014 mandava o link por WhatsApp para preencher antes. A objeção continua
-válida: link `.vercel.app` pedindo dado de saúde parece golpe, exige domínio
-novo, app novo e token próprio. Com o check-in no iPad a paciente já está
-identificada (telefone + código), já confere os dados e já assina ali. A ficha
-no iPad custa os minutos no balcão da **primeira** visita de cada paciente e
-nada depois. Preencher em casa pelo site (que já tem "Meus agendamentos" com
-a mesma sessão) fica como evolução, com a assinatura continuando no iPad ou
-no celular; o backend deste PRD já nasce pronto para isso porque as respostas
-são gravadas antes da assinatura.
+### 2.6 Por que não "ficha em casa, pelo link"
+
+Mesma objeção do 014: link pedindo dado de saúde no WhatsApp parece golpe e
+exige domínio, app e token próprios. No iPad a paciente já está identificada
+e já assina ali. Preencher em casa pelo site (que já tem "Meus agendamentos"
+com a mesma sessão) fica como evolução; as respostas gravadas antes da
+assinatura deixam o backend pronto para isso.
 
 ---
 
@@ -133,129 +123,126 @@ são gravadas antes da assinatura.
 
 ### Dentro
 
-- **Gatilho**: paciente sem ficha vigente nesta clínica (`ANAMNESE_VERSION`
-  no SSM, igual a `TCLE_VERSION`). Sem a versão configurada, o check-in não
-  pede a ficha e nada muda.
-- **Telas no iPad**, entre `consent-data` e a assinatura: Queixa + Histórico
-  médico, Medicamentos, Dermatológicas, Hábitos + Outras informações +
-  Observações, Exposição solar + Fototipo. Toques grandes, "Sim"/"Não"
-  obrigatórios (sem default), textos só quando "Sim", progresso "3 de 5".
-- **Uma assinatura** para o que estiver pendente: termo e ficha, só a ficha, ou
-  só o termo. Um envelope, um documento por item pendente, um widget.
-- **Respostas gravadas antes de assinar**, em JSONB versionado por
-  `form_version`, e PDF gerado por **modelo da ClickSign com variáveis**
-  (`ANAMNESE_TEMPLATE_KEY`), uma por resposta e por texto condicional.
+- **Documento único**, versão nova no SSM (`TCLE_VERSION`, que passa a
+  identificar o documento inteiro) e modelo novo na ClickSign
+  (`CLICKSIGN_TCLE_TEMPLATE_KEY` trocada). Sem versão, o check-in não pede.
+- **Telas da anamnese no iPad**, entre `consent-data` e a assinatura:
+  (1) Queixa + Histórico médico, (2) Medicamentos, (3) Dermatológicas, (4)
+  Hábitos + Outras + Observações + Fototipo. Toques grandes, "Sim"/"Não"
+  obrigatórios sem default, textos só quando "Sim", progresso "2 de 4",
+  gravação ao avançar.
+- **Respostas gravadas antes de assinar** (JSONB `answers` no registro do
+  documento), PDF gerado por **modelo com variáveis**: uma por resposta e por
+  texto condicional, além das 17 de hoje.
 - **Alertas** no painel: lista fixa de respostas que mudam a conduta
   (gestante, amamentando, isotretinoína, fotossensibilizantes, herpes na
   área, lesão ativa, tatuagem na área, peeling 30 d, cera/pinça 30 d, câncer,
-  imunossupressão, queloide, epilepsia, diabetes não controlada, sol 2
-  semanas, bronzeada, sensibilizada). Exibidos, nunca interpretados.
-- **Painel**: linha "Ficha" no popover (pendente / assinada / papel /
-  dispensar, como a do termo), aba **Ficha de anamnese** em Documentos
-  (respostas legíveis, alertas no topo, PDF e trilha), selo na agenda.
-- **Papel e dispensa**: mesmos mecanismos do termo, por documento.
-- **Menor de idade**: o responsável legal responde e assina, como no termo.
-- `patients.skin_type` **não é escrito** pelo fototipo declarado (regra do
-  PRD 012, mantida do 014).
-- Versão 03 da ficha (item 10.8 sem marca) como modelo na ClickSign, dev e
-  prod.
+  imunossupressão, queloide, epilepsia, diabetes não controlada). Exibidos,
+  nunca interpretados.
+- **Painel**: a linha "Termo" do popover vira "Documento" com os mesmos
+  estados e ações, mais os alertas; a aba de Documentos mostra as respostas
+  por seção, os alertas no topo, o fototipo declarado com nota, o PDF e a
+  trilha; botão "Pedir nova assinatura" (invalida a vigente para aquela
+  paciente); selo **DOCS** na agenda no lugar de TERMO.
+- **Papel e dispensa**: como hoje, para o documento inteiro.
+- **Menor de idade**: o responsável legal responde e assina, como hoje.
+- `patients.skin_type` **não é escrito** pelo fototipo declarado.
+- **Transição**: a assinatura de teste de prod na versão `2026-11` fica como
+  histórico; a versão nova exige assinatura de todo mundo, como qualquer
+  revisão.
 
 ### Fora
 
-- **Triagem curta por sessão** (seção 8 recorrente a cada check-in, sem
-  assinatura). Fase 2, com PRD próprio: o prontuário já tem `tanned_skin` por
-  sessão, preenchido pela profissional.
-- Preencher em casa pelo site. Evolução, não v1.
-- Assinatura da profissional responsável (decisão do 014: a RT é identificada,
-  não assina).
-- Bloquear sessão ou pagamento por alerta. Quem decide contraindicação é a
-  profissional.
-- O bot ler ou escrever qualquer coisa da ficha.
+- **Triagem por sessão** (sol, bronzeada, sensibilizada a cada check-in,
+  sem assinatura). Fase 2, PRD próprio. O prontuário já tem `tanned_skin`
+  por sessão.
+- Preencher em casa pelo site.
+- Assinatura da profissional responsável.
+- Bloquear sessão ou pagamento por alerta.
+- O bot ler ou escrever qualquer coisa da anamnese.
 - Migrar fichas de papel antigas.
+- Dois documentos por envelope (registrado na seção 2.3 como caminho de
+  volta).
 
 ---
 
-## 4. Decisões a tomar (com a recomendação)
+## 4. Decisões (05/11/2026)
 
-| # | Pergunta | Recomendação | Por quê |
+| # | Pergunta | Decisão | Por quê |
 |---|---|---|---|
-| 1 | Mesma assinatura do termo? | **Sim**, um envelope com os documentos pendentes | Provado no sandbox; um token e uma manuscrita; menos tempo no balcão |
-| 2 | Quando pede a ficha | **Sem ficha vigente** (versão) **ou vencida há 12 meses**, mais botão "Pedir nova ficha" no painel | Mesmo gatilho do termo; a validade cobre a mudança de estado de saúde que a 10.9 pede sem virar triagem por sessão |
-| 3 | PDF: modelo com variáveis ou arquivo gerado por nós | **Modelo com variáveis** (`Sim`/`Não`/`-` e os textos) | Zero biblioteca de PDF na Lambda, mesmo mecanismo do termo, carimbo e trilha da ClickSign iguais |
-| 4 | Ordem no iPad | Dados → **ficha** → assinatura → pagamento | A ficha alimenta o PDF; assinar antes de responder não existe |
-| 5 | Respostas sem assinatura | **Ficam gravadas** (`PREENCHIDA`) e os alertas já aparecem | Valor clínico não refém da etapa jurídica (014) |
-| 6 | Onde os alertas aparecem | Popover do agendamento e aba da ficha; **sem selo novo** na agenda além do "pendente" | A agenda já tem TERMO, CONFIRMADO e PENDENTE; mais um selo por alerta vira ruído |
-| 7 | Selo na agenda | **Um selo só, "DOCS"**, quando falta termo ou ficha, no lugar de TERMO | Dois selos para o mesmo gesto (assinar no iPad) confundem; o popover detalha qual falta |
-| 8 | Divergência de dados com o cadastro | Nome confirmado atualiza (como já faz); CPF, nascimento e e-mail só em campo vazio | Regra já em produção na 036 |
-| 9 | Quem vê as respostas | Permissão `prontuario.ler`, como o prontuário; ADMIN e STAFF com ela | Dado de saúde; a dívida de auth por usuário fica mais cara, não bloqueia |
-| 10 | Dispensa | Por documento, com os mesmos motivos do termo | A recepção pode dispensar a ficha e manter o termo |
+| 1 | Um documento ou dois | **Um**, anamnese + consentimento + imagem, com uma assinatura e finalidades individualizadas no texto | 1 crédito; uma versão, um PDF, um selo; a ficha já repetia o termo |
+| 2 | Quando pede | **Sem documento vigente** (versão) **ou pedido pela profissional** ("Pedir nova assinatura"). Sem validade automática | A seção 8 saiu, então o que resta quase não muda; renovar é decisão clínica, não de calendário |
+| 3 | PDF | Modelo da ClickSign com variáveis, como hoje | Zero biblioteca de PDF; carimbo e trilha iguais |
+| 4 | Ordem no iPad | Dados → anamnese (4 telas) → assinatura → pagamento | As respostas alimentam o PDF |
+| 5 | Respostas sem assinatura | Ficam gravadas e os alertas já aparecem | Valor clínico não refém da etapa jurídica (014) |
+| 6 | Onde os alertas aparecem | Popover e aba de Documentos; sem selo por alerta | A agenda já tem DOCS, CONFIRMADO e PENDENTE |
+| 7 | Selo na agenda | **DOCS**, no lugar de TERMO | Um gesto, um selo |
+| 8 | Divergência com o cadastro | Nome atualiza; CPF, nascimento e e-mail só em campo vazio | Regra já em prod |
+| 9 | Quem vê as respostas | Permissão `prontuario.ler` | Dado de saúde |
+| 10 | Dispensa | Do documento inteiro, mesmos motivos | Não existe metade |
+| 11 | Seção 8 | Sai da ficha; vira triagem por sessão (fase 2) | Cadência diferente |
+| 12 | Ordem do texto | Identificação → anamnese → consentimento → imagem → declarações → assinatura | As telas do iPad seguem a ordem do PDF |
 
 ---
 
 ## 5. Fluxo no iPad
 
 ```
-appointment ─confirmar─▶ backend responde documentsRequired: ['TCLE','ANAMNESE'] (0, 1 ou 2)
+appointment ─confirmar─▶ backend responde consentRequired (como hoje)
      │
-     ├─ nenhum ───────────────────────────────────────────────────▶ method
+     ├─ false ─────────────────────────────────────────────────▶ method
      │
-     └─ algum ─▶ consent-data ─▶ [anamnese 1..5, se pendente] ─▶ sign (1 widget) ─▶ method
+     └─ true ─▶ consent-data ─▶ anamnese 1..4 ─▶ consent-sign ─▶ method
 ```
 
-1. `consent-data` continua igual: é a identificação da signatária (ou do
-   responsável) e vale para os dois documentos.
-2. Telas da ficha, só se `ANAMNESE` estiver pendente. Cada tela grava ao
-   avançar (`PATCH` parcial), para uma queda de rede ou um "Recomeçar" não
-   perder tudo. Voltar é permitido até a assinatura.
-3. Ao terminar a última tela: `POST .../documents` cria o envelope com os
-   documentos pendentes, grava a ficha como `PREENCHIDA` e devolve o
-   `signerId`. A tela de assinatura é a de hoje, com "2 documentos" na barra.
-4. Assinado: cada `document_closed` fecha o seu documento (PDF para o S3,
-   hash); o `auto_close` não precisa fazer nada. O polling continua sendo quem
-   confirma para o iPad.
-5. Falha, desistência ou 5 min sem toque: "Chame a recepção", documentos ficam
-   `SIGNING`/`PREENCHIDA`, agenda mostra o selo. Sem pular.
-6. Reaproveitamento: envelope `SIGNING` de até 24 h é reaproveitado se os
-   dados **e as respostas** forem os mesmos; mudou algo, descarta e cria outro
-   (regra já existente no termo, estendida à ficha).
+1. `consent-data` continua igual: identificação da signatária (ou do
+   responsável) e escolha de uso de imagem.
+2. Quatro telas da anamnese. Cada "Continuar" grava as respostas daquela
+   tela (`PATCH` parcial num registro `FILLING`), para queda de rede ou
+   "Recomeçar" não perder nada. Voltar é permitido até a assinatura.
+3. Na última tela, `POST .../consent` como hoje, agora com as respostas
+   completas: cria o envelope com **um documento**, grava `SIGNING` e devolve
+   o `signerId`. A tela de assinatura é a de hoje.
+4. Assinado: `document_closed`/`auto_close` fecham como hoje (PDF no S3,
+   hash). O polling confirma para o iPad.
+5. Falha, desistência ou 5 min sem toque: "Chame a recepção"; registro fica
+   `SIGNING` com as respostas; agenda mostra DOCS. Sem pular.
+6. Reaproveitamento: `SIGNING` de até 24 h é reaproveitado se dados **e
+   respostas** forem iguais; mudou algo, descarta e cria outro (regra atual,
+   estendida às respostas).
 
 ---
 
 ## 6. Backend e dados
 
-**Unidade = documento, agrupamento = envelope.** `patient_consents` passa a
-ser a tabela dos documentos assinados no check-in, com uma linha por documento
-e o `provider_envelope_id` compartilhado entre termo e ficha do mesmo gesto.
-
 | Mudança | Detalhe |
 |---|---|
-| `patient_consents.kind` | `TCLE` (default, linhas existentes) ou `ANAMNESE` |
-| `patient_consents.answers` | JSONB, só para `ANAMNESE`: respostas das seções 1 a 9 por chave estável (`gestante`, `isotretinoina_ultima_dose`, `fototipo`...) |
-| `patient_consents.status` | ganha `FILLED` (preenchida, sem envelope ainda) além de `SIGNING`/`SIGNED`/`CANCELLED`/`EXPIRED`/`PAPER` |
-| Índices únicos | `(clinic_id, patient_id, kind, term_version)` vigente e `(clinic_id, patient_id, kind)` em andamento |
-| `appointments.consent_waived_*` | passa a guardar o `kind` dispensado (ou os dois) |
-| SSM | `/{stage}/CLICKSIGN_ANAMNESE_TEMPLATE_KEY`, `/{stage}/ANAMNESE_VERSION` |
-| `consentimento.py` | `precisa_assinar` vira por `kind`; `inicia` monta o envelope com os documentos pendentes; `_fecha` por `document_key`; alertas calculados de `answers` por lista fixa |
-| Rotas | `public/.../checkin/appointments/{id}/anamnesis` (PATCH parcial), `.../documents` (cria envelope); painel: `GET consents/patients/{id}` devolve os dois tipos, `POST .../paper`, `.../waive` com `kind` |
-| Nada de Lambda nova | tudo dentro de `PublicBooking` e `Consentimento`: o stack está em 482/500 em dev e prod |
+| `patient_consents.answers` | JSONB com as respostas por chave estável (`gestante`, `isotretinoina_ultima_dose`, `fototipo`...). Vazio nas linhas antigas |
+| `patient_consents.status` | ganha `FILLING` (respondendo, sem envelope) antes de `SIGNING` |
+| Índice único em andamento | passa a cobrir `FILLING` e `SIGNING` |
+| SSM | mesmas chaves de hoje; `TCLE_VERSION` nova (ex.: `2026-12`) e `CLICKSIGN_TCLE_TEMPLATE_KEY` do modelo novo |
+| `consentimento.py` | `inicia` recebe `answers` completas; rota nova de gravação parcial; validação por tela; `_mesmos_dados` compara respostas; alertas calculados de `answers` por lista fixa; `para_o_painel` devolve `answers` e `alertas` só com `prontuario.ler` |
+| `anamnese.py` (novo) | catálogo das perguntas (chave, texto, seção, tela, condicional, alerta), validação, variáveis do modelo |
+| `clicksign_provider.py` | sem mudança estrutural; só mais variáveis |
+| Rotas | `PATCH public/.../checkin/appointments/{id}/consent/answers` (parcial); `POST .../consent` como hoje; painel: `POST consents/{id}/renew` ("pedir nova assinatura") |
+| Lambdas | nenhuma nova: `PublicBooking` e `Consentimento`. Stacks em 482/500 |
 
-O PDF da ficha nasce do modelo com variáveis; o `answers` é a fonte para o
-painel e para os alertas, o PDF é a prova. Os dois são gravados; divergir é
-impossível porque o PDF é gerado a partir do `answers`.
+`answers` é a fonte para o painel e os alertas; o PDF é a prova, gerado a
+partir de `answers`. Divergir é impossível.
 
 ---
 
 ## 7. Painel
 
-- **Popover**: linha "Ficha de anamnese" abaixo de "Termo", mesmos estados e
-  ações (ver PDF, registrar papel, dispensar). Alertas em vermelho logo abaixo,
-  um por linha, só os "Sim" relevantes.
-- **Documentos**: terceira aba `?doc=ficha`. Respostas agrupadas por seção,
-  alertas no topo, fototipo declarado com a nota "autodeclarado; o tipo de
-  pele do prontuário é o da profissional", botão "Pedir nova ficha".
-- **Agenda**: selo DOCS (decisão 7).
-- **Configurações**: a seção "Responsável técnica e termo" passa a listar os
-  dois documentos e a versão vigente de cada um.
+- **Popover**: linha "Documento" (hoje "Termo") com estados e ações; abaixo,
+  os alertas em vermelho, um por linha, só os "Sim" relevantes.
+- **Documentos**: a aba "Termo de consentimento" vira "Anamnese e
+  consentimento": alertas no topo, respostas por seção, fototipo declarado com
+  a nota "autodeclarado; o tipo de pele do prontuário é o da profissional",
+  PDF e trilha, botão "Pedir nova assinatura".
+- **Agenda**: selo DOCS.
+- **Configurações**: a seção "Responsável técnica e termo" mostra a versão
+  vigente do documento.
 
 ---
 
@@ -263,20 +250,17 @@ impossível porque o PDF é gerado a partir do `answers`.
 
 | Caminho | Tipo | Descrição |
 |---|---|---|
-| `docs/work/assets/038-anamnese/` | criar | `gera_modelo.js` e o `.docx` da ficha v03 com variáveis |
-| `scheduler/src/services/consentimento.py` | modificar | `kind`, envelope multi-documento, `answers`, alertas |
-| `scheduler/src/services/anamnese.py` | criar | perguntas, chaves, validação por tela, lista de alertas, variáveis do modelo |
-| `scheduler/src/providers/signature_provider.py`, `clicksign_provider.py`, `simulated_signature_provider.py` | modificar | `cria_envelope(documentos=[...])` no lugar de `cria_termo`; espera de todos os documentos |
-| `scheduler/src/functions/public_booking/checkin.py` | modificar | rotas da ficha e do envelope |
-| `scheduler/src/functions/consent/router.py` | modificar | `kind` nas rotas do painel |
-| `scheduler/src/functions/appointment/list.py` | modificar | `anamnesis_status` ao lado de `consent_status` |
+| `docs/work/assets/038-documento-unico/` | criar | `gera_modelo.js` e o `.docx` do documento único com variáveis |
+| `scheduler/src/services/anamnese.py` | criar | catálogo, validação, alertas, variáveis |
+| `scheduler/src/services/consentimento.py` | modificar | `answers`, `FILLING`, comparação, alertas, renew |
+| `scheduler/src/functions/public_booking/checkin.py` | modificar | rota de gravação parcial |
+| `scheduler/src/functions/consent/router.py` | modificar | `answers`/alertas na resposta, `renew` |
 | `scheduler/src/scripts/setup_database.py` | modificar | migrations idempotentes da seção 6 |
-| `scheduler/serverless.yml` | modificar | duas env vars novas |
-| `checkin/src/steps/Anamnese*.tsx` | criar | as 5 telas |
-| `checkin/src/pages/CheckinPage.tsx`, `ConsentSignStep.tsx` | modificar | estados novos; "N documentos" na barra |
-| `frontend/src/pages/agenda/components/TermoDoAgendamento.tsx` | modificar | vira "DocumentosDoAgendamento" com as duas linhas |
-| `frontend/src/pages/documentos/` | modificar | aba da ficha |
-| `scheduler/tests/`, `checkin/src/**/*.test.tsx`, `frontend/src/**/*.test.tsx` | criar | cobertura dos fluxos acima |
+| `checkin/src/steps/Anamnese*.tsx` | criar | 4 telas |
+| `checkin/src/pages/CheckinPage.tsx` | modificar | estados novos |
+| `frontend/src/pages/agenda/components/TermoDoAgendamento.tsx`, `TermoPendenteBadge.tsx` | modificar | "Documento", alertas, DOCS |
+| `frontend/src/pages/documentos/components/TermoDeConsentimento.tsx` | modificar | respostas, alertas, renew |
+| testes nos três apps | criar | cobertura dos fluxos |
 
 ---
 
@@ -284,71 +268,73 @@ impossível porque o PDF é gerado a partir do `answers`.
 
 **Dependências**
 
-- Ficha **Versão 03** aprovada (item 10.8 sem marca). Sem isso, o PDF gerado
-  cita ZapSign num documento assinado pela ClickSign.
-- Modelo da ficha criado pela API nas contas de sandbox e produção (o script
-  do 036 já faz isso).
-- Confirmação do custo por documento na ClickSign.
+- **Texto final do documento único**, aprovado por quem assina pela clínica:
+  revisão jurídica (inclusive a cláusula 18 do termo atual, que tenta afastar
+  responsabilidade por omissão do cliente e não elimina o dever profissional
+  de avaliação), sem seção 8, sem marca de plataforma, sem assinatura da
+  profissional, com versão e data no rodapé e na ordem da decisão 12. **É o
+  bloqueio de entrada**: o modelo é gerado a partir dele.
+- Modelo criado nas contas de sandbox e produção (script do 036).
 
 **Riscos**
 
 | Risco | Mitigação |
 |---|---|
-| Tempo no balcão na primeira visita (3 a 5 min a mais) | Só na primeira visita; textos condicionais; grava por tela; a recepção pode dispensar a ficha e manter o termo. Medir pelo `created_at` das telas |
-| Variáveis demais para o modelo | Confirmar no sandbox com o `.docx` real antes da spec; se houver limite, cair para upload de PDF gerado (a API aceita `content_base64`) |
-| Dado de saúde sob a auth de hoje | Permissão `prontuario.ler`; nada no bot; bucket privado; a dívida de auth por usuário sobe de prioridade |
-| Resposta "Não" por pressa | Sem default: cada pergunta exige um toque; 10.1 e 18 do termo responsabilizam pela omissão |
-| Dois `document_closed` e um `auto_close` | Fechar por `document_key`; o envelope só é "concluído" quando todos os documentos forem `SIGNED` |
-| Fototipo declarado virar parâmetro | Campo só em `answers`; nunca escreve `skin_type` (teste garante) |
+| Tempo no balcão na primeira visita (3 a 4 min a mais) | Só na primeira visita; condicionais; grava por tela; a recepção dispensa se precisar. Medir pelo tempo entre telas |
+| Modelo com ~90 variáveis | Confirmar no sandbox com o `.docx` real **antes da spec**; se houver limite, cair para upload de PDF gerado (`content_base64`) |
+| Revisão de texto obriga todo mundo a assinar de novo | Aceito (seção 2.5); revisar o texto com parcimônia e versionar |
+| Dado de saúde sob a auth de hoje | `prontuario.ler`; nada no bot; bucket privado; dívida de auth por usuário sobe de prioridade |
+| "Não" por pressa | Sem default, um toque por pergunta; a declaração de veracidade responsabiliza |
+| Fototipo declarado virar parâmetro | Só em `answers`; nunca escreve `skin_type` (teste garante) |
+| Documento longo no widget | Tela cheia já existe; manter o texto enxuto |
 
 ---
 
 ## 10. Antes da spec
 
-1. Revisar o texto da ficha (10.8) e aprovar a Versão 03.
-2. Montar o `.docx` com todas as variáveis e criar o modelo no sandbox; abrir
-   um envelope de teste com termo + ficha e **assinar de verdade** no widget,
-   para ver os dois PDFs, os dois `document_closed` e o `auto_close`.
-3. Confirmar com a ClickSign o custo por documento num envelope.
-4. Decidir a tabela da seção 4.
+1. Texto final do documento único aprovado (bloqueio de entrada).
+2. Montar o `.docx` com todas as variáveis, criar o modelo no sandbox e
+   **assinar de verdade** um documento de teste pelo widget, para ver o PDF
+   renderizado com ~90 campos.
+3. Confirmar a lista de alertas com a responsável técnica.
 
 ---
 
 ## 11. Critérios de aceite
 
-- [ ] Paciente sem ficha vigente responde as 5 telas no iPad e assina termo e
-      ficha com um token e uma manuscrita; quem já tem termo assina só a ficha.
-- [ ] Sem `ANAMNESE_VERSION`, o check-in não muda.
+- [ ] Paciente sem documento vigente responde as 4 telas e assina com um
+      token e uma manuscrita; o PDF traz respostas, consentimento e imagem.
+- [ ] Sem `TCLE_VERSION`, o check-in não muda.
 - [ ] As respostas ficam gravadas ao avançar cada tela e sobrevivem a
-      "Recomeçar" dentro de 24 h.
-- [ ] Assinada, a aba Ficha mostra respostas, alertas, PDF e hash; o PDF não
-      tem URL pública.
+      "Recomeçar" dentro de 24 h; mudar uma resposta gera documento novo.
+- [ ] Assinada, a aba de Documentos mostra respostas, alertas, PDF e hash; o
+      PDF não tem URL pública.
 - [ ] Os alertas aparecem no popover e na aba; nada é bloqueado.
 - [ ] `skin_type` não muda com o fototipo declarado.
 - [ ] Menor de idade: o responsável responde e assina.
-- [ ] Dispensa e papel funcionam por documento, com motivo.
-- [ ] Nenhuma tool do bot lê ou escreve a ficha.
+- [ ] "Pedir nova assinatura" invalida a vigente e o próximo check-in pede de
+      novo.
+- [ ] Nenhuma tool do bot lê ou escreve as respostas.
 - [ ] `pytest`, `npm run build`, `npm run lint` e `npm run test` verdes nos
-      três apps; stack dev e prod abaixo de 500 recursos.
+      três apps; stacks abaixo de 500 recursos.
 
 ---
 
 ## 12. Referências
 
-- PRD 036 e `scheduler/tests/integration/036-termo-de-consentimento.md`
-  (provedor, widget, webhook, achados).
-- PRD 014 (decisões herdadas: alertas exibidos e não interpretados, respostas
+- PRD 036 e `scheduler/tests/integration/036-termo-de-consentimento.md`.
+- PRD 014 (regras herdadas: alertas exibidos e não interpretados, respostas
   antes da assinatura, fototipo não escreve `skin_type`, RT não assina).
 - PRD 012 (pasta de Documentos, `skin_type` só pela profissional).
-- `docs/work/assets/036-tcle/gera_modelo.js` (como gerar o `.docx` do modelo).
-- Sondagem de dois documentos: envelope `d0ecd5ae` no sandbox, script
-  `dois_docs.py` da sessão de 05/11/2026.
+- `docs/work/assets/036-tcle/gera_modelo.js` (como gerar o `.docx`).
+- Sondagem de dois documentos: envelope `d0ecd5ae` no sandbox, 05/11/2026.
+- Custo por documento: `pages.clicksign.com/funcionalidade-envios-multiplos`.
 
 ---
 
 ## Status
 
-- [x] Pendente
+- [x] Pendente (aguardando o texto final do documento único)
 - [ ] Spec gerada: `spec/038-ficha-de-anamnese-no-checkin.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
