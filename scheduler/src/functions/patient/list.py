@@ -7,6 +7,7 @@ from src.services.visao_do_staff import para_o_staff
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.utils.phone import normalize_phone
 from src.services.db.postgres import PostgresService
+from src.services.relogio import HOJE_SQL
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -79,9 +80,9 @@ def handler(event, context):
         having_clauses = []
         having_params = []
         if next_visit == "with":
-            having_clauses.append("MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) IS NOT NULL")
+            having_clauses.append(f"MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= {HOJE_SQL}) IS NOT NULL")
         elif next_visit == "without":
-            having_clauses.append("MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) IS NULL")
+            having_clauses.append(f"MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= {HOJE_SQL}) IS NULL")
 
         if last_visit_before:
             # Patients whose MAX(appointment_date) <= last_visit_before.
@@ -130,13 +131,13 @@ def handler(event, context):
                 p.last_message_at,
                 COUNT(a.id) as total_visits,
                 MAX(a.appointment_date) as last_visit,
-                MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= CURRENT_DATE) as next_visit,
+                MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= {HOJE_SQL}) as next_visit,
                 COALESCE(SUM(a.final_price_cents) FILTER (WHERE a.status != 'CANCELLED'), 0) as total_spent_cents
             FROM scheduler.patients p
             LEFT JOIN scheduler.appointments a ON a.patient_id = p.id AND a.status != 'CANCELLED'
-            {where}
+            {{where}}
             GROUP BY p.id
-            {having}
+            {{having}}
             ORDER BY p.created_at DESC, p.id DESC
             LIMIT %s OFFSET %s
         """, tuple(params + having_params + [per_page, offset]))

@@ -3,6 +3,7 @@ from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
+from src.services.relogio import HOJE_SQL
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import razao_de as razao_do_personalizado
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
@@ -989,7 +990,7 @@ class AppointmentService:
         patient_id = str(patients[0]["id"])
 
         appointments = self.db.execute_query(
-            """
+            f"""
             SELECT a.*, s.name as service_name,
                    areas_q.areas_display
             FROM scheduler.appointments a
@@ -1000,7 +1001,7 @@ class AppointmentService:
                 WHERE asa.appointment_id = a.id
             ) areas_q ON TRUE
             WHERE a.patient_id = %s::uuid AND a.status = 'CONFIRMED'
-            AND a.appointment_date >= CURRENT_DATE
+            AND a.appointment_date >= {HOJE_SQL}
             ORDER BY a.appointment_date ASC, a.start_time ASC
             LIMIT 1
             """,
@@ -1029,7 +1030,7 @@ class AppointmentService:
             return []
 
         return self.db.execute_query(
-            """
+            f"""
             SELECT a.*, s.name as service_name,
                    areas_q.areas_display,
                    -- O carrinho do agendamento, para o site remarcar com a
@@ -1058,7 +1059,7 @@ class AppointmentService:
             ) pares ON TRUE
             WHERE p.clinic_id = %s AND p.phone = ANY(%s) AND p.deleted_at IS NULL
             AND a.clinic_id = %s AND a.status = 'CONFIRMED'
-            AND a.appointment_date >= CURRENT_DATE
+            AND a.appointment_date >= {HOJE_SQL}
             ORDER BY a.appointment_date ASC, a.start_time ASC
             """,
             (clinic_id, variantes, clinic_id),
