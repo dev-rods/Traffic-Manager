@@ -364,6 +364,6 @@ partir de `answers`. Divergir é impossível.
 ## Status
 
 - [x] Pendente: decisões fechadas, ficha V03 aprovada e modelo compilado validado no sandbox em 05/11/2026
-- [ ] Spec gerada: `spec/038-ficha-de-anamnese-no-checkin.md`
+- [x] Spec gerada: `spec/038-ficha-de-anamnese-no-checkin.md` (05/11/2026)
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
