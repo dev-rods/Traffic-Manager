@@ -1289,8 +1289,10 @@ SQL_STATEMENTS = [
         patient_id UUID NOT NULL REFERENCES scheduler.patients(id),
         appointment_id UUID REFERENCES scheduler.appointments(id),
         term_version VARCHAR(20) NOT NULL,
+        -- FILLING = respondendo a anamnese, sem envelope ainda (PRD 038);
+        -- REVOKED = a profissional pediu nova assinatura.
         status VARCHAR(12) NOT NULL
-            CHECK (status IN ('SIGNING', 'SIGNED', 'CANCELLED', 'EXPIRED', 'PAPER')),
+            CHECK (status IN ('FILLING', 'SIGNING', 'SIGNED', 'CANCELLED', 'EXPIRED', 'PAPER', 'REVOKED')),
         signer_kind VARCHAR(10) NOT NULL CHECK (signer_kind IN ('PATIENT', 'GUARDIAN')),
         signer_name VARCHAR(255),
         signer_cpf VARCHAR(11),
@@ -1310,17 +1312,33 @@ SQL_STATEMENTS = [
         signed_at TIMESTAMPTZ,
         paper_signed_at DATE,
         paper_registered_by VARCHAR(120),
+        -- Respostas da anamnese por chave (PRD 038); NULL nas linhas da
+        -- versão 2026-11, que era só o termo.
+        answers JSONB,
+        revoked_at TIMESTAMPTZ,
+        revoked_by VARCHAR(120),
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
     )""",
     # Um termo vigente (assinado ou em papel) por paciente, clínica e versão;
-    # e um só "assinando" por vez, para dois toques não abrirem dois envelopes.
+    # e um só "em andamento" (respondendo ou assinando) por vez, para dois
+    # toques não abrirem dois envelopes.
     """CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_consents_vigente
        ON scheduler.patient_consents (clinic_id, patient_id, term_version)
        WHERE status IN ('SIGNED', 'PAPER')""",
-    """CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_consents_assinando
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_patient_consents_em_andamento
        ON scheduler.patient_consents (clinic_id, patient_id)
-       WHERE status = 'SIGNING'""",
+       WHERE status IN ('FILLING', 'SIGNING')""",
+    # PRD 038: a ficha de anamnese entra no mesmo documento.
+    "ALTER TABLE scheduler.patient_consents ADD COLUMN IF NOT EXISTS answers JSONB",
+    "ALTER TABLE scheduler.patient_consents ADD COLUMN IF NOT EXISTS revoked_at TIMESTAMPTZ",
+    "ALTER TABLE scheduler.patient_consents ADD COLUMN IF NOT EXISTS revoked_by VARCHAR(120)",
+    """DO $$ BEGIN
+        ALTER TABLE scheduler.patient_consents DROP CONSTRAINT IF EXISTS patient_consents_status_check;
+        ALTER TABLE scheduler.patient_consents ADD CONSTRAINT patient_consents_status_check
+            CHECK (status IN ('FILLING', 'SIGNING', 'SIGNED', 'CANCELLED', 'EXPIRED', 'PAPER', 'REVOKED'));
+    END $$""",
+    "DROP INDEX IF EXISTS scheduler.uq_patient_consents_assinando",
     """CREATE INDEX IF NOT EXISTS idx_patient_consents_provider_doc
        ON scheduler.patient_consents (provider_document_id)""",
 

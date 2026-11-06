@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, date, time
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param
+from src.services import anamnese, consentimento
 from src.services.db.postgres import PostgresService
 from src.services.politica_de_desconto import faixas_de_desconto
 
@@ -97,6 +98,9 @@ def handler(event, context):
         return http_response(200, {
             "status": "SUCCESS",
             "clinic": _serialize_row(clinics[0]),
+            # Ficha de anamnese do check-in (PRD 038): o iPad renderiza as telas
+            # a partir daqui. null quando o termo está desligado.
+            "anamnesis": anamnese.catalogo() if consentimento.versao() else None,
             "services": [_serialize_row(r) for r in services],
             "professionals": [_serialize_row(r) for r in professionals],
             "serviceAreas": [_serialize_row(r) for r in service_areas],
