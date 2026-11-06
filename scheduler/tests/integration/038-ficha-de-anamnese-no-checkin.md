@@ -26,9 +26,24 @@ Criar o modelo numa conta: o mesmo `modelo_prod.py` do 036, apontando para o `.d
 | PDF carimbado (antes de assinar) | 8 páginas, dados do paciente, respostas em negrito, "SOP" no detalhe, "-" nos vazios, fototipo assinalado |
 | Rota do painel | documento `SIGNING` da versão `2026-12` com `has_anamnesis`, `answers` e `alertas` (vazio quando só "hormonal", que não é alerta) |
 | Paciente com termo `2026-11` assinado | passa a ser pendente na versão `2026-12`: assina o compilado inteiro, como previsto |
-| Assinatura real do compilado | **pendente**: agendamento de teste `d979abf9` (06/11 23:50, Essência dev); o SIGNING `111a1543` é reaproveitado em 24 h |
+| Assinatura real do compilado | **Feita pelo André em 06/11** no checkin-dev (agendamento `d979abf9`), com pagamento no fim |
 
 **Bug pré-existente encontrado, fora do 038:** `get_active_appointments_by_phone` filtra `appointment_date >= CURRENT_DATE` em UTC. Depois das 21h (horário de Brasília) um agendamento do mesmo dia some do iPad ("Não encontramos seu agendamento"). Vale um PRD curto.
+
+## Teste real do André e melhorias (06/11/2026)
+
+O André percorreu o fluxo inteiro no checkin-dev (termo + ficha assinados de
+verdade no documento compilado, pagamento). Quatro melhorias pedidas e
+aplicadas no mesmo dia (commit `56fdc9f`):
+
+| Pedido | O que mudou |
+|---|---|
+| Nada pré-preenchido na ficha, nem "Não" | O iPad abre as 4 telas em branco; o backend deixou de mandar `anamnesisPrefill`. Cada tela só avança com as obrigatórias |
+| Cada etapa no topo da página | `window.scrollTo(0,0)` a cada mudança de etapa ou de tela |
+| Espera depois de assinar | Faixa "Assinatura recebida! Aguarde..." após o `signed` do widget e polling a cada 1,5 s (o backend espera o PDF da ClickSign, 20 a 30 s) |
+| Conferência do agendamento depois do termo | Ordem nova: escolher o agendamento → dados → ficha → assinar → conferir áreas, preço e horário (grava o check-in) → pagamento. `consentRequired` vem da lista de agendamentos |
+
+Conferido por E2E headless com paciente fictício (`5511970000038`, agendamento `8f06a0e9`): termo antes da conferência, `scrollY=0` e zero rádios marcados em cada tela, widget aberto com o PDF de 8 páginas.
 
 ## Roteiro E2E (continuação)
 
