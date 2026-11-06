@@ -358,7 +358,7 @@ material real e não de suposição.
 
 ## Status
 
-- [x] Pendente
+- [x] **Substituído pelo PRD 038** (`038-ficha-de-anamnese-no-checkin.md`, 05/11/2026): a ficha passa a ser preenchida no check-in do iPad e assinada junto com o termo, no mesmo envelope da ClickSign (PRD 036). Ficam valendo daqui as regras da seção 6 (alertas exibidos, respostas antes da assinatura, fototipo não escreve `skin_type`, RT não assina).
 - [ ] Spec gerada
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
