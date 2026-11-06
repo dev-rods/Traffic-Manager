@@ -44,6 +44,8 @@ class TestHoje(unittest.TestCase):
                 caminho = os.path.join(raiz, nome)
                 with open(caminho, encoding="utf-8") as f:
                     for n, linha in enumerate(f, 1):
+                        if linha.lstrip().startswith("#"):
+                            continue  # comentário contando a história, não SQL
                         if re.search(r"\bCURRENT_DATE\b", linha):
                             culpados.append("%s:%d" % (os.path.relpath(caminho, SRC), n))
         self.assertEqual(culpados, [])
