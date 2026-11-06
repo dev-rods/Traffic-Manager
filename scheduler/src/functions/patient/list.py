@@ -135,9 +135,9 @@ def handler(event, context):
                 COALESCE(SUM(a.final_price_cents) FILTER (WHERE a.status != 'CANCELLED'), 0) as total_spent_cents
             FROM scheduler.patients p
             LEFT JOIN scheduler.appointments a ON a.patient_id = p.id AND a.status != 'CANCELLED'
-            {{where}}
+            {where}
             GROUP BY p.id
-            {{having}}
+            {having}
             ORDER BY p.created_at DESC, p.id DESC
             LIMIT %s OFFSET %s
         """, tuple(params + having_params + [per_page, offset]))
