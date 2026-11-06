@@ -298,7 +298,7 @@ partir de `answers`. Divergir é impossível.
 | Risco | Mitigação |
 |---|---|
 | Tempo no balcão na primeira visita (3 a 4 min a mais) | Só na primeira visita; condicionais; grava por tela; a recepção dispensa se precisar. Medir pelo tempo entre telas |
-| Modelo com ~80 variáveis | Confirmar no sandbox com o `.docx` real **antes da spec**; se houver limite, cair para upload de PDF gerado (`content_base64`) |
+| Modelo com ~80 variáveis | Confirmado no sandbox em 05/11: 68 variáveis distintas aceitas e substituídas (seção 10) |
 | Revisão de texto obriga todo mundo a assinar de novo | Aceito (seção 2.5); revisar com parcimônia e versionar |
 | Dado de saúde sob a auth de hoje | `prontuario.ler`; nada no bot; bucket privado; dívida de auth por usuário sobe de prioridade |
 | "Não" por pressa | Sem default, um toque por pergunta; a declaração de veracidade responsabiliza |
@@ -309,10 +309,18 @@ partir de `answers`. Divergir é impossível.
 
 ## 10. Antes da spec
 
-1. Aprovar a Versão 03 da ficha (seção 2.2).
-2. Montar o `.docx` compilado com todas as variáveis, criar o modelo no
-   sandbox e **assinar de verdade** um documento de teste pelo widget, para
-   ver o PDF renderizado com ~80 campos.
+1. ~~Aprovar a Versão 03 da ficha~~ Aprovada pelo André em 05/11/2026.
+2. ~~Montar o `.docx` compilado e criar o modelo no sandbox~~ Feito em
+   05/11/2026: `docs/work/assets/038-modelo-compilado/gera_modelo.js` gera
+   `TCLE_anamnese_modelo_clicksign_2026-12.docx` (TCLE byte a byte, provado
+   por assert no script de montagem, + ficha V03). Modelo no sandbox
+   `1d2b35f6-e9a1-4657-8f76-248ac228ad95`, **68 variáveis distintas (80
+   ocorrências)**, aceito sem erro. Envelope de teste `74a1dcd2` com todas as
+   variáveis preenchidas: documento processado em ~1 s, widget abre normal,
+   PDF de **8 páginas** (TCLE nas 5 primeiras, ficha da 6 à 8, assinatura no
+   fim) com todas as variáveis substituídas. Consequência dos cortes: as
+   seções 9 e 10 da ficha viraram 8 e 9. Falta só a **assinatura real** de
+   um documento compilado, que fica para o E2E da implementação.
 3. Confirmar a lista de alertas com a responsável técnica e as linhas 5 a 12
    da seção 4.
 
@@ -353,7 +361,7 @@ partir de `answers`. Divergir é impossível.
 
 ## Status
 
-- [x] Pendente (aguardando a aprovação da Versão 03 da ficha)
+- [x] Pendente: ficha V03 aprovada e modelo compilado validado no sandbox em 05/11/2026; pronto para a spec
 - [ ] Spec gerada: `spec/038-ficha-de-anamnese-no-checkin.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
