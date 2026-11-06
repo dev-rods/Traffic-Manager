@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { checkinService } from '@/services/checkin.service'
-import type { ConsentStartPayload, PaymentMethod, Session } from '@/types'
+import type { AnamneseRespostas, ConsentStartPayload, PaymentMethod, Session } from '@/types'
 
 export const checkinKeys = {
   bootstrap: (clinicId: string) => ['checkin', 'bootstrap', clinicId] as const,
@@ -17,6 +17,16 @@ export function useClinic(clinicId: string) {
     queryKey: checkinKeys.bootstrap(clinicId),
     queryFn: () => checkinService.bootstrap(clinicId),
     select: (data) => data.clinic,
+    staleTime: 1000 * 60 * 30,
+  })
+}
+
+/** O catálogo da ficha de anamnese (PRD 038), da mesma resposta do bootstrap. */
+export function useAnamneseCatalogo(clinicId: string) {
+  return useQuery({
+    queryKey: checkinKeys.bootstrap(clinicId),
+    queryFn: () => checkinService.bootstrap(clinicId),
+    select: (data) => data.anamnesis,
     staleTime: 1000 * 60 * 30,
   })
 }
@@ -90,6 +100,19 @@ export function useStartConsent(clinicId: string, session: Session | null) {
 
 /** Acompanha a assinatura até sair de SIGNING: o webhook da ClickSign ou a
  * consulta que o backend faz a cada polling fecham o termo. */
+export function useSaveAnamnesis(clinicId: string, session: Session | null) {
+  return useMutation({
+    mutationFn: (v: { appointmentId: string; screen: number; answers: AnamneseRespostas }) =>
+      checkinService.saveAnamnesis(
+        clinicId,
+        session as Session,
+        v.appointmentId,
+        v.screen,
+        v.answers
+      ),
+  })
+}
+
 export function useConsentStatus(clinicId: string, session: Session | null, consentId: string) {
   return useQuery({
     queryKey: checkinKeys.consent(clinicId, consentId),

@@ -1,19 +1,29 @@
 import { useCallback, useReducer } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { useClinic } from '@/hooks/useCheckin'
+import { useAnamneseCatalogo, useClinic } from '@/hooks/useCheckin'
 import { useIdleReset } from '@/hooks/useIdleReset'
 import { StartStep } from '@/steps/StartStep'
 import { PhoneStep } from '@/steps/PhoneStep'
 import { CodeStep } from '@/steps/CodeStep'
 import { AppointmentStep } from '@/steps/AppointmentStep'
+import { AnamneseStep } from '@/steps/AnamneseStep'
 import { ConsentDataStep } from '@/steps/ConsentDataStep'
 import { ConsentSignStep } from '@/steps/ConsentSignStep'
+import { ConsentStartStep } from '@/steps/ConsentStartStep'
 import { MethodStep } from '@/steps/MethodStep'
 import { CpfStep } from '@/steps/CpfStep'
 import { PaymentStep } from '@/steps/PaymentStep'
 import { DoneStep } from '@/steps/DoneStep'
-import type { CheckinAppointment, Consent, Payment, PaymentMethod, Session } from '@/types'
+import type {
+  AnamneseRespostas,
+  CheckinAppointment,
+  Consent,
+  ConsentStartPayload,
+  Payment,
+  PaymentMethod,
+  Session,
+} from '@/types'
 import { formatCurrencyBRL } from '@/utils/format'
 
 type State =
@@ -22,6 +32,15 @@ type State =
   | { step: 'code'; phone: string; devCode: string | null }
   | { step: 'appointment'; session: Session }
   | ({ step: 'consent-data' } & Paying)
+  // Ficha de anamnese (PRD 038): 4 telas entre os dados e a assinatura, com
+  // os dados conferidos guardados para o envelope.
+  | ({
+      step: 'anamnese'
+      tela: number
+      respostas: AnamneseRespostas
+      dados: ConsentStartPayload
+    } & Paying)
+  | ({ step: 'consent-start'; dados: ConsentStartPayload } & Paying)
   | ({ step: 'consent-sign'; consent: Consent } & Paying)
   | ({ step: 'method' } & Paying)
   | ({ step: 'cpf'; method: PaymentMethod } & Paying)
@@ -53,7 +72,7 @@ function reducer(_: State, action: Action): State {
 // não chegam ao `useIdleReset`.
 const IDLE_MS = 90_000
 const IDLE_PAYMENT_MS = 5 * 60_000
-const LONG_IDLE_STEPS = new Set(['payment', 'consent-sign'])
+const LONG_IDLE_STEPS = new Set(['payment', 'anamnese', 'consent-start', 'consent-sign'])
 
 function firstNameOf(appointment: CheckinAppointment): string | null {
   return appointment.fullName?.trim().split(/\s+/)[0] || null
@@ -104,6 +123,7 @@ function paying(state: Paying): Paying {
 export function CheckinPage() {
   const { clinicId = '' } = useParams()
   const clinic = useClinic(clinicId)
+  const anamnese = useAnamneseCatalogo(clinicId).data ?? null
   const queryClient = useQueryClient()
   const [state, dispatch] = useReducer(reducer, { step: 'start' })
   const go = (s: State) => dispatch({ type: 'go', state: s })
@@ -249,15 +269,55 @@ export function CheckinPage() {
 
         {state.step === 'consent-data' ? (
           <ConsentDataStep
+            appointment={state.appointment}
+            onContinue={(dados) =>
+              anamnese
+                ? go({
+                    ...paying(state),
+                    step: 'anamnese',
+                    tela: 1,
+                    respostas: state.appointment.anamnesisPrefill ?? {},
+                    dados,
+                  })
+                : go({ ...paying(state), step: 'consent-start', dados })
+            }
+            onRestart={reset}
+          />
+        ) : null}
+
+        {state.step === 'anamnese' && anamnese ? (
+          <AnamneseStep
+            key={state.tela}
             clinicId={clinicId}
             session={state.session}
             appointment={state.appointment}
+            catalogo={anamnese}
+            tela={state.tela}
+            respostas={state.respostas}
+            onBack={() =>
+              state.tela === 1
+                ? go({ ...paying(state), step: 'consent-data' })
+                : go({ ...state, tela: state.tela - 1 })
+            }
+            onNext={(respostas) =>
+              state.tela < anamnese.screens.length
+                ? go({ ...state, tela: state.tela + 1, respostas })
+                : go({ ...paying(state), step: 'consent-start', dados: state.dados })
+            }
+          />
+        ) : null}
+
+        {state.step === 'consent-start' ? (
+          <ConsentStartStep
+            clinicId={clinicId}
+            session={state.session}
+            appointmentId={state.appointment.id}
+            payload={state.dados}
             onStarted={(consent) =>
               consent.status === 'SIGNING'
                 ? go({ ...paying(state), step: 'consent-sign', consent })
                 : go(next({ ...paying(state), consentDone: true }, state.appointment.payment))
             }
-            onRestart={reset}
           />
         ) : null}
 

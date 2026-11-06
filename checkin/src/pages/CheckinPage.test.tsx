@@ -6,7 +6,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CheckinPage } from './CheckinPage'
 import { checkinService } from '@/services/checkin.service'
 import { ApiError } from '@/services/api'
-import type { CheckinAppointment, Consent, ConsentPrefill, Payment } from '@/types'
+import type {
+  AnamneseCatalogo,
+  CheckinAppointment,
+  Consent,
+  ConsentPrefill,
+  Payment,
+} from '@/types'
 
 vi.mock('@/services/checkin.service')
 
@@ -106,6 +112,12 @@ async function login() {
 beforeEach(() => {
   vi.mocked(checkinService.bootstrap).mockResolvedValue({
     clinic: { clinic_id: 'c1', name: 'Clínica X', display_name: 'Essência', logo_url: null },
+    anamnesis: null,
+  })
+  vi.mocked(checkinService.saveAnamnesis).mockResolvedValue({
+    screen: 1,
+    answered: [],
+    complete: false,
   })
   vi.mocked(checkinService.sendCode).mockResolvedValue(null)
   vi.mocked(checkinService.confirmCode).mockResolvedValue('tok')
@@ -127,6 +139,109 @@ afterEach(() => {
   vi.useRealTimers()
   vi.clearAllMocks()
 })
+
+// Catálogo curto da ficha (PRD 038): 2 telas em vez de 4, mesmo formato do backend.
+const CATALOGO: AnamneseCatalogo = {
+  version: '03',
+  phototypes: [
+    { value: 'I', text: 'Pele muito clara' },
+    { value: 'III', text: 'Pele clara média' },
+  ],
+  screens: [
+    {
+      n: 1,
+      questions: [
+        {
+          key: 'queixa_principal',
+          text: 'O que motivou a busca?',
+          type: 'TEXTO',
+          conditionalOf: null,
+          label: null,
+          required: true,
+          section: '1. Queixa principal',
+        },
+        {
+          key: 'gestante',
+          text: 'Está gestante?',
+          type: 'SIM_NAO',
+          conditionalOf: null,
+          label: null,
+          required: true,
+          section: '2. Histórico médico',
+        },
+        {
+          key: 'hormonal',
+          text: 'Possui distúrbios hormonais?',
+          type: 'SIM_NAO',
+          conditionalOf: null,
+          label: null,
+          required: true,
+          section: '2. Histórico médico',
+        },
+        {
+          key: 'hormonal_quais',
+          text: 'Quais?',
+          type: 'TEXTO',
+          conditionalOf: 'hormonal',
+          label: 'Se sim, quais?',
+          required: true,
+          section: '2. Histórico médico',
+        },
+      ],
+    },
+    {
+      n: 2,
+      questions: [
+        {
+          key: 'fuma',
+          text: 'Fuma?',
+          type: 'SIM_NAO',
+          conditionalOf: null,
+          label: null,
+          required: true,
+          section: '5. Hábitos',
+        },
+        {
+          key: 'observacoes',
+          text: 'Observações',
+          type: 'TEXTO',
+          conditionalOf: null,
+          label: null,
+          required: false,
+          section: '7. Observações',
+        },
+        {
+          key: 'fototipo',
+          text: 'Como sua pele reage ao sol?',
+          type: 'FOTOTIPO',
+          conditionalOf: null,
+          label: null,
+          required: true,
+          section: '8. Fototipo',
+        },
+      ],
+    },
+  ],
+}
+
+function comFicha(prefill: Record<string, boolean | string> | null = null) {
+  vi.mocked(checkinService.bootstrap).mockResolvedValue({
+    clinic: { clinic_id: 'c1', name: 'Clínica X', display_name: 'Essência', logo_url: null },
+    anamnesis: CATALOGO,
+  })
+  withConsent()
+  vi.mocked(checkinService.appointments).mockResolvedValue([{ ...ANA, anamnesisPrefill: prefill }])
+}
+
+async function ateADadosConfirmados() {
+  renderPage()
+  await login()
+  await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+  await screen.findByRole('heading', { name: 'Termo de consentimento' })
+  await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' }))
+  await screen.findByRole('heading', { name: 'Ficha de anamnese' })
+}
 
 describe('Check-in', () => {
   it('fluxo do Pix: login, confirma, paga e conclui', async () => {
@@ -404,7 +519,9 @@ describe('Check-in', () => {
     expect(screen.getByLabelText('E-mail')).toHaveValue('ana@exemplo.com')
 
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     expect(checkinService.startConsent).toHaveBeenCalledWith(
       'c1',
       { phone: '5511999990000', token: 'tok' },
@@ -432,7 +549,9 @@ describe('Check-in', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     expect(checkinService.startConsent).not.toHaveBeenCalled()
     expect(screen.getByText('Informe o CPF.')).toBeInTheDocument()
     expect(screen.getByText('Informe a data de nascimento.')).toBeInTheDocument()
@@ -443,7 +562,9 @@ describe('Check-in', () => {
     await userEvent.type(screen.getByLabelText('Data de nascimento'), '10051990')
     await userEvent.type(screen.getByLabelText('E-mail'), 'ana@exemplo.com')
     await userEvent.click(screen.getByRole('radio', { name: 'Não autorizo' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     expect(checkinService.startConsent).toHaveBeenLastCalledWith(
       'c1',
       expect.anything(),
@@ -464,7 +585,9 @@ describe('Check-in', () => {
     expect(await screen.findByRole('heading', { name: 'Responsável legal' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     expect(checkinService.startConsent).not.toHaveBeenCalled()
 
     await userEvent.type(screen.getByLabelText('Nome completo do responsável'), 'Carla Souza')
@@ -472,7 +595,9 @@ describe('Check-in', () => {
     await userEvent.type(screen.getByLabelText('Nascimento do responsável'), '01011980')
     await userEvent.type(screen.getByLabelText('Celular do responsável'), '11988887777')
     await userEvent.type(screen.getByLabelText('E-mail do responsável'), 'carla@exemplo.com')
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     expect(checkinService.startConsent).toHaveBeenLastCalledWith(
       'c1',
       expect.anything(),
@@ -496,7 +621,7 @@ describe('Check-in', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     expect(await screen.findByText(/A clínica ainda não configurou o termo/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Pix/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Continuar para a assinatura' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Continuar para a ficha de anamnese' })).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Voltar ao início' }))
     expect(await screen.findByRole('button', { name: 'Fazer check-in' })).toBeInTheDocument()
   })
@@ -511,7 +636,9 @@ describe('Check-in', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     expect(await screen.findByRole('alert')).toHaveTextContent('Confira o CPF da paciente')
   })
 
@@ -525,7 +652,9 @@ describe('Check-in', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
   })
 
@@ -542,7 +671,9 @@ describe('Check-in', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
   })
 
@@ -566,7 +697,9 @@ describe('Check-in', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
     await screen.findByRole('heading', { name: 'Assine o termo' })
 
     // O iframe da ClickSign tem height: 100%: o container ocupa o que sobra
@@ -583,6 +716,107 @@ describe('Check-in', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Reduzir' }))
     expect(screen.getByTestId('clicksign-frame').className).not.toContain('fixed')
     delete window.Clicksign
+  })
+
+  it('ficha de anamnese: 4 telas viram 2 aqui, condicional só com "Sim", grava por tela e assina (PRD 038)', async () => {
+    comFicha()
+    await ateADadosConfirmados()
+    expect(screen.getByText(/Tela 1 de 2/)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Se sim, quais?')).toBeNull()
+
+    // Sem default: continuar sem responder marca as perguntas.
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(checkinService.saveAnamnesis).not.toHaveBeenCalled()
+    expect(screen.getAllByText('Responda Sim ou Não.')).toHaveLength(2)
+
+    await userEvent.type(screen.getByLabelText('O que motivou a busca?'), 'Pelos encravados')
+    const gestante = screen.getByRole('radiogroup', { name: 'Está gestante?' })
+    await userEvent.click(within(gestante).getByRole('radio', { name: 'Não' }))
+    const hormonal = screen.getByRole('radiogroup', { name: 'Possui distúrbios hormonais?' })
+    await userEvent.click(within(hormonal).getByRole('radio', { name: 'Sim' }))
+    expect(screen.getByLabelText('Se sim, quais?')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Se sim, quais?'), 'SOP')
+    // Mudou de ideia: a condicional some e não vai no envio.
+    await userEvent.click(within(hormonal).getByRole('radio', { name: 'Não' }))
+    expect(screen.queryByLabelText('Se sim, quais?')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(checkinService.saveAnamnesis).toHaveBeenLastCalledWith(
+      'c1',
+      expect.anything(),
+      'ap-ana',
+      1,
+      {
+        queixa_principal: 'Pelos encravados',
+        gestante: false,
+        hormonal: false,
+      }
+    )
+
+    expect(await screen.findByText(/Tela 2 de 2/)).toBeInTheDocument()
+    const fuma = screen.getByRole('radiogroup', { name: 'Fuma?' })
+    await userEvent.click(within(fuma).getByRole('radio', { name: 'Não' }))
+    await userEvent.click(screen.getByRole('radio', { name: /III/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar para a assinatura' }))
+    expect(checkinService.saveAnamnesis).toHaveBeenLastCalledWith(
+      'c1',
+      expect.anything(),
+      'ap-ana',
+      2,
+      {
+        fuma: false,
+        fototipo: 'III',
+      }
+    )
+
+    // Só então o envelope, com os dados conferidos na tela de dados.
+    expect(await screen.findByRole('heading', { name: 'Assine o termo' })).toBeInTheDocument()
+    expect(checkinService.startConsent).toHaveBeenCalledWith(
+      'c1',
+      expect.anything(),
+      'ap-ana',
+      expect.objectContaining({ fullName: 'Ana Souza', imageAuthorized: true })
+    )
+  })
+
+  it('ficha: "Voltar" na tela 1 volta aos dados; prefill preenche o que já foi respondido', async () => {
+    comFicha({ queixa_principal: 'Virilha', gestante: false, hormonal: false })
+    await ateADadosConfirmados()
+    expect(screen.getByLabelText('O que motivou a busca?')).toHaveValue('Virilha')
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Está gestante?' })).getByRole('radio', {
+        name: 'Não',
+      })
+    ).toBeChecked()
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Termo de consentimento' })
+    ).toBeInTheDocument()
+  })
+
+  it('ficha: erro 400 do backend marca o campo e não avança', async () => {
+    comFicha({ queixa_principal: 'Virilha', gestante: false, hormonal: false })
+    vi.mocked(checkinService.saveAnamnesis).mockRejectedValue(
+      new ApiError('Responda esta pergunta.', 400, 'gestante')
+    )
+    await ateADadosConfirmados()
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(await screen.findByText('Confira esta resposta.')).toBeInTheDocument()
+    expect(screen.getByText(/Tela 1 de 2/)).toBeInTheDocument()
+    expect(checkinService.startConsent).not.toHaveBeenCalled()
+  })
+
+  it('sem catálogo no bootstrap (termo desligado) o fluxo é o de antes: dados e assinatura', async () => {
+    withConsent()
+    renderPage()
+    await login()
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
+    await screen.findByRole('heading', { name: 'Termo de consentimento' })
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
+    expect(await screen.findByRole('heading', { name: 'Assine o termo' })).toBeInTheDocument()
+    expect(checkinService.saveAnamnesis).not.toHaveBeenCalled()
   })
 
   it('"Recomeçar" volta ao início a qualquer momento', async () => {

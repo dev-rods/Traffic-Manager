@@ -7,7 +7,36 @@ export interface Clinic {
 
 export interface BootstrapResponse {
   clinic: Clinic
+  // Ficha de anamnese (PRD 038): o iPad renderiza as telas a partir do
+  // catálogo do backend. null quando o termo está desligado.
+  anamnesis: AnamneseCatalogo | null
 }
+
+export type AnamneseTipo = 'SIM_NAO' | 'TEXTO' | 'FOTOTIPO'
+
+export interface AnamnesePergunta {
+  key: string
+  text: string
+  type: AnamneseTipo
+  // Pergunta Sim/Não que habilita esta (os "Se sim, quais?").
+  conditionalOf: string | null
+  label: string | null
+  required: boolean
+  section: string
+}
+
+export interface AnamneseTela {
+  n: number
+  questions: AnamnesePergunta[]
+}
+
+export interface AnamneseCatalogo {
+  version: string
+  screens: AnamneseTela[]
+  phototypes: { value: string; text: string }[]
+}
+
+export type AnamneseRespostas = Record<string, boolean | string>
 
 // LINK: cobrança mandada pela recepção no WhatsApp (PRD 029); não é escolha do iPad.
 export type PaymentMethod = 'PIX' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'CASH' | 'LINK'
@@ -52,6 +81,9 @@ export interface CheckinAppointment {
   // backend; o iPad só pede quando ele manda.
   consentRequired: boolean
   consentPrefill: ConsentPrefill | null
+  // Respostas da ficha já gravadas nesta versão (PRD 038): "Recomeçar" e
+  // queda de rede voltam com o que já foi respondido.
+  anamnesisPrefill?: AnamneseRespostas | null
 }
 
 export interface ConsentGuardianPrefill {

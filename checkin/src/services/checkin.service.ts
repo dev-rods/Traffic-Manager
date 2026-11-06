@@ -1,5 +1,6 @@
 import { api } from './api'
 import type {
+  AnamneseRespostas,
   BootstrapResponse,
   CheckinAppointment,
   ConfirmResponse,
@@ -73,6 +74,20 @@ export const checkinService = {
         }
       )
       .then((r) => r.data.consent),
+
+  // Ficha de anamnese (PRD 038): uma tela por chamada, gravada antes de assinar.
+  saveAnamnesis: (
+    clinicId: string,
+    s: Session,
+    appointmentId: string,
+    screen: number,
+    answers: AnamneseRespostas
+  ) =>
+    api
+      .post<{
+        anamnesis: { screen: number; answered: string[]; complete: boolean }
+      }>(`${base(clinicId)}/checkin/appointments/${appointmentId}/anamnesis`, { ...s, screen, answers })
+      .then((r) => r.data.anamnesis),
 
   consent: (clinicId: string, s: Session, consentId: string) =>
     api
