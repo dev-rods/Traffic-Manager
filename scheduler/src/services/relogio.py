@@ -15,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 FUSO_PADRAO = "America/Sao_Paulo"
 
+# "Hoje" dentro do SQL. O banco roda em UTC, que está à frente do Brasil:
+# entre 21h e meia-noite em Brasília o `CURRENT_DATE` já é o dia seguinte, e a
+# sessão de hoje passa por passada (sumia do iPad e de "Meus agendamentos",
+# e virava "feita" no bot). Toda consulta que precisa de "hoje" usa isto;
+# um teste proíbe `CURRENT_DATE` em `src/`.
+HOJE_SQL = "(NOW() AT TIME ZONE 'America/Sao_Paulo')::date"
+
 
 def agora_na_clinica(timezone: Optional[str], agora_utc: Optional[datetime] = None) -> datetime:
     """O instante atual no fuso da clínica. Fuso ausente ou inválido vira São Paulo.

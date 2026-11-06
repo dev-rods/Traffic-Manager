@@ -26,6 +26,7 @@ import re
 from typing import Dict, List, Optional
 
 from src.utils.phone import variantes_do_numero
+from src.services.relogio import HOJE_SQL
 
 logger = logging.getLogger(__name__)
 
@@ -72,20 +73,20 @@ def identificar(db, clinic_id: str, phone: str) -> Dict:
     try:
         variantes = sorted(variantes_do_numero(phone))
         linhas = db.execute_query(
-            """
+            f"""
             SELECT p.id, p.name, p.birth_date, p.cpf, p.email,
                    (SELECT COUNT(*) FROM scheduler.appointments a
                      WHERE a.patient_id = p.id AND a.status = 'CONFIRMED'
-                       AND a.appointment_date < CURRENT_DATE) AS sessoes_feitas,
+                       AND a.appointment_date < {HOJE_SQL}) AS sessoes_feitas,
                    (SELECT MAX(a.appointment_date) FROM scheduler.appointments a
                      WHERE a.patient_id = p.id AND a.status = 'CONFIRMED'
-                       AND a.appointment_date < CURRENT_DATE) AS ultima_sessao,
+                       AND a.appointment_date < {HOJE_SQL}) AS ultima_sessao,
                    (SELECT json_build_object(
                            'id', a.id::text, 'data', a.appointment_date::text,
                            'hora', to_char(a.start_time, 'HH24:MI'))
                       FROM scheduler.appointments a
                      WHERE a.patient_id = p.id AND a.status = 'CONFIRMED'
-                       AND a.appointment_date >= CURRENT_DATE
+                       AND a.appointment_date >= {HOJE_SQL}
                      ORDER BY a.appointment_date, a.start_time LIMIT 1) AS agendamento_futuro
             FROM scheduler.patients p
             WHERE p.clinic_id = %s AND p.phone = ANY(%s) AND p.deleted_at IS NULL
