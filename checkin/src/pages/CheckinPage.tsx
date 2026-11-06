@@ -1,4 +1,4 @@
-import { useCallback, useReducer } from 'react'
+import { useCallback, useEffect, useReducer } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAnamneseCatalogo, useClinic } from '@/hooks/useCheckin'
@@ -31,6 +31,9 @@ type State =
   | { step: 'phone' }
   | { step: 'code'; phone: string; devCode: string | null }
   | { step: 'appointment'; session: Session }
+  // Confere áreas, preço e horário DEPOIS do termo e da ficha (pedido do
+  // André em 06/11/2026): o check-in é gravado aqui, já com tudo assinado.
+  | ({ step: 'appointment-confirm' } & Paying)
   | ({ step: 'consent-data' } & Paying)
   // Ficha de anamnese (PRD 038): 4 telas entre os dados e a assinatura, com
   // os dados conferidos guardados para o envelope.
@@ -78,16 +81,20 @@ function firstNameOf(appointment: CheckinAppointment): string | null {
   return appointment.fullName?.trim().split(/\s+/)[0] || null
 }
 
+/** Para onde vai a paciente depois de escolher o agendamento: termo e ficha
+ * primeiro (se exigidos), senão a conferência do agendamento. */
+function depoisDeEscolher(paying: Paying): State {
+  if (paying.appointment.consentRequired && !paying.consentDone) {
+    return { step: 'consent-data', ...paying }
+  }
+  return { step: 'appointment-confirm', ...paying }
+}
+
 /** Para onde vai a paciente depois de confirmar o agendamento ou criar o pagamento. */
 function next(paying: Paying, payment: Payment | null): State {
   const { appointment } = paying
   const firstName = firstNameOf(appointment)
   const amount = formatCurrencyBRL(payment?.amountCents ?? appointment.finalPriceCents)
-  // O termo vem antes do pagamento (decisão 4 do PRD 036). Agendamento já
-  // pago não passa por aqui (`alreadyPaid`): o termo fica para a recepção.
-  if (appointment.consentRequired && !paying.consentDone) {
-    return { step: 'consent-data', ...paying }
-  }
   if (payment?.status === 'PAID') {
     return {
       step: 'done',
@@ -127,6 +134,13 @@ export function CheckinPage() {
   const queryClient = useQueryClient()
   const [state, dispatch] = useReducer(reducer, { step: 'start' })
   const go = (s: State) => dispatch({ type: 'go', state: s })
+
+  // Cada etapa começa no topo: a ficha e o termo são longos, e a tela
+  // seguinte abria onde a anterior tinha parado.
+  const tela = state.step === 'anamnese' ? state.tela : 0
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [state.step, tela])
 
   const reset = useCallback(() => {
     // O que a pessoa anterior viu não fica em cache para a próxima.
@@ -244,20 +258,31 @@ export function CheckinPage() {
           <AppointmentStep
             clinicId={clinicId}
             session={state.session}
+            onChosen={(appointment) =>
+              go(
+                depoisDeEscolher({
+                  session: state.session,
+                  appointment,
+                  payerCpfKnown: false,
+                  cpf: null,
+                  consentDone: false,
+                })
+              )
+            }
+            onAlreadyPaid={alreadyPaid}
+            onRestart={reset}
+          />
+        ) : null}
+
+        {state.step === 'appointment-confirm' ? (
+          <AppointmentStep
+            clinicId={clinicId}
+            session={state.session}
+            appointment={state.appointment}
             onConfirmed={(appointment, confirmed) =>
               go(
                 next(
-                  {
-                    session: state.session,
-                    appointment: {
-                      ...appointment,
-                      consentRequired: confirmed.consentRequired,
-                      consentPrefill: confirmed.consentPrefill,
-                    },
-                    payerCpfKnown: confirmed.payerCpfKnown,
-                    cpf: null,
-                    consentDone: false,
-                  },
+                  { ...paying(state), appointment, payerCpfKnown: confirmed.payerCpfKnown },
                   appointment.payment
                 )
               )
@@ -276,7 +301,8 @@ export function CheckinPage() {
                     ...paying(state),
                     step: 'anamnese',
                     tela: 1,
-                    respostas: state.appointment.anamnesisPrefill ?? {},
+                    // Sempre em branco: nada pré-assinalado, nem "Não".
+                    respostas: {},
                     dados,
                   })
                 : go({ ...paying(state), step: 'consent-start', dados })
@@ -316,7 +342,7 @@ export function CheckinPage() {
             onStarted={(consent) =>
               consent.status === 'SIGNING'
                 ? go({ ...paying(state), step: 'consent-sign', consent })
-                : go(next({ ...paying(state), consentDone: true }, state.appointment.payment))
+                : go({ ...paying(state), step: 'appointment-confirm', consentDone: true })
             }
           />
         ) : null}
@@ -327,7 +353,7 @@ export function CheckinPage() {
             session={state.session}
             consent={state.consent}
             onSigned={() =>
-              go(next({ ...paying(state), consentDone: true }, state.appointment.payment))
+              go({ ...paying(state), step: 'appointment-confirm', consentDone: true })
             }
             onRestart={reset}
           />

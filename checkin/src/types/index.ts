@@ -81,9 +81,6 @@ export interface CheckinAppointment {
   // backend; o iPad só pede quando ele manda.
   consentRequired: boolean
   consentPrefill: ConsentPrefill | null
-  // Respostas da ficha já gravadas nesta versão (PRD 038): "Recomeçar" e
-  // queda de rede voltam com o que já foi respondido.
-  anamnesisPrefill?: AnamneseRespostas | null
 }
 
 export interface ConsentGuardianPrefill {

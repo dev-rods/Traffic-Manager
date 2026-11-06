@@ -42,11 +42,11 @@ export function useConfirmCode(clinicId: string) {
   })
 }
 
-export function useAppointments(clinicId: string, session: Session | null) {
+export function useAppointments(clinicId: string, session: Session | null, enabled = true) {
   return useQuery({
     queryKey: checkinKeys.appointments(clinicId, session?.phone ?? ''),
     queryFn: () => checkinService.appointments(clinicId, session as Session),
-    enabled: session !== null,
+    enabled: session !== null && enabled,
     // Cada check-in é uma pessoa nova no balcão: nada de cache entre elas.
     staleTime: 0,
     gcTime: 0,
@@ -113,13 +113,20 @@ export function useSaveAnamnesis(clinicId: string, session: Session | null) {
   })
 }
 
-export function useConsentStatus(clinicId: string, session: Session | null, consentId: string) {
+export function useConsentStatus(
+  clinicId: string,
+  session: Session | null,
+  consentId: string,
+  // Depois do `signed` do widget, o backend ainda espera o PDF da ClickSign
+  // (uns 20 a 30 s): consulta mais rápido para a tela virar logo.
+  rapido = false
+) {
   return useQuery({
     queryKey: checkinKeys.consent(clinicId, consentId),
     queryFn: () => checkinService.consent(clinicId, session as Session, consentId),
     enabled: session !== null,
     refetchInterval: (query) =>
-      query.state.data && query.state.data.status !== 'SIGNING' ? false : 3000,
+      query.state.data && query.state.data.status !== 'SIGNING' ? false : rapido ? 1500 : 3000,
     refetchIntervalInBackground: true,
     gcTime: 0,
   })

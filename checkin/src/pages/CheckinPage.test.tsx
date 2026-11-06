@@ -77,10 +77,14 @@ function consent(over: Partial<Consent> = {}): Consent {
 }
 
 function withConsent(prefill: Partial<ConsentPrefill> = {}) {
+  // O termo vem antes da conferência: quem diz "precisa assinar" é a lista.
+  vi.mocked(checkinService.appointments).mockResolvedValue([
+    { ...ANA, consentRequired: true, consentPrefill: { ...PREFILL, ...prefill } },
+  ])
   vi.mocked(checkinService.confirm).mockResolvedValue({
     payerCpfKnown: true,
-    consentRequired: true,
-    consentPrefill: { ...PREFILL, ...prefill },
+    consentRequired: false,
+    consentPrefill: null,
   })
 }
 
@@ -224,19 +228,17 @@ const CATALOGO: AnamneseCatalogo = {
   ],
 }
 
-function comFicha(prefill: Record<string, boolean | string> | null = null) {
+function comFicha() {
   vi.mocked(checkinService.bootstrap).mockResolvedValue({
     clinic: { clinic_id: 'c1', name: 'Clínica X', display_name: 'Essência', logo_url: null },
     anamnesis: CATALOGO,
   })
   withConsent()
-  vi.mocked(checkinService.appointments).mockResolvedValue([{ ...ANA, anamnesisPrefill: prefill }])
 }
 
 async function ateADadosConfirmados() {
   renderPage()
   await login()
-  await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
   await screen.findByRole('heading', { name: 'Termo de consentimento' })
   await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
   await userEvent.click(screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' }))
@@ -507,7 +509,6 @@ describe('Check-in', () => {
     withConsent()
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
 
     expect(
       await screen.findByRole('heading', { name: 'Termo de consentimento' })
@@ -539,6 +540,8 @@ describe('Check-in', () => {
     expect(await screen.findByRole('heading', { name: 'Assine o termo' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Simular assinatura (teste)' }))
     expect(checkinService.simulateConsent).toHaveBeenCalledWith('c1', expect.anything(), 'cons-1')
+    // Depois de assinar, a conferência do agendamento; só então o pagamento.
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
   })
 
@@ -546,7 +549,6 @@ describe('Check-in', () => {
     withConsent({ cpfKnown: false, cpfMasked: null, birthDate: null, email: null })
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
 
     await userEvent.click(
@@ -581,7 +583,6 @@ describe('Check-in', () => {
     withConsent({ name: 'Bia Souza', birthDate: '2010-06-01', isMinor: true })
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     expect(await screen.findByRole('heading', { name: 'Responsável legal' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
@@ -618,7 +619,6 @@ describe('Check-in', () => {
     withConsent({ clinicReady: false })
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     expect(await screen.findByText(/A clínica ainda não configurou o termo/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Pix/ })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Continuar para a ficha de anamnese' })).toBeNull()
@@ -633,7 +633,6 @@ describe('Check-in', () => {
     )
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
     await userEvent.click(
@@ -649,12 +648,13 @@ describe('Check-in', () => {
     )
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
     await userEvent.click(
       screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
     )
+    // Depois de assinar, a conferência do agendamento; só então o pagamento.
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
   })
 
@@ -668,12 +668,13 @@ describe('Check-in', () => {
     )
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
     await userEvent.click(
       screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
     )
+    // Depois de assinar, a conferência do agendamento; só então o pagamento.
+    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     expect(await screen.findByRole('button', { name: /^Pix/ })).toBeInTheDocument()
   })
 
@@ -694,7 +695,6 @@ describe('Check-in', () => {
     }
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
     await userEvent.click(
@@ -778,15 +778,11 @@ describe('Check-in', () => {
     )
   })
 
-  it('ficha: "Voltar" na tela 1 volta aos dados; prefill preenche o que já foi respondido', async () => {
-    comFicha({ queixa_principal: 'Virilha', gestante: false, hormonal: false })
+  it('ficha: nada vem pré-assinalado, nem "Não"; "Voltar" na tela 1 volta aos dados', async () => {
+    comFicha()
     await ateADadosConfirmados()
-    expect(screen.getByLabelText('O que motivou a busca?')).toHaveValue('Virilha')
-    expect(
-      within(screen.getByRole('radiogroup', { name: 'Está gestante?' })).getByRole('radio', {
-        name: 'Não',
-      })
-    ).toBeChecked()
+    expect(screen.getByLabelText('O que motivou a busca?')).toHaveValue('')
+    for (const radio of screen.getAllByRole('radio')) expect(radio).not.toBeChecked()
     await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
     expect(
       await screen.findByRole('heading', { name: 'Termo de consentimento' })
@@ -794,11 +790,17 @@ describe('Check-in', () => {
   })
 
   it('ficha: erro 400 do backend marca o campo e não avança', async () => {
-    comFicha({ queixa_principal: 'Virilha', gestante: false, hormonal: false })
+    comFicha()
     vi.mocked(checkinService.saveAnamnesis).mockRejectedValue(
       new ApiError('Responda esta pergunta.', 400, 'gestante')
     )
     await ateADadosConfirmados()
+    await userEvent.type(screen.getByLabelText('O que motivou a busca?'), 'Virilha')
+    for (const nome of ['Está gestante?', 'Possui distúrbios hormonais?']) {
+      await userEvent.click(
+        within(screen.getByRole('radiogroup', { name: nome })).getByRole('radio', { name: 'Não' })
+      )
+    }
     await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
     expect(await screen.findByText('Confira esta resposta.')).toBeInTheDocument()
     expect(screen.getByText(/Tela 1 de 2/)).toBeInTheDocument()
@@ -809,7 +811,6 @@ describe('Check-in', () => {
     withConsent()
     renderPage()
     await login()
-    await userEvent.click(await screen.findByRole('button', { name: 'Está certo, confirmar' }))
     await screen.findByRole('heading', { name: 'Termo de consentimento' })
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
     await userEvent.click(

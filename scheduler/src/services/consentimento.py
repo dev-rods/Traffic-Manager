@@ -210,17 +210,7 @@ def resumo_para_o_ipad(db, clinic_id: str, appt: Dict) -> Dict[str, Any]:
             "guardian": responsavel,
             "clinicReady": _clinica_pronta(_clinica(db, clinic_id)),
         },
-        # Ficha já respondida (ou em resposta) nesta versão: "Recomeçar" e
-        # queda de rede voltam com o que já foi respondido (PRD 038).
-        "anamnesisPrefill": _respostas_em_andamento(db, clinic_id, str(appt["patient_id"])),
     }
-
-
-def _respostas_em_andamento(db, clinic_id: str, patient_id: str) -> Optional[Dict[str, Any]]:
-    row = _em_andamento(db, clinic_id, patient_id)
-    if not row or row.get("term_version") != versao():
-        return None
-    return _respostas_de(row)
 
 
 def _respostas_de(row: Dict) -> Optional[Dict[str, Any]]:

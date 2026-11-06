@@ -673,8 +673,8 @@ class TestAnamnese(Base):
         self.assertEqual(len(self.db.termos), 1)
         # A tela 1 regravada substitui as chaves dela: a condicional some.
         self.assertNotIn("hormonal_quais", linha["answers"])
-        pre = consentimento.resumo_para_o_ipad(self.db, CLINIC, self.db.agendamentos[APPT])["anamnesisPrefill"]
-        self.assertEqual(pre["fototipo"], "III")
+        # Nada de prefill no iPad (decisão do André em 06/11): a ficha abre em branco.
+        self.assertNotIn("anamnesisPrefill", consentimento.resumo_para_o_ipad(self.db, CLINIC, self.db.agendamentos[APPT]))
 
     def test_tela_invalida_aponta_o_campo(self):
         with self.assertRaises(anamnese.AnamneseInvalida) as cm:
@@ -726,7 +726,6 @@ class TestAnamnese(Base):
         r = consentimento.renova(self.db, CLINIC, c["id"], "Recepção")
         self.assertEqual((r["status"], r["revoked_by"]), ("REVOKED", "Recepção"))
         self.assertTrue(consentimento.precisa_assinar(self.db, CLINIC, self.db.agendamentos[APPT]))
-        self.assertIsNone(consentimento.resumo_para_o_ipad(self.db, CLINIC, self.db.agendamentos[APPT])["anamnesisPrefill"])
         with self.assertRaises(consentimento.NaoEncontrado):
             consentimento.renova(self.db, CLINIC, c["id"], "Recepção")
 
