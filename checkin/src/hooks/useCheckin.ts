@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { checkinService } from '@/services/checkin.service'
-import type { ConsentStartPayload, PaymentMethod, Session } from '@/types'
+import type { AnamneseRespostas, ConsentStartPayload, PaymentMethod, Session } from '@/types'
 
 export const checkinKeys = {
   bootstrap: (clinicId: string) => ['checkin', 'bootstrap', clinicId] as const,
@@ -21,6 +21,16 @@ export function useClinic(clinicId: string) {
   })
 }
 
+/** O catálogo da ficha de anamnese (PRD 038), da mesma resposta do bootstrap. */
+export function useAnamneseCatalogo(clinicId: string) {
+  return useQuery({
+    queryKey: checkinKeys.bootstrap(clinicId),
+    queryFn: () => checkinService.bootstrap(clinicId),
+    select: (data) => data.anamnesis,
+    staleTime: 1000 * 60 * 30,
+  })
+}
+
 export function useSendCode(clinicId: string) {
   return useMutation({ mutationFn: (phone: string) => checkinService.sendCode(clinicId, phone) })
 }
@@ -32,11 +42,11 @@ export function useConfirmCode(clinicId: string) {
   })
 }
 
-export function useAppointments(clinicId: string, session: Session | null) {
+export function useAppointments(clinicId: string, session: Session | null, enabled = true) {
   return useQuery({
     queryKey: checkinKeys.appointments(clinicId, session?.phone ?? ''),
     queryFn: () => checkinService.appointments(clinicId, session as Session),
-    enabled: session !== null,
+    enabled: session !== null && enabled,
     // Cada check-in é uma pessoa nova no balcão: nada de cache entre elas.
     staleTime: 0,
     gcTime: 0,
@@ -90,13 +100,33 @@ export function useStartConsent(clinicId: string, session: Session | null) {
 
 /** Acompanha a assinatura até sair de SIGNING: o webhook da ClickSign ou a
  * consulta que o backend faz a cada polling fecham o termo. */
-export function useConsentStatus(clinicId: string, session: Session | null, consentId: string) {
+export function useSaveAnamnesis(clinicId: string, session: Session | null) {
+  return useMutation({
+    mutationFn: (v: { appointmentId: string; screen: number; answers: AnamneseRespostas }) =>
+      checkinService.saveAnamnesis(
+        clinicId,
+        session as Session,
+        v.appointmentId,
+        v.screen,
+        v.answers
+      ),
+  })
+}
+
+export function useConsentStatus(
+  clinicId: string,
+  session: Session | null,
+  consentId: string,
+  // Depois do `signed` do widget, o backend ainda espera o PDF da ClickSign
+  // (uns 20 a 30 s): consulta mais rápido para a tela virar logo.
+  rapido = false
+) {
   return useQuery({
     queryKey: checkinKeys.consent(clinicId, consentId),
     queryFn: () => checkinService.consent(clinicId, session as Session, consentId),
     enabled: session !== null,
     refetchInterval: (query) =>
-      query.state.data && query.state.data.status !== 'SIGNING' ? false : 3000,
+      query.state.data && query.state.data.status !== 'SIGNING' ? false : rapido ? 1500 : 3000,
     refetchIntervalInBackground: true,
     gcTime: 0,
   })

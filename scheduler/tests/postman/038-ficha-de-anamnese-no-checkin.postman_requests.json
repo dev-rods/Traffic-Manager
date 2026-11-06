@@ -1,0 +1,90 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - Ficha de anamnese no check-in (PRD 038)",
+    "description": "A ficha de anamnese respondida no iPad e compilada no mesmo documento do termo. Complementa a coleção do 036: catálogo no bootstrap, gravação por tela, respostas e alertas no painel, pedir nova assinatura. Nada de segredo aqui: chaves vão nas variáveis.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "API_KEY", "value": "YOUR_API_KEY_HERE", "type": "string" },
+    { "key": "BOOKING_API_KEY", "value": "YOUR_BOOKING_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "phone", "value": "5511999990000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "appointmentId", "value": "", "type": "string" },
+    { "key": "patientId", "value": "", "type": "string" },
+    { "key": "consentId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "iPad (público: chave do booking + token da sessão)",
+      "item": [
+        {
+          "name": "Bootstrap - catálogo da ficha",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }],
+            "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/bootstrap", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "bootstrap"] },
+            "description": "`anamnesis` traz as 4 telas (`screens[].questions[]` com key, text, type SIM_NAO|TEXTO|FOTOTIPO, conditionalOf, label, required, section) e `phototypes`. `null` quando TCLE_VERSION não está configurada."
+          }
+        },
+        {
+          "name": "Gravar uma tela da ficha",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/anamnesis", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "checkin", "appointments", "{{appointmentId}}", "anamnesis"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"token\": \"{{token}}\",\n  \"screen\": 1,\n  \"answers\": {\n    \"queixa_principal\": \"Pelos encravados\",\n    \"gestante\": false,\n    \"amamentando\": false,\n    \"hormonal\": true,\n    \"hormonal_quais\": \"SOP\",\n    \"doenca_pele\": false,\n    \"autoimune\": false,\n    \"imunossupressao\": false,\n    \"epilepsia\": false,\n    \"cancer\": false,\n    \"diabetes\": false,\n    \"alergia\": false\n  }\n}"
+            },
+            "description": "Uma tela por chamada (1 a 4). Grava numa linha FILLING da paciente; se havia envelope aberto (SIGNING), ele é cancelado. 200 `{anamnesis: {screen, answered[], complete}}`; 400 com `field` quando falta resposta ou o texto é inválido; 400 sem `field` se a paciente não precisa assinar."
+          }
+        },
+        {
+          "name": "Iniciar o documento (como no 036)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/checkin/appointments/{{appointmentId}}/consent", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "checkin", "appointments", "{{appointmentId}}", "consent"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"token\": \"{{token}}\",\n  \"fullName\": \"Ana Souza\",\n  \"cpf\": null,\n  \"birthDate\": \"1990-05-10\",\n  \"email\": \"ana@exemplo.com\",\n  \"imageAuthorized\": true,\n  \"guardian\": null\n}"
+            },
+            "description": "Mesma rota do 036. Agora exige a ficha completa (400 \"Responda a ficha de anamnese antes de assinar.\") e leva as respostas ao documento compilado."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Painel",
+      "item": [
+        {
+          "name": "Documentos da paciente (respostas e alertas)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{API_KEY}}" }],
+            "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/consents/patients/{{patientId}}", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "consents", "patients", "{{patientId}}"] },
+            "description": "prontuario.ler. Cada documento traz `has_anamnesis`, `answers` (por chave) e `alertas` ([{key,label}]), além de `revoked_at`/`revoked_by`. A linha FILLING não aparece."
+          }
+        },
+        {
+          "name": "Pedir nova assinatura",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-api-key", "value": "{{API_KEY}}" }],
+            "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/consents/{{consentId}}/renew", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "clinics", "{{clinicId}}", "consents", "{{consentId}}", "renew"] },
+            "description": "agenda.escrever. O documento SIGNED/PAPER vira REVOKED e o próximo check-in pede termo e ficha de novo. 404 se não estiver vigente."
+          }
+        }
+      ]
+    }
+  ]
+}

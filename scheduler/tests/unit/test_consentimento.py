@@ -19,7 +19,7 @@ os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 from src.providers.signature_provider import (
     ASSINADO, ASSINANDO, CANCELADO, EXPIRADO, ErroDoProvedor, SignatureProvider, TermoCriado,
 )
-from src.services import consentimento
+from src.services import anamnese, consentimento
 
 CLINIC = "clinica-teste-0001"
 FONE = "5511999990000"
@@ -135,10 +135,10 @@ class Db:
             return [dict(t) for t in self.termos.values()
                     if t["clinic_id"] == clinic and t["patient_id"] == pac and t["term_version"] == versao
                     and t["status"] in ("SIGNED", "PAPER")]
-        if "status = 'SIGNING' LIMIT 1" in sql:
+        if "status IN ('FILLING', 'SIGNING') LIMIT 1" in sql:
             clinic, pac = params
             return [dict(t) for t in self.termos.values()
-                    if t["clinic_id"] == clinic and t["patient_id"] == pac and t["status"] == "SIGNING"]
+                    if t["clinic_id"] == clinic and t["patient_id"] == pac and t["status"] in ("FILLING", "SIGNING")]
         if "SELECT pc.* FROM scheduler.patient_consents pc" in sql:
             cid, clinic, fones = params
             t = self.termos.get(cid)
@@ -159,17 +159,38 @@ class Db:
                     if t["provider"] == params[0] and t["provider_envelope_id"] == params[1]]
         if "consent_webhook_events WHERE event_id" in sql:
             return [{"x": 1}] if params[0] in self.eventos else []
-        if "WHERE clinic_id = %s AND patient_id = %s::uuid ORDER BY created_at DESC" in sql:
+        if "(provider IS NOT NULL OR status = 'PAPER') ORDER BY created_at DESC" in sql:
             return [dict(t) for t in self.termos.values()
-                    if t["clinic_id"] == params[0] and t["patient_id"] == params[1]]
+                    if t["clinic_id"] == params[0] and t["patient_id"] == params[1]
+                    and (t.get("provider") or t["status"] == "PAPER")]
         raise AssertionError("consulta inesperada: " + sql)
 
     def execute_write(self, sql, params=None):
         self.escritas.append(sql)
         if "UPDATE scheduler.patient_consents SET status" in sql:
             t = self.termos[params[1]]
-            if t["status"] == "SIGNING":
+            if t["status"] in ("FILLING", "SIGNING"):
                 t["status"] = params[0]
+            return 1
+        if "SET answers = %s" in sql:
+            answers, cid = params[0], params[-1]
+            t = self.termos[cid]
+            if t["status"] == "FILLING":
+                t["answers"] = answers.adapted
+            return 1
+        if "INSERT INTO scheduler.patient_consents" in sql and "'FILLING'" in sql:
+            clinic, pac, appt, versao, answers = params
+            if any(t["patient_id"] == pac and t["clinic_id"] == clinic and t["status"] in ("FILLING", "SIGNING")
+                   for t in self.termos.values()):
+                raise psycopg2.IntegrityError("uq_patient_consents_em_andamento")
+            cid = "ffffffff-0000-0000-0000-%012d" % (len(self.termos) + 1)
+            self.termos[cid] = {"id": cid, "clinic_id": clinic, "patient_id": pac, "appointment_id": appt,
+                                "term_version": versao, "status": "FILLING", "signer_kind": "PATIENT",
+                                "answers": answers.adapted, "provider": None, "provider_envelope_id": None,
+                                "provider_document_id": None, "provider_signer_id": None, "signer_name": None,
+                                "image_authorized": None, "pdf_s3_key": None, "audit_s3_key": None,
+                                "signed_at": None, "paper_signed_at": None, "paper_registered_by": None,
+                                "created_at": AGORA}
             return 1
         if "UPDATE scheduler.patients SET" in sql:
             p = self.pacientes[params[-1]]
@@ -194,10 +215,10 @@ class Db:
         self.escritas.append(sql)
         if "INSERT INTO scheduler.patient_consents" in sql and "'SIGNING'" in sql:
             (cid, clinic, pac, appt, versao, kind, nome, cpf, nasc, fone, email, snap, img, resp,
-             prov, env, doc, signer) = params
-            if any(t["patient_id"] == pac and t["clinic_id"] == clinic and t["status"] == "SIGNING"
+             prov, env, doc, signer, answers) = params
+            if any(t["patient_id"] == pac and t["clinic_id"] == clinic and t["status"] in ("FILLING", "SIGNING")
                    for t in self.termos.values()):
-                raise psycopg2.IntegrityError("uq_patient_consents_assinando")
+                raise psycopg2.IntegrityError("uq_patient_consents_em_andamento")
             row = {"id": cid, "clinic_id": clinic, "patient_id": pac, "appointment_id": appt,
                    "term_version": versao, "status": "SIGNING", "signer_kind": kind, "signer_name": nome,
                    "signer_cpf": cpf, "signer_birth_date": nasc, "signer_phone": fone, "signer_email": email,
@@ -205,9 +226,16 @@ class Db:
                    "provider": prov, "provider_envelope_id": env, "provider_document_id": doc,
                    "provider_signer_id": signer, "pdf_s3_key": None, "pdf_sha256": None, "audit_s3_key": None,
                    "signed_at": None, "paper_signed_at": None, "paper_registered_by": None,
-                   "created_at": AGORA}
+                   "answers": answers.adapted, "created_at": AGORA}
             self.termos[cid] = row
             return dict(row)
+        if "SET status = 'REVOKED'" in sql:
+            autor, cid, clinic = params
+            t = self.termos.get(cid)
+            if not t or t["clinic_id"] != clinic or t["status"] not in ("SIGNED", "PAPER"):
+                return None
+            t.update(status="REVOKED", revoked_at=AGORA, revoked_by=autor)
+            return dict(t)
         if "INSERT INTO scheduler.patient_consents" in sql and "'PAPER'" in sql:
             clinic, pac, versao, data, autor = params
             if any(t["patient_id"] == pac and t["clinic_id"] == clinic and t["term_version"] == versao
@@ -268,7 +296,25 @@ class Base(unittest.TestCase):
         self.gravados[chave] = conteudo
         return "sha-" + str(len(conteudo))
 
-    def inicia(self, appt=APPT, dados=None):
+    def responde(self, appt=APPT, **over):
+        """As quatro telas da ficha, tudo "Não" salvo o que vier em `over`."""
+        r = {p.chave: False for p in anamnese.PERGUNTAS if p.tipo == anamnese.SIM_NAO}
+        r.update(queixa_principal="Pelos encravados", fototipo="III")
+        r.update(over)
+        saida = None
+        for tela in anamnese.TELAS:
+            chaves = [p.chave for p in anamnese.PERGUNTAS if p.tela == tela]
+            saida = consentimento.guarda_respostas(self.db, self.prov, CLINIC, FONE, appt, tela,
+                                                   {k: v for k, v in r.items() if k in chaves})
+        return saida["anamnesis"]
+
+    def inicia(self, appt=APPT, dados=None, responde=True):
+        if responde and not any(t["patient_id"] == self.db.agendamentos[appt]["patient_id"]
+                                and t["status"] in ("FILLING", "SIGNING") for t in self.db.termos.values()):
+            try:
+                self.responde(appt)
+            except consentimento.ConsentimentoInvalido:
+                pass  # não precisa assinar: o `inicia` de verdade responde NOT_REQUIRED
         return consentimento.inicia(self.db, self.prov, CLINIC, FONE, appt, dados or DADOS)["consent"]
 
 
@@ -277,16 +323,15 @@ class TestGatilho(Base):
         self.assertTrue(consentimento.precisa_assinar(self.db, CLINIC, self.db.agendamentos[APPT]))
 
     def test_signed_da_versao_vigente_nao_pede(self):
-        self.inicia()
+        cid = self.inicia()["id"]
         self.prov.status_remoto["env-1"] = ASSINADO
-        cid = next(iter(self.db.termos))
         consentimento.status(self.db, self.prov, CLINIC, FONE, cid)
         self.assertFalse(consentimento.precisa_assinar(self.db, CLINIC, self.db.agendamentos[APPT]))
 
     def test_signed_de_versao_antiga_pede(self):
-        self.inicia()
+        cid = self.inicia()["id"]
         self.prov.status_remoto["env-1"] = ASSINADO
-        consentimento.status(self.db, self.prov, CLINIC, FONE, next(iter(self.db.termos)))
+        consentimento.status(self.db, self.prov, CLINIC, FONE, cid)
         with mock.patch.dict(os.environ, {"TCLE_VERSION": "2027-01"}):
             self.assertTrue(consentimento.precisa_assinar(self.db, CLINIC, self.db.agendamentos[APPT]))
 
@@ -349,11 +394,19 @@ class TestInicia(Base):
         self.assertEqual(dados["clinica_nome"], "Essência")
         self.assertEqual(dados["cidade"], "São Paulo")
         self.assertEqual(dados["data"], "04/11/2026")
+        # A ficha vai no mesmo documento (PRD 038): uma variável por pergunta.
+        self.assertEqual((dados["gestante"], dados["fototipo"], dados["queixa_principal"], dados["hormonal_quais"]),
+                         ("Não", "III", "Pelos encravados", "-"))
+        self.assertEqual(len(dados), 17 + 50)
         self.assertEqual(signatario.cpf, CPF_OK)
         self.assertEqual(signatario.telefone, FONE)
         termo = self.db.termos[c["id"]]
         self.assertEqual(termo["signer_kind"], "PATIENT")
         self.assertEqual(termo["patient_snapshot"]["variaveis"]["cpf"], "529.982.247-25")
+        self.assertEqual(termo["patient_snapshot"]["respostas"]["fototipo"], "III")
+        self.assertEqual(termo["answers"]["gestante"], False)
+        # A linha FILLING virou histórico; só a SIGNING está em andamento.
+        self.assertEqual([t["status"] for t in self.db.termos.values()], [EXPIRADO, ASSINANDO])
         self.assertEqual(termo["responsible_snapshot"]["profissional_nome"], "Dra. Lia")
 
     def test_nao_exigido_quando_ja_assinou(self):
@@ -460,13 +513,15 @@ class TestInicia(Base):
 
     def test_corrida_cancela_o_envelope_novo(self):
         a = self.inicia()
-        # Simula o outro toque: o SIGNING já existe quando ESTE insere.
+        # Simula o outro toque: os dois leram a mesma linha FILLING; o outro
+        # já a promoveu a SIGNING quando ESTE insere.
         original = self.db.execute_query
+        self.db.termos["zzz"] = dict(self.db.termos[a["id"]], id="zzz", status="FILLING", provider=None)
 
         def sem_signing(sql, params=None):
-            if "status = 'SIGNING' LIMIT 1" in sql and not getattr(sem_signing, "ja", False):
+            if "status IN ('FILLING', 'SIGNING') LIMIT 1" in sql and not getattr(sem_signing, "ja", False):
                 sem_signing.ja = True
-                return []
+                return [dict(self.db.termos["zzz"])]
             return original(sql, params)
         self.db.execute_query = sem_signing
         b = self.inicia()
@@ -516,6 +571,7 @@ class TestStatus(Base):
         with self.assertRaises(consentimento.ConsentimentoInvalido):
             consentimento.simula(self.db, self.prov, CLINIC, FONE, c["id"])
         sim = Simulado()
+        self.responde(APPT_MENOR)
         c2 = consentimento.inicia(self.db, sim, CLINIC, FONE, APPT_MENOR,
                                   dict(DADOS, fullName="Bia Souza", birthDate="2010-06-01",
                                        guardian=RESPONSAVEL))["consent"]
@@ -602,6 +658,83 @@ class TestPainel(Base):
             consentimento.url_do_zip(self.db, CLINIC, c["id"])
         with self.assertRaises(consentimento.NaoEncontrado):
             consentimento.url_do_pdf(self.db, "outra-clinica", c["id"])
+
+
+class TestAnamnese(Base):
+    def test_grava_tela_a_tela_numa_linha_filling(self):
+        r1 = consentimento.guarda_respostas(self.db, self.prov, CLINIC, FONE, APPT, 1, {
+            **{p.chave: False for p in anamnese.PERGUNTAS if p.tela == 1 and p.tipo == anamnese.SIM_NAO},
+            "queixa_principal": "Virilha", "hormonal": True, "hormonal_quais": "SOP"})["anamnesis"]
+        self.assertEqual((r1["screen"], r1["complete"]), (1, False))
+        self.assertIn("hormonal_quais", r1["answered"])
+        linha = next(iter(self.db.termos.values()))
+        self.assertEqual((linha["status"], linha["answers"]["hormonal_quais"]), ("FILLING", "SOP"))
+        self.assertEqual(self.responde()["complete"], True)
+        self.assertEqual(len(self.db.termos), 1)
+        # A tela 1 regravada substitui as chaves dela: a condicional some.
+        self.assertNotIn("hormonal_quais", linha["answers"])
+        # Nada de prefill no iPad (decisão do André em 06/11): a ficha abre em branco.
+        self.assertNotIn("anamnesisPrefill", consentimento.resumo_para_o_ipad(self.db, CLINIC, self.db.agendamentos[APPT]))
+
+    def test_tela_invalida_aponta_o_campo(self):
+        with self.assertRaises(anamnese.AnamneseInvalida) as cm:
+            consentimento.guarda_respostas(self.db, self.prov, CLINIC, FONE, APPT, 2,
+                                           {"medicamento": True, "isotretinoina": False,
+                                            "fotossensibilizante": False, "minoxidil": False})
+        self.assertEqual(cm.exception.campo, "medicamento_quais")
+        with self.assertRaises(anamnese.AnamneseInvalida):
+            consentimento.guarda_respostas(self.db, self.prov, CLINIC, FONE, APPT, "x", {})
+
+    def test_inicia_sem_ficha_falha(self):
+        with self.assertRaises(consentimento.ConsentimentoInvalido) as cm:
+            self.inicia(responde=False)
+        self.assertIn("anamnese", str(cm.exception))
+        self.assertEqual(self.prov.criados, [])
+
+    def test_mudar_resposta_com_envelope_aberto_cancela_o_envelope(self):
+        a = self.inicia()
+        consentimento.guarda_respostas(self.db, self.prov, CLINIC, FONE, APPT, 3, {
+            **{p.chave: False for p in anamnese.PERGUNTAS if p.tela == 3 and p.tipo == anamnese.SIM_NAO},
+            "tatuagem": True})
+        self.assertEqual(self.db.termos[a["id"]]["status"], EXPIRADO)
+        self.assertEqual(self.prov.cancelados, ["env-1"])
+        b = self.inicia()
+        self.assertNotEqual(a["id"], b["id"])
+        self.assertEqual(self.prov.criados[-1][2]["tatuagem"], "Sim")
+
+    def test_mesmas_respostas_reaproveitam_o_envelope(self):
+        a = self.inicia()
+        b = self.inicia()
+        self.assertEqual(a["id"], b["id"])
+        self.assertEqual(len(self.prov.criados), 1)
+
+    def test_painel_traz_respostas_e_alertas(self):
+        self.responde(gestante=True, diabetes=True, diabetes_controlada=False)
+        c = self.inicia()
+        self.prov.status_remoto["env-1"] = ASSINADO
+        consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])
+        termo = consentimento.lista_do_paciente(self.db, CLINIC, PAC)[0]
+        self.assertTrue(termo["has_anamnesis"])
+        self.assertEqual(termo["answers"]["gestante"], True)
+        self.assertEqual([a["key"] for a in termo["alertas"]], ["gestante", "diabetes_nao_controlada"])
+
+    def test_renova_revoga_o_vigente_e_o_checkin_pede_de_novo(self):
+        c = self.inicia()
+        self.prov.status_remoto["env-1"] = ASSINADO
+        consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])
+        self.assertFalse(consentimento.precisa_assinar(self.db, CLINIC, self.db.agendamentos[APPT]))
+        r = consentimento.renova(self.db, CLINIC, c["id"], "Recepção")
+        self.assertEqual((r["status"], r["revoked_by"]), ("REVOKED", "Recepção"))
+        self.assertTrue(consentimento.precisa_assinar(self.db, CLINIC, self.db.agendamentos[APPT]))
+        with self.assertRaises(consentimento.NaoEncontrado):
+            consentimento.renova(self.db, CLINIC, c["id"], "Recepção")
+
+    def test_linha_antiga_sem_respostas_nao_quebra_o_painel(self):
+        self.db.termos["x"] = {"id": "x", "clinic_id": CLINIC, "patient_id": PAC, "status": "SIGNED",
+                               "term_version": "2026-11", "answers": None, "provider": "clicksign",
+                               "created_at": AGORA}
+        termo = consentimento.lista_do_paciente(self.db, CLINIC, PAC)[0]
+        self.assertEqual((termo["has_anamnesis"], termo["answers"], termo["alertas"]), (False, None, []))
 
 
 if __name__ == "__main__":

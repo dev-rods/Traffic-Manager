@@ -1,0 +1,9 @@
+{
+  "httpMethod": "POST",
+  "pathParameters": {
+    "clinicId": "clinicaessenciaestetica-9668a4",
+    "proxy": "appointments/d979abf9-8934-468b-a1d8-ee9779da9ff7/anamnesis"
+  },
+  "headers": { "x-api-key": "<BOOKING_INTAKE_API_KEY>" },
+  "body": "{\"phone\": \"5511999990000\", \"token\": \"<token da sessão>\", \"screen\": 1, \"answers\": {\"queixa_principal\": \"Pelos encravados nas axilas\", \"gestante\": false, \"amamentando\": false, \"hormonal\": true, \"hormonal_quais\": \"SOP\", \"doenca_pele\": false, \"autoimune\": false, \"imunossupressao\": false, \"epilepsia\": false, \"cancer\": false, \"diabetes\": false, \"alergia\": false}}"
+}

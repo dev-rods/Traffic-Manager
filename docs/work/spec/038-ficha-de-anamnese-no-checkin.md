@@ -52,7 +52,7 @@ Invariantes que a implementação preserva:
 | `scheduler/src/scripts/setup_database.py` | `answers JSONB`, status `FILLING`/`REVOKED` no CHECK, índice "em andamento" cobre `FILLING` |
 | `scheduler/src/services/consentimento.py` | `FILLING`, `guarda_respostas`, `inicia` exige ficha completa, snapshot e `_mesmos_dados` com respostas, variáveis da ficha, `renova`, `para_o_painel` com `answers`/`alertas`, `resumo_para_o_ipad` com `anamnesisPrefill` |
 | `scheduler/src/services/checkin.py` | Nada além do spread já existente (o `resumo` cresce sozinho) |
-| `scheduler/src/functions/public_booking/checkin.py` | Rota `PUT appointments/{id}/anamnesis`; `bootstrap` devolve o catálogo |
+| `scheduler/src/functions/public_booking/checkin.py` | Rota `POST appointments/{id}/anamnesis` (a rota coringa só aceita GET e POST); `bootstrap` devolve o catálogo |
 | `scheduler/src/functions/consent/router.py` | `POST {id}/renew`; `GET patients/{id}` já devolve o que `para_o_painel` montar |
 | `scheduler/src/functions/appointment/list.py` | LATERAL trata `FILLING` como pendente (já cai no `ELSE 'SIGNING'`); comentário |
 | `scheduler/src/providers/*` | Sem mudança de interface. `clicksign_provider` só recebe mais `dados` |
@@ -384,5 +384,5 @@ export type AnamneseRespostas = Record<string, boolean | string>
 
 ## Status
 
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 06/11/2026 (PR #171)
+- [x] Registrado em `TASKS_LOG.md`

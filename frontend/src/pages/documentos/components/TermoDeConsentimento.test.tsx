@@ -12,9 +12,11 @@ let consulta: {
   refetch: () => void
 } = { isLoading: false, isError: false, refetch: vi.fn() }
 
+const renovar = vi.fn()
 vi.mock('@/hooks/useConsents', () => ({
   useConsentsDoPaciente: () => consulta,
   useAbrirDocumentoDoTermo: () => ({ mutate: abrir, isPending: false, isError: false }),
+  useRenovarTermo: () => ({ mutate: renovar, isPending: false, isSuccess: false }),
 }))
 
 function termo(over: Partial<PatientConsent> = {}): PatientConsent {
@@ -33,6 +35,11 @@ function termo(over: Partial<PatientConsent> = {}): PatientConsent {
     has_zip: false,
     test: false,
     created_at: '2026-11-04T12:55:00Z',
+    answers: null,
+    alertas: [],
+    has_anamnesis: false,
+    revoked_at: null,
+    revoked_by: null,
     ...over,
   }
 }
@@ -59,8 +66,8 @@ describe('TermoDeConsentimento', () => {
   it('vazio ensina onde se assina', () => {
     consulta = { ...consulta, data: { consents: [], consent_enabled: true, term_version: '2026-11' } }
     render(<TermoDeConsentimento patientId="p1" />)
-    expect(screen.getByText('Nenhum termo assinado')).toBeInTheDocument()
-    expect(screen.getByText(/assina o termo no check-in/)).toBeInTheDocument()
+    expect(screen.getByText('Nenhum documento assinado')).toBeInTheDocument()
+    expect(screen.getByText(/ficha de anamnese no check-in do iPad/)).toBeInTheDocument()
   })
 
   it('lista as versões e abre o PDF por URL assinada', async () => {
@@ -101,5 +108,42 @@ describe('TermoDeConsentimento', () => {
     expect(zips[0]).toBeDisabled()
     await userEvent.click(zips[2])
     expect(abrir).toHaveBeenCalledWith({ consentId: 't3', kind: 'zip' })
+  })
+
+  it('documento com ficha: mostra as respostas por seção, os alertas e pede nova assinatura (PRD 038)', async () => {
+    consulta = {
+      ...consulta,
+      data: {
+        consents: [
+          termo({
+            term_version: '2026-12',
+            has_anamnesis: true,
+            answers: { queixa_principal: 'Virilha', gestante: true, hormonal: true, hormonal_quais: 'SOP', fototipo: 'III', fuma: false },
+            alertas: [{ key: 'gestante', label: 'Gestante' }],
+          }),
+          termo({ id: 't0', term_version: '2026-11', status: 'REVOKED', revoked_at: '2026-11-05T10:00:00Z', revoked_by: 'Joana' }),
+        ],
+        consent_enabled: true,
+        term_version: '2026-12',
+      },
+    }
+    window.confirm = vi.fn(() => true)
+    render(<TermoDeConsentimento patientId="p1" />)
+    expect(screen.getByText('NOVA ASSINATURA PEDIDA')).toBeInTheDocument()
+    expect(screen.getByText(/nova assinatura pedida em 05\/11\/2026 por Joana/)).toBeInTheDocument()
+    expect(screen.queryByTestId('respostas-da-anamnese')).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ver respostas' }))
+    const respostas = screen.getByTestId('respostas-da-anamnese')
+    expect(respostas).toHaveTextContent('Gestante')
+    expect(respostas).toHaveTextContent('Virilha')
+    expect(respostas).toHaveTextContent('SOP')
+    expect(respostas).toHaveTextContent('III - Pele clara média')
+    expect(respostas).toHaveTextContent('Autodeclarado pela paciente')
+    // Condicional cujo pai é "Não" não aparece.
+    expect(respostas).not.toHaveTextContent('Data da última dose')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Pedir nova assinatura' }))
+    expect(renovar).toHaveBeenCalledWith('t1')
   })
 })

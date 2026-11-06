@@ -20,7 +20,8 @@ from src.providers.signature_provider import (
 
 SIGNATARIA = Signatario(nome="Ana Souza", cpf="52998224725", nascimento=date(1990, 5, 1),
                         telefone="5511999990000", email="ana@example.com")
-PRAZO = datetime(2026, 11, 5, 12, 0, tzinfo=timezone(timedelta(hours=-3)))
+# Relativo a hoje: uma data fixa no passado faria `consulta` responder EXPIRED.
+PRAZO = (datetime.now(timezone(timedelta(hours=-3))) + timedelta(days=30)).replace(microsecond=0)
 
 
 def resposta(status=200, json=None, content=b""):
@@ -116,7 +117,7 @@ class TestCriaTermo(Base):
         self.assertEqual(env["type"], "envelopes")
         self.assertEqual(env["attributes"]["locale"], "pt-BR")
         self.assertTrue(env["attributes"]["auto_close"])
-        self.assertEqual(env["attributes"]["deadline_at"], "2026-11-05T12:00:00-03:00")
+        self.assertEqual(env["attributes"]["deadline_at"], PRAZO.isoformat())
         # Vencido sem assinatura vira "canceled", para "closed" significar assinado.
         self.assertEqual(env["attributes"]["deadline_partial_signature_action"], "canceled")
         self.assertIn("clinica/appt-1", env["attributes"]["name"])

@@ -254,11 +254,18 @@ export interface Appointment {
 export type ConsentStatus = 'SIGNED' | 'PAPER' | 'SIGNING'
 export type ConsentWaiveReason = 'SEM_CELULAR' | 'RECUSOU' | 'SISTEMA_FORA' | 'OUTRO'
 
+/** Um "Sim" da ficha de anamnese que muda a conduta (PRD 038). Exibido, nunca interpretado. */
+export interface AlertaDaAnamnese {
+  key: string
+  label: string
+}
+
 export interface PatientConsent {
   id: string
   appointment_id: string | null
   term_version: string
-  status: 'SIGNING' | 'SIGNED' | 'CANCELLED' | 'EXPIRED' | 'PAPER'
+  // FILLING (respondendo a ficha) não aparece na lista; REVOKED é "pediu nova assinatura".
+  status: 'FILLING' | 'SIGNING' | 'SIGNED' | 'CANCELLED' | 'EXPIRED' | 'PAPER' | 'REVOKED'
   signer_kind: 'PATIENT' | 'GUARDIAN'
   signer_name: string | null
   image_authorized: boolean | null
@@ -270,6 +277,12 @@ export interface PatientConsent {
   /** Assinado no sandbox ou no provedor simulado: sem valor jurídico. */
   test: boolean
   created_at: string
+  /** Ficha de anamnese no mesmo documento (PRD 038). null nas versões só com o termo. */
+  answers: Record<string, boolean | string> | null
+  alertas: AlertaDaAnamnese[]
+  has_anamnesis: boolean
+  revoked_at: string | null
+  revoked_by: string | null
 }
 
 export interface ListConsentsResponse {

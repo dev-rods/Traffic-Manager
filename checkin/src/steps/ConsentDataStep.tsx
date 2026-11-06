@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { TextField } from '@/components/ui/TextField'
 import { ErrorMessage, StepHeader } from '@/components/StepHeader'
-import { useStartConsent } from '@/hooks/useCheckin'
-import type { CheckinAppointment, Consent, ConsentPrefill, Session } from '@/types'
+import type { CheckinAppointment, ConsentPrefill, ConsentStartPayload } from '@/types'
 import { cx } from '@/utils/cx'
 import {
   digitsToIsoDate,
@@ -20,10 +19,10 @@ import {
 } from '@/utils/format'
 
 interface ConsentDataStepProps {
-  clinicId: string
-  session: Session
   appointment: CheckinAppointment
-  onStarted: (consent: Consent) => void
+  // Os dados conferidos seguem para a ficha de anamnese e só então para o
+  // backend (PRD 038): esta tela não chama a API.
+  onContinue: (payload: ConsentStartPayload) => void
   onRestart: () => void
 }
 
@@ -66,15 +65,8 @@ function hasTwoNames(name: string): boolean {
  * idade na data da sessão informa o responsável legal, que é quem assina.
  * Não há "pular": sem termo, só a recepção libera (dispensa pelo painel).
  */
-export function ConsentDataStep({
-  clinicId,
-  session,
-  appointment,
-  onStarted,
-  onRestart,
-}: ConsentDataStepProps) {
+export function ConsentDataStep({ appointment, onContinue, onRestart }: ConsentDataStepProps) {
   const prefill = appointment.consentPrefill
-  const start = useStartConsent(clinicId, session)
   const [patient, setPatient] = useState<Person>(() => fromPrefill(prefill))
   const [guardian, setGuardian] = useState<Person>(() => guardianFromPrefill(prefill))
   const [useKnownCpf, setUseKnownCpf] = useState(prefill?.cpfKnown ?? false)
@@ -126,29 +118,23 @@ export function ConsentDataStep({
   function submit() {
     setTouched(true)
     if (!valid || !birthIso || image === null) return
-    start.mutate(
-      {
-        appointmentId: appointment.id,
-        payload: {
-          fullName: patient.name.trim(),
-          cpf: useKnownCpf ? null : patient.cpf,
-          birthDate: birthIso,
-          email: patient.email.trim(),
-          imageAuthorized: image,
-          guardian:
-            minor && guardianBirthIso
-              ? {
-                  name: guardian.name.trim(),
-                  cpf: guardian.cpf,
-                  birthDate: guardianBirthIso,
-                  phone: toApiPhone(guardian.phone),
-                  email: guardian.email.trim(),
-                }
-              : null,
-        },
-      },
-      { onSuccess: onStarted }
-    )
+    onContinue({
+      fullName: patient.name.trim(),
+      cpf: useKnownCpf ? null : patient.cpf,
+      birthDate: birthIso,
+      email: patient.email.trim(),
+      imageAuthorized: image,
+      guardian:
+        minor && guardianBirthIso
+          ? {
+              name: guardian.name.trim(),
+              cpf: guardian.cpf,
+              birthDate: guardianBirthIso,
+              phone: toApiPhone(guardian.phone),
+              email: guardian.email.trim(),
+            }
+          : null,
+    })
   }
 
   return (
@@ -287,11 +273,9 @@ export function ConsentDataStep({
         </div>
       ) : null}
 
-      {start.isError ? <ErrorMessage>{start.error.message}</ErrorMessage> : null}
-
       <div className="mx-auto flex w-full max-w-sm flex-col gap-2">
-        <Button loading={start.isPending} disabled={touched && !valid} onClick={submit}>
-          Continuar para a assinatura
+        <Button disabled={touched && !valid} onClick={submit}>
+          Continuar para a ficha de anamnese
         </Button>
         <p className="text-center text-base text-ink-500">
           Dúvidas sobre o termo? Fale com a recepção antes de assinar.

@@ -31,7 +31,8 @@ export function ConsentSignStep({
   onRestart,
 }: ConsentSignStepProps) {
   const consentId = created.id ?? ''
-  const status = useConsentStatus(clinicId, session, consentId)
+  const [assinou, setAssinou] = useState(false)
+  const status = useConsentStatus(clinicId, session, consentId, assinou)
   const simulate = useSimulateConsent(clinicId, session)
   const consent = status.data ?? created
   const refetch = status.refetch
@@ -57,7 +58,10 @@ export function ConsentSignStep({
           created.signerId as string,
           created.widgetEndpoint,
           CONTAINER_ID,
-          () => void refetch(),
+          () => {
+            setAssinou(true)
+            void refetch()
+          },
           (h) => setHeight(h)
         )
         setWidget('ready')
@@ -119,9 +123,11 @@ export function ConsentSignStep({
         <div className="min-w-0">
           <h1 className="font-display text-2xl font-bold text-ink-900">Assine o termo</h1>
           <p className="text-base text-ink-600" aria-live="polite">
-            {useWidget && widget === 'ready'
-              ? 'Leia, digite o código do WhatsApp e assine na tela. Aguardando a assinatura…'
-              : 'Leia o termo, digite o código que chegou no seu WhatsApp e assine na tela.'}
+            {assinou
+              ? 'Assinatura recebida. Estamos registrando o documento…'
+              : useWidget && widget === 'ready'
+                ? 'Leia, digite o código do WhatsApp e assine na tela. Aguardando a assinatura…'
+                : 'Leia o termo, digite o código que chegou no seu WhatsApp e assine na tela.'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -194,6 +200,20 @@ export function ConsentSignStep({
                   Termo de consentimento
                 </span>
                 {toggle}
+              </div>
+            ) : null}
+            {assinou ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-center justify-center gap-4 border-b border-success-100 bg-success-100 px-6 py-5 text-lg text-success-600"
+              >
+                <Spinner size="md" className="text-success-500" />
+                <span>
+                  <strong className="font-bold">Assinatura recebida!</strong> Aguarde alguns
+                  segundos: estamos registrando o documento e já levamos você para conferir o
+                  agendamento e pagar.
+                </span>
               </div>
             ) : null}
             <div

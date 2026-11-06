@@ -1,4 +1,10 @@
-import { useConsentsDoPaciente, useAbrirDocumentoDoTermo } from '@/hooks/useConsents'
+import { Fragment, useState } from 'react'
+import {
+  useConsentsDoPaciente,
+  useAbrirDocumentoDoTermo,
+  useRenovarTermo,
+} from '@/hooks/useConsents'
+import { RespostasDaAnamnese } from './RespostasDaAnamnese'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { PatientConsent } from '@/types'
@@ -8,11 +14,13 @@ interface TermoDeConsentimentoProps {
 }
 
 const SITUACAO: Record<PatientConsent['status'], { label: string; cor: string }> = {
+  FILLING: { label: 'Respondendo', cor: 'bg-amber-100 text-amber-700' },
   SIGNED: { label: 'Assinado', cor: 'bg-emerald-100 text-emerald-700' },
   PAPER: { label: 'Em papel', cor: 'bg-emerald-100 text-emerald-700' },
   SIGNING: { label: 'Assinando', cor: 'bg-amber-100 text-amber-700' },
   CANCELLED: { label: 'Cancelado', cor: 'bg-gray-100 text-gray-600' },
   EXPIRED: { label: 'Expirado', cor: 'bg-gray-100 text-gray-600' },
+  REVOKED: { label: 'Nova assinatura pedida', cor: 'bg-gray-100 text-gray-600' },
 }
 
 function dataDe(iso: string | null): string {
@@ -30,6 +38,8 @@ function dataDe(iso: string | null): string {
 export function TermoDeConsentimento({ patientId }: TermoDeConsentimentoProps) {
   const { data, isLoading, isError, refetch } = useConsentsDoPaciente(patientId)
   const abrir = useAbrirDocumentoDoTermo()
+  const renovar = useRenovarTermo()
+  const [aberto, setAberto] = useState<string | null>(null)
 
   if (isLoading) {
     return (
@@ -45,10 +55,10 @@ export function TermoDeConsentimento({ patientId }: TermoDeConsentimentoProps) {
   if (data.consents.length === 0) {
     return (
       <EmptyState
-        title="Nenhum termo assinado"
+        title="Nenhum documento assinado"
         description={
           data.consent_enabled
-            ? 'A paciente assina o termo no check-in do iPad, na próxima sessão.'
+            ? 'A paciente assina o termo e responde a ficha de anamnese no check-in do iPad, na próxima sessão.'
             : 'A clínica ainda não tem uma versão do termo configurada.'
         }
       />
@@ -76,53 +86,108 @@ export function TermoDeConsentimento({ patientId }: TermoDeConsentimentoProps) {
             {data.consents.map((c) => {
               const situacao = SITUACAO[c.status]
               const assinadoEm = c.status === 'PAPER' ? c.paper_signed_at : c.signed_at
+              const vigente =
+                (c.status === 'SIGNED' || c.status === 'PAPER') &&
+                c.term_version === data.term_version
               return (
-                <tr key={c.id} className="align-top">
-                  <td className="py-2.5 pr-3 text-gray-800">
-                    {c.term_version}
-                    {c.term_version === data.term_version && (
-                      <span className="ml-1.5 text-[10px] font-semibold text-gray-400">VIGENTE</span>
-                    )}
-                  </td>
-                  <td className="py-2.5 pr-3">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${situacao.cor}`}>
-                      {situacao.label.toUpperCase()}
-                    </span>
-                    {c.test && (
-                      <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700" title="Assinado em ambiente de teste, sem valor jurídico">
-                        TESTE
+                <Fragment key={c.id}>
+                  <tr className="align-top">
+                    <td className="py-2.5 pr-3 text-gray-800">
+                      {c.term_version}
+                      {c.term_version === data.term_version && (
+                        <span className="ml-1.5 text-[10px] font-semibold text-gray-400">
+                          VIGENTE
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${situacao.cor}`}
+                      >
+                        {situacao.label.toUpperCase()}
                       </span>
-                    )}
-                  </td>
-                  <td className="py-2.5 pr-3 text-gray-800">
-                    {c.signer_name ?? (c.status === 'PAPER' ? 'Paciente' : '-')}
-                    {c.signer_kind === 'GUARDIAN' && (
-                      <span className="block text-xs text-gray-400">responsável legal</span>
-                    )}
-                  </td>
-                  <td className="py-2.5 pr-3 text-gray-800">{dataDe(assinadoEm ?? c.created_at)}</td>
-                  <td className="py-2.5 pr-3 text-gray-600">
-                    {c.status === 'PAPER' ? c.paper_registered_by ?? '-' : 'iPad (ClickSign)'}
-                  </td>
-                  <td className="py-2.5 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      disabled={!c.has_pdf || abrir.isPending}
-                      onClick={() => abrir.mutate({ consentId: c.id, kind: 'pdf' })}
-                      className="text-xs font-semibold text-brand-600 hover:text-brand-700 disabled:text-gray-300 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      Abrir PDF
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!c.has_zip || abrir.isPending}
-                      onClick={() => abrir.mutate({ consentId: c.id, kind: 'zip' })}
-                      className="ml-3 text-xs font-semibold text-brand-600 hover:text-brand-700 disabled:text-gray-300 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      Baixar zip
-                    </button>
-                  </td>
-                </tr>
+                      {c.test && (
+                        <span
+                          className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700"
+                          title="Assinado em ambiente de teste, sem valor jurídico"
+                        >
+                          TESTE
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3 text-gray-800">
+                      {c.signer_name ?? (c.status === 'PAPER' ? 'Paciente' : '-')}
+                      {c.signer_kind === 'GUARDIAN' && (
+                        <span className="block text-xs text-gray-400">responsável legal</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3 text-gray-800">
+                      {dataDe(assinadoEm ?? c.created_at)}
+                      {c.status === 'REVOKED' && c.revoked_at && (
+                        <span className="block text-xs text-gray-400">
+                          nova assinatura pedida em {dataDe(c.revoked_at)}
+                          {c.revoked_by ? ` por ${c.revoked_by}` : ''}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-3 text-gray-600">
+                      {c.status === 'PAPER' ? (c.paper_registered_by ?? '-') : 'iPad (ClickSign)'}
+                    </td>
+                    <td className="py-2.5 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        disabled={!c.has_pdf || abrir.isPending}
+                        onClick={() => abrir.mutate({ consentId: c.id, kind: 'pdf' })}
+                        className="text-xs font-semibold text-brand-600 hover:text-brand-700 disabled:text-gray-300 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        Abrir PDF
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!c.has_zip || abrir.isPending}
+                        onClick={() => abrir.mutate({ consentId: c.id, kind: 'zip' })}
+                        className="ml-3 text-xs font-semibold text-brand-600 hover:text-brand-700 disabled:text-gray-300 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        Baixar zip
+                      </button>
+                      {c.has_anamnesis && (
+                        <button
+                          type="button"
+                          aria-expanded={aberto === c.id}
+                          onClick={() => setAberto(aberto === c.id ? null : c.id)}
+                          className="ml-3 text-xs font-semibold text-brand-600 hover:text-brand-700 cursor-pointer"
+                        >
+                          {aberto === c.id ? 'Ocultar respostas' : 'Ver respostas'}
+                        </button>
+                      )}
+                      {vigente && (
+                        <button
+                          type="button"
+                          disabled={renovar.isPending}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                'Pedir termo e ficha de novo no próximo check-in desta paciente?'
+                              )
+                            ) {
+                              renovar.mutate(c.id)
+                            }
+                          }}
+                          className="ml-3 text-xs font-semibold text-gray-500 hover:text-gray-700 disabled:text-gray-300 cursor-pointer"
+                        >
+                          Pedir nova assinatura
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {aberto === c.id && c.has_anamnesis && (
+                    <tr key={`${c.id}-respostas`}>
+                      <td colSpan={6} className="bg-gray-50/60 px-3 py-3">
+                        <RespostasDaAnamnese consent={c} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               )
             })}
           </tbody>

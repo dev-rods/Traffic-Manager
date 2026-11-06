@@ -9,6 +9,7 @@ vi.mock('@/hooks/useConsents', () => ({
   useConsentsDoPaciente: () => ({ data: undefined, isLoading: false }),
   useDispensarTermo: () => ({ mutate: vi.fn(), isPending: false }),
   useRegistrarPapel: () => ({ mutate: vi.fn(), isPending: false }),
+  useRenovarTermo: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
   useAbrirDocumentoDoTermo: () => ({ abrir: vi.fn(), abrindo: null }),
 }))
 vi.mock('@/hooks/useCaixa', () => ({

@@ -36,8 +36,13 @@ pode ser afetado por mudanças daqui.
   escolher o pagamento, quem ainda não assinou a versão vigente do TCLE
   passa por `ConsentDataStep` (confere nome, CPF, nascimento, e-mail, uso de
   imagem; menor de idade informa o responsável, que é quem assina) e
+  `AnamneseStep` (PRD 038: 4 telas da ficha de anamnese, dirigidas pelo
+  catálogo `anamnesis` que vem no bootstrap; cada "Continuar" grava a tela no
+  backend, e "Recomeçar" volta com o `anamnesisPrefill`), `ConsentStartStep`
+  ("Preparando o documento": cria o envelope com os dados conferidos) e
   `ConsentSignStep` (widget embedded da ClickSign, `lib/clicksignWidget.ts`:
-  código no WhatsApp e assinatura manuscrita na tela). Quem decide "precisa
+  código no WhatsApp e assinatura manuscrita na tela). Termo e ficha são um
+  documento só, compilado no modelo da ClickSign. Quem decide "precisa
   assinar" é o backend (`consentRequired` na resposta de `confirm`); o iPad
   nunca pula o termo, só a recepção dispensa pelo painel. O "assinado" vem do
   backend (webhook ou polling de 3 s), nunca do evento do widget. Em dev sem

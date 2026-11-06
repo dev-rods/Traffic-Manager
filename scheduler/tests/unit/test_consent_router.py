@@ -48,6 +48,7 @@ class TestPermissoes(Base):
             ("POST", f"appointments/{APPT}/waive", "agenda.escrever", "dispensa", {"reason": "RECUSOU"}),
             ("GET", f"{TERMO}/pdf-url", "prontuario.ler", "url_do_pdf", {"url": "u", "expiresInSeconds": 300}),
             ("GET", f"{TERMO}/zip-url", "prontuario.ler", "url_do_zip", {"url": "u", "expiresInSeconds": 300}),
+            ("POST", f"{TERMO}/renew", "agenda.escrever", "renova", {"id": TERMO, "status": "REVOKED"}),
         ]
         for metodo, proxy, permissao, funcao, retorno in casos:
             with self.subTest(proxy):

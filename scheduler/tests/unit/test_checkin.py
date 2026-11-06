@@ -464,6 +464,24 @@ class TestHandler(unittest.TestCase):
             s, _ = self.chama("POST", f"appointments/{APPT}/payments", {"phone": FONE, "token": "ok", "method": "PIX"})
         self.assertEqual(s, 503)
 
+    def test_anamnese_grava_tela_e_erro_aponta_o_campo(self):
+        """PRD 038: POST appointments/{id}/anamnesis delega ao serviço; o 400
+        de campo leva `field` para o iPad marcar a pergunta."""
+        from src.services.anamnese import AnamneseInvalida
+        with mock.patch(f"{self.modulo}.provedor_de_assinatura", return_value=object()), \
+                mock.patch("src.services.consentimento.guarda_respostas",
+                           return_value={"anamnesis": {"screen": 1, "answered": ["gestante"], "complete": False}}) as g:
+            s, b = self.chama("POST", f"appointments/{APPT}/anamnesis",
+                              {"phone": FONE, "token": "ok", "screen": 1, "answers": {"gestante": False}})
+        self.assertEqual((s, b["anamnesis"]["screen"]), (200, 1))
+        self.assertEqual(g.call_args[0][5:], (1, {"gestante": False}))
+        with mock.patch(f"{self.modulo}.provedor_de_assinatura", return_value=object()), \
+                mock.patch("src.services.consentimento.guarda_respostas",
+                           side_effect=AnamneseInvalida("Responda esta pergunta.", "gestante")):
+            s, b = self.chama("POST", f"appointments/{APPT}/anamnesis",
+                              {"phone": FONE, "token": "ok", "screen": 1, "answers": {}})
+        self.assertEqual((s, b["field"]), (400, "gestante"))
+
     def test_baixa_em_dinheiro_nao_existe_na_rota_publica(self):
         """Mudou para o painel (functions/caixa), com a permissão da recepção."""
         self.assertEqual(self.chama("POST", f"payments/{uuid.uuid4()}/cash-received", {})[0], 404)

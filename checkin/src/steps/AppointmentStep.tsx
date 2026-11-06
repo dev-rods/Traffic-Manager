@@ -9,9 +9,15 @@ import { capitalize, formatCurrencyBRL, formatDateLong, isToday } from '@/utils/
 interface AppointmentStepProps {
   clinicId: string
   session: Session
-  // O backend responde se o CPF do pagador é conhecido e se o termo de
-  // consentimento é exigido nesta sessão (PRD 036).
-  onConfirmed: (appointment: CheckinAppointment, confirmed: ConfirmResponse) => void
+  // Duas fases, no mesmo componente para a lista e a conferência ficarem
+  // juntas. Sem `appointment`: lista e escolha, e `onChosen` entrega o
+  // escolhido (o termo e a ficha vêm antes da conferência). Com
+  // `appointment`: a conferência de áreas, preço e horário, e o
+  // "confirmar" grava o check-in. O backend responde se o CPF do pagador é
+  // conhecido (PRD 036).
+  appointment?: CheckinAppointment
+  onChosen?: (appointment: CheckinAppointment) => void
+  onConfirmed?: (appointment: CheckinAppointment, confirmed: ConfirmResponse) => void
   // Agendamento já pago: não há o que confirmar nem cobrar (PRD 028, M1).
   onAlreadyPaid: (appointment: CheckinAppointment) => void
   onRestart: () => void
@@ -62,23 +68,41 @@ function Situacao({ appointment: a }: { appointment: CheckinAppointment }) {
 export function AppointmentStep({
   clinicId,
   session,
+  appointment: preset,
+  onChosen,
   onConfirmed,
   onAlreadyPaid,
   onRestart,
 }: AppointmentStepProps) {
-  const appointments = useAppointments(clinicId, session)
+  const appointments = useAppointments(clinicId, session, !preset)
   const confirm = useConfirmAppointment(clinicId, session)
   const [chosenId, setChosenId] = useState<string | null>(null)
 
   const list = appointments.data ?? []
   // Um agendamento só: direto para ele. Mais de um (mãe e filha no mesmo
   // número, ou duas sessões marcadas): a pessoa escolhe.
-  const chosen = list.length === 1 ? list[0] : list.find((a) => a.id === chosenId)
+  const chosen = preset ?? (list.length === 1 ? list[0] : list.find((a) => a.id === chosenId))
   const chosenPaid = chosen?.payment?.status === 'PAID' ? chosen : null
+  const chosenToHandOff = !preset && chosen && !chosenPaid ? chosen : null
 
   useEffect(() => {
     if (chosenPaid) onAlreadyPaid(chosenPaid)
   }, [chosenPaid, onAlreadyPaid])
+
+  useEffect(() => {
+    if (chosenToHandOff) onChosen?.(chosenToHandOff)
+  }, [chosenToHandOff, onChosen])
+
+  if (preset) {
+    return (
+      <Conferencia
+        appointment={preset}
+        confirming={confirm.isPending}
+        error={confirm.isError ? confirm.error.message : null}
+        onConfirm={() => confirm.mutate(preset.id, { onSuccess: (r) => onConfirmed?.(preset, r) })}
+      />
+    )
+  }
 
   if (appointments.isLoading) {
     return (
@@ -112,14 +136,15 @@ export function AppointmentStep({
     )
   }
 
-  if (!chosen || chosenPaid) {
-    if (chosenPaid) {
-      return (
-        <div className="flex flex-1 items-center justify-center text-ink-500">
-          <Spinner size="lg" />
-        </div>
-      )
-    }
+  if (chosen) {
+    // Escolhido (ou único): a página leva ao termo ou à conferência.
+    return (
+      <div className="flex flex-1 items-center justify-center text-ink-500">
+        <Spinner size="lg" />
+      </div>
+    )
+  }
+  {
     return (
       <div className="flex flex-col gap-6">
         <StepHeader title="Qual é o seu agendamento?" />
@@ -151,16 +176,20 @@ export function AppointmentStep({
       </div>
     )
   }
+}
 
+function Conferencia({
+  appointment: chosen,
+  confirming,
+  error,
+  onConfirm,
+}: {
+  appointment: CheckinAppointment
+  confirming: boolean
+  error: string | null
+  onConfirm: () => void
+}) {
   const firstName = chosen.fullName?.trim().split(/\s+/)[0]
-
-  function handleConfirm() {
-    if (!chosen) return
-    confirm.mutate(chosen.id, {
-      onSuccess: (r) => onConfirmed(chosen, r),
-    })
-  }
-
   return (
     <div className="flex flex-col gap-8">
       <StepHeader title={firstName ? `Olá, ${firstName}!` : 'Olá!'}>
@@ -172,20 +201,14 @@ export function AppointmentStep({
           Seu check-in já foi feito às {horaDe(chosen.checkedInAt)}. Falta o pagamento.
         </p>
       ) : null}
-      {confirm.isError ? <ErrorMessage>{confirm.error.message}</ErrorMessage> : null}
+      {error ? <ErrorMessage>{error}</ErrorMessage> : null}
       <div className="flex flex-col gap-2">
-        <Button loading={confirm.isPending} onClick={handleConfirm}>
+        <Button loading={confirming} onClick={onConfirm}>
           {chosen.checkedInAt ? 'Continuar para o pagamento' : 'Está certo, confirmar'}
         </Button>
-        {list.length > 1 ? (
-          <Button variant="ghost" onClick={() => setChosenId(null)}>
-            Escolher outro agendamento
-          </Button>
-        ) : (
-          <p className="text-center text-base text-ink-500">
-            Algo errado? Fale com a recepção antes de pagar.
-          </p>
-        )}
+        <p className="text-center text-base text-ink-500">
+          Algo errado? Fale com a recepção antes de pagar.
+        </p>
       </div>
     </div>
   )

@@ -7,7 +7,7 @@ type Documento = 'historico' | 'termo'
 
 const ABAS: { id: Documento; label: string }[] = [
   { id: 'historico', label: 'Histórico por sessão' },
-  { id: 'termo', label: 'Termo de consentimento' },
+  { id: 'termo', label: 'Termo e anamnese' },
 ]
 
 /**

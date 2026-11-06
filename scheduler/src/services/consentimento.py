@@ -15,8 +15,13 @@ Regras:
   ganha o que estava vazio (mesma regra de `checkin._guarda_cpf_no_cadastro`).
 - Menor de idade NA DATA DA SESSÃO assina pelo responsável legal
   (`signer_kind = GUARDIAN`); o responsável é anexo do termo, não cadastro.
-- Um SIGNING por paciente (índice parcial). Dentro de 24 h é reaproveitado,
-  para o widget que caiu não gerar outro envelope; mais velho é descartado.
+- Um "em andamento" (FILLING ou SIGNING) por paciente (índice parcial).
+  SIGNING de até 24 h é reaproveitado, para o widget que caiu não gerar outro
+  envelope; mais velho é descartado.
+- Ficha de anamnese (PRD 038): as respostas chegam tela a tela
+  (`guarda_respostas`, status FILLING) e vão para o MESMO documento do termo,
+  pelo modelo compilado. `inicia` exige a ficha completa. Mudar uma resposta
+  depois de abrir o envelope invalida o envelope.
 - O provedor nunca recebe `db`; aqui nunca se fala HTTP.
 """
 import json
@@ -33,7 +38,8 @@ from src.providers.signature_provider import (
     ASSINADO, ASSINANDO, CANCELADO, EXPIRADO, PAPEL, ErroDoProvedor, Signatario, SignatureProvider,
     termo_de_teste,
 )
-from src.services import documentos_s3, relogio
+from src.services import anamnese, documentos_s3, relogio
+from src.services.anamnese import AnamneseInvalida  # noqa: F401  (re-exportado para o handler)
 from src.services.idade import e_menor_de_idade, para_data
 from src.utils.cadastro import cpf_valido, normaliza_cpf, normaliza_email
 from src.utils.phone import is_valid_phone, normalize_phone
@@ -43,6 +49,8 @@ logger = logging.getLogger(__name__)
 PACIENTE = "PATIENT"
 RESPONSAVEL = "GUARDIAN"
 NAO_EXIGIDO = "NOT_REQUIRED"
+RESPONDENDO = "FILLING"
+REVOGADO = "REVOKED"
 MOTIVOS_DE_DISPENSA = ("SEM_CELULAR", "RECUSOU", "SISTEMA_FORA", "OUTRO")
 REAPROVEITA_SIGNING_ATE = timedelta(hours=24)
 PRAZO_DO_ENVELOPE = timedelta(days=2)
@@ -205,6 +213,16 @@ def resumo_para_o_ipad(db, clinic_id: str, appt: Dict) -> Dict[str, Any]:
     }
 
 
+def _respostas_de(row: Dict) -> Optional[Dict[str, Any]]:
+    valor = row.get("answers")
+    if isinstance(valor, str):
+        try:
+            valor = json.loads(valor)
+        except ValueError:
+            return None
+    return valor if isinstance(valor, dict) else None
+
+
 # -- Criação ---------------------------------------------------------------------
 
 def _para_tela(row: Dict, provider: Optional[SignatureProvider]) -> Dict[str, Any]:
@@ -242,10 +260,11 @@ def _pessoa(dados: Dict, rotulo: str, exige_telefone: bool) -> Dict[str, Any]:
     return pessoa
 
 
-def _signing_da_paciente(db, clinic_id: str, patient_id: str) -> Optional[Dict]:
+def _em_andamento(db, clinic_id: str, patient_id: str) -> Optional[Dict]:
+    """A linha FILLING ou SIGNING desta paciente (há no máximo uma)."""
     rows = db.execute_query(
         "SELECT * FROM scheduler.patient_consents "
-        "WHERE clinic_id = %s AND patient_id = %s::uuid AND status = 'SIGNING' LIMIT 1",
+        "WHERE clinic_id = %s AND patient_id = %s::uuid AND status IN ('FILLING', 'SIGNING') LIMIT 1",
         (clinic_id, str(patient_id)),
     )
     return rows[0] if rows else None
@@ -259,10 +278,12 @@ def _pessoa_do_snapshot(p: Optional[Dict]) -> Optional[tuple]:
             (p.get("email") or "").lower(), p.get("telefone"))
 
 
-def _mesmos_dados(existente: Dict, paciente: Dict, responsavel: Optional[Dict], autoriza_imagem: bool) -> bool:
+def _mesmos_dados(existente: Dict, paciente: Dict, responsavel: Optional[Dict], autoriza_imagem: bool,
+                  respostas: Optional[Dict] = None) -> bool:
     """O termo em andamento só serve se foi gerado com os mesmos dados que a
     pessoa acabou de confirmar: o PDF já está pronto na ClickSign com o nome,
-    o CPF e a autorização de imagem de então. Editou algo, é outro termo."""
+    o CPF, a autorização de imagem e as respostas da anamnese de então.
+    Editou algo, é outro termo."""
     snapshot = existente.get("patient_snapshot") or {}
     if isinstance(snapshot, str):
         try:
@@ -271,13 +292,14 @@ def _mesmos_dados(existente: Dict, paciente: Dict, responsavel: Optional[Dict], 
             return False
     return (_pessoa_do_snapshot(snapshot) == _pessoa_do_snapshot(paciente)
             and _pessoa_do_snapshot(snapshot.get("responsavel")) == _pessoa_do_snapshot(responsavel)
-            and bool(existente.get("image_authorized")) == bool(autoriza_imagem))
+            and bool(existente.get("image_authorized")) == bool(autoriza_imagem)
+            and (snapshot.get("respostas") or {}) == (respostas or {}))
 
 
 def _marca(db, consent_id: str, status: str) -> None:
     db.execute_write(
         "UPDATE scheduler.patient_consents SET status = %s, updated_at = NOW() "
-        "WHERE id = %s::uuid AND status = 'SIGNING'",
+        "WHERE id = %s::uuid AND status IN ('FILLING', 'SIGNING')",
         (status, str(consent_id)),
     )
 
@@ -337,10 +359,12 @@ def _guarda_responsavel(db, patient_id: str, resp: Dict) -> None:
 
 
 def _dados_do_modelo(paciente: Dict, responsavel: Optional[Dict], autoriza_imagem: bool,
-                     clinica: Dict, hoje: date) -> Dict[str, str]:
-    """As variáveis do modelo .docx (docs/work/assets/036-tcle/gera_modelo.js)."""
+                     clinica: Dict, hoje: date, respostas: Optional[Dict] = None) -> Dict[str, str]:
+    """As variáveis do modelo compilado (docs/work/assets/038-modelo-compilado/
+    gera_modelo.js): as 17 do termo mais as 50 da ficha de anamnese. As do
+    termo têm precedência; nenhuma chave colide."""
     signatario = responsavel or paciente
-    return {
+    do_termo = {
         "nome_completo": paciente["nome"],
         "cpf": _cpf_formatado(paciente["cpf"]),
         "data_nascimento": _br(paciente["nascimento"]),
@@ -359,6 +383,67 @@ def _dados_do_modelo(paciente: Dict, responsavel: Optional[Dict], autoriza_image
         "cidade": (clinica.get("cidade") or "").strip(),
         "data": hoje.strftime("%d/%m/%Y"),
     }
+    return dict(anamnese.variaveis(respostas or {}), **do_termo)
+
+
+def guarda_respostas(db, provider: SignatureProvider, clinic_id: str, phone: str, appointment_id: str,
+                     tela: Any, respostas: Any) -> Dict[str, Any]:
+    """Uma tela da ficha de anamnese (PRD 038). Grava numa linha FILLING da
+    paciente, criando-a se não houver. Se já havia um envelope aberto
+    (SIGNING), ele é descartado: o PDF de lá tem as respostas antigas."""
+    from src.services import checkin
+    appt = checkin._do_numero(db, clinic_id, phone, appointment_id)
+    patient_id = str(appt["patient_id"])
+    if not precisa_assinar(db, clinic_id, appt):
+        raise ConsentimentoInvalido("Esta paciente não precisa assinar o termo nesta sessão.")
+    try:
+        n = int(tela)
+    except (TypeError, ValueError):
+        raise AnamneseInvalida("Tela inválida.", "screen")
+    limpas = anamnese.valida_tela(n, respostas if isinstance(respostas, dict) else {})
+
+    existente = _em_andamento(db, clinic_id, patient_id)
+    acumuladas = {}  # type: Dict[str, Any]
+    if existente and existente.get("term_version") == versao():
+        acumuladas = _respostas_de(existente) or {}
+    # As chaves desta tela são substituídas por inteiro: uma condicional que
+    # deixou de valer sai, em vez de ficar fantasma no PDF.
+    for chave in [p.chave for p in anamnese.PERGUNTAS if p.tela == n]:
+        acumuladas.pop(chave, None)
+    acumuladas.update(limpas)
+
+    if existente and (existente["status"] == ASSINANDO or existente.get("term_version") != versao()):
+        _descarta_signing(db, provider, existente, "nova resposta")
+        existente = None
+    if existente:
+        db.execute_write(
+            "UPDATE scheduler.patient_consents SET answers = %s, appointment_id = %s::uuid, updated_at = NOW() "
+            "WHERE id = %s::uuid AND status = 'FILLING'",
+            (Json(acumuladas), appointment_id, str(existente["id"])),
+        )
+    else:
+        try:
+            db.execute_write(
+                """
+                INSERT INTO scheduler.patient_consents
+                    (clinic_id, patient_id, appointment_id, term_version, status, signer_kind, answers)
+                VALUES (%s, %s::uuid, %s::uuid, %s, 'FILLING', 'PATIENT', %s)
+                """,
+                (clinic_id, patient_id, appointment_id, versao(), Json(acumuladas)),
+            )
+        except psycopg2.IntegrityError:
+            # Dois toques ao mesmo tempo: o outro criou a linha. Regrava nela.
+            outra = _em_andamento(db, clinic_id, patient_id)
+            if not outra:
+                raise
+            db.execute_write(
+                "UPDATE scheduler.patient_consents SET answers = %s, updated_at = NOW() "
+                "WHERE id = %s::uuid AND status = 'FILLING'",
+                (Json(acumuladas), str(outra["id"])),
+            )
+    logger.info("[Anamnese] tela {} de {} gravada ({} chaves) {} {}".format(
+        n, len(anamnese.TELAS), len(limpas), clinic_id, appointment_id))
+    return {"anamnesis": {"screen": n, "answered": sorted(acumuladas), "complete": anamnese.completa(acumuladas)}}
 
 
 def inicia(db, provider: SignatureProvider, clinic_id: str, phone: str, appointment_id: str,
@@ -399,14 +484,21 @@ def inicia(db, provider: SignatureProvider, clinic_id: str, phone: str, appointm
             raise ConsentimentoInvalido("O CPF do responsável não pode ser o mesmo da paciente.")
     signer_kind = RESPONSAVEL if menor else PACIENTE
 
-    existente = _signing_da_paciente(db, clinic_id, patient_id)
+    existente = _em_andamento(db, clinic_id, patient_id)
+    # A ficha vem da linha em andamento (FILLING ou SIGNING), nunca do body.
+    respostas = _respostas_de(existente) if existente and existente.get("term_version") == versao() else None
+    if not anamnese.completa(respostas):
+        raise ConsentimentoInvalido("Responda a ficha de anamnese antes de assinar.")
+    respostas = anamnese.valida_completa(respostas)
     if existente:
         criado = existente.get("created_at")
         recente = isinstance(criado, datetime) and (_agora(criado.tzinfo) - criado) <= REAPROVEITA_SIGNING_ATE
-        if (recente and existente.get("term_version") == versao() and existente.get("signer_kind") == signer_kind
-                and existente.get("provider") == provider.nome
-                and _mesmos_dados(existente, paciente, responsavel, autoriza_imagem)):
+        if (existente["status"] == ASSINANDO and recente and existente.get("term_version") == versao()
+                and existente.get("signer_kind") == signer_kind and existente.get("provider") == provider.nome
+                and _mesmos_dados(existente, paciente, responsavel, autoriza_imagem, respostas)):
             return {"consent": _para_tela(existente, provider)}
+        # FILLING vira histórico (EXPIRED) e a linha SIGNING nova leva as
+        # respostas; SIGNING velho ou diferente cancela o envelope.
         _descarta_signing(db, provider, existente, "reinício" if recente else "antigo")
 
     _guarda_no_cadastro(db, patient_id, appointment_id, pac, appt, paciente)
@@ -415,7 +507,7 @@ def inicia(db, provider: SignatureProvider, clinic_id: str, phone: str, appointm
 
     tz = clinica.get("timezone")
     agora = relogio.agora_na_clinica(tz)
-    variaveis = _dados_do_modelo(paciente, responsavel, autoriza_imagem, clinica, agora.date())
+    variaveis = _dados_do_modelo(paciente, responsavel, autoriza_imagem, clinica, agora.date(), respostas)
     signatario_dict = responsavel or paciente
     signatario = Signatario(nome=signatario_dict["nome"], cpf=signatario_dict["cpf"],
                             nascimento=signatario_dict["nascimento"], telefone=signatario_dict["telefone"],
@@ -434,6 +526,7 @@ def inicia(db, provider: SignatureProvider, clinic_id: str, phone: str, appointm
             "nascimento": responsavel["nascimento"].isoformat(),
             "telefone": responsavel["telefone"], "email": responsavel["email"]},
         "variaveis": variaveis,
+        "respostas": respostas,
     }
     responsavel_tecnico = {
         "clinica": variaveis["clinica_nome"], "cidade": variaveis["cidade"],
@@ -448,23 +541,23 @@ def inicia(db, provider: SignatureProvider, clinic_id: str, phone: str, appointm
                 (id, clinic_id, patient_id, appointment_id, term_version, status, signer_kind,
                  signer_name, signer_cpf, signer_birth_date, signer_phone, signer_email,
                  patient_snapshot, image_authorized, responsible_snapshot,
-                 provider, provider_envelope_id, provider_document_id, provider_signer_id)
+                 provider, provider_envelope_id, provider_document_id, provider_signer_id, answers)
             VALUES (%s::uuid, %s, %s::uuid, %s::uuid, %s, 'SIGNING', %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (consent_id, clinic_id, patient_id, appointment_id, versao(), signer_kind,
              signatario.nome, signatario.cpf, signatario.nascimento, signatario.telefone, signatario.email,
              Json(snapshot), autoriza_imagem, Json(responsavel_tecnico),
-             provider.nome, termo.envelope_id, termo.document_id, termo.signer_id),
+             provider.nome, termo.envelope_id, termo.document_id, termo.signer_id, Json(respostas)),
         )
     except psycopg2.IntegrityError:
         # Dois toques ao mesmo tempo: o outro já gravou. Este envelope não
         # pode ficar vivo sem registro nosso.
         logger.warning("[Consentimento] termo concorrente para {} em {}".format(patient_id, clinic_id))
         _cancela_orfao(provider, termo.envelope_id, referencia)
-        existente = _signing_da_paciente(db, clinic_id, patient_id)
-        if not existente:
+        existente = _em_andamento(db, clinic_id, patient_id)
+        if not existente or existente["status"] != ASSINANDO:
             raise ConsentimentoInvalido("Não conseguimos preparar o termo. Tente de novo.")
         return {"consent": _para_tela(existente, provider)}
     except Exception:
@@ -738,7 +831,32 @@ def para_o_painel(row: Dict) -> Dict[str, Any]:
         "has_zip": bool(row.get("audit_s3_key")),
         "test": termo_de_teste(row.get("provider")) if row.get("provider") else False,
         "created_at": _iso(row.get("created_at")),
+        # Ficha de anamnese (PRD 038). Só chega ao painel por rota com
+        # `prontuario.ler`; alertas são exibidos, nunca interpretados.
+        "answers": _respostas_de(row),
+        "alertas": anamnese.alertas(_respostas_de(row)),
+        "has_anamnesis": _respostas_de(row) is not None,
+        "revoked_at": _iso(row.get("revoked_at")),
+        "revoked_by": row.get("revoked_by"),
     }
+
+
+def renova(db, clinic_id: str, consent_id: str, autor: str) -> Dict[str, Any]:
+    """"Pedir nova assinatura" (PRD 038): o documento vigente vira REVOKED,
+    sai do índice de vigente e o próximo check-in pede tudo de novo."""
+    row = db.execute_write_returning(
+        """
+        UPDATE scheduler.patient_consents
+           SET status = 'REVOKED', revoked_at = NOW(), revoked_by = %s, updated_at = NOW()
+         WHERE id = %s::uuid AND clinic_id = %s AND status IN ('SIGNED', 'PAPER')
+        RETURNING *
+        """,
+        ((autor or "admin")[:120], str(consent_id), clinic_id),
+    )
+    if not row:
+        raise NaoEncontrado()
+    logger.info("[Consentimento] revogado {} {} por={}".format(clinic_id, consent_id, autor))
+    return para_o_painel(row)
 
 
 def lista_do_paciente(db, clinic_id: str, patient_id: str) -> List[Dict[str, Any]]:
@@ -746,9 +864,11 @@ def lista_do_paciente(db, clinic_id: str, patient_id: str) -> List[Dict[str, Any
         uuid.UUID(str(patient_id))
     except ValueError:
         raise NaoEncontrado()
+    # Só o que virou documento (teve provedor) ou papel: a linha FILLING da
+    # anamnese e o rastro dela (EXPIRED sem provedor) não são documentos.
     rows = db.execute_query(
         "SELECT * FROM scheduler.patient_consents WHERE clinic_id = %s AND patient_id = %s::uuid "
-        "ORDER BY created_at DESC",
+        "AND (provider IS NOT NULL OR status = 'PAPER') ORDER BY created_at DESC",
         (clinic_id, str(patient_id)),
     )
     return [para_o_painel(r) for r in rows]
