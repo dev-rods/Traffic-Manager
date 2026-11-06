@@ -30,6 +30,10 @@ Criar o modelo numa conta: o mesmo `modelo_prod.py` do 036, apontando para o `.d
 
 **Bug pré-existente encontrado, fora do 038:** `get_active_appointments_by_phone` filtra `appointment_date >= CURRENT_DATE` em UTC. Depois das 21h (horário de Brasília) um agendamento do mesmo dia some do iPad ("Não encontramos seu agendamento"). Vale um PRD curto.
 
+## Prod (06/11/2026)
+
+Migrations aplicadas e conferidas (check com FILLING/REVOKED, índice `uq_patient_consents_em_andamento`, colunas `answers`/`revoked_*`). Modelo compilado criado na conta de produção pela API (`38ac3c38-8c30-457f-97fa-fee35403baf3`), `/prod/TCLE_VERSION = 2026-12`, scheduler (stack `UPDATE_COMPLETE`, Lambda com a versão e o modelo novos, bootstrap com o catálogo) e checkin-prod (bundle com a ficha) publicados. Pendente: primeira assinatura real do compilado em prod.
+
 ## Teste real do André e melhorias (06/11/2026)
 
 O André percorreu o fluxo inteiro no checkin-dev (termo + ficha assinados de
