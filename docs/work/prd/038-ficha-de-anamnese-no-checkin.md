@@ -365,5 +365,6 @@ partir de `answers`. Divergir é impossível.
 
 - [x] Pendente: decisões fechadas, ficha V03 aprovada e modelo compilado validado no sandbox em 05/11/2026
 - [x] Spec gerada: `spec/038-ficha-de-anamnese-no-checkin.md` (05/11/2026)
-- [x] Implementado em: 06/11/2026 (PR #171; dev completo, E2E até o widget com o PDF compilado conferido; assinatura real e prod pendentes, ver `scheduler/tests/integration/038-ficha-de-anamnese-no-checkin.md`)
+- [x] Implementado em: 06/11/2026 (PR #171 mergeado; testado de ponta a ponta em dev pelo André, com as quatro melhorias do teste)
+- [x] Prod em 06/11/2026: migrations, modelo compilado na conta de produção (`38ac3c38`), `/prod/TCLE_VERSION = 2026-12`, scheduler e checkin-prod publicados. Quem assinou a 2026-11 assina o compilado de novo (só o teste do André)
 - [x] Registrado em `TASKS_LOG.md`
