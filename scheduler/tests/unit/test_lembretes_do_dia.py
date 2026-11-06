@@ -4,6 +4,7 @@ processador; dia passado e dia invalido sao recusados."""
 import json
 import os
 import unittest
+from datetime import datetime, timezone
 from unittest import mock
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "t")
@@ -24,6 +25,16 @@ def evento(dia, simular=False):
             "headers": {"x-api-key": "k"}, "body": None}
 
 
+class RelogioFixo(datetime):
+    """Meio-dia em Brasília, fora da janela de silêncio: com o relógio de
+    verdade, rodado à noite o lote saía adiado e nada acordava."""
+
+    @classmethod
+    def now(cls, tz=None):
+        fixo = datetime(2026, 11, 5, 15, 0, tzinfo=timezone.utc)
+        return fixo.astimezone(tz) if tz else fixo
+
+
 class TestEndpoint(unittest.TestCase):
     def chama(self, ev, clinic=CLINIC, resultado=None):
         db = mock.MagicMock()
@@ -33,7 +44,7 @@ class TestEndpoint(unittest.TestCase):
              mock.patch.object(h, "ReminderService"), \
              mock.patch.object(h, "enfileira", return_value=dict(resultado or RESULTADO)) as enf, \
              mock.patch.object(h, "_acorda_processador") as acorda, \
-             mock.patch.object(h, "_hoje", return_value="2026-11-05"):
+             mock.patch.object(h, "_hoje", return_value="2026-11-05"), \n             mock.patch.object(h, "datetime", RelogioFixo):
             return h.handler(ev, None), enf, acorda
 
     def test_simular_devolve_contagens_e_nao_acorda(self):
