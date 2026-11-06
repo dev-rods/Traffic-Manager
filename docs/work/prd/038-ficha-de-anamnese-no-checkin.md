@@ -201,8 +201,10 @@ assinatura deixam o backend pronto para isso.
 | 11 | Quem vê as respostas | Permissão `prontuario.ler` | Dado de saúde |
 | 12 | Dispensa | Do documento inteiro, mesmos motivos | Não existe metade |
 
-Linhas 1 a 4 fechadas pelo André em 05/11; 5 a 12 são a recomendação, a
-confirmar na spec.
+Todas as 12 linhas fechadas pelo André em 05/11/2026 (1 a 4 na decisão do
+modelo compilado; 5 a 12 aprovadas como recomendadas). Também aprovados: a
+lista de alertas da seção 3 e a renumeração das seções 9 e 10 da ficha para
+8 e 9 no documento compilado.
 
 ---
 
@@ -321,8 +323,8 @@ partir de `answers`. Divergir é impossível.
    fim) com todas as variáveis substituídas. Consequência dos cortes: as
    seções 9 e 10 da ficha viraram 8 e 9. Falta só a **assinatura real** de
    um documento compilado, que fica para o E2E da implementação.
-3. Confirmar a lista de alertas com a responsável técnica e as linhas 5 a 12
-   da seção 4.
+3. ~~Confirmar a lista de alertas e as linhas 5 a 12 da seção 4~~ Aprovadas
+   pelo André em 05/11/2026.
 
 ---
 
@@ -361,7 +363,7 @@ partir de `answers`. Divergir é impossível.
 
 ## Status
 
-- [x] Pendente: ficha V03 aprovada e modelo compilado validado no sandbox em 05/11/2026; pronto para a spec
+- [x] Pendente: decisões fechadas, ficha V03 aprovada e modelo compilado validado no sandbox em 05/11/2026
 - [ ] Spec gerada: `spec/038-ficha-de-anamnese-no-checkin.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
