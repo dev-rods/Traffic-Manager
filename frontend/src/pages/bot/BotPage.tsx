@@ -1,12 +1,24 @@
 import { useState } from 'react'
 import { useClinic, useUpdateClinic } from '@/hooks/useClinic'
-import { useActiveConversations, useRecentConversations, useBotMetrics, usePauseBot, useResumeBot, useFecharTarefa, ESPERA_RESPOSTA_RETOMADA_MS } from '@/hooks/useBot'
+import {
+  useActiveConversations,
+  useRecentConversations,
+  useBotMetrics,
+  usePauseBot,
+  useResumeBot,
+  useFecharTarefa,
+  useSilenciarContato,
+  useReativarSilencio,
+  useSilencioDoContato,
+  ESPERA_RESPOSTA_RETOMADA_MS,
+} from '@/hooks/useBot'
 import { SkeletonTable, SkeletonCard } from '@/components/ui/Skeleton'
 import { Switch } from '@/components/ui/Switch'
 import { Card } from '@/components/ui/Card'
 import { ConversationList } from './components/ConversationList'
 import { FilaDeAtendimento } from './components/FilaDeAtendimento'
 import { ConversationThread } from './components/ConversationThread'
+import { SilenciarModal } from './components/SilenciarModal'
 import { FILTROS, ROTULO_DO_FILTRO, passaNoFiltro, type Filtro } from '@/lib/motivoDaPausa'
 
 type MetricsPeriod = 'today' | 'week' | 'month'
@@ -26,6 +38,9 @@ export function BotPage() {
   const pauseBot = usePauseBot()
   const resumeBot = useResumeBot()
   const fecharTarefa = useFecharTarefa()
+  const silenciar = useSilenciarContato()
+  const reativarSilencio = useReativarSilencio()
+  const [silenciandoPhone, setSilenciandoPhone] = useState<string | null>(null)
 
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
   const [selectedName, setSelectedName] = useState('')
@@ -35,6 +50,12 @@ export function BotPage() {
   // A conversa selecionada carrega o motivo da pausa; sem ela o botão não sabe
   // se deve dizer "Retomar" (alguém pausou) ou "Ativar" (nunca foi elegível).
   const selectedConversation = (activeData?.conversations ?? []).find((c) => c.phone === selectedPhone)
+
+  // O motivo escrito do silêncio só é buscado com a conversa aberta: na lista
+  // o selo já sai de `pause_reason`.
+  const { data: silencio } = useSilencioDoContato(
+    selectedConversation?.pause_reason === 'muted' ? selectedPhone : null,
+  )
 
   // Filtro da lista de recentes, só de exibição: o motivo vem do servidor.
   const [filtro, setFiltro] = useState<Filtro>('todas')
@@ -197,12 +218,31 @@ export function BotPage() {
                   onClose={() => setSelectedPhone(null)}
                   pauseLoading={pauseBot.isPending}
                   resumeLoading={resumeBot.isPending}
+                  silencio={silencio ?? null}
+                  onSilenciar={() => setSilenciandoPhone(selectedPhone)}
+                  onReativarSilencio={() => reativarSilencio.mutate(selectedPhone)}
+                  silenciarLoading={silenciar.isPending || reativarSilencio.isPending}
                 />
               </div>
             )}
           </div>
         </div>
       </section>
+
+      <SilenciarModal
+        key={silenciandoPhone ?? 'fechado'}
+        open={!!silenciandoPhone}
+        phone={silenciandoPhone ?? ''}
+        onClose={() => setSilenciandoPhone(null)}
+        loading={silenciar.isPending}
+        onConfirm={(motivo) => {
+          if (!silenciandoPhone) return
+          silenciar.mutate(
+            { phone: silenciandoPhone, motivo },
+            { onSuccess: () => setSilenciandoPhone(null) },
+          )
+        }}
+      />
     </div>
   )
 }

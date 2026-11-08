@@ -20,8 +20,10 @@ RAIZ = Path(__file__).resolve().parents[2]
 LISTAGEM = RAIZ / "src" / "functions" / "patient" / "list.py"
 TIPOS = RAIZ.parent / "frontend" / "src" / "types" / "index.ts"
 
-# Campos do tipo `Patient` do frontend que a listagem NAO precisa trazer.
-DERIVADOS = {"deleted_at"}
+# Campos do tipo `Patient` do frontend que a listagem NAO traz como coluna de
+# `patients`. `silenciado` (PRD 039) e CALCULADO na query, de outra tabela, e
+# viaja so quando e verdade - por isso nao existe como `p.silenciado`.
+DERIVADOS = {"deleted_at", "silenciado"}
 
 
 def campos_que_a_tela_espera():
@@ -53,6 +55,26 @@ class TestContratoDaListagem(unittest.TestCase):
 
     def test_o_desconto_personalizado_esta_na_query(self):
         self.assertIn("p.custom_discount_pct", LISTAGEM.read_text(encoding="utf-8"))
+
+
+class TestSeloSilenciado(unittest.TestCase):
+    """O campo que a tabela exenta acima precisa existir de outro jeito."""
+
+    def test_a_query_calcula_o_silencio(self):
+        sql = LISTAGEM.read_text(encoding="utf-8")
+        self.assertIn("contatos_silenciados", sql)
+        self.assertIn("as silenciado", sql)
+        # Só o silêncio VIVO: sem isto um número já reativado continuaria
+        # aparecendo com selo para sempre.
+        self.assertIn("reativado_em IS NULL", sql)
+
+    def test_so_viaja_quando_e_verdade(self):
+        from src.functions.patient.list import _serialize_row
+
+        self.assertEqual(_serialize_row({"id": "p1", "silenciado": True}),
+                         {"id": "p1", "silenciado": True})
+        # Decisão §4.2 do PRD 039: quem não está silenciado não ganha campo.
+        self.assertEqual(_serialize_row({"id": "p1", "silenciado": False}), {"id": "p1"})
 
 
 if __name__ == "__main__":

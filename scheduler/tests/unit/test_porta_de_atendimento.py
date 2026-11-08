@@ -230,7 +230,11 @@ class TestRetomadaPeloPainel(unittest.TestCase):
         tracker.get_conversation_messages.return_value = [
             {"direction": "INBOUND", "content": "tem horário?", "sk": "MSG#x"}]
         db = mock.MagicMock()
-        db.execute_query.return_value = [clinic or {"clinic_id": "c1"}]
+        # Por SQL, nao return_value fixo: o dublê respondia a QUALQUER consulta
+        # com a clínica, e a consulta de silêncio (PRD 039) lia isso como
+        # "contato silenciado".
+        db.execute_query.side_effect = lambda sql, params=None: (
+            [] if "contatos_silenciados" in sql else [clinic or {"clinic_id": "c1"}])
 
         # Relogio fixo: a retomada passa por `pode_iniciar` sem `agora`, e com
         # o relogio real estes testes falhavam entre 22:59 e 04:59.

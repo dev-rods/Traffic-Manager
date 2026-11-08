@@ -13,6 +13,7 @@ import os
 import boto3
 
 from src.services.db.postgres import PostgresService
+from src.services import silencio
 from src.services.elegibilidade_do_bot import motivo_legivel, por_que_nao_pode
 from src.services.outbound_queue import OutboundQueueService
 from src.services.status_da_conversa import conversas_da_clinica, enriquece
@@ -71,7 +72,9 @@ def handler(event, context):
         # aba aberta há uma hora não é autorização: entre o render e o clique a
         # pessoa pode ter escrito, ou outra atendente pode ter marcado.
         lead = enriquece([lead], {}, conversas_da_clinica(db, lead["clinic_id"]))[0]
-        motivo = por_que_nao_pode(lead, clinic)
+        motivo = por_que_nao_pode(
+            lead, clinic,
+            silenciado=silencio.esta_silenciado(lead["clinic_id"], lead["phone"], db))
         if motivo:
             logger.info(f"[IniciarBot] {lead_id} recusado: {motivo}")
             return http_response(409, {

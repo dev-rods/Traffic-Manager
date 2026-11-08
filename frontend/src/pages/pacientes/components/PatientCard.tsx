@@ -3,6 +3,7 @@ import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon } from '@/co
 import { formatDate } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
 import type { PatientWithStats } from '@/types'
+import { SeloSilenciado } from './SeloSilenciado'
 
 interface PatientCardProps {
   patient: PatientWithStats
@@ -69,6 +70,11 @@ export function PatientCard({
                 {p.name ?? 'Sem nome'}
               </span>
               <span className="block text-xs text-gray-500">{formatPhone(p.phone)}</span>
+              {p.silenciado && (
+                <span className="mt-1 block">
+                  <SeloSilenciado silenciado />
+                </span>
+              )}
             </span>
           </span>
 

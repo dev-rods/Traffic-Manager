@@ -92,6 +92,11 @@ export interface Patient {
    * desconto". Nunca troque um pelo outro com `?? 0`.
    */
   custom_discount_pct: number | null
+  /**
+   * O bot está silenciado para este telefone (PRD 039). Presente SÓ quando
+   * verdadeiro: o backend não manda o campo para quem não está silenciado.
+   */
+  silenciado?: boolean
   deleted_at?: string | null
   created_at: string
   updated_at: string
@@ -506,7 +511,15 @@ export interface ApiError {
 
 // ── Bot / Conversations ──────────────────────────────────────
 /** Por que o bot não responde uma conversa. null quando ele está respondendo. */
-export type PauseReason = 'attendant' | 'clinic_paused' | 'not_eligible' | null
+export type PauseReason = 'attendant' | 'clinic_paused' | 'not_eligible' | 'muted' | null
+
+/** Quem silenciou o bot para um contato, quando e por quê (PRD 039). */
+export interface SilencioDoContato {
+  motivo: string
+  silenciado_por: string
+  /** ISO 8601. */
+  silenciado_em: string
+}
 
 export interface ActiveConversation {
   phone: string

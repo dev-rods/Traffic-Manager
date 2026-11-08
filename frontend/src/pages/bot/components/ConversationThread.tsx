@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useConversationMessages } from '@/hooks/useBot'
 import { formatPhone } from '@/utils/formatPhone'
 import { Button } from '@/components/ui/Button'
-import type { MessageStatus, PauseReason } from '@/types'
+import type { MessageStatus, PauseReason, SilencioDoContato } from '@/types'
 import { MOTIVO_DA_PAUSA } from '@/lib/motivoDaPausa'
 
 interface ConversationThreadProps {
@@ -18,6 +18,11 @@ interface ConversationThreadProps {
   onClose: () => void
   pauseLoading?: boolean
   resumeLoading?: boolean
+  /** Silêncio sem prazo deste contato (PRD 039), ou null/undefined. */
+  silencio?: SilencioDoContato | null
+  onSilenciar: () => void
+  onReativarSilencio: () => void
+  silenciarLoading?: boolean
 }
 
 // "Pausado" e "não elegível" parecem iguais na tela mas têm causas diferentes:
@@ -68,7 +73,7 @@ function DeliveryTicks({ status }: { status: MessageStatus }) {
   )
 }
 
-export function ConversationThread({ phone, senderName, botPaused, pauseReason, answering, onPause, onResume, onClose, pauseLoading, resumeLoading }: ConversationThreadProps) {
+export function ConversationThread({ phone, senderName, botPaused, pauseReason, answering, onPause, onResume, onClose, pauseLoading, resumeLoading, silencio, onSilenciar, onReativarSilencio, silenciarLoading }: ConversationThreadProps) {
   const { data, isLoading } = useConversationMessages(phone)
   const messages = useMemo(() => data?.messages ?? [], [data])
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -99,15 +104,51 @@ export function ConversationThread({ phone, senderName, botPaused, pauseReason, 
           {botPaused && pauseReason && (
             <span className="text-xs text-gray-400">{MOTIVO_DA_PAUSA[pauseReason]}</span>
           )}
-          {botPaused ? (
-            <Button size="sm" onClick={onResume} loading={resumeLoading}>
-              {pauseReason === 'not_eligible' ? 'Ativar bot' : 'Retomar bot'}
+          {/* Silenciado vence os outros botões: oferecer "Retomar bot" aqui
+              prometeria uma retomada que o silêncio recusa (PRD 039). */}
+          {pauseReason === 'muted' ? (
+            <Button size="sm" onClick={onReativarSilencio} loading={silenciarLoading}>
+              Reativar bot
             </Button>
           ) : (
-            <Button size="sm" variant="secondary" onClick={onPause} loading={pauseLoading}>Pausar bot</Button>
+            <>
+              {botPaused ? (
+                <Button size="sm" onClick={onResume} loading={resumeLoading}>
+                  {pauseReason === 'not_eligible' ? 'Ativar bot' : 'Retomar bot'}
+                </Button>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={onPause} loading={pauseLoading}>Pausar bot</Button>
+              )}
+              <Button size="sm" variant="secondary" onClick={onSilenciar} loading={silenciarLoading}>
+                Silenciar
+              </Button>
+            </>
           )}
         </div>
       </div>
+
+      {/* Quem silenciou, quando e por quê. Sem isto o selo diz "silenciado" e
+          ninguém sabe desfazer - é como o recurso viraria dívida. */}
+      {pauseReason === 'muted' && (
+        <div className="flex-shrink-0 border-b border-purple-100 bg-purple-50 px-4 py-2.5">
+          <p className="text-xs text-purple-900">
+            <strong className="font-semibold">Bot silenciado sem prazo.</strong>{' '}
+            {silencio ? (
+              <>
+                {silencio.motivo} - por {silencio.silenciado_por} em{' '}
+                {new Date(silencio.silenciado_em).toLocaleDateString('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                })}
+                .
+              </>
+            ) : (
+              'Carregando o motivo...'
+            )}
+          </p>
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">

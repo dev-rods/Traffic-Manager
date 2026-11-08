@@ -10,6 +10,7 @@ from decimal import Decimal
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 from src.services.lead_service import LeadService
+from src.services import silencio
 from src.services.status_da_conversa import (
     conversas_da_clinica,
     enriquece,
@@ -113,6 +114,7 @@ def handler(event, context):
                                      [l.get("phone") for l in leads]),
                 conversas_da_clinica(db, clinic_id),
                 clinic=clinic,
+                silenciados=silencio.silenciados_da_clinica(clinic_id, db),
             )
         except Exception as e:
             # A listagem nao pode cair por causa do enriquecimento: sem ele o

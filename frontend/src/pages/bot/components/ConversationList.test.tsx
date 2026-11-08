@@ -50,6 +50,17 @@ describe('selo do motivo', () => {
     expect(screen.getByText('Bot pausado')).toBeInTheDocument()
   })
 
+  it('silenciado tem selo próprio e NÃO oferece "Ativar bot" (PRD 039)', () => {
+    monta([
+      conversa({ phone: '1', sender_name: 'Muda', pause_reason: 'muted' }),
+      conversa({ phone: '2', sender_name: 'Avulsa', pause_reason: 'not_eligible' }),
+    ])
+    expect(screen.getByText('Silenciado')).toBeInTheDocument()
+    // Só a de "fora da regra": prometer ativação a um número silenciado é
+    // exatamente a exceção invisível que o PRD 039 proíbe.
+    expect(screen.getAllByRole('button', { name: 'Ativar bot' })).toHaveLength(1)
+  })
+
   it('sem motivo, sem selo - inclusive quando o backend antigo nem manda o campo', () => {
     monta([conversa({ phone: '1', pause_reason: null }), conversa({ phone: '2' })])
     expect(screen.queryByText(/Fora da regra|Com atendente|Bot pausado/)).not.toBeInTheDocument()
@@ -115,6 +126,12 @@ describe('passaNoFiltro', () => {
     ['bot_ativo', null, true],
     ['bot_ativo', undefined, true],
     ['bot_ativo', 'clinic_paused', false],
+    ['silenciadas', 'muted', true],
+    ['silenciadas', 'attendant', false],
+    ['silenciadas', null, false],
+    ['todas', 'muted', true],
+    ['bot_ativo', 'muted', false],
+    ['fora_da_regra', 'muted', false],
   ] as const)('%s x %s -> %s', (filtro, motivo, esperado) => {
     expect(passaNoFiltro(motivo, filtro)).toBe(esperado)
   })

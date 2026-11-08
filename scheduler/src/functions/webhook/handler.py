@@ -23,6 +23,7 @@ from src.services.agregador_de_mensagens import (
 )
 from src.services import atendimento
 from src.services import retencao
+from src.services import silencio
 from src.services.session_store import grava_atendimento, mark_conversation_eligible
 from src.services.autoria_mensagem import foi_enviada_pelo_bot
 from src.services.identidade_whatsapp import chat_lid, deve_vincular_lid, telefone_da_conversa
@@ -416,7 +417,11 @@ def handler(event, context):
 
         # A porta de atendimento (PRD 020 §3.5): pergunta REATIVA. Cooldown e
         # horario nao entram - quem escreveu esta do outro lado esperando.
-        if not atendimento.pode_responder(clinic, session, incoming.phone):
+        # O silencio por contato (PRD 039) vem do Postgres e vence todas as
+        # portas, inclusive lead que escreveu, campanha e lembrete vivos.
+        silenciado = silencio.esta_silenciado(clinic_id, incoming.phone)
+        if not atendimento.pode_responder(clinic, session, incoming.phone,
+                                          silenciado=silenciado):
             # A fala do cliente fica registrada, e NAO renova o prazo humano:
             # se renovasse, quem esta sem resposta nunca sairia do lock. E o
             # que a retomada (fase 3) vai ler para saber se ficou pergunta.
@@ -426,6 +431,7 @@ def handler(event, context):
             logger.info(
                 f"[Webhook] Resposta automática suprimida para {incoming.phone} "
                 f"(handler={atendimento.estado(session)}, "
+                f"silenciado={silenciado}, "
                 f"paused={clinic.get('bot_paused', False)}, "
                 f"policy={clinic.get('bot_autoreply_policy') or 'ALL'})"
             )

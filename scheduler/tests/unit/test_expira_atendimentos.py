@@ -40,7 +40,9 @@ def roda(sessao, eventos, efeitos=0, veredito='{"pendente": true, "o_que": "hor√
 
     db = mock.MagicMock()
     db.execute_query.side_effect = lambda sql, params=None: (
-        [CLINICA] if "clinics" in sql else [{"n": efeitos}] if "COUNT" in sql else [{"id": "t1"}])
+        [] if "contatos_silenciados" in sql
+        else [CLINICA] if "clinics" in sql
+        else [{"n": efeitos}] if "COUNT" in sql else [{"id": "t1"}])
     tracker = mock.MagicMock(); tracker.get_conversation_messages.return_value = eventos
     anthropic = mock.MagicMock(); anthropic.create_message.return_value = {"content": [{"type": "text", "text": veredito}]}
 
@@ -162,7 +164,9 @@ class TestNadaVencido(unittest.TestCase):
         s[at.CAMPO]["versao"] = 4  # como em prod: ja houve escritas antes
         tabela = Tabela(s)
         db = mock.MagicMock()
-        db.execute_query.side_effect = lambda sql, params=None: [CLINICA] if "clinics" in sql else [{"n": 0}]
+        db.execute_query.side_effect = lambda sql, params=None: (
+            [] if "contatos_silenciados" in sql
+            else [CLINICA] if "clinics" in sql else [{"n": 0}])
         tracker = mock.MagicMock()
         tracker.get_conversation_messages.return_value = [evento("INBOUND", "obrigada!", 30)]
         with mock.patch.object(modulo, "_tabela", return_value=tabela),              mock.patch("src.services.db.postgres.PostgresService", return_value=db),              mock.patch("src.services.message_tracker.MessageTracker", return_value=tracker),              mock.patch.object(modulo, "_agora", return_value=AGORA):
