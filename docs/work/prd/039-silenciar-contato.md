@@ -96,15 +96,22 @@ clínica para a pessoa, não resposta do bot). O que muda é que, se ela respond
 porque ela transforma um lembrete útil numa conversa que alguém tem de atender
 à mão.
 
-> **A decidir (André):** o silêncio vence o lembrete de sessão, ou o lembrete
-> suspende o silêncio enquanto estiver vivo? Recomendo o silêncio vencer:
-> silenciar é dizer "o bot não fala com esta pessoa", e uma exceção invisível
-> derruba a confiança no botão.
+> **Decidido (André, 08/11/2026):** o silêncio vence, **inclusive o lembrete
+> de sessão**. Silenciar é dizer "o bot não fala com esta pessoa", sem exceção.
+> O lembrete continua SAINDO (é a clínica falando, não o bot), e a resposta
+> dela cai na fila humana.
 
 ### 4.2 Quem enxerga que aquele número está mudo?
 
 Sem resposta para isso, o recurso vira dívida: número calado por engano, meses
-depois, sem ninguém saber por quê. Entregar junto:
+depois, sem ninguém saber por quê.
+
+> **Decidido (André, 08/11/2026):** marcar no painel, e também **no cadastro do
+> paciente**. A marca aparece SÓ quando o contato está silenciado - quem não
+> está não ganha selo nenhum, para a lista de pacientes não virar um mar de
+> rótulos.
+
+Entregar junto:
 
 - **Motivo de pausa novo** no vocabulário do painel (PRD 031): `muted`, ao lado
   de `attendant`, `clinic_paused` e `not_eligible`. Fonte única em
@@ -114,6 +121,9 @@ depois, sem ninguém saber por quê. Entregar junto:
 - **No cabeçalho da conversa**: quem silenciou, quando e o motivo escrito.
 - **Precedência de exibição**: `muted` aparece antes de `attendant`, porque é o
   estado mais forte e o que a recepção precisa enxergar para agir.
+- **No cadastro do paciente** (lista e card de `pacientes`): selo "Bot
+  silenciado" quando, e apenas quando, aquele telefone está silenciado. Serve
+  a quem abre o cadastro sem passar pela tela do bot.
 
 ---
 
@@ -159,9 +169,16 @@ Três razões para não morar na sessão do DynamoDB:
 
 **Como chega a `pode_responder` sem pesar no caminho de toda mensagem:** a
 função não ganha acesso ao banco. Quem já lê o Postgres antes de decidir (o
-webhook, o processador da fila, o lembrete) carrega o silêncio junto e o injeta
-no dict da sessão (ex.: `session["silenciado_em"]`), como já faz com
-`bot_enabled`. A assinatura de `pode_responder` não muda.
+webhook, o processador da fila, o lembrete) consulta o silêncio e **passa como
+argumento explícito** (`pode_responder(..., silenciado=True)`).
+
+Na redação de 08/11 esta seção propunha injetar o valor no dict da sessão
+(`session["silenciado_em"]`), "como já faz com `bot_enabled`". **Isso está
+errado e foi corrigido:** `bot_enabled` mora de verdade na sessão, o silêncio
+não. E `session_store.grava_atendimento`, quando a sessão ainda não existe,
+grava o dict inteiro (`put_item(Item=session)`) - o campo injetado viraria uma
+cópia persistida de um dado cuja fonte é o Postgres, livre para divergir em
+silêncio. Argumento explícito não persiste nada.
 
 ---
 
@@ -178,6 +195,8 @@ no dict da sessão (ex.: `session["silenciado_em"]`), como já faz com
 - [ ] "Reativar bot" devolve a conversa ao bot, e o evento fica registrado.
 - [ ] Silenciar exige motivo.
 - [ ] Nenhum caminho remarca o contato como elegível por trás (os três de §2).
+- [ ] O cadastro do paciente mostra o selo "Bot silenciado" quando, e só
+      quando, aquele telefone está silenciado.
 - [ ] `pytest`, `npm run build`, `npm run lint` e `npm run test` verdes.
 
 ---
@@ -207,7 +226,7 @@ no dict da sessão (ex.: `session["silenciado_em"]`), como já faz com
 
 ## Status
 
-- [x] Pendente (aguardando a decisão de §4.1)
+- [x] Aprovado: §4.1 e §4.2 decididos em 08/11/2026
 - [ ] Spec gerada: `spec/039-silenciar-contato.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
