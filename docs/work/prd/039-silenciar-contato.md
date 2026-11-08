@@ -227,6 +227,6 @@ silêncio. Argumento explícito não persiste nada.
 ## Status
 
 - [x] Aprovado: §4.1 e §4.2 decididos em 08/11/2026
-- [ ] Spec gerada: `spec/039-silenciar-contato.md`
+- [x] Spec gerada em 08/11/2026: `spec/039-silenciar-contato.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
