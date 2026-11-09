@@ -239,7 +239,7 @@ Nenhuma migration. Nenhuma mudança de prompt.
 
 ## Status
 
-- [ ] Aprovado: §7.1, §7.2 e §7.3 pendentes
-- [ ] Spec gerada
+- [x] Aprovado em 09/11/2026: §7.1 A (refazer, com transferência na segunda tentativa), §7.2 A (só com áreas definidas no turno), §7.3 A (medir, não bloquear)
+- [x] Spec gerada em 09/11/2026: `spec/044-data-nunca-sai-sem-consulta.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`

@@ -83,6 +83,7 @@ MOTIVO_AREAS_EM_LACO = "areas_em_laco"
 MOTIVO_AGENDA_SEM_RESPALDO = "agenda_sem_respaldo"
 MOTIVO_AFIRMOU_MENOR = "afirmou_menor_sem_respaldo"
 MOTIVO_INSISTIU_CADASTRO = "insistiu_em_cadastro"
+MOTIVO_PEDIU_DATA_SEM_CONSULTA = "pediu_data_sem_consulta"
 MOTIVO_INCOMPREENSAO = "incompreensao"
 MOTIVO_ESGOTOU = "esgotou_as_consultas"
 # Nível 3 (PRD 020 §4.3): escritos pelo código ANTES do modelo, por lista de
@@ -109,6 +110,7 @@ MOTIVOS_LEGIVEIS = {
     MOTIVO_AGENDA_SEM_RESPALDO: "O bot errou a agenda",
     MOTIVO_AFIRMOU_MENOR: "O bot errou sobre a idade",
     MOTIVO_INSISTIU_CADASTRO: "O bot insistiu em cadastro",
+    MOTIVO_PEDIU_DATA_SEM_CONSULTA: "O bot pediu data sem ver a agenda",
     MOTIVO_INCOMPREENSAO: "O bot não entendeu",
     MOTIVO_ESGOTOU: "O bot não conseguiu responder (esgotou as consultas)",
     MOTIVO_RECLAMACAO: "Reclamação",
