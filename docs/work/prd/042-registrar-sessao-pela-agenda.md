@@ -98,18 +98,30 @@ E a expansão de áreas **já funciona** por esse caminho (`escolheSessao` no
 `onChange` do rádio). Com a decisão de §3.1, o único defeito era a
 pré-seleção silenciosa - que deixa de existir.
 
-### 3.3 O caso que a lista não cobre
+### 3.3 O caso que eu achei que existia, e não existe
 
-`appointments_without_record` (`patient_record/list.py:77`) só traz
-`status = 'CONFIRMED'`. Um agendamento **PENDENTE** chega pelo atalho com um id
-que não está na lista: o rádio não marca nada e a aplicadora não entende por
-quê. Hoje isso já acontece, calado.
+**RETIRADO em 08/11/2026.** Esta seção afirmava que um agendamento PENDENTE
+chegaria pelo atalho sem estar na lista, deixando a tela muda, e que "hoje isso
+já acontece, calado". **Está errado, e a origem do erro foi minha:** eu li
+"Pendente" na agenda e assumi que era status de agendamento, sem conferir o
+modelo de dados.
 
-A tela precisa dizer o que houve, em vez de parecer quebrada. Qual a regra
-correta - mostrar o pendente na lista, ou explicar que ele precisa ser
-confirmado primeiro - é decisão §5.2.
+O que a conferência mostrou:
 
----
+1. O status de agendamento admite `CONFIRMED`, `CANCELLED`, `NO_SHOW` e `NULL`
+   (`appointments_status_check`). **Não existe PENDENTE.**
+2. "Pendente" na agenda é a **presença** (PRD 027): o lembrete saiu e a pessoa
+   ainda não confirmou. Nada a ver com o status do agendamento, e ortogonal a
+   registrar sessão.
+3. Em produção há **848 CONFIRMED, 153 CANCELLED, 29 NO_SHOW e nenhum com
+   status nulo**. Não há um único agendamento "sem status" para incluir.
+4. O atalho só aparece para agendamento que não está cancelado nem como falta
+   (`AppointmentPopover.tsx:216`). Ou seja, todo agendamento que oferece o
+   atalho é `CONFIRMED` - e portanto **já está** na lista.
+
+Conclusão: o filtro `status = 'CONFIRMED'` não exclui nada que devesse entrar.
+Incluir "pendentes" é mudança sem alvo. `CANCELLED` e `NO_SHOW` seguem fora por
+motivo correto: a sessão não aconteceu.
 
 ## 4. Escopo
 
@@ -148,22 +160,15 @@ em favor do caminho mais simples: nenhuma delas, nenhum componente novo.
 O André também reconsiderou e **manteve** o redirecionamento para o histórico -
 era a pergunta de fundo do pedido original, e segue de pé.
 
-### 5.2 Agendamento pendente
+### 5.2 Agendamento pendente - SEM OBJETO
 
-O atalho aparece no popover para qualquer agendamento não cancelado e sem falta,
-mas só os **confirmados** entram na lista de sessões sem registro.
+O André decidiu em 08/11/2026 **incluir os pendentes**. Ao preparar a mudança
+descobri que **não há pendentes a incluir**: a pergunta nasceu de uma premissa
+minha errada sobre o modelo de dados (ver §3.3). Nenhum agendamento em produção
+fica fora da lista por causa de status.
 
-- **Opção 1 (recomendada):** a lista passa a trazer pendentes também. Quem está
-  com a paciente na maca atendeu de fato - exigir que a recepção confirme antes
-  é burocracia no meio do atendimento, e a aplicadora não tem como resolver.
-- Opção 2: a tela explica ("este agendamento ainda não está confirmado") e
-  oferece registrar como sessão fora do sistema.
-
-Recomendo a 1, mas isso toca uma regra de negócio que não é minha: confirmar
-agendamento tem significado na recepção e no lembrete (PRD 027). **Preciso do
-seu aval.**
-
----
+A decisão fica registrada e sem efeito. Se um dia existir um estado
+intermediário de agendamento, esta seção é o lugar de reabrir.
 
 ## 6. Arquivos impactados
 
@@ -174,9 +179,10 @@ seu aval.**
 | `frontend/src/pages/documentos/components/RegistroDeSessaoModal.tsx` | `agendamentoInicial` sai; a escolha passa a ser só pelo rádio |
 | `frontend/src/pages/agenda/components/AppointmentPopover.tsx` | o link perde o `?agendamento=` |
 | `frontend/src/pages/agenda/components/AppointmentPopover.tsx` | só o comentário, que hoje descreve um comportamento que vai mudar |
-| `scheduler/src/functions/patient_record/list.py` | somente se a decisão §5.2 for a opção 1 |
+| `scheduler/src/functions/patient_record/list.py` | **nenhuma** (ver §3.3); só um teste que sustenta a ordem da lista |
 
-Nenhuma migration. Nenhuma mudança de contrato de API, exceto na §5.2 opção 1.
+**Entrega só de frontend.** Nenhuma migration, nenhuma mudança de contrato de
+API, nenhum deploy de backend. Duas das três mudanças são remoção de código.
 
 ---
 
@@ -190,7 +196,8 @@ Nenhuma migration. Nenhuma mudança de contrato de API, exceto na §5.2 opção 
 - [ ] Área composta expande em duas aplicações.
 - [ ] Nenhum caminho abre o modal com sessão escolhida sem as áreas montadas -
       a pré-seleção deixou de existir.
-- [ ] Agendamento que não está na lista produz mensagem clara, não tela muda.
+- [ ] Agendamento cancelado ou com falta não aparece na lista (a sessão não
+      aconteceu), e todo agendamento que oferece o atalho na agenda aparece.
 - [ ] A aplicadora não precisa adicionar nenhuma área à mão no caso comum.
 - [ ] `npm run build`, `npm run lint` e `npm run test` verdes.
 
@@ -202,7 +209,7 @@ Nenhuma migration. Nenhuma mudança de contrato de API, exceto na §5.2 opção 
 |---|---|
 | Dois cliques a mais no caminho de todo dia (histórico, "Novo registro", escolher a sessão) | O primeiro põe o parâmetro anterior na frente dela, que é o pedido. Os outros dois são a escolha explícita que substitui a pré-seleção silenciosa - foi ela que gerou o defeito |
 | Ela escolher a sessão errada na lista | A lista traz data, hora e áreas de cada uma, e vem da mais recente para a mais antiga; o registro é editável e tem trilha (`edit_count`) |
-| Pendente entrar na lista e alguém registrar sessão que não ocorreu | O registro é editável e tem trilha de edição (`edit_count`); e hoje o risco oposto - não conseguir registrar o que ocorreu - é o que acontece |
+| Eu voltar a inventar estado que o banco não tem | O status real é `CONFIRMED`/`CANCELLED`/`NO_SHOW`/`NULL`, e "Pendente" na agenda é presença (PRD 027). §3.3 guarda a medição |
 
 ---
 
@@ -216,7 +223,7 @@ Nenhuma migration. Nenhuma mudança de contrato de API, exceto na §5.2 opção 
 
 ## Status
 
-- [ ] §5.1 decidida em 08/11/2026; aguardando a de §5.2 (agendamento pendente)
+- [x] Aprovado: §5.1 decidida em 08/11/2026; §5.2 sem objeto (ver §3.3)
 - [ ] Spec gerada: `spec/042-registrar-sessao-pela-agenda.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
