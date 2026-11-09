@@ -19,6 +19,15 @@ from src.functions.patient_record._comum import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Status de agendamento que NAO pode virar registro de sessao, e o motivo em
+# palavras (PRD 042). A listagem de sessoes sem registro ja filtra por
+# CONFIRMED; isto aqui e para o caminho que nao passa pela tela - aba aberta
+# quando a recepcao cancela, chamada direta na rota.
+RECUSAM_REGISTRO = {
+    "CANCELLED": "Agendamento cancelado nao pode virar registro de sessao",
+    "NO_SHOW": "Agendamento marcado como falta nao pode virar registro de sessao",
+}
+
 
 def handler(event, context):
     """POST /clinics/{clinicId}/patients/{patientId}/session-records
@@ -59,16 +68,41 @@ def handler(event, context):
         # A data vem do agendamento quando ha um: e a data do ATENDIMENTO, nao
         # a de digitacao, e digitar de novo o que o sistema ja sabe e onde o
         # erro entra.
-        if appointment_id and not session_date:
+        #
+        # A consulta roda SEMPRE que ha agendamento, nao so quando falta a data
+        # (PRD 042, decisao do Andre em 08/11/2026): ela e tambem a trava que
+        # recusa cancelado e falta. Antes, mandar `sessionDate` no corpo pulava
+        # a unica leitura do agendamento, e a rota aceitava qualquer id.
+        #
+        # E confere `patient_id`, nao so `clinic_id`: sem isso um registro da
+        # paciente A podia apontar para o agendamento da paciente B na mesma
+        # clinica. Nenhuma tela produz isso, e e uma clausula.
+        if appointment_id:
             linhas = db.execute_query(
-                """SELECT appointment_date FROM scheduler.appointments
-                   WHERE id = %s::uuid AND clinic_id = %s""",
-                (appointment_id, clinic_id),
+                """SELECT appointment_date, status FROM scheduler.appointments
+                   WHERE id = %s::uuid AND clinic_id = %s AND patient_id = %s::uuid""",
+                (appointment_id, clinic_id, patient_id),
             )
             if not linhas:
-                return http_response(404, {"status": "ERROR",
-                                           "message": "Agendamento nao encontrado"})
-            session_date = str(linhas[0]["appointment_date"])
+                return http_response(404, {
+                    "status": "ERROR",
+                    "message": "Agendamento nao encontrado para esta paciente"})
+
+            status = (linhas[0].get("status") or "").upper()
+            # 409 e nao 400: o pedido esta bem formado, o estado do agendamento
+            # e que recusa. Mensagem por status porque as causas sao diferentes
+            # para quem esta na tela - cancelado e agendamento que nao existe
+            # mais; falta e sessao que nao houve.
+            #
+            # Status nulo PASSA: o banco permite, prod nao tem nenhum (medido em
+            # 08/11/2026) e barrar inventaria regra para um caso que nao existe.
+            if status in RECUSAM_REGISTRO:
+                return http_response(409, {
+                    "status": "ERROR",
+                    "reason": status,
+                    "message": RECUSAM_REGISTRO[status]})
+
+            session_date = session_date or str(linhas[0]["appointment_date"])
 
         if not session_date:
             return http_response(400, {"status": "ERROR",

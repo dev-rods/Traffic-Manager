@@ -293,10 +293,17 @@ export function AppointmentPopover({
               {/* O caminho curto do caso mais comum: ela acabou de atender e
                   a paciente esta na tela. Ir ate Pacientes, buscar pelo nome e
                   abrir Documentos seria o caminho longo para o que acontece
-                  todo dia. Leva a mesma tela, com a sessao ja escolhida. */}
+                  todo dia.
+
+                  Leva ao HISTORICO, nao ao formulario (PRD 042, decisao do
+                  Andre em 08/11/2026). Ate 08/11 isto abria o registro novo
+                  direto, com `?agendamento=`, e economizava um clique tirando
+                  da tela justamente o parametro da ultima sessao - que e o que
+                  faz a aplicadora decidir o desta. Dali, "Novo registro" lista
+                  as sessoes sem registro e escolher uma monta as areas. */}
               {a.patient_id && (
                 <Link
-                  to={`/pacientes/${a.patient_id}/documentos?agendamento=${a.id}`}
+                  to={`/pacientes/${a.patient_id}/documentos`}
                   onClick={onClose}
                   className="block w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
