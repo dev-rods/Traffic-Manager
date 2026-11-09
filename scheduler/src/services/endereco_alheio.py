@@ -79,9 +79,12 @@ def enderecos_das_clinicas(db):
     return {l["clinic_id"]: l["address"] for l in linhas}
 
 
+# As chaves da variavel sao quadruplicadas de proposito: esta string passa por
+# .format(), e "{{clinic_address}}" sairia com uma chave so - a recepcao leria
+# um nome de variavel que nao existe.
 MENSAGEM = ("O texto cita o endereco de outra clinica ({dona}: {endereco}). "
-            "Use a variavel {{clinic_address}}, que renderiza o endereco desta "
-            "clinica, e deixe as referencias de localizacao no FAQ.")
+            "Use a variavel {{{{clinic_address}}}}, que renderiza o endereco "
+            "desta clinica, e deixe as referencias de localizacao no FAQ.")
 
 
 def recusa_endereco_alheio(db, clinic_id, conteudo):
