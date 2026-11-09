@@ -224,6 +224,6 @@ API, nenhum deploy de backend. Duas das três mudanças são remoção de códig
 ## Status
 
 - [x] Aprovado: §5.1 decidida em 08/11/2026; §5.2 sem objeto (ver §3.3)
-- [ ] Spec gerada: `spec/042-registrar-sessao-pela-agenda.md`
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Spec gerada em 08/11/2026: `spec/042-registrar-sessao-pela-agenda.md`
+- [x] Implementado em 08/11/2026 (PR #179, dev e prod)
+- [x] Registrado em `TASKS_LOG.md`
