@@ -1389,7 +1389,6 @@ class ConversationAgent:
             "clinic_display_name": clinic.get("display_name") or clinic.get("name", "Clínica"),
             "clinic_address": clinic.get("address") or "",
             "clinic_phone": clinic.get("phone") or "",
-            "collected_data_summary": "",
             "single_service_hint": single_service_hint,
             # O valor vem do banco, nao do texto do prompt. Ver preco_minimo.py:
             # numero escrito no template envelhece calado quando a tabela muda.
