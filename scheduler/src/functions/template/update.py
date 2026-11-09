@@ -6,6 +6,7 @@ from psycopg2.extras import Json
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
+from src.services.endereco_alheio import recusa_endereco_alheio
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -94,6 +95,18 @@ def handler(event, context):
 
         # 4. Executar atualizacao
         db = PostgresService()
+
+        # Mesma regra da criacao: o texto de uma clinica nao carrega o
+        # endereco de outra. Aqui a clinica vem do template, nao do path.
+        if "content" in body:
+            dona = db.execute_query(
+                "SELECT clinic_id FROM scheduler.message_templates WHERE id = %s::uuid",
+                (template_id,))
+            if dona:
+                recusa = recusa_endereco_alheio(db, dona[0]["clinic_id"], body["content"])
+                if recusa:
+                    logger.warning(f"Template {template_id} recusado: {recusa}")
+                    return http_response(422, {"status": "ERROR", "message": recusa})
 
         result = db.execute_write_returning(query, tuple(params))
 
