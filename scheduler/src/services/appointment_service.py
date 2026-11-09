@@ -475,6 +475,12 @@ class AppointmentService:
             UPDATE scheduler.appointments
             SET appointment_date = %s, start_time = %s::time, end_time = %s::time,
                 total_duration_minutes = %s,
+                -- Quem confirmou confirmou um HORARIO, nao um agendamento
+                -- (PRD 043, decisao do Andre em 08/11/2026). Sem isto a agenda
+                -- seguia exibindo "Confirmada" num horario que a paciente nunca
+                -- viu - e como ninguem a avisa da remarcacao, a recepcao
+                -- acreditava numa confirmacao que nao existia.
+                confirmado_em = NULL, confirmado_por = NULL,
                 version = version + 1, updated_at = NOW()
             WHERE id = %s::uuid AND version = %s
             """,
