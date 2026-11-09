@@ -11,8 +11,6 @@ import { RegistroDeSessaoModal } from './RegistroDeSessaoModal'
 interface HistoricoDeSessaoProps {
   patientId: string
   skinType: SkinType | null
-  /** Vindo do atalho da agenda: abre o modal ja com esta sessao escolhida. */
-  agendamentoInicial?: string | null
 }
 
 /**
@@ -22,16 +20,15 @@ interface HistoricoDeSessaoProps {
  * justifica o documento existir, e escondê-la atrás de um clique transformaria
  * consulta rápida em navegação.
  */
-export function HistoricoDeSessao({
-  patientId,
-  skinType,
-  agendamentoInicial,
-}: HistoricoDeSessaoProps) {
+export function HistoricoDeSessao({ patientId, skinType }: HistoricoDeSessaoProps) {
   const { data, isLoading, isError, refetch } = useSessionRecords(patientId)
   const { data: areas } = useClinicAreas()
   const excluir = useDeleteSessionRecord()
 
-  const [criando, setCriando] = useState(Boolean(agendamentoInicial))
+  // Nasce fechado SEMPRE, inclusive vindo da agenda (PRD 042): o histórico é o
+  // que responde "que parâmetro usei da última vez?", e abrir o formulário por
+  // cima dele escondia a resposta.
+  const [criando, setCriando] = useState(false)
   const [editando, setEditando] = useState<RegistroDeSessao | null>(null)
   const [trilhaAberta, setTrilhaAberta] = useState<string | null>(null)
 
@@ -169,7 +166,6 @@ export function HistoricoDeSessao({
           areas={areas ?? []}
           sessoesSemRegistro={semRegistro}
           registro={editando}
-          agendamentoInicial={editando ? null : agendamentoInicial}
           onClose={() => {
             setCriando(false)
             setEditando(null)

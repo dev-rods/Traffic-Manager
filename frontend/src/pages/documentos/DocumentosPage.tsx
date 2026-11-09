@@ -23,14 +23,13 @@ const ABAS: { id: Documento; label: string }[] = [
  */
 export function DocumentosPage() {
   const { patientId } = useParams<{ patientId: string }>()
-  // O atalho da agenda chega com ?agendamento=<id> e abre o modal ja com a
-  // sessao escolhida: um clique, os parametros, salvar.
+  // O atalho da agenda cai aqui direto no histórico (PRD 042). Não há mais
+  // `?agendamento=`: ele pré-selecionava a sessão no modal e era justamente a
+  // pré-seleção que deixava o rádio marcado com a lista de áreas vazia.
   const [searchParams, setSearchParams] = useSearchParams()
-  const agendamentoInicial = searchParams.get('agendamento')
   const doc: Documento = searchParams.get('doc') === 'termo' ? 'termo' : 'historico'
 
   function trocarAba(novo: Documento) {
-    // Mantém ?agendamento=: a pessoa pode voltar ao histórico com o atalho vivo.
     const proximos = new URLSearchParams(searchParams)
     if (novo === 'historico') proximos.delete('doc')
     else proximos.set('doc', novo)
@@ -117,11 +116,7 @@ export function DocumentosPage() {
 
       <section className="mt-6" role="tabpanel">
         {doc === 'historico' ? (
-          <HistoricoDeSessao
-            patientId={patientId}
-            skinType={paciente.skin_type}
-            agendamentoInicial={agendamentoInicial}
-          />
+          <HistoricoDeSessao patientId={patientId} skinType={paciente.skin_type} />
         ) : (
           <TermoDeConsentimento patientId={patientId} />
         )}

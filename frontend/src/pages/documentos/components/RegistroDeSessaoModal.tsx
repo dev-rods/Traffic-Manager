@@ -22,8 +22,6 @@ interface RegistroDeSessaoModalProps {
   areas: ClinicArea[]
   sessoesSemRegistro: SessaoSemRegistro[]
   registro?: RegistroDeSessao | null
-  /** Abre já com este agendamento escolhido (atalho vindo da Agenda). */
-  agendamentoInicial?: string | null
   onClose: () => void
 }
 
@@ -40,7 +38,6 @@ export function RegistroDeSessaoModal({
   areas,
   sessoesSemRegistro,
   registro,
-  agendamentoInicial,
   onClose,
 }: RegistroDeSessaoModalProps) {
   const editando = Boolean(registro)
@@ -56,12 +53,14 @@ export function RegistroDeSessaoModal({
     return m
   }, [protocolo])
 
+  // Quem escolhe a sessão é o rádio, e só ele (PRD 042). Até 08/11/2026 o
+  // atalho da agenda pré-selecionava aqui, sem passar por `escolheSessao`: o
+  // rádio aparecia marcado e a lista de áreas vinha vazia, então a aplicadora
+  // tinha de adicionar área por área. Um caminho só, uma regra só.
   const [appointmentId, setAppointmentId] = useState<string | null>(
-    registro?.appointment_id ?? agendamentoInicial ?? null,
+    registro?.appointment_id ?? null,
   )
-  const [sessionDate, setSessionDate] = useState(
-    registro?.session_date ?? sessaoPorId(agendamentoInicial)?.appointment_date ?? '',
-  )
+  const [sessionDate, setSessionDate] = useState(registro?.session_date ?? '')
   const [professionalId, setProfessionalId] = useState(registro?.professional_id ?? '')
   const [bronzeada, setBronzeada] = useState(registro?.tanned_skin ?? false)
   const [notes, setNotes] = useState(registro?.notes ?? '')
@@ -192,6 +191,9 @@ export function RegistroDeSessaoModal({
       <form onSubmit={submete} className="space-y-5">
         {!editando && sessoesSemRegistro.length > 0 && (
           <fieldset>
+            {/* Da mais recente para a mais antiga, como vem do backend
+                (`ORDER BY appointment_date DESC`): a sessão que ela acabou de
+                atender é a primeira da lista. Não reordenar aqui. */}
             <legend className="mb-1.5 text-xs font-medium text-gray-500">De qual sessão?</legend>
             <div className="space-y-1.5">
               {sessoesSemRegistro.map((s) => (
