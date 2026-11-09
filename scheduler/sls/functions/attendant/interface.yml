@@ -48,6 +48,14 @@ AttendantControl:
         method: post
         cors: true
     - http:
+        path: attendant/mute
+        method: post
+        cors: true
+    - http:
+        path: attendant/unmute
+        method: post
+        cors: true
+    - http:
         path: attendant/status
         method: get
         cors: true

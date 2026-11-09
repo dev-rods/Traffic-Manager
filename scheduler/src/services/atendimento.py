@@ -76,6 +76,13 @@ ENTREGAS_DO_BOT = frozenset({POR_HANDOFF, POR_INSTABILIDADE})
 # mensagem conhecida (quem chama passa `ate`). Sessão legada sem prazo é
 # tratada como vencida há muito: o bot volta a responder se a pessoa
 # escrever, e a retomada automática não dispara para ela (idade máxima).
+#
+# UMA exceção, declarada (PRD 039, André em 08/11/2026): o SILÊNCIO por
+# contato não vence. Ele não é estado desta máquina nem mora na sessão - mora
+# em `scheduler.contatos_silenciados` e chega aqui como o argumento
+# `silenciado=`. A proibição de 9.1 era de pausa DERIVADA, que calaria
+# milhares de conversas antigas por um critério implícito; esta é um gesto
+# humano por contato, com autor, motivo e data, desfeito por outro gesto.
 
 # O que o cron devolve ao avaliar um vencimento.
 ACAO_PENDENTE = "pendente"
@@ -204,15 +211,24 @@ def _politica_permite(clinic: Dict, session: Dict, phone: str,
 
 
 def pode_responder(clinic: Optional[Dict], session: Optional[Dict], phone: str,
-                   agora: Optional[int] = None) -> bool:
+                   agora: Optional[int] = None, *, silenciado: bool = False) -> bool:
     """Alguém escreveu. O bot pode responder?
 
-    Ordem: a clínica desligou o bot -> não; a conversa está com uma pessoa ->
-    não; a política não cobre -> não. Cooldown e horário NÃO entram: quem
-    escreveu está do outro lado esperando.
+    Ordem: o contato está silenciado -> não; a clínica desligou o bot -> não;
+    a conversa está com uma pessoa -> não; a política não cobre -> não.
+    Cooldown e horário NÃO entram: quem escreveu está do outro lado esperando.
+
+    `silenciado` (PRD 039) é a PRIMEIRA porta, e vence todas as outras: quem
+    silenciou disse "o bot não fala com esta pessoa", e exceção a isso é
+    invisível para quem clicou. Quem sabe o valor é quem lê o Postgres antes
+    de chamar (`silencio.esta_silenciado`); o default `False` mantém todo
+    chamador antigo funcionando, e `tests/unit/test_silencio_em_todo_chamador.py`
+    garante que nenhum ficou sem passar.
     """
     clinic = clinic or {}
     session = session or {}
+    if silenciado:
+        return False
     if clinic.get("bot_paused"):
         return False
     if esta_com_pessoa(session, agora):
@@ -224,10 +240,12 @@ def pode_responder(clinic: Optional[Dict], session: Optional[Dict], phone: str,
 PAUSA_ATENDENTE = "attendant"
 PAUSA_CLINICA = "clinic_paused"
 PAUSA_FORA_DA_REGRA = "not_eligible"
+PAUSA_SILENCIADO = "muted"       # PRD 039: calado para este contato, sem prazo
 
 
 def motivo_da_pausa(clinic: Optional[Dict], session: Optional[Dict], phone: str,
-                    agora: Optional[int] = None) -> Optional[str]:
+                    agora: Optional[int] = None, *,
+                    silenciado: bool = False) -> Optional[str]:
     """Por que o bot NÃO responde esta conversa, ou None quando responde.
 
     As mesmas três portas de `pode_responder`, ditas em palavras para o painel:
@@ -239,6 +257,11 @@ def motivo_da_pausa(clinic: Optional[Dict], session: Optional[Dict], phone: str,
     clinic = clinic or {}
     session = session or {}
     agora = _agora(agora)
+    # `muted` vem na frente de tudo: é o estado mais forte e o único que a
+    # recepção precisa enxergar para agir (um atendente ativo vence sozinho,
+    # um silêncio não).
+    if silenciado:
+        return PAUSA_SILENCIADO
     if esta_com_pessoa(session, agora):
         return PAUSA_ATENDENTE
     if clinic.get("bot_paused"):
@@ -249,7 +272,8 @@ def motivo_da_pausa(clinic: Optional[Dict], session: Optional[Dict], phone: str,
 
 
 def pode_iniciar(clinic: Optional[Dict], session: Optional[Dict], phone: str,
-                 agora: Optional[int] = None, *, transacional: bool = False) -> bool:
+                 agora: Optional[int] = None, *, transacional: bool = False,
+                 silenciado: bool = False) -> bool:
     """Ninguém escreveu. O bot pode falar primeiro?
 
     Tudo de `pode_responder`, mais: em COOLDOWN não inicia, e na janela de
@@ -259,9 +283,13 @@ def pode_iniciar(clinic: Optional[Dict], session: Optional[Dict], phone: str,
     abre o cooldown; barrá-la pelo cooldown seria circular). Um terceiro
     chamador é sinal de que a mensagem não é nenhuma das duas coisas. A janela
     de silêncio vale SEMPRE, inclusive para eles.
+
+    `transacional=True` NÃO isenta do silêncio por contato (`silenciado`,
+    PRD 039): a retomada por vencimento é exatamente o caminho que devolveria
+    a conversa ao bot sozinha, e é o que silenciar existe para impedir.
     """
     agora = _agora(agora)
-    if not pode_responder(clinic, session, phone, agora):
+    if not pode_responder(clinic, session, phone, agora, silenciado=silenciado):
         return False
     if not transacional and estado(session, agora) == COOLDOWN:
         return False

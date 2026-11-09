@@ -105,14 +105,17 @@ def handler(event, context):
         # lista, so tira o selo.
         if conversations:
             try:
-                from src.services import atendimento
+                from src.services import atendimento, silencio
                 from src.services.sessoes_da_clinica import carrega_sessoes_da_clinica
 
                 clinic = _get_clinic(clinic_id)
                 sessoes = carrega_sessoes_da_clinica(clinic_id)
+                # Uma consulta para a lista toda (PRD 039).
+                mudos = silencio.silenciados_da_clinica(clinic_id)
                 now = int(time.time())
                 for phone, conv in conversations.items():
-                    motivo = atendimento.motivo_da_pausa(clinic, sessoes.get(phone), phone, now)
+                    motivo = atendimento.motivo_da_pausa(clinic, sessoes.get(phone), phone, now,
+                                                         silenciado=phone in mudos)
                     conv["pause_reason"] = motivo
                     conv["bot_paused"] = motivo is not None
             except Exception as e:

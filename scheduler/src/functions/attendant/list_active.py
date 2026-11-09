@@ -7,6 +7,7 @@ from boto3.dynamodb.conditions import Key
 
 from src.utils.http import http_response, require_api_key, extract_path_param
 from src.services import atendimento
+from src.services import silencio
 from src.services.bot_policy import CAMPO_DO_MOTIVO, motivo_do_handoff_legivel
 from src.services.retomada import alerta_legivel
 
@@ -64,6 +65,8 @@ def handler(event, context):
         # mostrava "Pausar bot" numa conversa que o bot já não estava atendendo, e
         # o botão prometia uma ação sem efeito.
         clinic = _get_clinic(clinic_id)
+        # Uma consulta por tela, nunca uma por telefone (PRD 039).
+        mudos = silencio.silenciados_da_clinica(clinic_id)
 
         for item in response.get("Items", []):
             session = item.get("session", {})
@@ -80,7 +83,9 @@ def handler(event, context):
 
             # Mesma decisão que o webhook toma ao receber mensagem: é a única
             # forma de o painel não mentir sobre o que vai acontecer.
-            responde = atendimento.pode_responder(clinic, session, phone, now)
+            mudo = phone in mudos
+            responde = atendimento.pode_responder(clinic, session, phone, now,
+                                                  silenciado=mudo)
 
             conversations.append({
                 "phone": phone,
@@ -99,7 +104,8 @@ def handler(event, context):
                 "bot_paused": not responde,
                 # Distingue "alguém pausou" de "a política não cobre esta conversa":
                 # o primeiro se resolve retomando, o segundo é o padrão da clínica.
-                "pause_reason": atendimento.motivo_da_pausa(clinic, session, phone, now),
+                "pause_reason": atendimento.motivo_da_pausa(clinic, session, phone, now,
+                                                            silenciado=mudo),
                 "attendant_active_until": attendant_until,
                 # Desde quando espera. A fila do painel ordena por isto: quem
                 # espera há mais tempo é quem a recepção precisa ver primeiro,

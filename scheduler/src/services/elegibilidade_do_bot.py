@@ -27,6 +27,7 @@ MOTIVOS = {
     "TEM_CONVERSA": "Já existe conversa com este número no WhatsApp.",
     "POLITICA": "O bot não está ativo para este número nesta clínica.",
     "SEM_TELEFONE": "Lead sem telefone.",
+    "SILENCIADO": "O bot está silenciado para este número. Reative na tela do bot.",
 }
 
 # A única origem que NÃO dá direito ao bot: quem escreveu direto no WhatsApp
@@ -41,12 +42,17 @@ def origem_da_direito_ao_bot(source) -> bool:
     return bool(source) and source != ORIGEM_SEM_DIREITO
 
 
-def por_que_nao_pode(lead, clinic):
+def por_que_nao_pode(lead, clinic, *, silenciado=False):
     """A chave do motivo, ou None quando o bot pode iniciar.
 
     A ordem importa para a mensagem: o motivo mais específico primeiro, senão
     todo lead de WhatsApp diria "política não permite", que é verdade e não
     ajuda.
+
+    `silenciado` (PRD 039) é apurado por quem chama, porque aqui não há banco -
+    mesmo contrato de `retomada.pode_retomar`. Vem antes de POLITICA: dizer "o
+    bot não está ativo nesta clínica" para um número que alguém silenciou de
+    propósito manda a atendente procurar o problema no lugar errado.
     """
     lead = lead or {}
 
@@ -86,14 +92,18 @@ def por_que_nao_pode(lead, clinic):
     # `pode_responder`, nao `pode_iniciar`: o botao enfileira para a proxima
     # abertura, entao a janela de silencio de agora nao e motivo para
     # desabilita-lo. A fila reconfere na hora de enviar.
-    if not atendimento.pode_responder(clinic, {"bot_enabled": True}, lead["phone"]):
+    if silenciado:
+        return "SILENCIADO"
+
+    if not atendimento.pode_responder(clinic, {"bot_enabled": True}, lead["phone"],
+                                      silenciado=silenciado):
         return "POLITICA"
 
     return None
 
 
-def pode_iniciar(lead, clinic):
-    return por_que_nao_pode(lead, clinic) is None
+def pode_iniciar(lead, clinic, *, silenciado=False):
+    return por_que_nao_pode(lead, clinic, silenciado=silenciado) is None
 
 
 def motivo_legivel(chave):

@@ -94,14 +94,15 @@ def responder_se_ficou_em_aberto(clinic_id, phone, entregue_em=None):
 
     # Ninguem escreveu agora: e o bot falando primeiro, entao passa pela
     # pergunta proativa. Antes nao conferia nem `bot_paused` nem politica.
-    from src.services import atendimento
+    from src.services import atendimento, silencio
     from src.services.session_store import carrega_sessao
 
     sessao = carrega_sessao(clinic_id, phone)
-    if not atendimento.pode_iniciar(rows[0], sessao, phone):
+    silenciado = silencio.esta_silenciado(clinic_id, phone, db)
+    if not atendimento.pode_iniciar(rows[0], sessao, phone, silenciado=silenciado):
         logger.info(
             f"[Retomada] {phone}: porta fechada "
-            f"(handler={atendimento.estado(sessao)}), nao respondo"
+            f"(handler={atendimento.estado(sessao)}, silenciado={silenciado}), nao respondo"
         )
         return False
 

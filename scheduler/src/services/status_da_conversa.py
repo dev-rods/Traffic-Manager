@@ -94,14 +94,18 @@ def conversas_da_clinica(db, clinic_id):
     return por_variante
 
 
-def enriquece(leads, sessoes, conversas, clinic=None):
+def enriquece(leads, sessoes, conversas, clinic=None, silenciados=None):
     """Devolve os leads com `conversation_status` e `has_whatsapp_chat`.
 
     Não sobrescreve `conversation_started_at`: "respondeu" continua sendo a
     pessoa tendo escrito para nós. A lista de chats do z-api não diz quem falou,
     então usá-la para "respondeu" inflaria a taxa de conversão com conversas em
     que só a clínica falou.
+
+    `silenciados` (PRD 039) é o conjunto de telefones mudos da clínica, lido de
+    uma vez por quem chama - uma consulta por tela, não uma por lead.
     """
+    silenciados = silenciados or set()
     enriquecidos = []
     for lead in leads:
         lead = dict(lead)
@@ -135,7 +139,12 @@ def enriquece(leads, sessoes, conversas, clinic=None):
         # frontend decidir criaria a regra em dois lugares - e a divergencia
         # entre eles e silenciosa, que e o defeito que originou esta tela.
         if clinic is not None:
-            motivo = por_que_nao_pode(lead, clinic)
+            # Só marca quem ESTÁ silenciado (decisão §4.2 do PRD 039): quem
+            # não está não ganha campo, para a lista não virar um mar de selos.
+            mudo = any(v in silenciados for v in variantes_do_numero(telefone))
+            if mudo:
+                lead["bot_silenciado"] = True
+            motivo = por_que_nao_pode(lead, clinic, silenciado=mudo)
             lead["can_start_bot"] = motivo is None
             lead["bot_block_reason"] = motivo
             lead["bot_block_message"] = motivo_legivel(motivo)

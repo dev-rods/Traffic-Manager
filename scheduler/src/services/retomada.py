@@ -117,12 +117,14 @@ def _plano(texto: str) -> str:
 
 
 def pode_retomar(session: Dict, eventos: Sequence[Dict], efeitos_depois: int,
-                 clinic: Dict, phone: str, agora: Optional[int] = None) -> Tuple[bool, str]:
+                 clinic: Dict, phone: str, agora: Optional[int] = None, *,
+                 silenciado: bool = False) -> Tuple[bool, str]:
     """As guardas determinísticas, na ordem. (True, "") quando todas passam.
 
     `efeitos_depois` é a contagem de agendamentos da pessoa criados ou
     alterados após a última fala dela - quem consulta é o chamador, porque
-    aqui não há banco.
+    aqui não há banco. `silenciado` (PRD 039) chega do mesmo jeito e pela
+    mesma razão.
     """
     agora = atendimento._agora(agora)
     fala = ultima_fala(eventos)
@@ -142,8 +144,11 @@ def pode_retomar(session: Dict, eventos: Sequence[Dict], efeitos_depois: int,
     # No instante do vencimento a sessão já lê como COOLDOWN, e o cooldown
     # existe justamente para o bot não iniciar nada DEPOIS da retomada. A
     # retomada é a transição; por isso ela ignora o cooldown (transacional),
-    # mas não a janela de silêncio, o bot_paused nem a política.
-    if not atendimento.pode_iniciar(clinic, session, phone, agora, transacional=True):
+    # mas não a janela de silêncio, o bot_paused, a política nem o silêncio
+    # por contato (PRD 039) - a retomada automática é justamente o caminho
+    # que devolveria ao bot uma conversa que alguém mandou calar.
+    if not atendimento.pode_iniciar(clinic, session, phone, agora, transacional=True,
+                                    silenciado=silenciado):
         return False, PORTA_FECHADA
     return True, ""
 

@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/Badge'
+import { SeloSilenciado } from './SeloSilenciado'
 import { Link } from 'react-router-dom'
 import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon } from '@/components/ui/Icons'
 import { formatCurrency } from '@/utils/formatCurrency'
@@ -115,9 +116,12 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDe
                     <p className="font-medium text-gray-800 truncate">
                       {p.name ?? 'Sem nome'}
                     </p>
-                    {p.gender && (
-                      <Badge variant="neutral">{p.gender === 'M' ? 'Masc' : 'Fem'}</Badge>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {p.gender && (
+                        <Badge variant="neutral">{p.gender === 'M' ? 'Masc' : 'Fem'}</Badge>
+                      )}
+                      <SeloSilenciado silenciado={p.silenciado} />
+                    </div>
                   </div>
                 </div>
               </td>

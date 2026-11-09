@@ -7,6 +7,7 @@ import boto3
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_query_param
 from src.services import atendimento
+from src.services import silencio
 from src.services.session_store import grava_atendimento
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,8 @@ def handler(event, context):
 
     POST /attendant/activate   — pause bot for a phone
     POST /attendant/deactivate — resume bot for a phone
+    POST /attendant/mute       — silencia o bot para um contato, sem prazo (PRD 039)
+    POST /attendant/unmute     — devolve o contato ao bot
     GET  /attendant/status     — check bot status for a phone
     """
     # Execução assíncrona que a própria função agendou. Chega sem httpMethod:
@@ -93,6 +96,10 @@ def handler(event, context):
         return _handle_activate(event)
     elif method == "POST" and path.endswith("/deactivate"):
         return _handle_deactivate(event, context)
+    elif method == "POST" and path.endswith("/mute"):
+        return _handle_mute(event)
+    elif method == "POST" and path.endswith("/unmute"):
+        return _handle_unmute(event)
     else:
         return http_response(404, {"status": "ERROR", "message": "Rota nao encontrada"})
 
@@ -171,8 +178,13 @@ def _handle_deactivate(event, context):
     # mostrava o bot escrevendo e nada saia (PRD 031).
     clinic = _get_clinic_completa(clinic_id)
     motivo_sem_resposta = None
-    if not atendimento.pode_iniciar(clinic, session, phone):
-        motivo_sem_resposta = "fora_do_horario" if _em_silencio(clinic) else "bot_pausado"
+    # "Retomar bot" NAO desfaz o silencio por contato (PRD 039): sao dois
+    # gestos distintos, e a resposta HTTP nao pode prometer "respondendo" para
+    # um numero que alguem mandou calar.
+    mudo = silencio.esta_silenciado(clinic_id, phone)
+    if not atendimento.pode_iniciar(clinic, session, phone, silenciado=mudo):
+        motivo_sem_resposta = ("silenciado" if mudo else
+                               "fora_do_horario" if _em_silencio(clinic) else "bot_pausado")
         logger.info(f"[Attendant] {phone}: porta fechada agora ({motivo_sem_resposta}); bot só ativado")
         respondendo = False
     else:
@@ -237,6 +249,87 @@ def _agendar_retomada(clinic_id, phone, context, entregue_em=None):
         return False
 
 
+def _quem_chamou(event):
+    """Autor do gesto, para a auditoria. A chave mestra não tem nome: fica
+    `painel`, que é a verdade - foi alguém usando o painel."""
+    try:
+        from src.utils.acesso import identifica
+
+        identidade = identifica(event)
+        if identidade and not identidade.chave_mestra:
+            return identidade.nome or identidade.user_id or "painel"
+    except Exception as e:
+        logger.warning(f"[Attendant] Não consegui identificar quem chamou: {e}")
+    return "painel"
+
+
+def _handle_mute(event):
+    """Cala o bot para um contato, sem prazo (PRD 039).
+
+    NÃO mexe na sessão: silêncio e pausa de 24h são estados independentes, e
+    juntá-los aqui faria um botão desfazer o outro.
+    """
+    body = parse_body(event)
+    if not body:
+        return http_response(400, {"status": "ERROR", "message": "Body obrigatorio"})
+
+    clinic_id = body.get("clinic_id")
+    phone = body.get("phone")
+    if not clinic_id or not phone:
+        return http_response(400, {"status": "ERROR", "message": "clinic_id e phone obrigatorios"})
+
+    phone = _normalize_phone(phone)
+    try:
+        registro = silencio.silencia(clinic_id, phone, body.get("motivo"),
+                                     _quem_chamou(event))
+    except ValueError as e:
+        # Motivo ausente ou curto. 400, com o texto que a tela mostra.
+        return http_response(400, {"status": "ERROR", "message": str(e)})
+    except Exception as e:
+        logger.error(f"[Attendant] Falha ao silenciar {phone}: {e}")
+        return http_response(500, {
+            "status": "ERROR", "message": "Não consegui silenciar o bot; tente de novo"})
+
+    return http_response(200, {
+        "status": "OK",
+        "message": f"Bot silenciado para {phone} até alguém reativar",
+        "silencio": registro,
+    })
+
+
+def _handle_unmute(event):
+    """Devolve o contato ao bot.
+
+    Não retoma a pausa de 24h: se havia atendente na conversa, ela segue com a
+    conversa até vencer. Reativar o bot nesse caso é o botão que já existe.
+    """
+    body = parse_body(event)
+    if not body:
+        return http_response(400, {"status": "ERROR", "message": "Body obrigatorio"})
+
+    clinic_id = body.get("clinic_id")
+    phone = body.get("phone")
+    if not clinic_id or not phone:
+        return http_response(400, {"status": "ERROR", "message": "clinic_id e phone obrigatorios"})
+
+    phone = _normalize_phone(phone)
+    try:
+        havia = silencio.reativa(clinic_id, phone, _quem_chamou(event))
+    except Exception as e:
+        logger.error(f"[Attendant] Falha ao reativar {phone}: {e}")
+        return http_response(500, {
+            "status": "ERROR", "message": "Não consegui remover o silêncio; tente de novo"})
+
+    # Sem silêncio para desfazer NÃO é erro: duas pessoas clicando no mesmo
+    # botão não podem ver uma tela vermelha.
+    return http_response(200, {
+        "status": "OK",
+        "message": (f"Bot reativado para {phone}" if havia
+                    else f"{phone} não estava silenciado"),
+        "havia_silencio": havia,
+    })
+
+
 def _handle_status(event):
     clinic_id = extract_query_param(event, "clinic_id")
     phone = extract_query_param(event, "phone")
@@ -258,15 +351,22 @@ def _handle_status(event):
     # "Pausar bot" numa conversa que o bot já não atendia — o botão prometia uma
     # ação sem efeito. Esta é a mesma decisão que o webhook toma.
     clinic = _get_clinic(clinic_id)
-    responde = atendimento.pode_responder(clinic, session, phone, now)
+    # O silencio por contato (PRD 039) e estado independente da pausa de 24h:
+    # os dois podem valer ao mesmo tempo, e o painel precisa saber dos dois
+    # para desenhar o botao certo.
+    mudo = silencio.detalhe(clinic_id, phone)
+    responde = atendimento.pode_responder(clinic, session, phone, now,
+                                          silenciado=bool(mudo))
 
     return http_response(200, {
         "status": "OK",
         "handler": atendimento.estado(session, now),
         "bot_paused": not responde,
-        "pause_reason": atendimento.motivo_da_pausa(clinic, session, phone, now),
+        "pause_reason": atendimento.motivo_da_pausa(clinic, session, phone, now,
+                                                    silenciado=bool(mudo)),
         "attendant_active_until": ttl if atendente_ativo and ttl else None,
         "ttl_remaining_seconds": max(0, ttl - now) if atendente_ativo and ttl else 0,
+        "silencio": mudo,
     })
 
 

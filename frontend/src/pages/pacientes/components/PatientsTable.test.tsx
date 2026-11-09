@@ -40,11 +40,11 @@ const PACIENTE: PatientWithStats = {
   last_message_at: null,
 }
 
-function renderiza() {
+function renderiza(paciente: PatientWithStats = PACIENTE) {
   return render(
     <MemoryRouter>
       <PatientsTable
-        patients={[PACIENTE]}
+        patients={[paciente]}
         onSelect={vi.fn()}
         onWhatsApp={vi.fn()}
         onPauseBot={vi.fn()}
@@ -89,6 +89,22 @@ describe('PatientsTable', () => {
     telaDe(375)
     renderiza()
     expect(screen.getByText('Beatriz Nogueira')).toBeInTheDocument()
+  })
+
+  it('o selo de bot silenciado aparece nos dois modos, e só quando é verdade', () => {
+    // Decisão §4.2 do PRD 039: quem não está silenciado não ganha rótulo -
+    // senão o selo some no meio dos outros justo onde importa.
+    for (const largura of [1200, 375]) {
+      telaDe(largura)
+      renderiza({ ...PACIENTE, silenciado: true })
+      expect(screen.getByText('Bot silenciado')).toBeInTheDocument()
+      cleanup()
+
+      telaDe(largura)
+      renderiza()
+      expect(screen.queryByText('Bot silenciado')).not.toBeInTheDocument()
+      cleanup()
+    }
   })
 
   it('a seleção em lote sobrevive ao celular', () => {

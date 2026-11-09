@@ -25,7 +25,7 @@ import uuid
 import boto3
 from boto3.dynamodb.conditions import Key
 
-from src.services import atendimento, retomada, tarefas
+from src.services import atendimento, retomada, silencio, tarefas
 from src.services.session_store import grava_atendimento
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,9 @@ def handler(event, context):
                 eventos = tracker.get_conversation_messages(clinic_id, phone, limit=retomada.EVENTOS_PARA_CONTEXTO)
                 fala = retomada.ultima_fala(eventos)
                 efeitos = _efeitos_depois(db, clinic_id, phone, fala)
-                pode, motivo = retomada.pode_retomar(sessao, eventos, efeitos, clinic, phone, agora)
+                pode, motivo = retomada.pode_retomar(
+                    sessao, eventos, efeitos, clinic, phone, agora,
+                    silenciado=silencio.esta_silenciado(clinic_id, phone, db))
                 if pode:
                     retomou = _retoma(db, clinic, clinic_id, phone, sessao, eventos, fala, agora, tracker, prefixo)
                     resultado["retomados" if retomou else "calados"] += 1

@@ -12,6 +12,7 @@ export const MOTIVO_DA_PAUSA: Record<NonNullable<PauseReason>, string> = {
   attendant: 'Atendimento humano em andamento',
   clinic_paused: 'Bot desligado para toda a clínica',
   not_eligible: 'Fora da regra de resposta automática',
+  muted: 'Bot silenciado para este contato, sem prazo',
 }
 
 /** Rótulo curto, para o selo na lista. */
@@ -19,19 +20,22 @@ export const SELO_DA_PAUSA: Record<NonNullable<PauseReason>, string> = {
   attendant: 'Com atendente',
   clinic_paused: 'Bot pausado',
   not_eligible: 'Fora da regra',
+  muted: 'Silenciado',
 }
 
 export const CLASSE_DO_SELO: Record<NonNullable<PauseReason>, string> = {
   attendant: 'bg-blue-50 text-blue-700',
   clinic_paused: 'bg-gray-100 text-gray-600',
   not_eligible: 'bg-amber-50 text-amber-700',
+  muted: 'bg-purple-50 text-purple-700',
 }
 
-export const FILTROS = ['todas', 'fora_da_regra', 'com_atendente', 'bot_ativo'] as const
+export const FILTROS = ['todas', 'silenciadas', 'fora_da_regra', 'com_atendente', 'bot_ativo'] as const
 export type Filtro = (typeof FILTROS)[number]
 
 export const ROTULO_DO_FILTRO: Record<Filtro, string> = {
   todas: 'Todas',
+  silenciadas: 'Silenciadas',
   fora_da_regra: 'Fora da regra',
   com_atendente: 'Com atendente',
   bot_ativo: 'Bot ativo',
@@ -45,6 +49,8 @@ export function passaNoFiltro(pauseReason: PauseReason | undefined, filtro: Filt
   switch (filtro) {
     case 'todas':
       return true
+    case 'silenciadas':
+      return pauseReason === 'muted'
     case 'fora_da_regra':
       return pauseReason === 'not_eligible'
     case 'com_atendente':

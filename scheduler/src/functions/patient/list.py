@@ -16,6 +16,12 @@ logger.setLevel(logging.INFO)
 def _serialize_row(row):
     result = {}
     for key, value in row.items():
+        # `silenciado` so viaja quando e verdade (decisao 4.2 do PRD 039): quem
+        # nao esta silenciado nao ganha campo nem selo na tela.
+        if key == "silenciado":
+            if value:
+                result[key] = True
+            continue
         if isinstance(value, (datetime, date, time)):
             result[key] = value.isoformat()
         else:
@@ -132,7 +138,13 @@ def handler(event, context):
                 COUNT(a.id) as total_visits,
                 MAX(a.appointment_date) as last_visit,
                 MIN(a.appointment_date) FILTER (WHERE a.appointment_date >= {HOJE_SQL}) as next_visit,
-                COALESCE(SUM(a.final_price_cents) FILTER (WHERE a.status != 'CANCELLED'), 0) as total_spent_cents
+                COALESCE(SUM(a.final_price_cents) FILTER (WHERE a.status != 'CANCELLED'), 0) as total_spent_cents,
+                -- PRD 039: o bot esta calado para este contato? Subconsulta, nao
+                -- JOIN: um JOIN aqui entraria no GROUP BY, que esta tabela ja
+                -- tem motivo de sobra para nao mexer.
+                EXISTS (SELECT 1 FROM scheduler.contatos_silenciados s
+                         WHERE s.clinic_id = p.clinic_id AND s.phone = p.phone
+                           AND s.reativado_em IS NULL) as silenciado
             FROM scheduler.patients p
             LEFT JOIN scheduler.appointments a ON a.patient_id = p.id AND a.status != 'CANCELLED'
             {where}

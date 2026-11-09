@@ -1,5 +1,12 @@
 import { api } from './api'
-import type { ActiveConversation, ConversationPreview, ConversationMessage, BotMetrics, Tarefa } from '@/types'
+import type {
+  ActiveConversation,
+  ConversationPreview,
+  ConversationMessage,
+  BotMetrics,
+  SilencioDoContato,
+  Tarefa,
+} from '@/types'
 
 interface ActiveConversationsResponse {
   status: string
@@ -32,6 +39,19 @@ interface AttendantResponse {
   answering_open_question?: boolean
 }
 
+interface SilenciarResponse {
+  status: string
+  message: string
+  silencio: SilencioDoContato & { ja_estava: boolean }
+}
+
+interface ReativarSilencioResponse {
+  status: string
+  message: string
+  /** `false` quando não havia silêncio: não é erro, só não havia o que desfazer. */
+  havia_silencio: boolean
+}
+
 interface TarefasResponse {
   status: string
   tarefas: Tarefa[]
@@ -50,6 +70,8 @@ interface AttendantStatusResponse {
   bot_paused: boolean
   attendant_active_until: number | null
   ttl_remaining_seconds: number
+  /** Silêncio vivo deste contato, ou null (PRD 039). */
+  silencio: SilencioDoContato | null
 }
 
 export const botService = {
@@ -89,6 +111,20 @@ export const botService = {
   resumeForPhone(clinicId: string, phone: string) {
     return api
       .post<AttendantResponse>('/attendant/deactivate', { clinic_id: clinicId, phone })
+      .then((r) => r.data)
+  },
+
+  // Silêncio por contato, sem prazo (PRD 039). Não se confunde com a pausa de
+  // 24h acima: só outro gesto humano o desfaz.
+  silenciar(clinicId: string, phone: string, motivo: string) {
+    return api
+      .post<SilenciarResponse>('/attendant/mute', { clinic_id: clinicId, phone, motivo })
+      .then((r) => r.data)
+  },
+
+  reativarSilencio(clinicId: string, phone: string) {
+    return api
+      .post<ReativarSilencioResponse>('/attendant/unmute', { clinic_id: clinicId, phone })
       .then((r) => r.data)
   },
 

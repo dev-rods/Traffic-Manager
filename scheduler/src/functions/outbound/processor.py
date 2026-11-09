@@ -21,6 +21,7 @@ import boto3
 from src.providers.whatsapp_provider import get_provider
 from src.services.agent_runner import falar
 from src.services import atendimento
+from src.services import silencio
 from src.services.business_hours import fuso, is_open
 from src.services.db.postgres import PostgresService
 from src.services.message_tracker import MessageTracker
@@ -166,8 +167,11 @@ def handler(event, context):
             # cooldown e janela de silencio barram quem vai falar primeiro.
             sessao_real = _load_session(clinic_id, phone)
             sessao_real["bot_enabled"] = True
+            # Silencio por contato (PRD 039): ADIA tambem, nunca falha - item
+            # FAILED e terminal e prenderia o lead para sempre.
             if not atendimento.pode_iniciar(clinic, sessao_real, phone,
-                                            int(agora_utc.timestamp())):
+                                            int(agora_utc.timestamp()),
+                                            silenciado=silencio.esta_silenciado(clinic_id, phone)):
                 # ADIA, nao falha. A politica muda: o piloto de hoje sai
                 # amanha, e 3 leads de 02/09/2026 ficaram parados para sempre
                 # porque FAILED e terminal. Quem para a repeticao e o prazo.

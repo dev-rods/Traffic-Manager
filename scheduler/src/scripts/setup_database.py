@@ -1351,6 +1351,30 @@ SQL_STATEMENTS = [
         payload JSONB,
         received_at TIMESTAMPTZ DEFAULT NOW()
     )""",
+
+    # PRD 039: o bot calado para UM contato, sem prazo. Nada e apagado -
+    # silenciar, reativar e silenciar de novo deixa tres linhas, e a auditoria
+    # (quem, quando, por que) e metade do motivo da tabela existir.
+    """CREATE TABLE IF NOT EXISTS scheduler.contatos_silenciados (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        phone VARCHAR(20) NOT NULL,
+        motivo TEXT NOT NULL,
+        silenciado_por VARCHAR(120) NOT NULL,
+        silenciado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        reativado_por VARCHAR(120),
+        reativado_em TIMESTAMPTZ
+    )""",
+    # Um silencio VIVO por contato; os reativados nao contam. Mesmo padrao do
+    # uq_patient_consents_em_andamento (PRD 036).
+    """CREATE UNIQUE INDEX IF NOT EXISTS uq_contatos_silenciados_ativo
+       ON scheduler.contatos_silenciados (clinic_id, phone)
+       WHERE reativado_em IS NULL""",
+    # A lista do painel pergunta "quais numeros estao mudos nesta clinica?" a
+    # cada carregamento.
+    """CREATE INDEX IF NOT EXISTS idx_contatos_silenciados_clinica
+       ON scheduler.contatos_silenciados (clinic_id)
+       WHERE reativado_em IS NULL""",
 ]
 
 
