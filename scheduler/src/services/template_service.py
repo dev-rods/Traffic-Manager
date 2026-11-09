@@ -51,9 +51,6 @@ Clínica: {{clinic_display_name}}
 Endereço: {{clinic_address}}
 Telefone: {{clinic_phone}}
 
-DADOS JÁ COLETADOS:
-{{collected_data_summary}}
-
 {{single_service_hint}}
 
 ═══ REGRA FUNDAMENTAL ═══
