@@ -103,7 +103,10 @@ class TestRecusa(unittest.TestCase):
     def test_recusa_nomeia_a_dona_do_endereco(self):
         msg = recusa_endereco_alheio(DbFalso(), NOBRE, BLOCO_REAL)
         self.assertIn(ESSENCIA, msg)
-        self.assertIn("clinic_address", msg)
+        # Com as chaves que a pessoa precisa digitar. Conferir só por
+        # "clinic_address" deixou passar um "{clinic_address}" de uma chave,
+        # que é nome de variável que o template não reconhece.
+        self.assertIn("{{clinic_address}}", msg)
 
     def test_texto_limpo_passa(self):
         self.assertIsNone(recusa_endereco_alheio(
