@@ -69,25 +69,34 @@ expansão rodar - ninguém descobre isso sozinho.
 
 ## 3. O que muda
 
-### 3.1 O atalho leva ao histórico
+### 3.1 O atalho leva ao histórico, e nada é destacado lá
 
 `?agendamento=<id>` para de abrir o modal. A aplicadora cai na lista de
-registros - que já mostra o parâmetro de cada sessão anterior sem precisar
-expandir nada - com a ação de registrar aquela sessão em destaque.
+registros - que já mostra o parâmetro de cada sessão anterior sem expandir nada.
 
-Fica a decidir **como** destacar (ver §5.1): um botão com rótulo específico
-("Registrar a sessão de hoje") ou a linha daquele agendamento marcada na lista
-de sessões sem registro.
+**Decidido (André, 08/11/2026):** o histórico **não destaca** a sessão do
+atalho. Ele mostra só os registros, como hoje. Quem escolhe a sessão é o modal,
+num clique em "Novo registro". O rótulo do botão também não muda.
+
+Consequência que simplifica o trabalho: com a escolha sempre passando pelo
+rádio, o parâmetro `?agendamento=` **deixa de ter função**. Ele existia para
+pré-selecionar, e pré-seleção foi justamente o que produziu o defeito (§2).
+Sai da URL e do componente - ver §5.1, que agora é só a confirmação disso.
 
 ### 3.2 Escolhida a sessão, as áreas vêm prontas
 
-Ao abrir o modal com uma sessão já escolhida - pelo atalho ou por qualquer
-caminho futuro - a expansão de áreas roda igual ao clique no rádio. A regra
-passa a valer **uma vez só, no mesmo lugar**, em vez de depender de qual evento
-disparou.
+As sessões sem registro aparecem no modal **da mais recente para a mais
+antiga**, e escolher uma cria as caixas das áreas já com a sugestão de
+parâmetro.
 
-Isso é uma correção de defeito, não feature nova: a função existe, está testada
-e só não é chamada nesse caminho.
+A ordem **já está correta** hoje: o backend ordena
+`ORDER BY a.appointment_date DESC` (`patient_record/list.py:88`) e nem o
+histórico nem o modal reordenam. Nada a fazer aqui além de um teste que
+sustente a ordem, para ela não se perder num refactor.
+
+E a expansão de áreas **já funciona** por esse caminho (`escolheSessao` no
+`onChange` do rádio). Com a decisão de §3.1, o único defeito era a
+pré-seleção silenciosa - que deixa de existir.
 
 ### 3.3 O caso que a lista não cobre
 
@@ -106,11 +115,11 @@ confirmado primeiro - é decisão §5.2.
 
 ### Dentro
 
-- O atalho da agenda passa a abrir o histórico, com a sessão do agendamento em
-  destaque.
-- Abrir o modal com sessão pré-escolhida pré-preenche as áreas, com a mesma
-  expansão de área composta e a mesma sugestão de parâmetro do clique no rádio.
-- Mensagem honesta quando o agendamento do atalho não está na lista.
+- O atalho da agenda passa a abrir o histórico, sem destaque nenhum.
+- `?agendamento=` sai da URL, da `DocumentosPage` e do `HistoricoDeSessao`:
+  sem pré-seleção, não há caminho que pule a expansão de áreas.
+- Teste que sustenta a ordem das sessões (mais recente primeiro) e a criação
+  das caixas de área ao escolher.
 - Testes: o atalho não abre o modal; o modal com `agendamentoInicial`
   pré-preenche as áreas; área composta expande nos dois caminhos.
 
@@ -126,19 +135,18 @@ confirmado primeiro - é decisão §5.2.
 
 ## 5. Decisões para o André
 
-### 5.1 Como a sessão do atalho aparece no histórico
+### 5.1 Como a sessão do atalho aparece no histórico - DECIDIDO
 
-| Opção | Como fica | Custo |
-|---|---|---|
-| **A. Botão com rótulo específico** (recomendada) | O histórico abre normal e o botão diz "Registrar a sessão de 08/11", em vez de "+ Novo registro". Um clique leva ao modal já preenchido. | baixo |
-| B. Linha destacada na lista | A sessão sem registro aparece realçada na própria lista, e clicar nela abre o modal. | médio; mexe no desenho da lista |
-| C. Abrir o modal, mas com a última sessão resumida dentro dele | Mantém zero cliques e traz o parâmetro anterior para dentro do formulário. | médio; é outra tela |
+**Decidido (André, 08/11/2026):** não aparece. O histórico mostra só os
+registros; a escolha da sessão vive no modal, atrás de "Novo registro", com as
+sessões sem registro listadas da mais recente para a mais antiga.
 
-Recomendo **A**: resolve o pedido com o menor movimento, mantém um clique de
-distância do formulário e não inventa um componente novo. A opção C merece ser
-registrada porque é a que mais economiza movimento da aplicadora - se o
-histórico inteiro for mais do que ela precisa ver, vale virar o caminho padrão
-depois.
+As três opções que este PRD levantou (botão com rótulo da sessão, linha
+destacada na lista, resumo da última sessão dentro do modal) foram **recusadas**
+em favor do caminho mais simples: nenhuma delas, nenhum componente novo.
+
+O André também reconsiderou e **manteve** o redirecionamento para o histórico -
+era a pergunta de fundo do pedido original, e segue de pé.
 
 ### 5.2 Agendamento pendente
 
@@ -161,8 +169,10 @@ seu aval.**
 
 | Arquivo | Mudança |
 |---|---|
-| `frontend/src/pages/documentos/components/HistoricoDeSessao.tsx` | não abrir o modal pelo parâmetro; botão com rótulo da sessão |
-| `frontend/src/pages/documentos/components/RegistroDeSessaoModal.tsx` | pré-preencher as áreas quando a sessão já vem escolhida |
+| `frontend/src/pages/documentos/components/HistoricoDeSessao.tsx` | não abrir o modal pelo parâmetro; `agendamentoInicial` sai |
+| `frontend/src/pages/documentos/DocumentosPage.tsx` | para de ler `?agendamento=` |
+| `frontend/src/pages/documentos/components/RegistroDeSessaoModal.tsx` | `agendamentoInicial` sai; a escolha passa a ser só pelo rádio |
+| `frontend/src/pages/agenda/components/AppointmentPopover.tsx` | o link perde o `?agendamento=` |
 | `frontend/src/pages/agenda/components/AppointmentPopover.tsx` | só o comentário, que hoje descreve um comportamento que vai mudar |
 | `scheduler/src/functions/patient_record/list.py` | somente se a decisão §5.2 for a opção 1 |
 
@@ -174,10 +184,12 @@ Nenhuma migration. Nenhuma mudança de contrato de API, exceto na §5.2 opção 
 
 - [ ] Clicar em "Registrar sessão" na agenda abre o **histórico** daquela
       paciente, com os parâmetros das sessões anteriores visíveis sem expandir.
-- [ ] Dali, um clique abre o registro **com as áreas do agendamento já
-      preenchidas** e com a sugestão de parâmetro do protocolo.
-- [ ] Área composta expande em duas aplicações pelo atalho, igual ao clique no
-      rádio.
+- [ ] "Novo registro" lista as sessões sem registro **da mais recente para a
+      mais antiga**, e escolher uma cria as caixas das áreas com a sugestão do
+      protocolo.
+- [ ] Área composta expande em duas aplicações.
+- [ ] Nenhum caminho abre o modal com sessão escolhida sem as áreas montadas -
+      a pré-seleção deixou de existir.
 - [ ] Agendamento que não está na lista produz mensagem clara, não tela muda.
 - [ ] A aplicadora não precisa adicionar nenhuma área à mão no caso comum.
 - [ ] `npm run build`, `npm run lint` e `npm run test` verdes.
@@ -188,8 +200,8 @@ Nenhuma migration. Nenhuma mudança de contrato de API, exceto na §5.2 opção 
 
 | Risco | Mitigação |
 |---|---|
-| Um clique a mais no caminho de todo dia | É o clique que põe o parâmetro anterior na frente dela, que é o pedido; o rótulo do botão diz exatamente qual sessão será registrada |
-| A expansão rodar duas vezes e duplicar aplicações | A expansão substitui a lista (`setAplicacoes(novas)`), não acrescenta; o teste cobre abrir pelo atalho e trocar de rádio em seguida |
+| Dois cliques a mais no caminho de todo dia (histórico, "Novo registro", escolher a sessão) | O primeiro põe o parâmetro anterior na frente dela, que é o pedido. Os outros dois são a escolha explícita que substitui a pré-seleção silenciosa - foi ela que gerou o defeito |
+| Ela escolher a sessão errada na lista | A lista traz data, hora e áreas de cada uma, e vem da mais recente para a mais antiga; o registro é editável e tem trilha (`edit_count`) |
 | Pendente entrar na lista e alguém registrar sessão que não ocorreu | O registro é editável e tem trilha de edição (`edit_count`); e hoje o risco oposto - não conseguir registrar o que ocorreu - é o que acontece |
 
 ---
@@ -204,7 +216,7 @@ Nenhuma migration. Nenhuma mudança de contrato de API, exceto na §5.2 opção 
 
 ## Status
 
-- [ ] Pendente (aguardando as decisões de §5.1 e §5.2)
+- [ ] §5.1 decidida em 08/11/2026; aguardando a de §5.2 (agendamento pendente)
 - [ ] Spec gerada: `spec/042-registrar-sessao-pela-agenda.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
