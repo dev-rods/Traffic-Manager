@@ -225,7 +225,7 @@ Nenhuma migration.
 
 ## Status
 
-- [ ] Pendente (aguardando §7.1 e §7.2)
-- [ ] Spec gerada: `spec/043-confirmar-alteracao-de-agendamento.md`
+- [x] Aprovado em 08/11/2026: §7.1 só o que tem efeito fora da tela; §7.2 sim
+- [x] Spec gerada em 08/11/2026: `spec/043-confirmar-alteracao-de-agendamento.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`

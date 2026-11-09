@@ -14,6 +14,14 @@ import { TimeField } from './TimeField'
 import { ObservacaoField } from './ObservacaoField'
 import { PrimeiraVisitaField } from './PrimeiraVisitaField'
 import { ehHorarioValido } from '@/lib/horario'
+import { ResumoDaAlteracao } from './ResumoDaAlteracao'
+import {
+  avisosDaAlteracao,
+  linhasDaAlteracao,
+  temEfeitoForaDaTela,
+  textoDoDesconto,
+  type AlteracaoPretendida,
+} from '@/lib/alteracaoDeAgendamento'
 import type { Appointment, UpdateAppointmentPayload } from '@/types'
 import { precoComDesconto } from '@/lib/cadastroPaciente'
 
@@ -40,6 +48,9 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   )
   const [duracaoDescartada, setDuracaoDescartada] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Segundo passo DENTRO do mesmo modal (PRD 043): dois overlays empilhados
+  // escondem o formulário que a pessoa precisa poder revisar.
+  const [confirmando, setConfirmando] = useState(false)
 
   // Discount state
   const initDiscountMode = appointment?.discount_reason === 'partnership'
@@ -161,6 +172,44 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
 
   const hasChanges = dateChanged || timeChanged || primeiraChanged || notesChanged || serviceChanged || areasChanged || discountChanged || manualChanged
 
+  // O que vai mudar, em texto legível, para o resumo do PRD 043. Observação e
+  // primeira visita não entram: não têm efeito fora da tela.
+  const nomeDoServico = (id: string) =>
+    services?.find((s) => s.id === id)?.name ?? id
+  const nomesDasAreas = (ids: string[]) => {
+    const nomes = ids
+      .map((id) => serviceAreas?.find((ar) => ar.area_id === id)?.name)
+      .filter((n): n is string => Boolean(n))
+    return nomes.length > 0 ? nomes.join(', ') : 'nenhuma'
+  }
+  const alteracao: AlteracaoPretendida = {
+    ...(dateChanged ? { data: { de: a.appointment_date, para: date } } : {}),
+    ...(timeChanged ? { horario: { de: a.start_time.slice(0, 5), para: time } } : {}),
+    ...(serviceChanged
+      ? { servico: { de: a.service_name ?? nomeDoServico(a.service_id), para: nomeDoServico(serviceId) } }
+      : {}),
+    ...(areasChanged
+      ? { areas: { de: a.areas || 'nenhuma', para: nomesDasAreas(selectedAreaIds) } }
+      : {}),
+    ...(manualChanged
+      ? {
+          duracao: {
+            de: a.manual_duration_minutes ? `${a.manual_duration_minutes} min` : 'calculada',
+            para: manualDuration ? `${manualDuration} min` : 'calculada',
+          },
+        }
+      : {}),
+    ...(discountChanged
+      ? {
+          desconto: {
+            de: textoDoDesconto(initDiscountMode, a.discount_pct ?? 0),
+            para: textoDoDesconto(discountMode, customDiscountPct),
+          },
+        }
+      : {}),
+  }
+  const pedeConfirmacao = temEfeitoForaDaTela(alteracao)
+
   const toggleArea = (areaId: string) => {
     setSelectedAreaIds((prev) =>
       prev.includes(areaId)
@@ -196,6 +245,21 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
       return
     }
 
+    // A porta do PRD 043: mudança com efeito fora da tela não executa no
+    // clique. Mostra o que vai mudar e espera o segundo gesto. Observação e
+    // primeira visita seguem direto - confirmação que não compra nada treina
+    // a clicar sem ler.
+    if (pedeConfirmacao && !confirmando) {
+      setError(null)
+      setConfirmando(true)
+      return
+    }
+
+    await executa()
+  }
+
+  /** Grava. Chamado pelo Salvar (sem campo sensível) e pelo Confirmar. */
+  const executa = async () => {
     setError(null)
     try {
       const payload: UpdateAppointmentPayload = {}
@@ -244,6 +308,23 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
         setError('Erro ao atualizar agendamento')
       }
     }
+  }
+
+  if (confirmando) {
+    return (
+      <Modal open onClose={onClose} title="Confirmar alteração" width="lg">
+        <ResumoDaAlteracao
+          paciente={displayName}
+          quando={`${a.appointment_date} às ${a.start_time.slice(0, 5)}`}
+          linhas={linhasDaAlteracao(alteracao)}
+          avisos={avisosDaAlteracao(a, alteracao)}
+          onVoltar={() => setConfirmando(false)}
+          onConfirmar={() => void executa()}
+          salvando={updateAppointment.isPending}
+          erro={error}
+        />
+      </Modal>
+    )
   }
 
   return (
