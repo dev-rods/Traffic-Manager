@@ -45,6 +45,10 @@ from src.services.menor_de_idade import afirmacao_sem_respaldo as afirmacao_de_m
 from src.services.menor_de_idade import precisa_avisar as precisa_avisar_menor
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.preco_minimo import preco_minimo_por_area
+from src.services.pergunta_de_data import (
+    oferece_ver_as_datas,
+    pede_data_sem_consulta,
+)
 from src.services.proveniencia import fatos_de_agenda, fatos_sem_origem
 from src.services.recusa_repetida import CAMPO as CAMPO_DE_RECUSAS
 from src.services.recusa_repetida import e_laco as recusa_em_laco
@@ -107,6 +111,7 @@ from src.services.bot_policy import (
     MOTIVO_FORA_DO_ESCOPO,
     MOTIVO_INSISTIU_CADASTRO,
     MOTIVO_PEDIDO,
+    MOTIVO_PEDIU_DATA_SEM_CONSULTA,
     entrega_a_humano,
 )
 
@@ -524,6 +529,11 @@ class ConversationAgent:
         # dissera dias antes, já cancelado. Aqui a decisão sai do modelo: se a
         # pergunta é sobre agenda, preço ou disponibilidade, a consulta acontece
         # antes de ele escrever, e o resultado entra como fonte única.
+        # Deste turno, nao da sessao: respaldo_das_tools atravessa turnos
+        # (nasce de respaldo_anterior) e guarda resultados, nao nomes. A
+        # pre-carga logo abaixo ja escreve nestes dois.
+        tools_do_turno = set()
+        areas_do_turno = False
         dados_consultados = []
         intencoes_detectadas = set() if gatilho else intencoes(user_content)
         if not gatilho:
@@ -540,6 +550,7 @@ class ConversationAgent:
                     )
                     dados_consultados.append((nome_tool, resultado))
                     respaldo_das_tools.append(resultado)
+                    tools_do_turno.add(nome_tool)
                 except Exception as e:
                     logger.error(f"[PreCarga] {nome_tool} falhou para {phone}: {e}")
 
@@ -632,6 +643,7 @@ class ConversationAgent:
         ja_refez_narracao = False
         ja_refez_valor = False
         ja_refez_truncada = False
+        ja_refez_data = False
         em_campanha = campanha_viva(session)
         # O contador do quebra-laço atravessa turnos: cada pergunta da trava é
         # uma mensagem nova, e um contador de uma rodada só veria a primeira
@@ -850,6 +862,67 @@ class ConversationAgent:
                             f"resposta segue | {texto_provisorio[:160]!r}"
                         )
 
+                    # Pedir data sem ter consultado a agenda e o irmao do
+                    # bloco abaixo, do lado da PERGUNTA: "qual data fica melhor
+                    # pra voce?" nao afirma fato nenhum, e por isso a
+                    # proveniencia aprova - foi assim que uma lead da Nobre,
+                    # que atende em cerca de uma data por mes, foi convidada a
+                    # escolher um dia que nao existe (09/11/2026). Ver
+                    # pergunta_de_data e PRD 044.
+                    if oferece_ver_as_datas(texto_provisorio):
+                        logger.info(
+                            f"[DataSemConsulta] {phone}: ofereceu ver as datas antes de "
+                            f"consultar | clinic={clinic_id}"
+                        )
+                    pediu_data = (
+                        pede_data_sem_consulta(texto_provisorio)
+                        and "check_availability" not in tools_do_turno
+                        # Decisao 7.2: so com as areas escolhidas no turno. No
+                        # inicio da conversa o prompt manda NAO consultar ainda,
+                        # e barrar ali brigaria com uma regra correta.
+                        and areas_do_turno
+                    )
+                    if pediu_data and not ja_refez_data and not efeito_cometido:
+                        ja_refez_data = True
+                        logger.warning(
+                            f"[DataSemConsulta] {phone}: pediu data sem consultar a "
+                            f"agenda; refazendo | clinic={clinic_id}"
+                        )
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            "PARE. Você pediu uma data à pessoa sem consultar a agenda. "
+                            "As áreas dela já estão definidas, então a consulta é "
+                            "possível agora. Chame check_availability e mostre as datas "
+                            "que ela devolver, usando o label de cada uma. Se não voltar "
+                            "nenhuma data, siga a regra de transferir para uma "
+                            "especialista - não pergunte a data de novo."
+                        )})
+                        forcar_proxima = True
+                        text_parts = []
+                        continue
+                    elif pediu_data:
+                        # Insistiu. A mensagem NAO vai: numa clinica de poucas
+                        # datas ela custa uma pessoa aparecendo no dia errado.
+                        logger.error(
+                            f"[DataSemConsulta] {phone}: insistiu; entregando para uma "
+                            f"pessoa | clinic={clinic_id} | {texto_provisorio[:160]!r}"
+                        )
+                        text_parts = [
+                            "Vou confirmar as próximas datas com uma especialista e "
+                            "já te retorno 😊"
+                        ]
+                        pending_buttons = None
+                        handoff_requested = True
+                        # O motivo vai pela variavel, nao por entrega_a_humano
+                        # aqui: o bloco de handoff depois do laco chama
+                        # entrega_a_humano com `motivo_do_handoff` e abre a
+                        # pendencia. Chamar nos dois lugares sobrescreveria o
+                        # motivo por MOTIVO_PEDIDO e a recepcao leria
+                        # "pediu para falar com uma pessoa".
+                        motivo_do_handoff = MOTIVO_PEDIU_DATA_SEM_CONSULTA
+                        history.append({"role": "assistant", "content": content_blocks})
+                        break
+
                     if inventado and not ja_refez and not efeito_cometido:
                         ja_refez = True
                         logger.warning(
@@ -886,6 +959,12 @@ class ConversationAgent:
                                  "turnos": _turnos_para_trava(history)},
                     )
                     respaldo_das_tools.append(result)
+                    tools_do_turno.add(tool_use["name"])
+                    # As areas ESCOLHIDAS pela pessoa so existem como argumento
+                    # de tool. list_areas nao conta: devolve o catalogo da
+                    # clinica, nao a escolha de ninguem.
+                    if (tool_use.get("input") or {}).get("service_area_pairs"):
+                        areas_do_turno = True
 
                     # Intercept special tools
                     if tool_use["name"] == "present_options" and result.get("presented"):
