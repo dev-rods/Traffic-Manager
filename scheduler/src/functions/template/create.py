@@ -6,6 +6,7 @@ from psycopg2.extras import Json
 
 from src.utils.http import parse_body, http_response, require_api_key, extract_path_param
 from src.services.db.postgres import PostgresService
+from src.services.endereco_alheio import recusa_endereco_alheio
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -72,6 +73,13 @@ def handler(event, context):
 
         # 4. Inserir no banco de dados
         db = PostgresService()
+
+        # Cadastrar clinica nova copiando o texto da anterior e o endereco da
+        # anterior ir junto foi o bug de 09/11/2026. Recusa aqui, nao avisa.
+        recusa = recusa_endereco_alheio(db, clinic_id, content)
+        if recusa:
+            logger.warning(f"[clinicId: {clinic_id}] Template recusado: {recusa}")
+            return http_response(422, {"status": "ERROR", "message": recusa})
 
         query = """
             INSERT INTO scheduler.message_templates (
