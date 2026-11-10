@@ -13,11 +13,15 @@ let consulta: {
 } = { isLoading: false, isError: false, refetch: vi.fn() }
 
 const renovar = vi.fn()
+const registrarPapel = vi.fn()
 vi.mock('@/hooks/useConsents', () => ({
   useConsentsDoPaciente: () => consulta,
   useAbrirDocumentoDoTermo: () => ({ mutate: abrir, isPending: false, isError: false }),
   useRenovarTermo: () => ({ mutate: renovar, isPending: false, isSuccess: false }),
+  useRegistrarPapel: () => ({ mutate: registrarPapel, isPending: false }),
 }))
+vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast: vi.fn() }) }))
+vi.mock('@/hooks/useOverlayLock', () => ({ useOverlayLock: () => undefined }))
 
 function termo(over: Partial<PatientConsent> = {}): PatientConsent {
   return {
@@ -46,6 +50,7 @@ function termo(over: Partial<PatientConsent> = {}): PatientConsent {
 
 beforeEach(() => {
   abrir.mockReset()
+  registrarPapel.mockReset()
   consulta = { isLoading: false, isError: false, refetch: vi.fn() }
 })
 
@@ -63,11 +68,44 @@ describe('TermoDeConsentimento', () => {
     expect(consulta.refetch).toHaveBeenCalled()
   })
 
-  it('vazio ensina onde se assina', () => {
+  it('vazio ensina onde se assina e oferece o papel (PRD 047)', async () => {
     consulta = { ...consulta, data: { consents: [], consent_enabled: true, term_version: '2026-11' } }
     render(<TermoDeConsentimento patientId="p1" />)
     expect(screen.getByText('Nenhum documento assinado')).toBeInTheDocument()
-    expect(screen.getByText(/ficha de anamnese no check-in do iPad/)).toBeInTheDocument()
+    expect(screen.getByText(/ficha no check-in do iPad/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Assinado em papel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }))
+    expect(registrarPapel).toHaveBeenCalledWith(
+      { patientId: 'p1', signedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
+      expect.any(Object)
+    )
+  })
+
+  it('vazio sem versão configurada: sem botão de papel', () => {
+    consulta = { ...consulta, data: { consents: [], consent_enabled: false, term_version: null } }
+    render(<TermoDeConsentimento patientId="p1" />)
+    expect(screen.queryByRole('button', { name: 'Assinado em papel' })).toBeNull()
+  })
+
+  it('com documentos mas sem vigente: oferece o papel; com vigente, não (PRD 047)', () => {
+    consulta = {
+      ...consulta,
+      data: {
+        consents: [termo({ term_version: '2026-01' })],
+        consent_enabled: true,
+        term_version: '2026-11',
+      },
+    }
+    const { rerender } = render(<TermoDeConsentimento patientId="p1" />)
+    expect(screen.getByRole('button', { name: 'Assinado em papel' })).toBeInTheDocument()
+
+    consulta = {
+      ...consulta,
+      data: { consents: [termo()], consent_enabled: true, term_version: '2026-11' },
+    }
+    rerender(<TermoDeConsentimento patientId="p1" />)
+    expect(screen.queryByRole('button', { name: 'Assinado em papel' })).toBeNull()
   })
 
   it('lista as versões e abre o PDF por URL assinada', async () => {

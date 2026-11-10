@@ -12,6 +12,8 @@ export interface ListPatientsParams {
   next_visit?: 'with' | 'without'
   last_message_days?: string
   last_visit_before?: string
+  /** PRD 047: `missing` = sem termo vigente; `ok` = assinado ou em papel. */
+  consent?: 'missing' | 'ok'
   page?: number
   per_page?: number
 }

@@ -1,7 +1,9 @@
 import { Badge } from '@/components/ui/Badge'
 import { SeloSilenciado } from './SeloSilenciado'
+import { SeloSemTermo } from './SeloSemTermo'
 import { Link } from 'react-router-dom'
-import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon } from '@/components/ui/Icons'
+import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon, PenIcon } from '@/components/ui/Icons'
+import { semTermo } from '@/utils/termo'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { formatDate } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
@@ -15,6 +17,10 @@ interface PatientsTableProps {
   onWhatsApp: (patient: PatientWithStats) => void
   onPauseBot: (phone: string) => void
   onDelete: (patient: PatientWithStats) => void
+  /** "Assinado em papel" na linha (PRD 047); só para quem está sem termo. */
+  onPapel: (patient: PatientWithStats) => void
+  /** A clínica tem versão do termo configurada. */
+  consentEnabled: boolean
   pausedPhones: Set<string>
   pauseLoading?: boolean
   selectedIds: Set<string>
@@ -36,7 +42,7 @@ interface PatientsTableProps {
  * As props sao as mesmas nos dois caminhos, entao quem chama nao sabe a
  * diferenca.
  */
-export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDelete, pausedPhones, pauseLoading, selectedIds, allSelected, onToggleSelect, onToggleAll }: PatientsTableProps) {
+export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDelete, onPapel, consentEnabled, pausedPhones, pauseLoading, selectedIds, allSelected, onToggleSelect, onToggleAll }: PatientsTableProps) {
   const ehDesktop = useEhDesktop()
 
   if (!ehDesktop) {
@@ -66,6 +72,8 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDe
               onWhatsApp={onWhatsApp}
               onPauseBot={onPauseBot}
               onDelete={onDelete}
+              onPapel={onPapel}
+              consentEnabled={consentEnabled}
             />
           ))}
         </ul>
@@ -121,6 +129,7 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDe
                         <Badge variant="neutral">{p.gender === 'M' ? 'Masc' : 'Fem'}</Badge>
                       )}
                       <SeloSilenciado silenciado={p.silenciado} />
+                      <SeloSemTermo consentEnabled={consentEnabled} status={p.consent_status} />
                     </div>
                   </div>
                 </div>
@@ -184,6 +193,16 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDe
                   >
                     <DocumentIcon className="w-[18px] h-[18px]" />
                   </Link>
+                  {semTermo(consentEnabled, p.consent_status) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onPapel(p) }}
+                      className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-amber-600 hover:text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/40"
+                      title="Assinado em papel"
+                      aria-label="Assinado em papel"
+                    >
+                      <PenIcon className="w-[18px] h-[18px]" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(p) }}
                     className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40"

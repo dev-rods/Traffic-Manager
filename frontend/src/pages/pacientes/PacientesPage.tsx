@@ -15,7 +15,7 @@ import { PatientSearch } from './components/PatientSearch'
 import { Drawer } from '@/components/ui/Drawer'
 import { FiltrosDePacientes } from './components/FiltrosDePacientes'
 import { contaFiltrosAtivos } from './components/contagemDeFiltros'
-import type { NextVisitFilter, LastMessageFilter } from './components/contagemDeFiltros'
+import type { NextVisitFilter, LastMessageFilter, ConsentFilter } from './components/contagemDeFiltros'
 import { PatientsTable } from './components/PatientsTable'
 import { CreatePatientModal } from './components/CreatePatientModal'
 import { EditPatientModal } from './components/EditPatientModal'
@@ -23,6 +23,8 @@ import { BatchMessageModal } from './components/BatchMessageModal'
 import { DeletePatientConfirmModal } from './components/DeletePatientConfirmModal'
 import { BatchDeletePatientsModal } from './components/BatchDeletePatientsModal'
 import { AcoesEmLote } from './components/AcoesEmLote'
+import { BatchPapelModal } from './components/BatchPapelModal'
+import { RegistrarPapelModal } from '@/components/RegistrarPapelModal'
 import type { PatientWithStats } from '@/types'
 
 export function PacientesPage() {
@@ -30,6 +32,7 @@ export function PacientesPage() {
   const [nextVisitFilter, setNextVisitFilter] = useState<NextVisitFilter>('all')
   const [lastMessageFilter, setLastMessageFilter] = useState<LastMessageFilter>('all')
   const [lastVisitBefore, setLastVisitBefore] = useState('')
+  const [consentFilter, setConsentFilter] = useState<ConsentFilter>('all')
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(25)
   const [createOpen, setCreateOpen] = useState(false)
@@ -39,6 +42,10 @@ export function PacientesPage() {
   const [batchPatients, setBatchPatients] = useState<PatientWithStats[]>([])
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [batchDeleteTargets, setBatchDeleteTargets] = useState<PatientWithStats[]>([])
+  // Termo em papel (PRD 047): um por vez pela linha, ou os selecionados.
+  const [papelPatient, setPapelPatient] = useState<PatientWithStats | null>(null)
+  const [batchPapelOpen, setBatchPapelOpen] = useState(false)
+  const [batchPapelTargets, setBatchPapelTargets] = useState<PatientWithStats[]>([])
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [feedback, setFeedback] = useState<{ tone: 'success' | 'info'; message: string } | null>(null)
   const debouncedSearch = useDebounce(search)
@@ -88,11 +95,13 @@ export function PacientesPage() {
     next_visit: nextVisitFilter !== 'all' ? nextVisitFilter : undefined,
     last_message_days: lastMessageFilter !== 'all' ? lastMessageFilter : undefined,
     last_visit_before: lastVisitBefore || undefined,
+    consent: consentFilter !== 'all' ? consentFilter : undefined,
     page,
     per_page: perPage,
   })
 
   const patients = useMemo(() => data?.items ?? [], [data])
+  const consentEnabled = data?.consent_enabled ?? false
 
   const {
     selectedIds,
@@ -109,11 +118,13 @@ export function PacientesPage() {
   const handleNextVisitFilter = useCallback((v: NextVisitFilter) => { setNextVisitFilter(v); setPage(1); clearSelection() }, [clearSelection])
   const handleLastMessageFilter = useCallback((v: LastMessageFilter) => { setLastMessageFilter(v); setPage(1); clearSelection() }, [clearSelection])
   const handleLastVisitBefore = useCallback((v: string) => { setLastVisitBefore(v); setPage(1); clearSelection() }, [clearSelection])
+  const handleConsentFilter = useCallback((v: ConsentFilter) => { setConsentFilter(v); setPage(1); clearSelection() }, [clearSelection])
 
   const filtrosAtivos = contaFiltrosAtivos({
     nextVisit: nextVisitFilter,
     lastMessage: lastMessageFilter,
     lastVisitBefore,
+    consent: consentFilter,
   })
 
   return (
@@ -166,6 +177,8 @@ export function PacientesPage() {
             onNextVisit={handleNextVisitFilter}
             onLastMessage={handleLastMessageFilter}
             onLastVisitBefore={handleLastVisitBefore}
+            consent={consentFilter}
+            onConsent={consentEnabled ? handleConsentFilter : undefined}
           />
         </div>
       </div>
@@ -184,6 +197,8 @@ export function PacientesPage() {
           onNextVisit={handleNextVisitFilter}
           onLastMessage={handleLastMessageFilter}
           onLastVisitBefore={handleLastVisitBefore}
+          consent={consentFilter}
+          onConsent={consentEnabled ? handleConsentFilter : undefined}
         />
       </Drawer>
 
@@ -216,6 +231,8 @@ export function PacientesPage() {
             onWhatsApp={(p) => { setBatchPatients([p]); setBatchOpen(true) }}
             onPauseBot={handleTogglePause}
             onDelete={setDeletingPatient}
+            onPapel={setPapelPatient}
+            consentEnabled={consentEnabled}
             pausedPhones={pausedPhones}
             pauseLoading={pauseBot.isPending || resumeBot.isPending}
             selectedIds={selectedIds}
@@ -238,6 +255,11 @@ export function PacientesPage() {
         onLimpar={clearSelection}
         onWhatsApp={() => { setBatchPatients(selectedPatients); setBatchOpen(true) }}
         onExcluir={() => { setBatchDeleteTargets(selectedPatients); setBatchDeleteOpen(true) }}
+        onPapel={
+          consentEnabled
+            ? () => { setBatchPapelTargets(selectedPatients); setBatchPapelOpen(true) }
+            : undefined
+        }
       />
 
       <CreatePatientModal
@@ -284,6 +306,29 @@ export function PacientesPage() {
             setFeedback({
               tone: 'success',
               message: `${deletedCount} paciente${deletedCount !== 1 ? 's' : ''} excluído${deletedCount !== 1 ? 's' : ''}.`,
+            })
+          }
+        }}
+      />
+
+      {papelPatient && (
+        <RegistrarPapelModal
+          open
+          patientId={papelPatient.id}
+          onClose={() => setPapelPatient(null)}
+        />
+      )}
+      <BatchPapelModal
+        open={batchPapelOpen}
+        patients={batchPapelTargets}
+        onClose={() => setBatchPapelOpen(false)}
+        onDone={(registeredCount) => {
+          clearSelection()
+          setBatchPapelTargets([])
+          if (registeredCount > 0) {
+            setFeedback({
+              tone: 'success',
+              message: `${registeredCount} termo${registeredCount !== 1 ? 's' : ''} em papel registrado${registeredCount !== 1 ? 's' : ''}.`,
             })
           }
         }}

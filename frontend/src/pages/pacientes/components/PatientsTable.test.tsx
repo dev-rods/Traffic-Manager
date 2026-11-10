@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, cleanup } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { PatientsTable } from './PatientsTable'
 import type { PatientWithStats } from '@/types'
@@ -38,9 +39,13 @@ const PACIENTE: PatientWithStats = {
   next_visit: '2026-09-23',
   total_spent_cents: 58500,
   last_message_at: null,
+  consent_status: null,
 }
 
-function renderiza(paciente: PatientWithStats = PACIENTE) {
+function renderiza(
+  paciente: PatientWithStats = PACIENTE,
+  extra: { consentEnabled?: boolean; onPapel?: (p: PatientWithStats) => void } = {},
+) {
   return render(
     <MemoryRouter>
       <PatientsTable
@@ -49,6 +54,8 @@ function renderiza(paciente: PatientWithStats = PACIENTE) {
         onWhatsApp={vi.fn()}
         onPauseBot={vi.fn()}
         onDelete={vi.fn()}
+        onPapel={extra.onPapel ?? vi.fn()}
+        consentEnabled={extra.consentEnabled ?? false}
         pausedPhones={new Set()}
         selectedIds={new Set()}
         allSelected={false}
@@ -103,6 +110,31 @@ describe('PatientsTable', () => {
       telaDe(largura)
       renderiza()
       expect(screen.queryByText('Bot silenciado')).not.toBeInTheDocument()
+      cleanup()
+    }
+  })
+
+  it('o selo "Sem termo" e a ação de papel só para quem falta, nos dois modos (PRD 047)', async () => {
+    for (const largura of [1200, 375]) {
+      const onPapel = vi.fn()
+      telaDe(largura)
+      renderiza({ ...PACIENTE, consent_status: null }, { consentEnabled: true, onPapel })
+      expect(screen.getByText('Sem termo')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Assinado em papel' }))
+      expect(onPapel).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }))
+      cleanup()
+
+      telaDe(largura)
+      renderiza({ ...PACIENTE, consent_status: 'PAPER' }, { consentEnabled: true })
+      expect(screen.queryByText('Sem termo')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Assinado em papel' })).not.toBeInTheDocument()
+      cleanup()
+
+      // Clínica sem termo configurado: nada, mesmo com status null.
+      telaDe(largura)
+      renderiza({ ...PACIENTE, consent_status: null }, { consentEnabled: false })
+      expect(screen.queryByText('Sem termo')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Assinado em papel' })).not.toBeInTheDocument()
       cleanup()
     }
   })

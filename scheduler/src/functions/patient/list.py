@@ -8,6 +8,7 @@ from src.utils.http import http_response, require_api_key, extract_path_param, e
 from src.utils.phone import normalize_phone
 from src.services.db.postgres import PostgresService
 from src.services.relogio import HOJE_SQL
+from src.services import consentimento
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -52,15 +53,37 @@ def handler(event, context):
         next_visit = extract_query_param(event, "next_visit") or ""  # "with" | "without" | ""
         last_message_days = extract_query_param(event, "last_message_days") or ""  # "7"|"15"|"30"|"60"|"never"|""
         last_visit_before = extract_query_param(event, "last_visit_before") or ""  # "YYYY-MM-DD"
+        consent = extract_query_param(event, "consent") or ""  # "missing" | "ok" | "" (PRD 047)
         page = int(extract_query_param(event, "page") or "1")
         per_page = int(extract_query_param(event, "per_page") or "20")
         offset = (page - 1) * per_page
 
         db = PostgresService()
 
+        # Termo e anamnese por paciente (PRD 047): o mesmo LATERAL da listagem
+        # da agenda. Entra sempre no SELECT (a tela mostra o selo) e no COUNT
+        # so quando o filtro `consent` esta ligado.
+        termo_vigente = consentimento.versao()
+        lateral_do_termo = """
+            LEFT JOIN LATERAL (
+                SELECT CASE WHEN pc.status IN ('SIGNED', 'PAPER') THEN pc.status ELSE 'SIGNING' END AS consent_status
+                FROM scheduler.patient_consents pc
+                WHERE pc.clinic_id = p.clinic_id AND pc.patient_id = p.id
+                  AND pc.term_version = %s AND pc.status IN ('SIGNED', 'PAPER', 'SIGNING')
+                ORDER BY CASE pc.status WHEN 'SIGNED' THEN 0 WHEN 'PAPER' THEN 0 ELSE 1 END
+                LIMIT 1
+            ) ct ON TRUE
+        """
+        filtra_termo = bool(termo_vigente) and consent in ("missing", "ok")
+
         # Build WHERE clause
         where = "WHERE p.clinic_id = %s AND p.deleted_at IS NULL"
         params = [clinic_id]
+        if filtra_termo:
+            if consent == "missing":
+                where += " AND (ct.consent_status IS NULL OR ct.consent_status = 'SIGNING')"
+            else:
+                where += " AND ct.consent_status IN ('SIGNED', 'PAPER')"
 
         if search.strip():
             search_term = search.strip()
@@ -104,11 +127,12 @@ def handler(event, context):
                 SELECT p.id
                 FROM scheduler.patients p
                 LEFT JOIN scheduler.appointments a ON a.patient_id = p.id AND a.status != 'CANCELLED'
+                {lateral_do_termo if filtra_termo else ""}
                 {where}
                 GROUP BY p.id
                 {having}
             ) sub
-        """, tuple(params + having_params))
+        """, tuple(([termo_vigente] if filtra_termo else []) + params + having_params))
         total = count_rows[0]["total"] if count_rows else 0
 
         # Fetch patients with appointment stats.
@@ -144,15 +168,17 @@ def handler(event, context):
                 -- tem motivo de sobra para nao mexer.
                 EXISTS (SELECT 1 FROM scheduler.contatos_silenciados s
                          WHERE s.clinic_id = p.clinic_id AND s.phone = p.phone
-                           AND s.reativado_em IS NULL) as silenciado
+                           AND s.reativado_em IS NULL) as silenciado,
+                ct.consent_status
             FROM scheduler.patients p
             LEFT JOIN scheduler.appointments a ON a.patient_id = p.id AND a.status != 'CANCELLED'
+            {lateral_do_termo}
             {where}
-            GROUP BY p.id
+            GROUP BY p.id, ct.consent_status
             {having}
             ORDER BY p.created_at DESC, p.id DESC
             LIMIT %s OFFSET %s
-        """, tuple(params + having_params + [per_page, offset]))
+        """, tuple([termo_vigente] + params + having_params + [per_page, offset]))
 
         items = [_serialize_row(r) for r in rows]
 
@@ -163,6 +189,8 @@ def handler(event, context):
             "total": total,
             "page": page,
             "per_page": per_page,
+            # Ha versao do termo configurada: sem ela nada e pendente (PRD 047).
+            "consent_enabled": bool(termo_vigente),
         }))
 
     except Exception as e:

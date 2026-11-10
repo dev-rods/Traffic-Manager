@@ -131,7 +131,13 @@ export interface PatientWithStats extends Patient {
   next_visit: string | null
   total_spent_cents: number
   last_message_at: string | null
+  /** Termo e anamnese (PRD 047): o estado da versão vigente, como a agenda.
+   *  null = nada; `SIGNING` = começou no iPad e não terminou. */
+  consent_status: ConsentStatus | null
 }
+
+/** Filtro da lista de pacientes pelo termo (PRD 047). */
+export type ConsentFilter = 'all' | 'missing' | 'ok'
 
 // ── Service & Area ────────────────────────────────────────────
 export interface Area {
@@ -502,6 +508,8 @@ export interface PaginatedResponse<T> {
   total: number
   page: number
   per_page: number
+  /** Lista de pacientes (PRD 047): há versão do termo configurada na clínica. */
+  consent_enabled?: boolean
 }
 
 export interface ApiError {

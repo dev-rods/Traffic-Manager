@@ -74,10 +74,17 @@ class TestRotas(Base):
         self.assertEqual(corpo["term_version"], "2026-11")
 
     def test_papel_passa_data_e_autor(self):
-        with self.acesso(), mock.patch("src.services.consentimento.registra_papel", return_value={"id": TERMO}) as papel:
+        with self.acesso(), mock.patch("src.services.consentimento.registra_papel", return_value=({"id": TERMO}, True)) as papel:
             r = router.handler(evento("POST", f"patients/{PAC}/paper", {"signedAt": "2026-11-01"}), None)
         self.assertEqual(r["statusCode"], 201)
         self.assertEqual(papel.call_args[0][2:], (PAC, date(2026, 11, 1), "Joana"))
+
+    def test_papel_que_ja_tinha_e_200(self):
+        """PRD 047: o lote do painel lê o status para dizer "Já tinha"."""
+        with self.acesso(), mock.patch("src.services.consentimento.registra_papel", return_value=({"id": TERMO}, False)):
+            r = router.handler(evento("POST", f"patients/{PAC}/paper", {"signedAt": "2026-11-01"}), None)
+        self.assertEqual(r["statusCode"], 200)
+        self.assertEqual(json.loads(r["body"])["consent"], {"id": TERMO})
 
     def test_papel_com_data_ruim_e_400(self):
         with self.acesso():

@@ -1,10 +1,14 @@
 export type NextVisitFilter = 'all' | 'with' | 'without'
 export type LastMessageFilter = 'all' | '7' | '15' | '30' | '60' | 'never'
+import type { ConsentFilter } from '@/types'
+export type { ConsentFilter }
 
 export interface EstadoDosFiltros {
   nextVisit: NextVisitFilter
   lastMessage: LastMessageFilter
   lastVisitBefore: string
+  /** Termo e anamnese (PRD 047). Ausente = clínica sem termo configurado. */
+  consent?: ConsentFilter
 }
 
 /**
@@ -26,10 +30,12 @@ export function contaFiltrosAtivos({
   nextVisit,
   lastMessage,
   lastVisitBefore,
+  consent = 'all',
 }: EstadoDosFiltros): number {
   let n = 0
   if (nextVisit !== 'all') n += 1
   if (lastMessage !== 'all') n += 1
   if (lastVisitBefore) n += 1
+  if (consent !== 'all') n += 1
   return n
 }

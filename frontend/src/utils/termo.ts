@@ -1,4 +1,4 @@
-import type { Appointment, ConsentWaiveReason } from '@/types'
+import type { Appointment, ConsentStatus, ConsentWaiveReason } from '@/types'
 
 export const MOTIVO_DA_DISPENSA: Record<ConsentWaiveReason, string> = {
   SEM_CELULAR: 'Sem celular na mão',
@@ -44,4 +44,13 @@ export function situacaoDoTermo(a: Appointment): SituacaoDoTermo {
     return { label: 'Assinando no iPad', tom: 'atencao', pendente: true }
   }
   return { label: 'Pendente', tom: 'pendente', pendente: a.status === 'CONFIRMED' }
+}
+
+/**
+ * Falta o termo (e a ficha) da versão vigente, para a lista de pacientes
+ * (PRD 047). `SIGNING` conta como falta, como o DOCS da agenda. Sem versão
+ * configurada nada é pendente.
+ */
+export function semTermo(consentEnabled: boolean, status: ConsentStatus | null | undefined): boolean {
+  return consentEnabled && status !== 'SIGNED' && status !== 'PAPER'
 }

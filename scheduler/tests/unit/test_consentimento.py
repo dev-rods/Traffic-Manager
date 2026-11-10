@@ -625,11 +625,15 @@ class TestWebhook(Base):
 
 class TestPainel(Base):
     def test_papel_duas_vezes_devolve_o_mesmo(self):
-        a = consentimento.registra_papel(self.db, CLINIC, PAC, date(2026, 11, 1), "Recepção")
-        b = consentimento.registra_papel(self.db, CLINIC, PAC, date(2026, 11, 2), "Recepção")
+        a, criado_a = consentimento.registra_papel(self.db, CLINIC, PAC, date(2026, 11, 1), "Recepção")
+        b, criado_b = consentimento.registra_papel(self.db, CLINIC, PAC, date(2026, 11, 2), "Recepção")
         self.assertEqual(a["id"], b["id"])
         self.assertEqual(a["status"], "PAPER")
         self.assertEqual(a["paper_registered_by"], "Recepção")
+        # PRD 047: a segunda vez diz que já tinha, e a data da primeira fica.
+        self.assertTrue(criado_a)
+        self.assertFalse(criado_b)
+        self.assertEqual(b["paper_signed_at"], "2026-11-01")
 
     def test_papel_com_data_futura_falha(self):
         with self.assertRaises(consentimento.ConsentimentoInvalido):

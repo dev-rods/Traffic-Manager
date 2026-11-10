@@ -21,11 +21,23 @@ function renderiza(quantidade = 2, acoes: Record<string, () => void> = {}) {
       onLimpar={acoes.onLimpar ?? vi.fn()}
       onWhatsApp={acoes.onWhatsApp ?? vi.fn()}
       onExcluir={acoes.onExcluir ?? vi.fn()}
+      onPapel={acoes.onPapel}
     />,
   )
 }
 
 describe('AcoesEmLote', () => {
+  it('"Assinado em papel" só com onPapel, e chama (PRD 047)', async () => {
+    renderiza(2)
+    expect(screen.queryByRole('button', { name: /papel/i })).toBeNull()
+    cleanup()
+
+    const onPapel = vi.fn()
+    renderiza(2, { onPapel })
+    await userEvent.click(screen.getByRole('button', { name: /papel/i }))
+    expect(onPapel).toHaveBeenCalled()
+  })
+
   it('sem seleção não aparece', () => {
     const { container } = renderiza(0)
 

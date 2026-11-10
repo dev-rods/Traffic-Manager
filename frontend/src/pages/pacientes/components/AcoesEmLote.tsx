@@ -1,11 +1,13 @@
 import { Button } from '@/components/ui/Button'
-import { WhatsAppIcon, TrashIcon } from '@/components/ui/Icons'
+import { WhatsAppIcon, TrashIcon, PenIcon } from '@/components/ui/Icons'
 
 interface AcoesEmLoteProps {
   quantidade: number
   onLimpar: () => void
   onWhatsApp: () => void
   onExcluir: () => void
+  /** "Assinado em papel" em lote (PRD 047). Ausente = clínica sem termo configurado. */
+  onPapel?: () => void
 }
 
 /**
@@ -20,7 +22,7 @@ interface AcoesEmLoteProps {
  * Em celular o conteúdo empilha. Em linha, a contagem mais três botões passam
  * de 500px.
  */
-export function AcoesEmLote({ quantidade, onLimpar, onWhatsApp, onExcluir }: AcoesEmLoteProps) {
+export function AcoesEmLote({ quantidade, onLimpar, onWhatsApp, onExcluir, onPapel }: AcoesEmLoteProps) {
   if (quantidade === 0) return null
 
   const plural = quantidade !== 1
@@ -62,6 +64,19 @@ export function AcoesEmLote({ quantidade, onLimpar, onWhatsApp, onExcluir }: Aco
             <span className="md:hidden">WhatsApp</span>
             <span className="hidden md:inline">Enviar WhatsApp</span>
           </Button>
+
+          {onPapel && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-h-11 flex-1 md:min-h-0 md:flex-none"
+              onClick={onPapel}
+            >
+              <PenIcon className="h-4 w-4" />
+              <span className="md:hidden">Papel</span>
+              <span className="hidden md:inline">Assinado em papel</span>
+            </Button>
+          )}
 
           <Button
             variant="danger"

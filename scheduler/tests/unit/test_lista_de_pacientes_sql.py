@@ -68,6 +68,46 @@ class TestSql(unittest.TestCase):
                 self.assertIn(relogio.HOJE_SQL, sql)
                 self.assertEqual(sql.count("%s"), len(params), sql)
 
+    def test_termo_na_listagem(self):
+        """PRD 047: o LATERAL do termo entra no SELECT com a versao como
+        primeiro parametro; o envelope diz se ha versao configurada."""
+        with mock.patch(f"{MODULO}.consentimento.versao", return_value="2026-12"):
+            r, chamadas = self.chama({})
+        self.assertEqual(r["statusCode"], 200, r["body"])
+        sql_count, params_count = chamadas[0]
+        sql, params = chamadas[1]
+        self.assertNotIn("patient_consents", sql_count)
+        self.assertIn("patient_consents", sql)
+        self.assertIn("ct.consent_status", sql)
+        self.assertIn("GROUP BY p.id, ct.consent_status", sql)
+        self.assertEqual(params[0], "2026-12")
+        self.assertEqual(sql.count("%s"), len(params), sql)
+        self.assertTrue(json.loads(r["body"])["consent_enabled"])
+
+    def test_filtro_do_termo(self):
+        for valor, trecho in (("missing", "ct.consent_status IS NULL OR ct.consent_status = 'SIGNING'"),
+                              ("ok", "ct.consent_status IN ('SIGNED', 'PAPER')")):
+            with self.subTest(valor), mock.patch(f"{MODULO}.consentimento.versao", return_value="2026-12"):
+                r, chamadas = self.chama({"consent": valor})
+                self.assertEqual(r["statusCode"], 200, r["body"])
+                for sql, params in chamadas:
+                    self.assertIn("patient_consents", sql)
+                    self.assertIn(trecho, sql)
+                    self.assertEqual(params[0], "2026-12")
+                    self.assertEqual(sql.count("%s"), len(params), sql)
+
+    def test_filtro_do_termo_ignorado(self):
+        """Valor desconhecido, ou clinica sem versao do termo: a lista nao filtra."""
+        with mock.patch(f"{MODULO}.consentimento.versao", return_value="2026-12"):
+            r, chamadas = self.chama({"consent": "qualquer"})
+        self.assertNotIn("ct.consent_status", chamadas[0][0])
+        self.assertNotIn("ct.consent_status IS NULL", chamadas[1][0])
+        with mock.patch(f"{MODULO}.consentimento.versao", return_value=""):
+            r, chamadas = self.chama({"consent": "missing"})
+        self.assertEqual(r["statusCode"], 200, r["body"])
+        self.assertNotIn("ct.consent_status IS NULL", chamadas[1][0])
+        self.assertFalse(json.loads(r["body"])["consent_enabled"])
+
 
 if __name__ == "__main__":
     unittest.main()
