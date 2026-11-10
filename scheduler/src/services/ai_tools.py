@@ -370,6 +370,14 @@ TOOL_DEFINITIONS = [
                         "type": "integer",
                         "description": "Final price in cents after discount",
                     },
+                    "segunda_sessao": {
+                        "type": "boolean",
+                        "description": (
+                            "true ONLY after the person explicitly confirmed she wants a "
+                            "SECOND session in addition to the one she already has. For "
+                            "changes to the existing session use alterar_agendamento."
+                        ),
+                    },
                 },
                 "required": ["service_area_pairs", "date", "time"],
             },
@@ -378,25 +386,47 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "reschedule_appointment",
-            "description": "Reschedule an existing appointment to a new date and time. Call lookup_appointments first to get the appointment_id.",
+            "name": "alterar_agendamento",
+            "description": (
+                "Edit the appointment the person ALREADY HAS: its areas, its date, its "
+                "time, or all of them. Use it for ANY change to a booked session. Never "
+                "use book_appointment for that: it creates a second appointment and "
+                "leaves the first one on the agenda. Call lookup_appointments first to "
+                "get the appointment_id. Keep the current date and time unless the "
+                "person asks to move or the tool answers nao_cabe."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "appointment_id": {
                         "type": "string",
-                        "description": "UUID of the appointment to reschedule",
+                        "description": "UUID of the appointment to edit",
+                    },
+                    "service_area_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "service_id": {"type": "string"},
+                                "area_id": {"type": "string"},
+                            },
+                            "required": ["service_id", "area_id"],
+                        },
+                        "description": (
+                            "The COMPLETE list of areas the session will have after the "
+                            "change - not only the ones that change. Omit to keep the areas."
+                        ),
                     },
                     "new_date": {
                         "type": "string",
-                        "description": "New date in YYYY-MM-DD format",
+                        "description": "New date in YYYY-MM-DD format. Omit to keep the date.",
                     },
                     "new_time": {
                         "type": "string",
-                        "description": "New time in HH:MM format",
+                        "description": "New time in HH:MM format. Omit to keep the time.",
                     },
                 },
-                "required": ["appointment_id", "new_date", "new_time"],
+                "required": ["appointment_id"],
             },
         },
     },
@@ -624,6 +654,24 @@ class ToolExecutor:
             logger.error(f"[ToolExecutor] Error executing {tool_name}: {e}")
             return {"error": str(e)}
 
+    def _engine_de(self, ctx):
+        """A agenda vista pela pessoa deste turno: sem a sessao dela.
+
+        `agendamento_futuro` vem de identificar_paciente e esta em todo ctx.
+        Ate 09/11/2026 o bot respondia "14:50 nao cabe" a quem estava nas
+        14:50 - a vaga era dela (PRD 045). Pelo ctx e nao por argumento: o
+        modelo nao precisa saber que isso existe; e um fato sobre quem esta
+        na conversa, nao uma escolha dele. Sem sessao, o engine de sempre.
+        """
+        futuro = self._sessao_futura(ctx)
+        if futuro and self.availability_engine:
+            return self.availability_engine.excluindo(futuro["id"])
+        return self.availability_engine
+
+    def _sessao_futura(self, ctx):
+        futuro = ((ctx or {}).get("paciente") or {}).get("agendamento_futuro")
+        return futuro if isinstance(futuro, dict) and futuro.get("id") else None
+
     def _barra_areas_nao_conversadas(self, args, clinic_id, ctx):
         """Devolve o recado de recusa se houver area que ninguem conversou.
 
@@ -751,7 +799,7 @@ class ToolExecutor:
         # A duração é derivada das áreas, nunca do que o modelo informa. Ver
         # duration_rules.py: ele já pediu horário para uma sessão de 4 minutos.
         total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
-        days = self.availability_engine.get_available_days_multi(clinic_id, total_duration)
+        days = self._engine_de(ctx).get_available_days_multi(clinic_id, total_duration)
         return {
             "available_dates": [
                 {"date": d, "label": _format_pt_br_date_label(d)} for d in days
@@ -772,7 +820,8 @@ class ToolExecutor:
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
         total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
-        slots = self.availability_engine.get_available_slots_multi(clinic_id, target_date, total_duration)
+        engine = self._engine_de(ctx)
+        slots = engine.get_available_slots_multi(clinic_id, target_date, total_duration)
         resultado = {
             "date": target_date,
             "date_label": _format_pt_br_date_label(target_date),
@@ -787,7 +836,7 @@ class ToolExecutor:
         # respaldar.
         pedido = _normaliza_hora(args.get("horario_pedido"))
         if pedido:
-            cabe = self.availability_engine.cabe_no_horario(
+            cabe = engine.cabe_no_horario(
                 clinic_id, target_date, total_duration, pedido
             )
             resultado["horario_pedido"] = pedido
@@ -846,6 +895,15 @@ class ToolExecutor:
                 "status": appt.get("status", ""),
                 "service_name": appt.get("service_name", ""),
                 "full_name": appt.get("full_name", ""),
+                # O que ela tem marcado, para "so a axila" poder ser lido como
+                # "tirar a 1/2 perna" (PRD 045). A query ja trazia tudo isso.
+                "areas": appt.get("areas_display") or "",
+                "service_area_pairs": [
+                    {"service_id": str(p.get("serviceId")), "area_id": str(p.get("areaId"))}
+                    for p in (appt.get("service_area_pairs") or [])
+                ],
+                "duration_minutes": appt.get("total_duration_minutes"),
+                "final_price_cents": appt.get("final_price_cents"),
             })
         return {"appointments": result}
 
@@ -1022,6 +1080,9 @@ class ToolExecutor:
             logger.warning(f"[ToolExecutor] Falha ao gravar cadastro do paciente: {e}")
 
     def _tool_book_appointment(self, args, clinic_id, phone, ctx):
+        recusa = self._recusa_segunda_sessao(args, phone, ctx)
+        if recusa:
+            return recusa
         recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
         if recusa:
             return recusa
@@ -1131,16 +1192,136 @@ class ToolExecutor:
             "status": result.get("status"),
         }
 
-    def _tool_reschedule_appointment(self, args, clinic_id, phone, ctx):
+    def _recusa_segunda_sessao(self, args, phone, ctx):
+        """book_appointment para quem JA TEM sessao futura: so com a pessoa
+        tendo dito que quer duas.
+
+        Em 09/11/2026 (Essencia) o caminho "alterar as areas" terminava em
+        book_appointment: linha nova, a antiga de pe, duas sessoes na agenda
+        para a mesma pessoa. A tool explica e o modelo refaz, como em
+        full_name_obrigatorio. `segunda_sessao=true` e o registro, no rastro
+        da tool, de que a duplicidade foi pedida (PRD 045).
+        """
+        futuro = self._sessao_futura(ctx)
+        if not futuro or args.get("segunda_sessao") is True:
+            return None
+        logger.info(f"[Alteracao] {phone}: book_appointment recusado, sessão futura {futuro['id']}")
+        return {
+            "error": "ja_tem_sessao_marcada",
+            "sessao": {
+                "appointment_id": futuro["id"],
+                "date": futuro.get("data"),
+                "time": futuro.get("hora"),
+                "areas": futuro.get("areas"),
+            },
+            "o_que_fazer": (
+                "Esta pessoa já tem sessão marcada (acima). Se ela quer MUDAR essa "
+                "sessão - áreas, dia ou hora -, chame alterar_agendamento. Só se ela "
+                "disser, com todas as letras, que quer OUTRA sessão além dessa, chame "
+                "book_appointment de novo com segunda_sessao=true e diga a ela que a "
+                "primeira continua marcada."
+            ),
+        }
+
+    def _tool_alterar_agendamento(self, args, clinic_id, phone, ctx):
+        """Edita a sessao que existe: areas, data, hora, ou os tres (PRD 045).
+
+        Reutiliza o que o painel usa (appointment/update.py), na mesma ordem e
+        pela mesma razao: areas antes, porque mudam a duracao; o conflito so
+        e conferido contra a data FINAL. `ConflictError` nao e erro para o
+        modelo - e a resposta "nao cabe", com o que fazer em seguida.
+        """
+        from src.services.appointment_service import ConflictError
+
         if not self.appointment_service:
             return {"error": "Appointment service not available"}
         appointment_id = args.get("appointment_id")
-        new_date = args.get("new_date")
-        new_time = args.get("new_time")
-        if not all([appointment_id, new_date, new_time]):
-            return {"error": "Missing required fields: appointment_id, new_date, new_time"}
-        self.appointment_service.reschedule_appointment(appointment_id, new_date, new_time)
-        return {"success": True, "new_date": new_date, "new_time": new_time}
+        pares = args.get("service_area_pairs") or None
+        new_date = args.get("new_date") or None
+        new_time = _normaliza_hora(args.get("new_time")) or None
+        if not appointment_id:
+            return {"error": "appointment_id is required"}
+        if not (pares or new_date or new_time):
+            return {"error": "nada_a_alterar",
+                    "o_que_fazer": "Informe as áreas completas, a nova data e/ou a nova hora."}
+
+        if pares:
+            recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
+            if recusa:
+                return recusa
+            self._troca_por_combos(args, clinic_id)
+            pares = args.get("service_area_pairs") or pares
+
+        atual = self._agendamento_confirmado(appointment_id, clinic_id)
+        if not atual:
+            return {"error": "agendamento_nao_encontrado",
+                    "o_que_fazer": "Chame lookup_appointments e use o appointment_id que ela devolver."}
+        antes = atual.get("areas_display") or ""
+        data_atual = str(atual["appointment_date"])
+        hora_atual = str(atual["start_time"])[:5]
+        data_final = new_date or data_atual
+        hora_final = new_time or hora_atual
+        moveu = (data_final, hora_final) != (data_atual, hora_atual)
+
+        try:
+            if pares:
+                self.appointment_service.update_appointment_services(
+                    appointment_id,
+                    pares[0]["service_id"],
+                    # O servico fala o dialeto do painel (camelCase); as tools
+                    # do bot, snake_case. O mapa fica aqui, num lugar so.
+                    [{"serviceId": p["service_id"], "areaId": p["area_id"]} for p in pares],
+                    verificar_conflito=not moveu,
+                )
+            if moveu:
+                self.appointment_service.reschedule_appointment(appointment_id, data_final, hora_final)
+        except ConflictError:
+            logger.info(f"[Alteracao] {phone}: sessão {appointment_id} não cabe em "
+                        f"{data_final} {hora_final} com as áreas novas")
+            return {
+                "error": "nao_cabe",
+                "date": data_final, "time": hora_final,
+                "o_que_fazer": (
+                    f"As áreas novas não cabem às {hora_final} em {_format_pt_br_date_label(data_final)}. "
+                    "Chame get_time_slots com as áreas novas nesse MESMO dia e ofereça "
+                    "primeiro o horário mais próximo; a sessão dela continua como estava."
+                ),
+            }
+
+        depois = self._agendamento_confirmado(appointment_id, clinic_id) or atual
+        areas_depois = depois.get("areas_display") or antes
+        if moveu:
+            logger.info(f"[Alteracao] {phone}: sessão {appointment_id} movida "
+                        f"{data_atual} {hora_atual} -> {data_final} {hora_final}")
+        if pares:
+            logger.info(f"[Alteracao] {phone}: sessão {appointment_id} áreas "
+                        f"{antes!r} -> {areas_depois!r}, horário {'movido' if moveu else 'mantido'}")
+        return {
+            "success": True,
+            "appointment_id": appointment_id,
+            "date": data_final,
+            "date_label": _format_pt_br_date_label(data_final),
+            "time": hora_final,
+            "areas": areas_depois,
+            "duration_minutes": depois.get("total_duration_minutes"),
+            "final_price_cents": depois.get("final_price_cents"),
+            "horario_mantido": not moveu,
+        }
+
+    def _agendamento_confirmado(self, appointment_id, clinic_id):
+        linhas = self.db.execute_query(
+            """
+            SELECT a.id, a.appointment_date, a.start_time, a.end_time,
+                   a.total_duration_minutes, a.final_price_cents,
+                   (SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at)
+                      FROM scheduler.appointment_service_areas asa
+                     WHERE asa.appointment_id = a.id) AS areas_display
+              FROM scheduler.appointments a
+             WHERE a.id = %s::uuid AND a.clinic_id = %s AND a.status = 'CONFIRMED'
+            """,
+            (appointment_id, clinic_id),
+        )
+        return linhas[0] if linhas else None
 
     def _tool_cancel_appointment(self, args, clinic_id, phone, ctx):
         if not self.appointment_service:

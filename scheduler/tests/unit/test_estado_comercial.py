@@ -82,10 +82,22 @@ class TestBloco(unittest.TestCase):
         self.assertIn("ACTIVE_CUSTOMER", b)
         self.assertIn("Camila", b)
         self.assertIn("Sessões feitas: 3", b)
-        self.assertIn("2026-10-21 às 16:25", b)
+        # dd/mm: o que esta aqui o modelo copia para a pessoa (PRD 045).
+        self.assertIn("21/10/2026 às 16:25", b)
         self.assertIn("Não peça nome, nascimento, CPF nem e-mail", b)
         self.assertIn("não apresente a clínica de novo", b)
-        self.assertIn("pergunta e confirma com ela", b, "paciente nao e dispensada da confirmacao de areas")
+        # Quem tem horario marcado nao esta escolhendo areas para sessao
+        # nova: a linha "pergunte as areas" sai e entra a de ALTERACAO
+        # (PRD 045). Quem a dispensa a confirmacao e a skill, nao este bloco.
+        self.assertNotIn("pergunta e confirma com ela", b)
+        self.assertIn("alterar_agendamento", b)
+
+    def test_proximo_horario_traz_as_areas(self):
+        b = ec.bloco(paciente(sessoes=1, ultima="2026-09-24",
+                              futuro={"id": "a1", "data": "2026-11-18", "hora": "14:50",
+                                      "areas": "Axilas, Buço, Linha alba"}),
+                     ec.ACTIVE_CUSTOMER)
+        self.assertIn("18/11/2026 às 14:50 - Axilas, Buço, Linha alba", b)
 
     def test_lead_nova(self):
         b = ec.bloco({"encontrado": False}, ec.NEW_LEAD)

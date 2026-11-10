@@ -64,7 +64,7 @@ class TestDeOndeVem(unittest.TestCase):
 class TestQuandoSai(unittest.TestCase):
     def test_agendar_e_remarcar_avisam(self):
         self.assertIn("book_appointment", TOOLS_QUE_MARCAM_SESSAO)
-        self.assertIn("reschedule_appointment", TOOLS_QUE_MARCAM_SESSAO)
+        self.assertIn("alterar_agendamento", TOOLS_QUE_MARCAM_SESSAO)
 
     def test_cancelar_nao_avisa(self):
         """Quem cancelou não tem preparo a fazer."""

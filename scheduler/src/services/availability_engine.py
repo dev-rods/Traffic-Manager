@@ -87,6 +87,18 @@ class AvailabilityEngine:
                 candidatas.append(alvo.strftime("%Y-%m-%d"))
         return candidatas
 
+    def excluindo(self, appointment_id):
+        """O mesmo engine, sem contar `appointment_id` como ocupado.
+
+        Para a agenda vista por quem JA TEM sessao: ate 09/11/2026 o bot
+        respondia "14:50 nao cabe" a paciente que estava nas 14:50 - a vaga
+        era dela. Nova instancia, nao mutacao: o engine do bot e compartilhado
+        entre turnos (agent_runner.montar_agente), e dois turnos nao podem
+        disputar o mesmo atributo. O site passa o id no construtor (PRD 035);
+        este e o mesmo mecanismo visto do lado da conversa.
+        """
+        return AvailabilityEngine(self.db, ignorar_agendamento=appointment_id)
+
     def get_available_slots(self, clinic_id: str, target_date: str, service_id: str) -> List[str]:
         try:
             # 1. Fetch service duration

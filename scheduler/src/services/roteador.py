@@ -157,13 +157,22 @@ def tools_obrigatorias(intencoes_detectadas, estado_comercial=None):
     Ordem estável para o contexto ficar reproduzível entre execuções.
 
     `estado_comercial` (fase 4 do PRD 020) entra aqui para a fase 7 despachar
-    por ele. Hoje não muda a lista: para NEW_LEAD a pré-carga de
-    `identificar_paciente` seria dispensável, mas fica - custa uma consulta e
-    elimina um ramo.
+    por ele. Para quem TEM sessão marcada (FIRST_BOOKING, ACTIVE_CUSTOMER),
+    `lookup_appointments` entra sempre, seja qual for o texto: em 09/11/2026
+    uma paciente respondeu "buço, mento, linha alba, perna, virilha" a uma
+    pergunta da recepção, nada casou com AGENDAMENTO_PROPRIO, e o modelo
+    tratou a lista como marcação nova (PRD 045). A condição é o estado da
+    pessoa, não a frase.
     """
+    from src.services import estado_comercial as ec
+
     tools = []
     for nome in sorted(intencoes_detectadas or []):
         for tool in TOOLS_POR_INTENCAO.get(nome, []):
+            if tool not in tools:
+                tools.append(tool)
+    if estado_comercial in (ec.FIRST_BOOKING, ec.ACTIVE_CUSTOMER):
+        for tool in TOOLS_POR_INTENCAO[AGENDAMENTO_PROPRIO]:
             if tool not in tools:
                 tools.append(tool)
     return tools

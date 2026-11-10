@@ -38,14 +38,15 @@ class TestFerramentasNoAgente(unittest.TestCase):
     def test_com_lembrete_e_site_sai_cancelar_entra_confirmar(self):
         n = nomes({"lembrete": L.abre(APPT, COM_SITE, AGORA)}, COM_SITE)
         self.assertNotIn("cancel_appointment", n)
-        self.assertNotIn("reschedule_appointment", n)
+        # PRD 045 §7.3 A: trocar as areas e uma frase e o site nao faz isso.
+        self.assertIn("alterar_agendamento", n)
         self.assertIn("confirm_attendance", n)
         self.assertIn("lookup_appointments", n)
 
     def test_com_lembrete_sem_site_mantem_cancelar(self):
         n = nomes({"lembrete": L.abre(APPT, SEM_SITE, AGORA)}, SEM_SITE)
         self.assertIn("cancel_appointment", n)
-        self.assertIn("reschedule_appointment", n)
+        self.assertIn("alterar_agendamento", n)
         self.assertIn("confirm_attendance", n)
 
     def test_sem_lembrete_nada_muda(self):

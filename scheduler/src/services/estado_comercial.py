@@ -65,6 +65,15 @@ def do_paciente(paciente: Optional[Dict]) -> str:
     return deriva(p.get("sessoes_feitas") or 0, bool(p.get("agendamento_futuro")))
 
 
+def _dd_mm(iso) -> str:
+    """2026-11-18 -> 18/11/2026. Texto estranho volta como veio."""
+    t = str(iso or "")
+    partes = t[:10].split("-")
+    if len(partes) == 3 and all(partes):
+        return f"{partes[2]}/{partes[1]}/{partes[0]}"
+    return t
+
+
 def bloco(paciente: Optional[Dict], estado: str) -> str:
     """O bloco QUEM É, para o turno da pessoa. Diz o que o banco sabe e o
     que isso muda na conduta; o modelo não deduz o estado, lê."""
@@ -77,8 +86,17 @@ def bloco(paciente: Optional[Dict], estado: str) -> str:
         if p.get("ultima_sessao"):
             linhas.append(f"Última sessão: {str(p['ultima_sessao'])[:10]}.")
         futuro = p.get("agendamento_futuro")
-        if isinstance(futuro, dict) and futuro.get("data"):
-            linhas.append(f"Próximo horário marcado: {futuro.get('data')} às {futuro.get('hora', '?')}.")
+        tem_futuro = isinstance(futuro, dict) and bool(futuro.get("data"))
+        if tem_futuro:
+            # dd/mm, nao ISO: o que esta aqui o modelo copia para a pessoa.
+            # As areas entram para "so a axila" poder ser lido como "tirar a
+            # 1/2 perna" (PRD 045) - sem elas o modelo nao sabe o que mudar.
+            areas = f" - {futuro['areas']}" if futuro.get("areas") else ""
+            linhas.append(
+                f"Próximo horário marcado: {_dd_mm(futuro.get('data'))} às "
+                f"{futuro.get('hora', '?')}{areas}. Pedido de mudança nessa sessão "
+                f"é ALTERAÇÃO (alterar_agendamento), nunca marcação de outra."
+            )
         linhas.append(
             "Cadastro completo: sim. Não peça nome, nascimento, CPF nem e-mail."
             if p.get("cadastro_completo") else
@@ -90,7 +108,14 @@ def bloco(paciente: Optional[Dict], estado: str) -> str:
         linhas.append("Sem cadastro neste telefone.")
     if estado in (ACTIVE_CUSTOMER, NO_NEXT_BOOKING):
         linhas.append("Já conhece a clínica: não apresente a clínica de novo nem repita o valor sem ela perguntar.")
-        linhas.append("As áreas desta sessão você pergunta e confirma com ela, como sempre: o que ela fez antes não diz o que quer agora.")
+        # Quem tem horario marcado nao esta escolhendo areas para uma sessao
+        # nova - esta, no maximo, mudando a que existe. Mandar "perguntar as
+        # areas desta sessao" a essa pessoa empurrava o modelo para o roteiro
+        # de marcar (PRD 045, Essencia 09/11/2026). Quem conduz esse caso e a
+        # skill PACIENTE_COM_HORARIO.
+        if not (p.get("encontrado") and isinstance(p.get("agendamento_futuro"), dict)
+                and p["agendamento_futuro"].get("data")):
+            linhas.append("As áreas desta sessão você pergunta e confirma com ela, como sempre: o que ela fez antes não diz o que quer agora.")
     linhas.append("Vale só para esta mensagem; a cada mensagem este bloco é refeito.")
     return "\n".join(linhas)
 

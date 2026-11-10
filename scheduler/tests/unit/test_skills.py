@@ -54,14 +54,14 @@ class TestTools(unittest.TestCase):
 
     def test_lead_nova_nao_tem_remarcar_nem_cancelar(self):
         nomes = self._nomes(skills.PRIMEIRO_AGENDAMENTO)
-        self.assertNotIn("reschedule_appointment", nomes)
+        self.assertNotIn("alterar_agendamento", nomes)
         self.assertNotIn("cancel_appointment", nomes)
         self.assertIn("book_appointment", nomes)
         self.assertIn("lookup_appointments", nomes)
 
     def test_paciente_sem_horario_nao_tem_remarcar_nem_cancelar(self):
         nomes = self._nomes(skills.PACIENTE_SEM_HORARIO)
-        self.assertNotIn("reschedule_appointment", nomes)
+        self.assertNotIn("alterar_agendamento", nomes)
         self.assertNotIn("cancel_appointment", nomes)
         self.assertIn("book_appointment", nomes)
 
@@ -124,18 +124,18 @@ class TestNoAgente(unittest.TestCase):
 
     def test_lead_nova_nao_enxerga_remarcar(self):
         v = self._roda({"encontrado": False})
-        self.assertNotIn("reschedule_appointment", v["tools"])
+        self.assertNotIn("alterar_agendamento", v["tools"])
         self.assertNotIn("cancel_appointment", v["tools"])
         self.assertIn("ainda não é paciente", v["system"])
 
-    def test_paciente_com_horario_enxerga_remarcar(self):
+    def test_paciente_com_horario_enxerga_alterar(self):
         v = self._roda(paciente(sessoes=2, futuro={"data": "2026-10-21", "hora": "16:25"}))
-        self.assertIn("reschedule_appointment", v["tools"])
+        self.assertIn("alterar_agendamento", v["tools"])
         self.assertIn("já tem sessão marcada", v["system"])
 
     def test_paciente_sem_horario_nao_enxerga_remarcar(self):
         v = self._roda(paciente(sessoes=3))
-        self.assertNotIn("reschedule_appointment", v["tools"])
+        self.assertNotIn("alterar_agendamento", v["tools"])
         self.assertIn("não tem a próxima marcada", v["system"])
 
     def test_campanha_sobrepoe_e_nao_leva_o_bloco_da_skill(self):
@@ -145,7 +145,7 @@ class TestNoAgente(unittest.TestCase):
         sessao = {"campanha": {"modo": "REAGENDAMENTO", "datas": ["2026-10-21"], "expira_em": int(time.time()) + 3600}}
         v = self._roda(paciente(sessoes=3), sessao=sessao)
         self.assertNotIn("QUEM VOCÊ ESTÁ ATENDENDO", v["system"])
-        self.assertNotIn("reschedule_appointment", v["tools"], "as tools continuam da skill")
+        self.assertNotIn("alterar_agendamento", v["tools"], "as tools continuam da skill")
 
 
 if __name__ == "__main__":
