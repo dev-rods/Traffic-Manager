@@ -16,6 +16,7 @@ Legenda: 🔴 dói hoje · 🟡 dói quando acontecer · ⬜ dívida de manuten�
 | D2 | **PRD 039 fase 2: relatório de contatos silenciados há muito tempo** | 🟡 | O silêncio não tem prazo por decisão; sem relatório, um número silenciado por engano fica mudo para sempre sem ninguém notar. Tabela `scheduler.contatos_silenciados` já guarda `silenciado_em` e o motivo |
 | D3 | **Item `FAILED` na fila de saída é terminal** | 🔴 | Lead cujo primeiro contato falhou fica preso: a fila não tenta de novo, o painel recusa reenviar e a pausa de 24h ainda corre por cima. Receita de recuperação em `project_lead_preso_apos_falha` (chave do rastro `CLINIC#...#PHONE#...`) |
 | D4 | **A pausa por instabilidade sobrevive à causa** | 🟡 | Quando o provedor ou a Anthropic falha, a conversa fica pausada pelo prazo cheio mesmo depois de o serviço voltar. Exposto pela pane de 05-06/11/2026 (18 h caladas) |
+| D12 | **O bot nega o link de agendamento a quem a clínica mandou agendar pelo link** | 🔴 | Virou o **PRD 046** (`prd/046-link-e-o-primeiro-caminho.md`) em 10/11/2026: para paciente cadastrada, o link é o caminho padrão de primeira tentativa. Sai desta lista quando o PRD for entregue |
 
 ## Operação e infraestrutura
 
