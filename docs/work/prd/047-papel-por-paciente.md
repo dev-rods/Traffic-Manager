@@ -77,15 +77,18 @@ tem onde ser registrado.
 3. **Ação direta na linha**: na lista, quem está "Sem termo" tem a ação
    "Assinado em papel" (mesmo modal), para regularizar a base sem abrir pasta
    por pasta. Depende da decisão §7.1.
-4. Testes: Vitest dos três pontos (modal compartilhado, botão na pasta, selo e
+4. **Registro em lote** (§7.2 B): na barra de seleção da lista
+   (`AcoesEmLote`), "Assinado em papel" para os selecionados, com **uma data
+   para todos** e aviso claro disso no modal. Mesmo molde do excluir em lote:
+   laço no cliente sobre a rota unitária, progresso e resultado por pessoa.
+   Quem já tem vigente é pulado (a rota devolve o vigente; o painel mostra
+   "já tinha").
+5. Testes: Vitest dos quatro pontos (modal compartilhado, botão na pasta, selo e
    filtro na lista); pytest do `consent_status` e do filtro em
    `patient/list.py`; doc de integração.
 
 ### Fora do escopo
 
-- Registro em lote com uma data só para N pacientes selecionados
-  (`AcoesEmLote`). A data do papel é de cada um; uma data para todos é um
-  registro falso. Fica como decisão §7.2, padrão fora.
 - Separar termo de anamnese (um em papel, outro no iPad). Não existe esse
   estado desde o PRD 038 e criar seria desfazer a decisão de documento único.
 - Anexar foto/scan do papel. O registro continua "sem PDF".
@@ -104,6 +107,7 @@ tem onde ser registrado.
 | `frontend/src/types/index.ts` | modificar | `Patient.consent_status: ConsentStatus ou null`, `consent_enabled` |
 | `frontend/src/services/patients.service.ts`, `hooks/usePatients*.ts` | modificar | parâmetro do filtro |
 | `frontend/src/pages/pacientes/components/FiltrosDePacientes.tsx`, `contagemDeFiltros.ts`, `PatientsTable.tsx`, `PatientCard.tsx` (+ tests) | modificar | filtro, selo e ação na linha |
+| `frontend/src/pages/pacientes/components/AcoesEmLote.tsx`, `BatchPapelModal.tsx` (+ tests), `hooks/useConsents.ts` (`useRegistrarPapelEmLote`) | modificar/criar | lote com uma data, progresso e resultado por pessoa |
 | `scheduler/tests/unit/test_patient_list*.py` | modificar/criar | `consent_status` e filtro |
 | `scheduler/tests/integration/047-papel-por-paciente.md` | criar | roteiro de conferência |
 
@@ -136,14 +140,17 @@ perto do limite do CloudFormation e a rota de papel já existe.
 - [ ] Com termo vigente (`SIGNED` ou `PAPER`), o botão não aparece; sem `TCLE_VERSION`, também não.
 - [ ] Depois do registro, a sessão futura dessa pessoa na agenda deixa de mostrar `DOCS` e o check-in do iPad pula termo e ficha.
 - [ ] A lista de pacientes mostra "Sem termo" para quem não tem vigente e o filtro "sem vigente" traz só essas pessoas; a contagem de filtros ativos considera o novo.
-- [ ] A ação na linha (se §7.1 = A) grava e atualiza a linha sem recarregar a página.
+- [ ] A ação na linha grava e atualiza a linha sem recarregar a página.
+- [ ] O lote registra os selecionados com a data informada, mostra progresso e resultado por pessoa (registrado / já tinha / erro) e limpa a seleção ao fechar.
 - [ ] O popover da agenda continua funcionando igual (mesmo modal, mesmos textos, mesmo toast).
 - [ ] Usuário sem `agenda.escrever` não vê o botão e recebe 403 se chamar a rota.
 - [ ] Nome ou telefone real de paciente não aparece em teste, commit nem doc.
 
 ---
 
-## 7. Decisões em aberto
+## 7. Decisões
+
+Registradas em 10/11/2026: **§7.1 A**, **§7.2 B**, **§7.3 A**.
 
 ### 7.1 Onde fica a ação de registrar
 
@@ -181,8 +188,8 @@ perto do limite do CloudFormation e a rota de papel já existe.
 
 ## 9. Status
 
-- [ ] Decisões §7 registradas
-- [ ] Spec gerada
+- [x] Decisões §7 registradas em 10/11/2026: **§7.1 A** (pasta e linha da lista), **§7.2 B** (lote com uma data, com aviso), **§7.3 A** (selo só para quem está sem termo)
+- [x] Spec gerada em 10/11/2026 (`spec/047-papel-por-paciente.md`)
 - [ ] Implementado em dev
 - [ ] Em prod
 - [ ] Registrado no TASKS_LOG
