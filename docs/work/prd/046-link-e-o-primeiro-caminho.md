@@ -222,7 +222,7 @@ dando conta ou se as pessoas voltam para a conversa.
 ## 8. Status
 
 - [x] Decisões §7 registradas em 10/11/2026: **§7.1 A** (o domínio decide o roteiro da campanha), **§7.2 A** (segunda tentativa = o link já saiu nesta conversa), **§7.3 A** (segunda sessão também começa pelo link)
-- [ ] Spec gerada
+- [x] Spec gerada em 10/11/2026 (`spec/046-link-e-o-primeiro-caminho.md`)
 - [ ] Implementado em dev
 - [ ] Em prod
 - [ ] Registrado no TASKS_LOG
