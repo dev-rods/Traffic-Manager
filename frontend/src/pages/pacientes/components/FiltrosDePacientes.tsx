@@ -1,4 +1,4 @@
-import type { NextVisitFilter, LastMessageFilter } from './contagemDeFiltros'
+import type { NextVisitFilter, LastMessageFilter, ConsentFilter } from './contagemDeFiltros'
 
 export interface FiltrosDePacientesProps {
   nextVisit: NextVisitFilter
@@ -7,6 +7,9 @@ export interface FiltrosDePacientesProps {
   onNextVisit: (v: NextVisitFilter) => void
   onLastMessage: (v: LastMessageFilter) => void
   onLastVisitBefore: (v: string) => void
+  /** Termo e anamnese (PRD 047). Sem `onConsent` o campo não aparece: clínica sem termo configurado. */
+  consent?: ConsentFilter
+  onConsent?: (v: ConsentFilter) => void
   /** Empilhado (drawer do celular) ou em linha (desktop). */
   empilhado?: boolean
 }
@@ -26,6 +29,8 @@ export function FiltrosDePacientes({
   onNextVisit,
   onLastMessage,
   onLastVisitBefore,
+  consent = 'all',
+  onConsent,
   empilhado = false,
 }: FiltrosDePacientesProps) {
   const campo =
@@ -84,6 +89,21 @@ export function FiltrosDePacientes({
           )}
         </div>
       </Campo>
+
+      {onConsent && (
+        <Campo rotulo="Termo e anamnese" empilhado={empilhado}>
+          <select
+            value={consent}
+            onChange={(e) => onConsent(e.target.value as ConsentFilter)}
+            aria-label="Termo e anamnese"
+            className={`${campo} ${empilhado ? 'w-full' : ''}`}
+          >
+            <option value="all">Termo e anamnese</option>
+            <option value="missing">Sem termo vigente</option>
+            <option value="ok">Com termo vigente</option>
+          </select>
+        </Campo>
+      )}
     </div>
   )
 }

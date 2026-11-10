@@ -5,8 +5,10 @@ import {
   useRenovarTermo,
 } from '@/hooks/useConsents'
 import { RespostasDaAnamnese } from './RespostasDaAnamnese'
+import { RegistrarPapelModal } from '@/components/RegistrarPapelModal'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Button } from '@/components/ui/Button'
 import type { PatientConsent } from '@/types'
 
 interface TermoDeConsentimentoProps {
@@ -32,14 +34,16 @@ function dataDe(iso: string | null): string {
 /**
  * A aba "Termo de consentimento" da pasta de documentos (PRD 036): todas as
  * versões que a paciente assinou (ou registrou em papel), com o PDF assinado
- * e o zip de auditoria por URL de 5 min. A paciente assina no check-in; aqui
- * não se cria nada.
+ * e o zip de auditoria por URL de 5 min. A paciente assina no check-in; o que
+ * se registra aqui é o papel (PRD 047): quem já assinou na recepção não
+ * precisa de uma sessão na agenda para ser regularizada.
  */
 export function TermoDeConsentimento({ patientId }: TermoDeConsentimentoProps) {
   const { data, isLoading, isError, refetch } = useConsentsDoPaciente(patientId)
   const abrir = useAbrirDocumentoDoTermo()
   const renovar = useRenovarTermo()
   const [aberto, setAberto] = useState<string | null>(null)
+  const [papelAberto, setPapelAberto] = useState(false)
 
   if (isLoading) {
     return (
@@ -52,24 +56,55 @@ export function TermoDeConsentimento({ patientId }: TermoDeConsentimentoProps) {
   if (isError || !data) {
     return <ErrorState message="Não foi possível carregar os termos." onRetry={() => refetch()} />
   }
+  const temVigente = data.consents.some(
+    (c) => (c.status === 'SIGNED' || c.status === 'PAPER') && c.term_version === data.term_version
+  )
+  const podeRegistrarPapel = data.consent_enabled && !temVigente
+  const modalDoPapel = podeRegistrarPapel && (
+    <RegistrarPapelModal
+      open={papelAberto}
+      patientId={patientId}
+      onClose={() => setPapelAberto(false)}
+    />
+  )
+
   if (data.consents.length === 0) {
     return (
-      <EmptyState
-        title="Nenhum documento assinado"
-        description={
-          data.consent_enabled
-            ? 'A paciente assina o termo e responde a ficha de anamnese no check-in do iPad, na próxima sessão.'
-            : 'A clínica ainda não tem uma versão do termo configurada.'
-        }
-      />
+      <>
+        <EmptyState
+          title="Nenhum documento assinado"
+          description={
+            data.consent_enabled
+              ? 'A paciente assina o termo e responde a ficha no check-in do iPad. Se já assinou em papel, registre aqui.'
+              : 'A clínica ainda não tem uma versão do termo configurada.'
+          }
+          action={
+            podeRegistrarPapel ? (
+              <Button size="sm" variant="secondary" onClick={() => setPapelAberto(true)}>
+                Assinado em papel
+              </Button>
+            ) : undefined
+          }
+        />
+        {modalDoPapel}
+      </>
     )
   }
 
   return (
     <div className="space-y-3">
-      {data.term_version && (
-        <p className="text-xs text-gray-400">Versão vigente: {data.term_version}</p>
-      )}
+      <div className="flex items-center justify-between gap-3">
+        {data.term_version ? (
+          <p className="text-xs text-gray-400">Versão vigente: {data.term_version}</p>
+        ) : (
+          <span />
+        )}
+        {podeRegistrarPapel && (
+          <Button size="sm" variant="secondary" onClick={() => setPapelAberto(true)}>
+            Assinado em papel
+          </Button>
+        )}
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -196,6 +231,7 @@ export function TermoDeConsentimento({ patientId }: TermoDeConsentimentoProps) {
       {abrir.isError && (
         <p className="text-xs text-red-500">Não foi possível abrir o documento. Tente de novo.</p>
       )}
+      {modalDoPapel}
     </div>
   )
 }

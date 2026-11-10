@@ -2,12 +2,8 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/toastContext'
-import {
-  useConsentsDoPaciente,
-  useDispensarTermo,
-  useRegistrarPapel,
-  useRenovarTermo,
-} from '@/hooks/useConsents'
+import { useConsentsDoPaciente, useDispensarTermo, useRenovarTermo } from '@/hooks/useConsents'
+import { RegistrarPapelModal } from '@/components/RegistrarPapelModal'
 import { AlertasDaAnamnese } from './AlertasDaAnamnese'
 import { MOTIVO_DA_DISPENSA, situacaoDoTermo } from '@/utils/termo'
 import type { Appointment, ConsentWaiveReason } from '@/types'
@@ -20,11 +16,6 @@ const TOM = {
 } as const
 
 const MOTIVOS = Object.keys(MOTIVO_DA_DISPENSA) as ConsentWaiveReason[]
-
-function hoje(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 function mensagemDe(erro: unknown): string | undefined {
   return (erro as { response?: { data?: { message?: string } } })?.response?.data?.message
@@ -41,10 +32,12 @@ interface TermoDoAgendamentoProps {
  * aqui: "Dispensar nesta sessão" (a próxima pede de novo) ou "Assinado em
  * papel" (vale como vigente). Os dois exigem `agenda.escrever` no servidor.
  * Só aparece quando a clínica tem uma versão do termo configurada.
+ *
+ * O modal do papel é o `RegistrarPapelModal`, o mesmo da pasta do paciente e
+ * da lista (PRD 047).
  */
 export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) {
   const dispensar = useDispensarTermo()
-  const papel = useRegistrarPapel()
   const renovar = useRenovarTermo()
   // Os alertas da anamnese e o id do documento vigente vêm da pasta da
   // paciente (PRD 038); a lista de agendamentos só traz o estado.
@@ -56,13 +49,13 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
   const [confirmaRenovar, setConfirmaRenovar] = useState(false)
   const [motivo, setMotivo] = useState<ConsentWaiveReason>('SEM_CELULAR')
   const [nota, setNota] = useState('')
-  const [assinadoEm, setAssinadoEm] = useState(hoje)
+  const [emPapel, setEmPapel] = useState(false)
 
   if (!a.consent_enabled) return null
 
   // O popover guarda o agendamento de quando foi aberto; depois da ação, o
   // estado novo vem da própria resposta, sem esperar a agenda recarregar.
-  const situacao = papel.isSuccess
+  const situacao = emPapel
     ? { label: 'Em papel', tom: 'ok' as const, pendente: false }
     : dispensar.isSuccess
       ? { label: 'Dispensado nesta sessão', tom: 'atencao' as const, pendente: false }
@@ -107,24 +100,6 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
         onError: (erro) =>
           showToast({
             message: mensagemDe(erro) ?? 'Não foi possível dispensar o termo.',
-            variant: 'error',
-          }),
-      }
-    )
-  }
-
-  function confirmarPapel() {
-    if (!a.patient_id) return
-    papel.mutate(
-      { patientId: a.patient_id, signedAt: assinadoEm },
-      {
-        onSuccess: () => {
-          fechar()
-          showToast({ message: 'Termo em papel registrado' })
-        },
-        onError: (erro) =>
-          showToast({
-            message: mensagemDe(erro) ?? 'Não foi possível registrar o termo.',
             variant: 'error',
           }),
       }
@@ -259,37 +234,14 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
         </div>
       </Modal>
 
-      <Modal open={modal === 'papel'} onClose={fechar} title="Termo assinado em papel" width="sm">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Guarde o papel na pasta da paciente. Aqui fica só o registro, sem PDF.
-          </p>
-          <div>
-            <label
-              htmlFor="data-do-papel"
-              className="text-xs font-medium text-gray-500 block mb-1.5"
-            >
-              Assinado em
-            </label>
-            <input
-              id="data-do-papel"
-              type="date"
-              value={assinadoEm}
-              max={hoje()}
-              onChange={(e) => setAssinadoEm(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={fechar}>
-              Cancelar
-            </Button>
-            <Button onClick={confirmarPapel} loading={papel.isPending} disabled={!assinadoEm}>
-              Registrar
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {a.patient_id && (
+        <RegistrarPapelModal
+          open={modal === 'papel'}
+          patientId={a.patient_id}
+          onClose={fechar}
+          onRegistrado={() => setEmPapel(true)}
+        />
+      )}
     </div>
   )
 }

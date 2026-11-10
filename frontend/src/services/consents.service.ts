@@ -30,14 +30,18 @@ export const consentsService = {
       )
       .then((r) => r.data.appointment),
 
-  /** Assinado em papel na recepção: vale como vigente, sem PDF. */
+  /**
+   * Assinado em papel na recepção: vale como vigente, sem PDF.
+   * `created` é false quando a pessoa já tinha termo vigente: o servidor
+   * devolve o que havia (200) sem gravar nada (PRD 047, lote).
+   */
   registerPaper: (clinicId: string, patientId: string, signedAt: string) =>
     api
       .post<{ consent: PatientConsent }>(
         `/clinics/${clinicId}/consents/patients/${patientId}/paper`,
         { signedAt }
       )
-      .then((r) => r.data.consent),
+      .then((r) => ({ consent: r.data.consent, created: r.status === 201 })),
 
   /** "Pedir nova assinatura" (PRD 038): o documento vigente vira REVOKED e o próximo check-in pede tudo de novo. */
   renew: (clinicId: string, consentId: string) =>

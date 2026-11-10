@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
-import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon } from '@/components/ui/Icons'
+import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon, PenIcon } from '@/components/ui/Icons'
 import { formatDate } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
+import { semTermo } from '@/utils/termo'
 import type { PatientWithStats } from '@/types'
 import { SeloSilenciado } from './SeloSilenciado'
+import { SeloSemTermo } from './SeloSemTermo'
 
 interface PatientCardProps {
   patient: PatientWithStats
@@ -15,6 +17,8 @@ interface PatientCardProps {
   onWhatsApp: (patient: PatientWithStats) => void
   onPauseBot: (phone: string) => void
   onDelete: (patient: PatientWithStats) => void
+  onPapel: (patient: PatientWithStats) => void
+  consentEnabled: boolean
 }
 
 /**
@@ -42,7 +46,10 @@ export function PatientCard({
   onWhatsApp,
   onPauseBot,
   onDelete,
+  onPapel,
+  consentEnabled,
 }: PatientCardProps) {
+  const faltaTermo = semTermo(consentEnabled, p.consent_status)
   return (
     <li className="flex gap-3 px-3 py-3">
       <label className="flex h-11 w-6 flex-shrink-0 items-center justify-center cursor-pointer">
@@ -70,9 +77,10 @@ export function PatientCard({
                 {p.name ?? 'Sem nome'}
               </span>
               <span className="block text-xs text-gray-500">{formatPhone(p.phone)}</span>
-              {p.silenciado && (
-                <span className="mt-1 block">
-                  <SeloSilenciado silenciado />
+              {(p.silenciado || faltaTermo) && (
+                <span className="mt-1 flex flex-wrap gap-1">
+                  <SeloSilenciado silenciado={p.silenciado} />
+                  <SeloSemTermo consentEnabled={consentEnabled} status={p.consent_status} />
                 </span>
               )}
             </span>
@@ -118,6 +126,16 @@ export function PatientCard({
           >
             <DocumentIcon className="h-[18px] w-[18px]" />
           </Link>
+
+          {faltaTermo && (
+            <AcaoDoCard
+              onClick={() => onPapel(p)}
+              label="Assinado em papel"
+              className="text-amber-600 hover:bg-amber-50"
+            >
+              <PenIcon className="h-[18px] w-[18px]" />
+            </AcaoDoCard>
+          )}
 
           <AcaoDoCard
             onClick={() => onDelete(p)}
