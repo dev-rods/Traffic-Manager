@@ -4,8 +4,8 @@
 Gravada na sessao no ato da ENTREGA do lembrete, nunca inferida pelo modelo.
 Enquanto viva (ate o fim do dia da sessao, no fuso da clinica):
 
-- com site de autoatendimento, `cancel_appointment` e `reschedule_appointment`
-  NAO vao ao modelo: a pessoa recebe o link e resolve sozinha. Nao e so prompt:
+- com site de autoatendimento, `cancel_appointment`
+  NAO vai ao modelo: a pessoa recebe o link e resolve sozinha. Nao e so prompt:
   a ferramenta nao existe para ele.
 - sem site, nada e removido: o bot cancela e remarca como sempre.
 - `confirm_attendance` so existe aqui: resposta positiva vira Confirmado.
@@ -20,7 +20,10 @@ from src.services.autoatendimento import link_de_autoatendimento
 from src.services.business_hours import fuso
 
 CHAVE = "lembrete"
-FERRAMENTAS_DE_SAIDA = frozenset({"reschedule_appointment", "cancel_appointment"})
+# So cancelar sai: trocar as areas e uma frase e o site nao faz isso (PRD 045
+# §7.3). Remarcar pelo bot durante o lembrete continua fora pelo PROMPT (o
+# link), nao pela ferramenta: `alterar_agendamento` e a mesma tool das areas.
+FERRAMENTAS_DE_SAIDA = frozenset({"cancel_appointment"})
 FERRAMENTA_DE_CONFIRMACAO = "confirm_attendance"
 
 
@@ -109,7 +112,8 @@ def bloco_de_prompt(session, clinic, agora: Optional[int] = None) -> str:
             f"Se ela quiser REMARCAR ou CANCELAR, NÃO execute nada: envie o link {link} e diga "
             "que por lá ela remarca ou cancela em um minuto, com o mesmo número de WhatsApp. "
             "Se disser que não vai poder ir sem pedir nada, pergunte se prefere remarcar ou "
-            "cancelar e então envie o link.\n"
+            "cancelar e então envie o link. Se ela quiser só TROCAR, TIRAR ou INCLUIR área, "
+            "resolva por aqui com alterar_agendamento, mantendo o dia e a hora.\n"
         )
     else:
         saida = "Se ela quiser cancelar ou remarcar, pode resolver por aqui mesmo com as ferramentas, como sempre.\n"

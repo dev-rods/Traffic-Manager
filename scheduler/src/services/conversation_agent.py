@@ -132,7 +132,7 @@ GATILHOS_SINTETICOS = ("__INICIAR_CONVERSA__", "__RETOMAR_CONVERSA__")
 # especialista" a deixaria com uma sessão marcada que ela não sabe que tem.
 TOOLS_COM_EFEITO = frozenset({
     "book_appointment",
-    "reschedule_appointment",
+    "alterar_agendamento",
     "cancel_appointment",
 })
 
@@ -140,7 +140,7 @@ TOOLS_COM_EFEITO = frozenset({
 # fazer. Cancelar não entra: quem cancelou não precisa raspar nada.
 TOOLS_QUE_MARCAM_SESSAO = frozenset({
     "book_appointment",
-    "reschedule_appointment",
+    "alterar_agendamento",
 })
 
 
@@ -537,7 +537,7 @@ class ConversationAgent:
         dados_consultados = []
         intencoes_detectadas = set() if gatilho else intencoes(user_content)
         if not gatilho:
-            for nome_tool in tools_obrigatorias(intencoes_detectadas):
+            for nome_tool in tools_obrigatorias(intencoes_detectadas, estado):
                 try:
                     resultado = self.tool_executor.execute(
                         nome_tool, {}, context={"clinic_id": clinic_id, "phone": phone,

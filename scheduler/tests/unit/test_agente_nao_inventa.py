@@ -339,7 +339,7 @@ class TestEfeitoJaCometido(unittest.TestCase):
     def test_as_tres_tools_que_mudam_o_mundo(self):
         self.assertEqual(
             TOOLS_COM_EFEITO,
-            frozenset({"book_appointment", "reschedule_appointment", "cancel_appointment"}),
+            frozenset({"book_appointment", "alterar_agendamento", "cancel_appointment"}),
         )
 
     def test_consulta_nao_e_efeito(self):

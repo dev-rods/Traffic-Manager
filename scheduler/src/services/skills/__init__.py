@@ -6,7 +6,7 @@ estado comercial (fase 4), e a skill decide duas coisas que ficam em CÓDIGO,
 não em instrução:
 
   1. as tools que o modelo enxerga - lead nova e paciente sem horário não têm
-     `reschedule_appointment` nem `cancel_appointment`: não há o que remarcar,
+     `alterar_agendamento` nem `cancel_appointment`: não há o que alterar,
      e uma tool que não existe não pode ser chamada por engano;
   2. um bloco de conduta próprio no system prompt, curto, dizendo o que muda
      para quem está do outro lado.
@@ -37,7 +37,7 @@ from typing import Dict, FrozenSet, List, Optional, Sequence
 from src.services import estado_comercial as ec
 
 # Tools que só fazem sentido quando existe sessão marcada.
-TOOLS_DE_SESSAO_MARCADA = frozenset({"reschedule_appointment", "cancel_appointment"})
+TOOLS_DE_SESSAO_MARCADA = frozenset({"alterar_agendamento", "cancel_appointment"})
 
 
 @dataclass(frozen=True)
@@ -84,11 +84,12 @@ PACIENTE_COM_HORARIO = Skill(
         "\n═══ QUEM VOCÊ ESTÁ ATENDENDO ═══\n"
         "Uma paciente que já tem sessão marcada (veja o próximo horário no bloco QUEM É).\n"
         "1. Não se apresente nem apresente a clínica: a relação já existe.\n"
-        "2. Quem já tem sessão marcada raramente quer marcar outra: antes de agendar,\n"
-        "   confirme se não é remarcar, cancelar ou tirar uma dúvida sobre a sessão\n"
-        "   que existe. Consulte lookup_appointments.\n"
-        "3. Se for marcar outra sessão, pergunte e confirme as áreas como sempre:\n"
-        "   o que ela fez antes não diz o que quer agora.\n"
+        "2. Quem já tem sessão marcada raramente quer marcar outra. Pedido de mudança\n"
+        "   - trocar, tirar ou incluir área, mudar dia ou hora - é ALTERAÇÃO da sessão\n"
+        "   que existe: siga o passo 2b. SESSÃO JÁ MARCADA e use alterar_agendamento.\n"
+        "   Nunca book_appointment para isso.\n"
+        "3. Marcar uma SEGUNDA sessão só depois de ela confirmar que quer duas; aí\n"
+        "   pergunte e confirme as áreas como sempre.\n"
         "4. Não repita o valor sem ela perguntar.\n"
     ),
 )

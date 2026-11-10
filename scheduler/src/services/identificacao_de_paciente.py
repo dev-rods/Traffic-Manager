@@ -83,7 +83,12 @@ def identificar(db, clinic_id: str, phone: str) -> Dict:
                        AND a.appointment_date < {HOJE_SQL}) AS ultima_sessao,
                    (SELECT json_build_object(
                            'id', a.id::text, 'data', a.appointment_date::text,
-                           'hora', to_char(a.start_time, 'HH24:MI'))
+                           'hora', to_char(a.start_time, 'HH24:MI'),
+                           -- As areas marcadas, para o modelo ler "so a axila"
+                           -- como "tirar a 1/2 perna" (PRD 045).
+                           'areas', (SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at)
+                                       FROM scheduler.appointment_service_areas asa
+                                      WHERE asa.appointment_id = a.id))
                       FROM scheduler.appointments a
                      WHERE a.patient_id = p.id AND a.status = 'CONFIRMED'
                        AND a.appointment_date >= {HOJE_SQL}

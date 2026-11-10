@@ -43,7 +43,7 @@ class TestDepoisDeAgendar(unittest.TestCase):
         self.assertIn("confirmado", saida[0].content.lower())
 
     def test_remarcacao_tambem_avisa(self):
-        agente = monta_agente(roteiro_com("reschedule_appointment"),
+        agente = monta_agente(roteiro_com("alterar_agendamento"),
                               resultado_da_tool={"appointment_id": "a-1"})
         saida = agente.process_message(CLINIC, mensagem("quero remarcar pra quinta"))
         self.assertEqual(saida[-1].content, TEXTO)
