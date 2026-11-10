@@ -120,3 +120,27 @@ def despacha(estado: Optional[str]) -> Skill:
     que pede e confirma tudo - errar para esse lado custa uma pergunta a
     mais, nunca uma sessão mexida por engano."""
     return _POR_ESTADO.get(estado or "", PRIMEIRO_AGENDAMENTO)
+
+
+# -- O site como primeira tentativa (PRD 046) --------------------------------
+#
+# Funcao, nao campo da Skill: depende da CLINICA (dominio), nao do estado. Vale
+# para as duas skills de paciente; a lead nova fica de fora de proposito - o
+# site pede cadastro, e o bot ja faz isso melhor na conversa.
+
+def bloco_do_site(link):
+    """O bloco "PRIMEIRA TENTATIVA E O SITE", ou vazio sem link."""
+    if not link:
+        return ""
+    return (
+        "\n═══ PRIMEIRA TENTATIVA É O SITE ═══\n"
+        f"Quem já é paciente agenda pelo site: {link}\n"
+        "Lá ela vê os horários, escolhe e confirma com o mesmo número de WhatsApp.\n"
+        "1. Pedido de agendar, pergunta sobre o link, sobre \"onde marco\" ou sobre o\n"
+        "   link que ela recebeu: responda em uma frase que é por lá, mande o link e\n"
+        "   se coloque à disposição para dúvidas. NÃO pergunte as áreas, NÃO ofereça\n"
+        "   datas, NÃO chame check_availability.\n"
+        "2. Só se ela disser que não consegue, que o link não abre, ou que prefere\n"
+        "   resolver por aqui, conduza o agendamento na conversa, como sempre.\n"
+        "3. Dúvidas (preço, preparo, endereço, áreas) continuam respondidas aqui.\n"
+    )
