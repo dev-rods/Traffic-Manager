@@ -334,7 +334,7 @@ Nobre foi exatamente uma resposta ao lembrete pedindo para tirar uma área.
 
 - [x] Decisões §7 registradas em 09/11/2026: **§7.1 A** (mantém o horário; só move se não couber ou se ela pedir), **§7.2 A** (`alterar_agendamento` substitui `reschedule_appointment`), **§7.3 A** (alterar áreas fica no bot durante o lembrete; remarcar/cancelar seguem pelo link), **§7.4 A** (campanha continua destravando; fica só como achado)
 - [x] Spec gerada em 09/11/2026 (`spec/045-alterar-sessao-marcada.md`)
-- [ ] Implementado em dev
-- [ ] Prompt corrigido no banco (dev e prod)
-- [ ] Em prod
-- [ ] Registrado no TASKS_LOG
+- [x] Implementado em dev em 09/11/2026 (PR #188; E2E em dev: trocar área mantendo horário, mover só a hora, segunda sessão explícita)
+- [x] Prompt corrigido no banco em 10/11/2026 (prod, Essência e Nobre, 15119 → 16190 chars; dev usa o default do código)
+- [x] Em prod em 10/11/2026 (layer 151, artefatos conferidos)
+- [x] Registrado no TASKS_LOG
