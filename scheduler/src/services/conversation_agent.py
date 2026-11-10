@@ -21,6 +21,11 @@ from src.services.fora_do_escopo import INSTRUCAO_DO_PROMPT as INSTRUCAO_FORA_DO
 from src.services.fora_do_escopo import TEXTO as TEXTO_FORA_DO_ESCOPO
 from src.services.fora_do_escopo import detecta as procedimento_fora_do_escopo
 from src.services.prompt_da_campanha import adapta as adapta_para_campanha
+from src.services.autoatendimento import (
+    link_citado,
+    link_de_agendamento,
+    marca_link_enviado,
+)
 from src.services.prompt_da_campanha import pede_cadastro
 from src.services import desambiguacao
 from src.services import estado_comercial
@@ -416,11 +421,19 @@ class ConversationAgent:
         # 2f. A clinica, uma vez: a sobreposicao de lembrete precisa dela
         # (dominio do site decide se cancelar/remarcar vao ao modelo).
         clinic = self._clinica(clinic_id)
+        # O site da clinica, se houver: para quem ja e paciente ele e a
+        # PRIMEIRA tentativa de agendar (PRD 046). Vai no prompt (bloco do
+        # site) e no ctx das tools (recusa ate o link ter saido).
+        link = link_de_agendamento(clinic)
 
         # 3. Build system prompt
         system_prompt = self._build_system_prompt(clinic_id, phone, session)
         if not campanha_viva(session):
             system_prompt += skill.bloco
+            # Lead nova fica de fora: o site pede cadastro, e o bot ja faz
+            # isso melhor na conversa. Ver skills.bloco_do_site.
+            if skill is not skills.PRIMEIRO_AGENDAMENTO:
+                system_prompt += skills.bloco_do_site(link)
         # Sobreposicao de lembrete (PRD 027): bloco por cima de qualquer skill,
         # como a campanha. Gravada na entrega do lembrete, nunca inferida.
         system_prompt += lembrete.bloco_de_prompt(session, clinic)
@@ -546,6 +559,7 @@ class ConversationAgent:
                                  "faq": itens_do_faq,
                                  "faq_entregues": faq_entregues,
                                  "session": session,
+                                 "link_de_agendamento": link,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     dados_consultados.append((nome_tool, resultado))
@@ -956,6 +970,7 @@ class ConversationAgent:
                                  "faq": itens_do_faq,
                                  "faq_entregues": faq_entregues,
                                  "session": session,
+                                 "link_de_agendamento": link,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     respaldo_das_tools.append(result)
@@ -1261,6 +1276,13 @@ class ConversationAgent:
                 f"após {efeito_cometido}"
             )
 
+        # O bot mandou o link nesta rodada? So a mensagem DELE conta - o texto
+        # do disparo e a da recepcao nao, de proposito (PRD 046): e isso que
+        # libera check_availability e book_appointment para a segunda tentativa.
+        if link and any(link_citado(getattr(m, "content", ""), link) for m in outgoing):
+            marca_link_enviado(session)
+            logger.info(f"[Link] {phone}: link enviado")
+
         # 8. Save history (truncated)
         session["agent_history"] = self._truncate_history(
             estado_comercial.sem_bloco(limpar_gatilhos(history)))
@@ -1389,6 +1411,9 @@ class ConversationAgent:
             "clinic_display_name": clinic.get("display_name") or clinic.get("name", "Clínica"),
             "clinic_address": clinic.get("address") or "",
             "clinic_phone": clinic.get("phone") or "",
+            # Vazio sem dominio. O prompt do banco nao precisa cita-la; existe
+            # para o bloco do site e para quem quiser usa-la no texto (PRD 046).
+            "link_de_agendamento": link_de_agendamento(clinic) or "",
             "single_service_hint": single_service_hint,
             # O valor vem do banco, nao do texto do prompt. Ver preco_minimo.py:
             # numero escrito no template envelhece calado quando a tabela muda.
@@ -1534,18 +1559,19 @@ class ConversationAgent:
                 "   de nascimento antes de seguir. Não presuma que é maior de idade.\n"
             )
 
-        bloco_da_campanha = self._bloco_da_campanha(clinic_id, phone, session)
+        bloco_da_campanha = self._bloco_da_campanha(
+            clinic_id, phone, session, link_de_agendamento(clinic))
         if bloco_da_campanha:
             # Tira o roteiro de lead ANTES de acrescentar o da campanha. Antes
             # isto era so acrescimo, e o roteiro antigo continuava la: em
             # 11/09/2026 o bot reproduziu palavra por palavra o passo 6 dele,
             # pedindo CPF a uma paciente cadastrada.
-            system_prompt = adapta_para_campanha(system_prompt)
+            system_prompt = adapta_para_campanha(system_prompt, link_de_agendamento(clinic))
         system_prompt += bloco_da_campanha
 
         return system_prompt
 
-    def _bloco_da_campanha(self, clinic_id, phone, session):
+    def _bloco_da_campanha(self, clinic_id, phone, session, link=None):
         """O que muda quando a conversa e de campanha - e nada quando nao e.
 
         Fica no FIM do prompt de proposito: tudo acima e identico nos dois
@@ -1587,11 +1613,21 @@ class ConversationAgent:
             "2. NUNCA peça nome, CPF, data de nascimento ou e-mail. Já temos o cadastro\n"
             "   dela. Pedir de novo é o erro mais visível que você pode cometer aqui.\n"
             "3. NÃO anuncie preço, total nem desconto. Só fale de valor se ELA perguntar.\n"
-            "4. Comece pelas ÁREAS, antes de qualquer horário: pergunte quais áreas\n"
-            "   ela quer tratar DESTA VEZ. Sempre pergunte, mesmo que ela já seja\n"
-            "   cliente antiga - o que ela fez da última vez não diz o que ela quer\n"
-            "   agora, e supor por ela já custou caro aqui.\n"
-            "   Só depois da resposta dela vá para os horários.\n"
+            + (
+                # Com site, a primeira tentativa e o link (PRD 046). As areas
+                # so entram se ela nao conseguir por la.
+                f"4. Comece pelo LINK: {link} - mande-o com as datas, em uma frase.\n"
+                "   Se o disparo já o mandou e ela perguntou dele, confirme que é por\n"
+                "   lá e mande de novo. NÃO pergunte as áreas. Só se ela disser que\n"
+                "   não consegue pelo site, pergunte quais áreas ela quer tratar DESTA\n"
+                "   VEZ e siga para os horários.\n"
+                if link else
+                "4. Comece pelas ÁREAS, antes de qualquer horário: pergunte quais áreas\n"
+                "   ela quer tratar DESTA VEZ. Sempre pergunte, mesmo que ela já seja\n"
+                "   cliente antiga - o que ela fez da última vez não diz o que ela quer\n"
+                "   agora, e supor por ela já custou caro aqui.\n"
+                "   Só depois da resposta dela vá para os horários.\n"
+            ) +
             "5. Ofereça APENAS as datas anunciadas acima. Confirme os horários com\n"
             "   check_availability e get_time_slots, como sempre.\n"
             "6. Ao fechar, apenas confirme: o aviso de preparo pré-sessão é enviado\n"

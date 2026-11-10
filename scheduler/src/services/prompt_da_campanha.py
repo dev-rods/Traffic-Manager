@@ -65,6 +65,26 @@ FLUXO_DA_CAMPANHA = (
 )
 
 
+# Com site (PRD 046), a primeira tentativa e o link: o roteiro so entra nas
+# areas se ela nao conseguir por la. O texto do disparo ja diz isso.
+FLUXO_DA_CAMPANHA_PELO_LINK = (
+    "1. LINK\n"
+    "   Mande o link {link} com as datas da campanha, em uma frase. Se o disparo\n"
+    "   ja o mandou e ela perguntou dele, confirme que e por la e mande de novo.\n"
+    "   NAO pergunte as areas, NAO ofereca horarios, NAO chame check_availability.\n"
+    "\n"
+    "2. SE ELA NAO CONSEGUIR PELO SITE\n"
+    "   Ai sim: pergunte quais areas ela quer tratar DESTA VEZ, ofereca as datas\n"
+    "   da campanha com check_availability e get_time_slots, resuma (areas, data,\n"
+    "   horario, SEM valor) e pergunte \"Confirmo?\". Depois do sim dela,\n"
+    "   calculate_discount e book_appointment. NAO peca dados de cadastro.\n"
+    "\n"
+    "3. ENCERRAMENTO\n"
+    "   Confirme e informe o endereco. O aviso de preparo pre-sessao e enviado\n"
+    "   pelo sistema logo depois da sua mensagem: nao escreva esse aviso.\n"
+)
+
+
 def _limite_da_secao(prompt, titulo):
     """(inicio, fim) da secao, ou None. O fim e o proximo cabecalho."""
     marca = re.search(
@@ -77,8 +97,12 @@ def _limite_da_secao(prompt, titulo):
     return marca.start(), (seguinte if seguinte != -1 else len(prompt))
 
 
-def adapta(prompt):
+def adapta(prompt, link=None):
     """Devolve o prompt sem o roteiro de lead, com o da campanha no lugar.
+
+    `link` (PRD 046): com o site da clinica, o roteiro comeca pelo link e so
+    agenda na conversa se ela nao conseguir por la. Sem link, o roteiro de
+    sempre.
 
     Tolerante a template editado pela clinica: secao que nao existe e ignorada
     em silencio - o bloco de campanha e a trava de saida seguem valendo.
@@ -95,7 +119,9 @@ def adapta(prompt):
     if limite:
         novo = (
             "\n" + _CABECALHO + " COMO CONDUZIR A CONVERSA (CAMPANHA) " + _CABECALHO
-            + "\n" + FLUXO_DA_CAMPANHA + "\n"
+            + "\n"
+            + (FLUXO_DA_CAMPANHA_PELO_LINK.replace("{link}", link) if link else FLUXO_DA_CAMPANHA)
+            + "\n"
         )
         prompt = prompt[:limite[0]] + novo + prompt[limite[1]:]
     return prompt

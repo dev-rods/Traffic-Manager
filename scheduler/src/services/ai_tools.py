@@ -36,6 +36,7 @@ from src.services.primeira_visita import e_primeira_visita
 from src.services.politica_de_desconto import decide as decide_desconto
 from src.services.duration_rules import calcula_duracao
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
+from src.services.autoatendimento import link_ja_foi
 
 logger = logging.getLogger(__name__)
 
@@ -668,6 +669,33 @@ class ToolExecutor:
             return self.availability_engine.excluindo(futuro["id"])
         return self.availability_engine
 
+    def _recusa_sem_o_link(self, nome_da_tool, phone, ctx):
+        """Em clinica com site, quem JA E PACIENTE agenda pelo link primeiro
+        (PRD 046). check_availability e book_appointment so passam depois de
+        o BOT ter mandado o link nesta conversa (autoatendimento.link_ja_foi).
+
+        Lead nova e clinica sem dominio seguem como sempre. A tool explica e o
+        modelo refaz - o mesmo desenho de full_name_obrigatorio.
+        """
+        link = (ctx or {}).get("link_de_agendamento")
+        paciente = (ctx or {}).get("paciente") or {}
+        if not link or not paciente.get("encontrado"):
+            return None
+        if link_ja_foi((ctx or {}).get("session")):
+            logger.info(f"[Link] {phone}: segunda tentativa - {nome_da_tool} na conversa")
+            return None
+        logger.info(f"[Link] {phone}: {nome_da_tool} recusado, link ainda não foi")
+        return {
+            "error": "primeiro_o_link",
+            "link": link,
+            "o_que_fazer": (
+                "Esta pessoa já é paciente e esta clínica agenda pelo site. Mande o "
+                f"link ({link}) em uma frase e pergunte se ela consegue por lá. Não "
+                "pergunte as áreas nem ofereça datas. Só se ela disser que não "
+                "consegue, chame esta tool de novo."
+            ),
+        }
+
     def _sessao_futura(self, ctx):
         futuro = ((ctx or {}).get("paciente") or {}).get("agendamento_futuro")
         return futuro if isinstance(futuro, dict) and futuro.get("id") else None
@@ -794,6 +822,9 @@ class ToolExecutor:
         return {"areas": areas}
 
     def _tool_check_availability(self, args, clinic_id, phone, ctx):
+        recusa = self._recusa_sem_o_link("check_availability", phone, ctx)
+        if recusa:
+            return recusa
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
         # A duração é derivada das áreas, nunca do que o modelo informa. Ver
@@ -1080,6 +1111,9 @@ class ToolExecutor:
             logger.warning(f"[ToolExecutor] Falha ao gravar cadastro do paciente: {e}")
 
     def _tool_book_appointment(self, args, clinic_id, phone, ctx):
+        recusa = self._recusa_sem_o_link("book_appointment", phone, ctx)
+        if recusa:
+            return recusa
         recusa = self._recusa_segunda_sessao(args, phone, ctx)
         if recusa:
             return recusa
