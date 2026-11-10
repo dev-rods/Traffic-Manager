@@ -5,7 +5,7 @@ Uma Lambda, uma rota coringa (`clinics/{clinicId}/consents/{proxy+}`, ANY):
 a stack está perto do limite de 500 recursos do CloudFormation.
 
     GET  patients/{patientId}            prontuario.ler    termos da paciente (todas as versões)
-    POST patients/{patientId}/paper      agenda.escrever   assinado em papel {signedAt}
+    POST patients/{patientId}/paper      agenda.escrever   assinado em papel {signedAt}; 201 gravou, 200 já tinha vigente
     POST appointments/{id}/waive         agenda.escrever   dispensa nesta sessão {reason, note?}
     POST {consentId}/renew               agenda.escrever   pede nova assinatura (PRD 038): o vigente vira REVOKED
     GET  {consentId}/pdf-url             prontuario.ler    URL assinada (5 min) do PDF
@@ -85,9 +85,10 @@ def handler(event, context):
                 assinado_em = date.fromisoformat(str(corpo.get("signedAt") or ""))
             except ValueError:
                 return _erro(400, "signedAt deve ser uma data YYYY-MM-DD")
-            termo = consentimento.registra_papel(PostgresService(), clinic_id, achou.group(1),
-                                                 assinado_em, _autor(identidade))
-            return http_response(201, para_o_staff(identidade, {"status": "SUCCESS", "consent": termo}))
+            termo, criado = consentimento.registra_papel(PostgresService(), clinic_id, achou.group(1),
+                                                         assinado_em, _autor(identidade))
+            return http_response(201 if criado else 200,
+                                 para_o_staff(identidade, {"status": "SUCCESS", "consent": termo}))
 
         achou = DISPENSA.match(caminho)
         if metodo == "POST" and achou:

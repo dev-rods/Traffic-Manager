@@ -29,7 +29,7 @@ import logging
 import os
 import uuid
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import psycopg2
 from psycopg2.extras import Json
@@ -901,8 +901,13 @@ def dispensa(db, clinic_id: str, appointment_id: str, motivo: str, nota: Optiona
     return {k: _iso(v) if k == "consent_waived_at" else (str(v) if k == "id" else v) for k, v in row.items()}
 
 
-def registra_papel(db, clinic_id: str, patient_id: str, assinado_em: date, autor: str) -> Dict[str, Any]:
-    """Termo assinado em papel na recepção: vale como vigente, sem PDF."""
+def registra_papel(db, clinic_id: str, patient_id: str, assinado_em: date, autor: str) -> Tuple[Dict[str, Any], bool]:
+    """Termo assinado em papel na recepção: vale como vigente, sem PDF.
+
+    Devolve `(termo, criado)`. Quem já tem vigente recebe o que havia e
+    `criado=False` - nada é gravado por cima. O painel usa isso no registro em
+    lote (PRD 047): a linha diz "Já tinha" em vez de "Registrado".
+    """
     if not versao():
         raise ConsentimentoInvalido("Nenhuma versão do termo configurada.")
     try:
@@ -925,9 +930,10 @@ def registra_papel(db, clinic_id: str, patient_id: str, assinado_em: date, autor
         existente = vigente(db, clinic_id, patient_id)
         if not existente:
             raise
-        return para_o_painel(existente)
+        logger.info("[Consentimento] papel {} paciente {}: já tinha vigente".format(clinic_id, patient_id))
+        return para_o_painel(existente), False
     logger.info("[Consentimento] papel {} paciente {} por={}".format(clinic_id, patient_id, autor))
-    return para_o_painel(row)
+    return para_o_painel(row), True
 
 
 def _do_painel(db, clinic_id: str, consent_id: str) -> Dict:
