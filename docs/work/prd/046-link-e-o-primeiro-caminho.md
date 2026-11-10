@@ -223,6 +223,6 @@ dando conta ou se as pessoas voltam para a conversa.
 
 - [x] Decisões §7 registradas em 10/11/2026: **§7.1 A** (o domínio decide o roteiro da campanha), **§7.2 A** (segunda tentativa = o link já saiu nesta conversa), **§7.3 A** (segunda sessão também começa pelo link)
 - [x] Spec gerada em 10/11/2026 (`spec/046-link-e-o-primeiro-caminho.md`)
-- [ ] Implementado em dev
-- [ ] Em prod
-- [ ] Registrado no TASKS_LOG
+- [x] Implementado em dev em 10/11/2026 (PR #191, layer 194; E2E: link primeiro, segunda tentativa, lead nova intocada)
+- [x] Em prod em 10/11/2026 (layer 152; sem script de prompt - o link entra por código)
+- [x] Registrado no TASKS_LOG
