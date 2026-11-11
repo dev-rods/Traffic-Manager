@@ -190,6 +190,6 @@ Registradas em 10/11/2026: **§7.1 A**, **§7.2 B**, **§7.3 A**.
 
 - [x] Decisões §7 registradas em 10/11/2026: **§7.1 A** (pasta e linha da lista), **§7.2 B** (lote com uma data, com aviso), **§7.3 A** (selo só para quem está sem termo)
 - [x] Spec gerada em 10/11/2026 (`spec/047-papel-por-paciente.md`)
-- [ ] Implementado em dev
-- [ ] Em prod
-- [ ] Registrado no TASKS_LOG
+- [x] Implementado em dev em 10/11/2026 (PR #194, layer 196; E2E da rota: 201/200, filtros missing/ok)
+- [x] Em prod em 10/11/2026 (layer 153; listagem da Essência em ~0,23 s com 338 pacientes, 85 sem termo)
+- [x] Registrado no TASKS_LOG
