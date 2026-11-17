@@ -68,12 +68,15 @@ Legenda: ✅ feito · 🟡 parcial · ⬜ pendente · ❌ descartado · ⏸️ c
 | N9 | `[depilação a laser sjc]` exata | ✅ | Criada em 08/11 (+ variante sem acento, redundante) |
 | N10 | Keywords locais expandidas | ✅ | `[laser sjc]`, `[depilação sjc]`, `[depilação a laser são josé dos campos]`, `"depilação a laser jacarei"` no grupo SJC. Em 7-10 dias: se termos locais seguirem saindo por `depilação definitiva`, negativar `sjc` naquele grupo |
 | N11 | Desperdício nos termos | ✅ | 15 negativas (taubaté, caçapava, led, fotodepilação, hakon, testículos, variantes sem acento de concorrentes). Deixados de fora com motivo: `jacarei` (3 conv), `ana hickmann` (1 conv), `yag` (Soprano usa Nd:YAG) |
-| N12 | Anúncio AVERAGE no grupo que mais gasta (`SJC e sessão avulsa`) | ⬜ | Segunda variante de RSA |
+| N12 | Anúncio AVERAGE no grupo que mais gasta (`SJC e sessão avulsa`) | 🟡 | Segundo RSA criado em 11/11 (ad 831399515894: 15 títulos, só H1 fixado, 4 descrições, path `depilacao-laser/sjc`), em revisão. O anúncio antigo 828427787247 segue ativo para comparação; decidir em 2-3 semanas qual pausar |
 | N13 | tCPA R$54,75 nunca batido (CPA real R$65,62) | ⬜ | Ajustar só depois de N2 refletir no QS |
 | N14 | Grupo `Geral` pausado (48,8% do gasto histórico) | ⬜ | Anúncios dele corrigidos em 08/11, não veiculam. Decidir se volta |
 | N15 | 3 anúncios editados + 6 keywords novas em revisão | ⬜ | Conferir aprovação em 09/11 |
 | N16 | `AGENTS.md` da LP desatualizado | ✅ | PR #6 mergeado; regra: muda no mesmo PR do comportamento |
 | N17 | Grupo de anúncio `Masculino` | ⏸️ | 47 operações validadas pela API em 08/11 (grupo, 15 keywords, RSA 15/4, 4 sitelinks, negativas de roteamento, pausa de 2 keywords) e **cancelado pelo André antes de aplicar**. Desenho em `docs/work/pendencias-campanhas-google-ads.md` §Anexo |
+| N19 | Keyword `"depilação a laser"` em frase é coletor genérico (R$610, CPA R$87 desde 18/10; termo exato R$422/4 conv, CPA R$105) | ⬜ | Proposta de 11/11: trocar para exata e pausar se seguir >R$80 em 2 semanas. André optou por não mexer agora |
+| N20 | Negativas e keywords de 11/11 | ✅ | Campanha: `mais laser`, `maislaser`, `via laser`, `clareamento`, `depiladora`, `depiladoras`, `laser rosa`, `antes e depois`, `laser yag` (frase). Grupo SJC: `[depilação a laser em sjc]`, `"depilação a laser perto de mim"`, `[depilação a laser valor]`, `[quanto custa depilação a laser]`, `"depilação a laser virilha"`. Planner (SJC+Jacareí+Taubaté): mercado ~1.500 buscas/mês, metade é o genérico; masculino 140/mês segue sem grupo (N17) |
+| N21 | Orçamento para a sessão de 03/12 (campanha em R$65/dia desde 08/11, 66% de IS perdido por orçamento) | ⬜ | Plano de 17/11: R$65 até 18/11 → R$150 de 19 a 25/11 → R$250-300 de 26/11 a 02/12 → R$65 a partir de 03/12. Degrau de duas semanas antes evita a fase "aprendendo (mudança de orçamento)" na semana de pico (antes de 06/11, o pico de formulários foi 04-05/11). Condição: sem N4 resolvido, subir só até R$150 em 26/11. Não há agendamento por API; usar Regras automatizadas no painel ou aplicar no dia |
 | N18 | Seção/página masculina na LP | ⬜ | Pré-requisito natural de N17 (`AreasDestaqueSjc` foi removida; página não tem sinal masculino além da tabela). PRD 040 §3.B fase 2 |
 
 ---
