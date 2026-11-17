@@ -20,7 +20,7 @@ const P = (
   method: 'SHR' | 'SHR_STACKING' | 'HR',
   protocol_area_key: string,
   fluence_j: number,
-  extra: Partial<ParametroDoProtocolo> = {},
+  extra: Partial<ParametroDoProtocolo> = {}
 ): ParametroDoProtocolo => ({
   skin_type,
   method,
@@ -53,7 +53,10 @@ const AXILAS: AplicacaoDeSessao = {
   display_order: 0,
 }
 
-function monta(aplicacoes: AplicacaoDeSessao[], extra: Partial<Parameters<typeof AplicacoesField>[0]> = {}) {
+function monta(
+  aplicacoes: AplicacaoDeSessao[],
+  extra: Partial<Parameters<typeof AplicacoesField>[0]> = {}
+) {
   const onChange = vi.fn()
   render(
     <AplicacoesField
@@ -65,7 +68,7 @@ function monta(aplicacoes: AplicacaoDeSessao[], extra: Partial<Parameters<typeof
       skinType="BRANCA"
       bronzeada={false}
       {...extra}
-    />,
+    />
   )
   return onChange
 }
@@ -165,5 +168,144 @@ describe('remover aplicação', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Remover Axilas' }))
 
     expect(onChange).toHaveBeenCalledWith([])
+  })
+})
+
+/**
+ * PRD 030: na mesma sessão, a mesma área com mais de um método. O caso que a
+ * clínica mandou: Axilas, SHR 8 J · 8 kJ e HR 20 J · 1 kJ.
+ */
+describe('vários métodos na mesma área', () => {
+  const SHR: AplicacaoDeSessao = { ...AXILAS, method: 'SHR', fluence_j: 7, energy_kj: 8 }
+  const HR: AplicacaoDeSessao = {
+    ...AXILAS,
+    method: 'HR',
+    fluence_j: 17,
+    energy_kj: 1,
+    display_order: 1,
+  }
+
+  it('"+ Adicionar método" cria a linha na mesma área, já com o método que falta', async () => {
+    const onChange = monta([SHR])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Adicionar método em Axilas' }))
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ area_name: 'Axilas', method: 'SHR' }),
+      expect.objectContaining({ area_name: 'Axilas', method: 'HR', fluence_j: 17, energy_kj: 1 }),
+    ])
+  })
+
+  it('mostra a área uma vez, com um seletor por método', () => {
+    monta([SHR, HR])
+
+    expect(screen.getAllByText('Axilas')).toHaveLength(1)
+    expect(screen.getAllByRole('combobox')).toHaveLength(2)
+  })
+
+  it('trocar o método de uma linha não mexe na outra', async () => {
+    const onChange = monta([SHR, HR])
+
+    await userEvent.selectOptions(screen.getAllByRole('combobox')[1], 'SHR_STACKING')
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ method: 'SHR', fluence_j: 7 }),
+      expect.objectContaining({ method: 'SHR_STACKING', fluence_j: null }),
+    ])
+  })
+
+  it('"Remover método" tira só aquela linha', async () => {
+    const onChange = monta([SHR, HR])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remover HR de Axilas' }))
+
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ method: 'SHR' })])
+  })
+
+  it('"Remover" do cabeçalho tira a área inteira', async () => {
+    const onChange = monta([SHR, HR])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remover Axilas' }))
+
+    expect(onChange).toHaveBeenCalledWith([])
+  })
+
+  it('com um método só, não oferece "Remover método"', () => {
+    monta([SHR])
+
+    expect(screen.queryByRole('button', { name: /Remover .* de Axilas/ })).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * PRD 030: "Interno de Virilha" não é vendida, então não é área da clínica —
+ * mas é aplicada com parâmetro próprio e precisa aparecer na busca.
+ */
+describe('Interno de Virilha', () => {
+  const COM_INTERNO = [
+    ...TABELA,
+    P('BRANCA', 'SHR', 'interno_virilha', 6, { energy_kj: 3 }),
+    P('BRANCA', 'HR', 'interno_virilha', 15, { energy_kj: null }),
+  ]
+
+  it('aparece na busca mesmo sem estar no catálogo', async () => {
+    monta([], { parametros: COM_INTERNO })
+
+    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'vir')
+
+    expect(screen.getByRole('button', { name: 'Interno de Virilha' })).toBeInTheDocument()
+  })
+
+  it('entra com a chave do protocolo, sem area_id', async () => {
+    const onChange = monta([], { parametros: COM_INTERNO })
+
+    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'interno')
+    await userEvent.click(screen.getByRole('button', { name: 'Interno de Virilha' }))
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        area_name: 'Interno de Virilha',
+        area_id: null,
+        protocol_area_key: 'interno_virilha',
+        // SHR e HR no protocolo: escolher por ela seria decidir conduta.
+        method: null,
+      }),
+    ])
+  })
+
+  it('e escolher o método traz a sugestão do protocolo', async () => {
+    const interno: AplicacaoDeSessao = {
+      ...AXILAS,
+      area_id: null,
+      area_name: 'Interno de Virilha',
+      protocol_area_key: 'interno_virilha',
+    }
+    const onChange = monta([interno], { parametros: COM_INTERNO })
+
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'SHR')
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ method: 'SHR', fluence_j: 6, energy_kj: 3 }),
+    ])
+  })
+
+  it('não duplica se a clínica tiver área com o mesmo nome', async () => {
+    monta([], {
+      areas: [
+        { id: 'iv', clinic_id: 'c', name: 'Interno de Virilha', display_order: 0, active: true },
+      ],
+    })
+
+    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'interno')
+
+    expect(screen.getAllByRole('button', { name: 'Interno de Virilha' })).toHaveLength(1)
+  })
+
+  it('não aparece quando a busca não casa', async () => {
+    monta([])
+
+    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'axi')
+
+    expect(screen.queryByRole('button', { name: 'Interno de Virilha' })).not.toBeInTheDocument()
   })
 })

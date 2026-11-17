@@ -1,4 +1,6 @@
 import type { AplicacaoDeSessao, AplicacaoPayload } from '@/types'
+import type { BlocoDeArea } from '@/lib/aplicacoes'
+import { ROTULO_DO_METODO } from '@/lib/protocolo'
 
 /**
  * Data e hora como a recepção lê. Pt-BR, curta, sem segundos.
@@ -53,4 +55,22 @@ export function resumoDaAplicacao(a: AplicacaoDeSessao): string {
   if (a.stacks != null) partes.push(`${a.stacks} stacks`)
   if (a.passes != null) partes.push(`${a.passes} passadas`)
   return partes.join(' · ')
+}
+
+/**
+ * Um método aplicado, em uma linha: `SHR · 8 J · 8 kJ`.
+ *
+ * Linha sem método nem valor diz isso em vez de sumir: no histórico, ausência
+ * muda parece descuido da tela.
+ */
+export function resumoDaLinha(a: AplicacaoDeSessao): string {
+  const metodo = a.method ? ROTULO_DO_METODO[a.method] : ''
+  const valores = resumoDaAplicacao(a)
+  if (!metodo && !valores) return 'sem parâmetro registrado'
+  return [metodo, valores].filter(Boolean).join(' · ')
+}
+
+/** Os métodos de uma área juntos: `SHR · 8 J · 8 kJ / HR · 20 J · 1 kJ`. */
+export function resumoDoBloco(bloco: BlocoDeArea): string {
+  return bloco.linhas.map(resumoDaLinha).join(' / ')
 }

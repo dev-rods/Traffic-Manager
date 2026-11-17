@@ -26,6 +26,19 @@ export const CAMPOS_POR_METODO: Record<MetodoLaser, readonly string[]> = {
  */
 export const TODOS_OS_METODOS: MetodoLaser[] = ['SHR', 'SHR_STACKING', 'HR']
 
+/**
+ * Áreas que a tela sempre sugere ao registrar a sessão, fora do catálogo.
+ *
+ * "Interno de Virilha" não é vendida — não pode ser área da clínica, senão
+ * aparece no agendamento e no site. Mas é aplicada com parâmetro próprio (mais
+ * baixo que o da virilha), e o protocolo já tem a linha dela. Entrar como texto
+ * livre perderia a sugestão e espalharia grafias diferentes pelo histórico.
+ * Ver PRD 030.
+ */
+export const AREAS_PADRAO: readonly { nome: string; protocol_area_key: string }[] = [
+  { nome: 'Interno de Virilha', protocol_area_key: 'interno_virilha' },
+]
+
 export const ROTULO_DO_METODO: Record<MetodoLaser, string> = {
   SHR: 'SHR',
   SHR_STACKING: 'SHR Stacking',

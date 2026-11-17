@@ -1,5 +1,6 @@
 import { useSessionRecordHistory } from '@/hooks/useSessionRecords'
-import { formatarData } from '@/lib/prontuario'
+import { agrupaPorArea } from '@/lib/aplicacoes'
+import { formatarData, resumoDoBloco } from '@/lib/prontuario'
 
 interface HistoricoDeEdicoesProps {
   recordId: string
@@ -52,13 +53,9 @@ export function HistoricoDeEdicoes({ recordId }: HistoricoDeEdicoesProps) {
           <span className="font-medium text-gray-700">{ACAO[e.action]}</span>
           {e.snapshot?.applications?.length ? (
             <ul className="mt-0.5 pl-3 text-gray-500">
-              {e.snapshot.applications.map((a, i) => (
-                <li key={i}>
-                  {a.area_name}
-                  {a.fluence_j ? ` — ${a.fluence_j} J` : ''}
-                  {a.energy_kj ? ` · ${a.energy_kj} kJ` : ''}
-                  {a.stacks ? ` · ${a.stacks} stacks` : ''}
-                  {a.passes ? ` · ${a.passes} passadas` : ''}
+              {agrupaPorArea(e.snapshot.applications).map((bloco) => (
+                <li key={bloco.chave}>
+                  {bloco.area_name} — {resumoDoBloco(bloco)}
                 </li>
               ))}
             </ul>
