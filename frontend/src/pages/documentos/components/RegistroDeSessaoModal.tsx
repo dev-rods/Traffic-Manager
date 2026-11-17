@@ -14,8 +14,12 @@ import type {
 import { metodosDaArea, sugestao } from '@/lib/protocolo'
 import { paraPayload } from '@/lib/prontuario'
 import { normaliza } from '@/lib/aplicacoes'
+import { rotuloDaSessao, sessoesPendentesAteHoje } from '@/lib/sessoesPendentes'
+import { todayStr } from '@/utils/dateHelpers'
 import { AplicacoesField } from './AplicacoesField'
 import { AvisosDoProtocolo } from './AvisosDoProtocolo'
+
+const MANUAL = 'manual'
 
 interface RegistroDeSessaoModalProps {
   patientId: string
@@ -70,8 +74,11 @@ export function RegistroDeSessaoModal({
   )
   const [erro, setErro] = useState<string | null>(null)
 
+  const [preselecionada, setPreselecionada] = useState(editando)
+  const [pendentes] = useState(() => sessoesPendentesAteHoje(sessoesSemRegistro, todayStr()))
+
   function sessaoPorId(id: string | null | undefined) {
-    return sessoesSemRegistro.find((s) => s.id === id)
+    return pendentes.find((s) => s.id === id)
   }
 
   /**
@@ -145,6 +152,14 @@ export function RegistroDeSessaoModal({
     }
   }
 
+  // Pré-seleciona a pendente mais recente até hoje. Passa por `escolheSessao`
+  // (um caminho só, PRD 042), que precisa do protocolo carregado para montar
+  // as áreas: por isso espera por ele, uma vez, e respeita quem já escolheu.
+  if (!preselecionada && protocolo && pendentes.length > 0) {
+    setPreselecionada(true)
+    escolheSessao(pendentes[0].id)
+  }
+
   const salvando = criar.isPending || editar.isPending
 
   const submete = async (e: React.FormEvent) => {
@@ -195,40 +210,25 @@ export function RegistroDeSessaoModal({
   return (
     <Modal open onClose={onClose} title={editando ? 'Editar registro' : 'Novo registro de sessão'}>
       <form onSubmit={submete} className="space-y-5">
-        {!editando && sessoesSemRegistro.length > 0 && (
-          <fieldset>
-            {/* Da mais recente para a mais antiga, como vem do backend
-                (`ORDER BY appointment_date DESC`): a sessão que ela acabou de
-                atender é a primeira da lista. Não reordenar aqui. */}
-            <legend className="mb-1.5 text-xs font-medium text-gray-500">De qual sessão?</legend>
-            <div className="space-y-1.5">
-              {sessoesSemRegistro.map((s) => (
-                <label key={s.id} className="flex cursor-pointer items-start gap-2.5">
-                  <input
-                    type="radio"
-                    name="sessao"
-                    checked={appointmentId === s.id}
-                    onChange={() => escolheSessao(s.id)}
-                    className="mt-0.5 accent-brand-500"
-                  />
-                  <span className="text-sm text-gray-700">
-                    {s.appointment_date} · {s.start_time?.slice(0, 5)}
-                    <span className="block text-xs text-gray-400">{s.areas || 'sem áreas'}</span>
-                  </span>
-                </label>
+        {!editando && pendentes.length > 0 && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">Qual sessão?</span>
+            <select
+              value={appointmentId ?? MANUAL}
+              onChange={(e) => {
+                setPreselecionada(true)
+                escolheSessao(e.target.value === MANUAL ? null : e.target.value)
+              }}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800"
+            >
+              {pendentes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {rotuloDaSessao(s)} · {s.areas || 'sem áreas'}
+                </option>
               ))}
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <input
-                  type="radio"
-                  name="sessao"
-                  checked={appointmentId === null}
-                  onChange={() => setAppointmentId(null)}
-                  className="accent-brand-500"
-                />
-                <span className="text-sm text-gray-700">Sessão feita fora do sistema</span>
-              </label>
-            </div>
-          </fieldset>
+              <option value={MANUAL}>Registrar manual</option>
+            </select>
+          </label>
         )}
 
         <div className="flex flex-wrap gap-4">
