@@ -220,7 +220,9 @@ real — que é onde o vazamento doeria.
 ## 15. Vários métodos na mesma área (PRD 030)
 
 ```bash
-curl -s -X POST "${H[@]}"   "$BASE/clinics/$CLINIC/patients/$PACIENTE/session-records"   -d '{"sessionDate": "2026-11-16", "applications": [
+curl -s -X POST "${H[@]}" \
+  "$BASE/clinics/$CLINIC/patients/$PACIENTE/session-records" \
+  -d '{"sessionDate": "2026-11-16", "applications": [
         {"areaId": null, "areaName": "Axilas", "protocolAreaKey": "axilas",
          "method": "SHR", "fluenceJ": 8, "energyKj": 8, "displayOrder": 0},
         {"areaId": null, "areaName": "Axilas", "protocolAreaKey": "axilas",
@@ -236,7 +238,9 @@ ordem SHR → HR, com os valores enviados. No painel, o histórico mostra
 ## 16. "Interno de Virilha" sem área no catálogo (PRD 030)
 
 ```bash
-curl -s -X POST "${H[@]}"   "$BASE/clinics/$CLINIC/patients/$PACIENTE/session-records"   -d '{"sessionDate": "2026-11-16", "applications": [
+curl -s -X POST "${H[@]}" \
+  "$BASE/clinics/$CLINIC/patients/$PACIENTE/session-records" \
+  -d '{"sessionDate": "2026-11-16", "applications": [
         {"areaId": null, "areaName": "Interno de Virilha",
          "protocolAreaKey": "interno_virilha", "method": "SHR",
          "fluenceJ": 6, "energyKj": 3, "displayOrder": 0}]}'
