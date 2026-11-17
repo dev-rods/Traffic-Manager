@@ -196,6 +196,46 @@ class TestValidacao(unittest.TestCase):
         self.assertEqual(valida_aplicacoes(None), [])
 
 
+class TestVariosMetodosNaMesmaArea(unittest.TestCase):
+    """PRD 030: 1 área -> N métodos -> N parâmetros, uma linha por método.
+
+    Não houve migração: o banco já era uma linha por área + método. Este teste
+    trava que a validação continua aceitando a mesma área repetida, que é o
+    que a tela manda agora.
+    """
+
+    def test_axilas_com_shr_e_hr(self):
+        limpas = valida_aplicacoes([
+            {"area_id": "a1", "area_name": "Axilas", "protocol_area_key": "axilas",
+             "method": "SHR", "fluence_j": 8, "energy_kj": 8, "display_order": 0},
+            {"area_id": "a1", "area_name": "Axilas", "protocol_area_key": "axilas",
+             "method": "HR", "fluence_j": 20, "energy_kj": 1, "display_order": 1},
+        ])
+        self.assertEqual(len(limpas), 2)
+        self.assertEqual([l["area_name"] for l in limpas], ["Axilas", "Axilas"])
+        self.assertEqual([l["method"] for l in limpas], ["SHR", "HR"])
+        self.assertEqual([(l["fluence_j"], l["energy_kj"]) for l in limpas],
+                         [(8.0, 8.0), (20.0, 1.0)])
+        self.assertEqual([l["display_order"] for l in limpas], [0, 1])
+
+    def test_mesmo_metodo_duas_vezes_e_aceito(self):
+        # Duas passadas de SHR com fluências diferentes: conduta é de quem aplica.
+        limpas = valida_aplicacoes([
+            {"area_name": "Axilas", "method": "SHR", "fluence_j": 8},
+            {"area_name": "Axilas", "method": "SHR", "fluence_j": 6},
+        ])
+        self.assertEqual([l["fluence_j"] for l in limpas], [8.0, 6.0])
+
+    def test_interno_de_virilha_sem_area_do_catalogo(self):
+        limpas = valida_aplicacoes([
+            {"area_id": None, "area_name": "Interno de Virilha",
+             "protocol_area_key": "interno_virilha", "method": "SHR",
+             "fluence_j": 6, "energy_kj": 3},
+        ])
+        self.assertIsNone(limpas[0]["area_id"])
+        self.assertEqual(limpas[0]["protocol_area_key"], "interno_virilha")
+
+
 class TestTrilha(unittest.TestCase):
     def test_grava_o_estado_completo(self):
         db = mock.MagicMock()

@@ -13,6 +13,7 @@ import type {
 } from '@/types'
 import { metodosDaArea, sugestao } from '@/lib/protocolo'
 import { paraPayload } from '@/lib/prontuario'
+import { normaliza } from '@/lib/aplicacoes'
 import { AplicacoesField } from './AplicacoesField'
 import { AvisosDoProtocolo } from './AvisosDoProtocolo'
 
@@ -160,7 +161,7 @@ export function RegistroDeSessaoModal({
       professionalId: professionalId || null,
       tannedSkin: bronzeada,
       notes,
-      applications: aplicacoes.map(paraPayload),
+      applications: normaliza(aplicacoes).map(paraPayload),
       changedBy: nomeDoProfissional(professionalId),
     }
 
@@ -184,7 +185,12 @@ export function RegistroDeSessaoModal({
     return profissionais?.find((p) => p.id === id)?.name ?? undefined
   }
 
-  const metodoEmUso = aplicacoes.find((a) => a.method)?.method ?? null
+  // HR em QUALQUER linha manda: os avisos são dele. Com vários métodos por
+  // área (PRD 030), olhar só o primeiro escondia o aviso de quem pôs HR
+  // depois de um SHR.
+  const metodoEmUso = aplicacoes.some((a) => a.method === 'HR')
+    ? 'HR'
+    : (aplicacoes.find((a) => a.method)?.method ?? null)
 
   return (
     <Modal open onClose={onClose} title={editando ? 'Editar registro' : 'Novo registro de sessão'}>

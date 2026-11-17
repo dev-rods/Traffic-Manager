@@ -214,3 +214,39 @@ vocês usaram em mim?"*.
 **Esperado:** ele não sabe e não consulta. A superfície é fechada por
 `tests/unit/test_bot_nao_ve_prontuario.py`, mas este caso confere na conversa
 real — que é onde o vazamento doeria.
+
+---
+
+## 15. Vários métodos na mesma área (PRD 030)
+
+```bash
+curl -s -X POST "${H[@]}" \
+  "$BASE/clinics/$CLINIC/patients/$PACIENTE/session-records" \
+  -d '{"sessionDate": "2026-11-16", "applications": [
+        {"areaId": null, "areaName": "Axilas", "protocolAreaKey": "axilas",
+         "method": "SHR", "fluenceJ": 8, "energyKj": 8, "displayOrder": 0},
+        {"areaId": null, "areaName": "Axilas", "protocolAreaKey": "axilas",
+         "method": "HR", "fluenceJ": 20, "energyKj": 1, "displayOrder": 1}]}'
+```
+
+**Esperado:** `201`, duas linhas em `record.applications`, ambas `Axilas`, na
+ordem SHR → HR, com os valores enviados. No painel, o histórico mostra
+`Axilas — SHR · 8 J · 8 kJ / HR · 20 J · 1 kJ`.
+
+---
+
+## 16. "Interno de Virilha" sem área no catálogo (PRD 030)
+
+```bash
+curl -s -X POST "${H[@]}" \
+  "$BASE/clinics/$CLINIC/patients/$PACIENTE/session-records" \
+  -d '{"sessionDate": "2026-11-16", "applications": [
+        {"areaId": null, "areaName": "Interno de Virilha",
+         "protocolAreaKey": "interno_virilha", "method": "SHR",
+         "fluenceJ": 6, "energyKj": 3, "displayOrder": 0}]}'
+```
+
+**Esperado:** `201`, `area_id: null`, `protocol_area_key: interno_virilha`.
+No painel, digitar "vir" em "+ Adicionar área" mostra "Interno de Virilha" e,
+ao escolher SHR, a fluência vem do protocolo conforme o tipo de pele.
+

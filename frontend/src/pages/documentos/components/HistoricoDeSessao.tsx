@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/Button'
 import { useClinicAreas } from '@/hooks/useAreas'
 import { useDeleteSessionRecord, useSessionRecords } from '@/hooks/useSessionRecords'
 import type { RegistroDeSessao, SkinType } from '@/types'
-import { ROTULO_DO_METODO } from '@/lib/protocolo'
-import { formatarDataDaSessao, resumoDaAplicacao } from '@/lib/prontuario'
+import { agrupaPorArea } from '@/lib/aplicacoes'
+import { formatarDataDaSessao, resumoDoBloco } from '@/lib/prontuario'
 import { HistoricoDeEdicoes } from './HistoricoDeEdicoes'
 import { RegistroDeSessaoModal } from './RegistroDeSessaoModal'
 
@@ -134,14 +134,10 @@ export function HistoricoDeSessao({ patientId, skinType }: HistoricoDeSessaoProp
 
               {r.applications.length > 0 && (
                 <dl className="mt-2 space-y-1">
-                  {r.applications.map((a, i) => (
-                    <div key={i} className="flex flex-wrap gap-x-3 text-sm">
-                      <dt className="text-gray-700">{a.area_name}</dt>
-                      <dd className="text-gray-500">
-                        {a.method ? ROTULO_DO_METODO[a.method] : ''}
-                        {a.method && resumoDaAplicacao(a) ? ' · ' : ''}
-                        {resumoDaAplicacao(a) || (a.method ? '' : 'sem parâmetro registrado')}
-                      </dd>
+                  {agrupaPorArea(r.applications).map((bloco) => (
+                    <div key={bloco.chave} className="flex flex-wrap gap-x-3 text-sm">
+                      <dt className="text-gray-700">{bloco.area_name}</dt>
+                      <dd className="text-gray-500">{resumoDoBloco(bloco)}</dd>
                     </div>
                   ))}
                 </dl>
