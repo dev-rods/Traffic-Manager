@@ -1,6 +1,7 @@
 # PRD - 048 Termo e anamnese antes da sessão, pelo link no WhatsApp
 
-> Gerado na fase **Research** em 17/11/2026. Use como input para a fase Spec.
+> Gerado na fase **Research** em 17/11/2026, decisões fechadas no mesmo dia
+> (§5). Use como input para a fase Spec.
 > Pedido do André: "transferir parte do fluxo do check-in para o WhatsApp, sem
 > o pagamento. Enviar um link para o paciente agendado como primeira vez, para
 > que ele antecipe e preencha o termo. Não pensar no envio automático ainda;
@@ -35,8 +36,8 @@ O pagamento continua só no dia: a clínica não cobra antecipado.
 | Link de pagamento enviado pelo popover da agenda (PRD 029) | `frontend/.../EnviarLinkDePagamento.tsx`, `services/checkin.envia_link` | molde do botão e da rota |
 | Domínio por clínica (`custom_domain`) e `link_de_autoatendimento` | `services/autoatendimento.py` | molde para montar a URL |
 
-O fluxo remoto é, na prática, **o meio do check-in sem as pontas**: sem OTP
-na entrada, sem confirmar chegada, sem pagamento.
+O fluxo remoto é, na prática, **o check-in sem as pontas de chegada e
+pagamento**: mesma entrada por OTP, mesmas telas de documento.
 
 ### 2.2 Por que foi deixado de fora antes e o que mudou
 
@@ -51,17 +52,17 @@ motivos. Cada um tem resposta hoje:
 2. **"Exige domínio, app e token próprios."** App e telas já existem
    (`checkin/`). O domínio é um CNAME por clínica. O token é o mesmo
    mecanismo HMAC do OTP, com outro escopo e outro prazo.
-3. **"No iPad a paciente já está identificada."** No celular ela é
-   identificada pelo token do link (uma sessão, um prazo) e, para assinar,
-   pelo código da ClickSign. O que o token do link libera sozinho é ler o
-   próprio nome, o CPF mascarado e responder a ficha; nunca confirmar
-   chegada nem pagar.
+3. **"No iPad a paciente já está identificada."** No celular ela se
+   identifica do mesmo jeito: telefone e código pelo WhatsApp (o OTP de
+   "Meus agendamentos" e do check-in). O link não carrega segredo nenhum;
+   encaminhado a terceiro, abre só a tela de telefone. Para assinar, ainda
+   o código da ClickSign.
 
 ### 2.3 O que o iPad faz hoje e o que passa para o celular
 
 ```
 Hoje (iPad):    telefone → OTP → sessão → dados → anamnese ×4 → preparar → assinar → confirmar → método → pagar → fim
-Celular (048):  link ───────────────────▶ dados → anamnese ×4 → preparar → assinar → fim
+Celular (048):  link → telefone → OTP → dados → anamnese ×4 → preparar → assinar → fim
 iPad no dia:    telefone → OTP → sessão → (documento vigente: pula) → confirmar → método → pagar → fim
 ```
 
@@ -75,46 +76,55 @@ dia precisa saber que a assinatura veio pelo celular.
 
 ### 3.1 O link
 
-`https://documentos.{domínio da clínica}/{clinicId}/documentos/{token}`
+`https://documentos.{domínio da clínica}/{clinicId}/documentos`
+
+Endereço **fixo por clínica, sem token e sem dado da paciente**. O mesmo link
+serve para todo mundo; quem identifica a pessoa é o OTP.
 
 - **Hospedagem:** o próprio app `checkin/` (projeto Vercel `checkin-prod`),
-  com uma rota nova `/:clinicId/documentos/:token`. Sem app novo, sem
-  duplicar telas no `booking-site/`.
-- **Domínio:** `documentos.<custom_domain da clínica>` apontando para o
-  projeto Vercel do check-in. Clínica sem domínio não tem link (mesma regra
-  do PRD 046, `link_de_autoatendimento`).
-- **Token:** o mesmo formato HMAC de `booking_verification._issue_token`
-  (`BOOKING_VERIFICATION_SECRET`), com escopo próprio:
-  `documentos|clinic_id|appointment_id|expires_at|hmac`. **Sem tabela**,
-  sem estado. Validade: **até o fim do dia da sessão** (depois do dia, o
-  iPad é o caminho). Reenviar gera outro token válido; o anterior continua
-  valendo até expirar, o que é inofensivo porque o escopo é só este.
-- **O que o token libera** nas sub-rotas do check-in (`checkin.py`):
-  - `GET appointments/{id}/documentos`: nome, data e hora da sessão,
-    `consentRequired`, `consentPrefill` (nome, CPF mascarado, nascimento,
-    e-mail, menor/responsável) e `anamnesisPrefill`, como o iPad recebe.
-  - `POST appointments/{id}/anamnesis`, `POST appointments/{id}/consent`,
-    `GET consents/{id}`: os mesmos handlers, aceitando o token de documentos
-    no lugar de `phone + token` de OTP.
-  - **Recusa** `confirm`, `payments` e a lista de agendamentos. O token só
-    serve ao `appointment_id` que carrega; o handler compara antes de tudo.
-- **Pré-condições para emitir:** sessão `CONFIRMED`, data `>= hoje`,
-  `precisa_assinar` verdadeiro, clínica pronta (`_clinica_pronta`: RT com
-  registro e cidade), clínica com domínio.
+  com uma rota nova `/:clinicId/documentos`. Sem app novo, sem duplicar
+  telas no `booking-site/`.
+- **Domínio:** `documentos.nobrelaser.com.br` e
+  `documentos.draclaradourado.com.br` (decididos em 17/11; DNS do André)
+  apontando para o projeto Vercel do check-in. Clínica sem domínio não tem
+  link (mesma regra do PRD 046, `link_de_autoatendimento`).
+- **Entrada:** telefone e código pelo WhatsApp, os mesmos `verify/send` e
+  `verify/confirm` do check-in e de "Meus agendamentos". O `confirm` ganha
+  um parâmetro `scope=documentos` e, com ele, emite um **token de escopo
+  `documentos` com 2 horas** de validade (o de quiosque segue 15 min). Mesmo
+  formato HMAC de `_issue_token`, com o escopo dentro do conteúdo assinado;
+  sem tabela.
+- **O que o token de documentos libera** nas sub-rotas do check-in
+  (`checkin.py`): `GET appointments` (lista, com `consentRequired`,
+  `consentPrefill` e `anamnesisPrefill`), `POST appointments/{id}/anamnesis`,
+  `POST appointments/{id}/consent`, `GET consents/{id}`. **Recusa**
+  `confirm` e `payments`: chegar e pagar continuam exclusivos do token de
+  quiosque, no iPad.
+- **Qual sessão:** a página escolhe, entre as sessões confirmadas futuras
+  ou de hoje da pessoa, a que tem `consentRequired`. Sem nenhuma: "Tudo
+  certo, nada a fazer". Mais de uma pendente não acontece, porque o
+  documento é por paciente.
+- **Pré-condições para o botão de envio aparecer** (§3.3): sessão
+  `CONFIRMED`, data `>= hoje`, `precisa_assinar` verdadeiro, clínica pronta
+  (`_clinica_pronta`: RT com registro e cidade), clínica com domínio.
 
 ### 3.2 O fluxo no celular
 
-Rota `/:clinicId/documentos/:token` no `checkin/`, **modo remoto**:
+Rota `/:clinicId/documentos` no `checkin/`, **modo remoto**:
 
-1. **Boas-vindas**: "Olá, {nome}. Sua sessão é {dia} às {hora}. Antes,
+1. **Telefone e código**: `PhoneStep` e `CodeStep` de hoje, com teclado do
+   celular. Texto de abertura: "Digite o WhatsApp em que você recebeu o
+   link".
+2. **Boas-vindas**: "Olá, {nome}. Sua sessão é {dia} às {hora}. Antes,
    confira seus dados, responda a ficha e assine o termo. Leva uns 5
-   minutos." Botão "Começar". Se o token expirou ou o documento já está
-   vigente: tela "Tudo certo, nada a fazer" ou "Este link venceu, faça no
-   dia na recepção".
-2. `consent-data` → `anamnese` 1 a 4 → `consent-start` → `consent-sign`:
-   **os mesmos componentes**, com o serviço recebendo o token de documentos.
-3. **Fim**: "Documento assinado. No dia, é só confirmar e pagar na
+   minutos." Botão "Começar". Sem sessão pendente: "Tudo certo, nada a
+   fazer".
+3. `consent-data` → `anamnese` 1 a 4 → `consent-start` → `consent-sign`:
+   **os mesmos componentes**, com o serviço usando o token de documentos.
+4. **Fim**: "Documento assinado. No dia, é só confirmar e pagar na
    recepção." Sem passo de método, sem pagamento.
+5. **Sessão vencida** (2 h): volta ao telefone, com o progresso preservado
+   no servidor (`FILLING` e `SIGNING` são retomados).
 
 Diferenças do modo quiosque, todas por flag de modo (não por cópia):
 
@@ -141,7 +151,7 @@ copiar quando o envio falhar.
   no router de consentimento já existente (`functions/consent/router.py`),
   permissão `agenda.escrever`. Sem recurso novo no CloudFormation (a stack
   está perto do limite).
-- Backend: emite o token, monta a URL, renderiza a mensagem e chama
+- Backend: monta a URL fixa da clínica, renderiza a mensagem e chama
   `envio_do_sistema.envia_texto(..., origem=DOCUMENTOS)`. **Origem nova**
   na lista fechada de `envio_do_sistema` (hoje `SITE_OTP`,
   `SITE_AGENDAMENTO`, `CHECKIN`); sem ela o envio levanta `ValueError`, e
@@ -156,8 +166,8 @@ copiar quando o envio falhar.
   > Olá, {{nome}}! Sua sessão na {{clinic_name}} é {{dia}} às {{hora}}.
   > Para agilizar o atendimento, confira seus dados, responda a ficha de
   > saúde e assine o termo de consentimento pelo link: {{link}}
-  > Leva uns 5 minutos. Na hora de assinar, um código de confirmação chega
-  > neste WhatsApp.
+  > Leva uns 5 minutos. Você entra com este número de WhatsApp e um código
+  > que chega aqui; na hora de assinar, chega outro código.
 
 ### 3.4 Quem recebe
 
@@ -184,11 +194,12 @@ se o André preferir.
 
 ### Dentro
 
-- Token de documentos (emissão e validação), com testes.
-- Sub-rota `GET appointments/{id}/documentos` e aceitação do token nas três
-  sub-rotas existentes; recusa explícita em `confirm`, `payments` e listagem.
-- Rota `/:clinicId/documentos/:token` no `checkin/` em modo remoto, com
-  boas-vindas, fim, expirado e já-vigente.
+- `scope=documentos` no `verify/confirm`: token com escopo e 2 h, com
+  testes; o token de quiosque não muda.
+- Aceitação do token de documentos em `GET appointments`, `anamnesis`,
+  `consent` e `consents/{id}`; recusa explícita em `confirm` e `payments`.
+- Rota `/:clinicId/documentos` no `checkin/` em modo remoto, com telefone,
+  código, boas-vindas, fim e "nada a fazer".
 - Rota do painel para enviar, origem `DOCUMENTOS`, template
   `LINK_DOCUMENTOS`, coluna `consent_link_sent_at` (migration idempotente),
   botão no popover com "enviado em".
@@ -215,9 +226,13 @@ se o André preferir.
 
 | # | Pergunta | Recomendação | Alternativa |
 |---|---|---|---|
+Fechadas pelo André em 17/11/2026.
+
+| # | Pergunta | Decisão | Alternativa descartada |
+|---|---|---|---|
 | 1 | Onde o link abre | **App `checkin/` em modo remoto** | Rotas no `booking-site/` (duplicaria 6 telas; o site é "não tocar") |
-| 2 | Domínio | **`documentos.<domínio da clínica>`** antes do primeiro envio real | `checkin-prod.vercel.app` como provisório; alimenta o "parece golpe" |
-| 3 | Autenticação | **Token do link (escopo documentos, até o dia da sessão) + código da ClickSign para assinar** | Pedir OTP ao abrir o link: um passo a mais e o token de 15 min não cobre 4 telas + assinatura |
+| 2 | Domínio | **`documentos.nobrelaser.com.br` e `documentos.draclaradourado.com.br`**, DNS pelo André | `checkin-prod.vercel.app`; alimenta o "parece golpe" |
+| 3 | Autenticação | **Link fixo, sem token; OTP ao abrir (telefone + código), com token de escopo `documentos` de 2 h; código da ClickSign para assinar** | Token no próprio link: um link encaminhado abriria nome, CPF mascarado, nascimento e e-mail. Descartado pelo André ("caminho mais seguro") |
 | 4 | Para quem | **Qualquer termo pendente** (botão manual) | Só `is_first_visit` |
 | 5 | Mensagem | **Template editável** (`LINK_DOCUMENTOS`) | Fixa em Python, como o link de pagamento |
 | 6 | Registro do envio | **`consent_link_sent_at` na sessão** | Só no `message-events` (a recepção não enxerga) |
@@ -229,18 +244,19 @@ se o André preferir.
 
 | Caminho | Tipo | Descrição |
 |---|---|---|
-| `scheduler/src/utils/booking_verification.py` | modificar | `issue_documents_token` / `verify_documents_token` (escopo, appointment, prazo) |
-| `scheduler/src/functions/public_booking/checkin.py` | modificar | aceitar o token de documentos; sub-rota `appointments/{id}/documentos`; recusa em confirm/payments/lista |
-| `scheduler/src/services/consentimento.py` | modificar | `resumo_para_o_link` (prefill + anamnesisPrefill para uma sessão); `link_de_documentos(clinic, appointment)` |
+| `scheduler/src/utils/booking_verification.py` | modificar | escopo no token (`kiosk` 15 min, `documentos` 2 h); `verify_token` devolve o escopo |
+| rota `verify/confirm` em `scheduler/src/functions/public_booking/` | modificar | parâmetro `scope` |
+| `scheduler/src/functions/public_booking/checkin.py` | modificar | exigir escopo `kiosk` em `confirm` e `payments`; aceitar os dois nas demais |
+| `scheduler/src/services/consentimento.py` | modificar | `link_de_documentos(clinic)` (URL fixa) |
 | `scheduler/src/services/envio_do_sistema.py` | modificar | origem `DOCUMENTOS` |
 | `scheduler/src/services/template_service.py` | modificar | `LINK_DOCUMENTOS` nos defaults |
 | `scheduler/src/functions/consent/router.py` | modificar | `POST .../consents/appointments/{appointmentId}/link` |
 | `scheduler/src/functions/appointment/list.py` | modificar | `FILLING` no `consent_status`; `consent_link_sent_at` |
 | `scheduler/src/scripts/setup_database.py` | modificar | `ALTER TABLE appointments ADD COLUMN IF NOT EXISTS consent_link_sent_at` (+ CREATE TABLE) |
 | `scheduler/tests/unit/test_documents_token.py`, `test_checkin_documentos.py` | criar | token, escopo, recusas, prefill |
-| `checkin/src/router.tsx`, `pages/DocumentosPage.tsx` (+ test) | criar/modificar | rota e máquina de estados do modo remoto |
+| `checkin/src/router.tsx`, `pages/DocumentosPage.tsx` (+ test) | criar/modificar | rota e máquina de estados do modo remoto (telefone → código → boas-vindas → documento → fim) |
 | `checkin/src/steps/*` | modificar | flag de modo (sem idle reset, teclado nativo, textos de fim) |
-| `checkin/src/services/checkin.service.ts`, `types/index.ts` | modificar | chamadas com token de documentos |
+| `checkin/src/services/checkin.service.ts`, `types/index.ts` | modificar | `scope` no confirm do OTP |
 | `frontend/src/pages/agenda/components/TermoDoAgendamento.tsx` (+ test), `EnviarLinkDosDocumentos.tsx` | criar/modificar | botão, estado, "enviado em", copiar |
 | `frontend/src/services/consents.service.ts`, `hooks/useConsents.ts`, `types/index.ts`, `utils/termo.ts` | modificar | rota, hook, rótulos |
 | `frontend/src/lib/*templates*` | modificar | `LINK_DOCUMENTOS` na tela de templates |
@@ -260,10 +276,11 @@ se o André preferir.
   dias de antecedência e paciente que para em "assinar" deixa um envelope
   vencer; reabrir cria outro (o `SIGNING` velho é descartado). Custo zero,
   porque a ClickSign cobra por documento finalizado.
-- **Link encaminhado a terceiro** expõe nome, CPF mascarado, nascimento e
-  e-mail que a própria paciente informou. Mitigação: prazo curto, escopo
-  único, assinatura só com código no WhatsApp dela. Se o André quiser
-  fechar mais, a decisão 3 tem a alternativa com OTP.
+- **Dois códigos pelo WhatsApp** (OTP na entrada, ClickSign na assinatura).
+  É o preço da decisão 3; a mensagem avisa que vêm dois. Se virar atrito
+  medido, a fase 2 pode reaproveitar o OTP como evidência na ClickSign.
+- **Token de 2 h vence no meio** se a pessoa deixar para depois: volta ao
+  telefone, sem perder o que gravou.
 - **Direto em prod**: um deploy do `scheduler/` (prod, nunca em paralelo
   com dev), `checkin-prod` pela CLI da Vercel, painel pela Vercel no merge.
   Nenhuma rota nova no CloudFormation. Migration idempotente.
@@ -277,14 +294,15 @@ se o André preferir.
 
 ## 8. Critérios de aceite
 
-- [ ] Link emitido só para sessão confirmada, futura ou de hoje, com termo pendente, clínica pronta e com domínio.
-- [ ] Token de documentos abre a página com o nome e a data da sessão; expira no fim do dia da sessão; não serve para `confirm`, `payments` nem para outra sessão.
+- [ ] Botão de envio só para sessão confirmada, futura ou de hoje, com termo pendente, clínica pronta e com domínio.
+- [ ] O link não carrega token nem dado da paciente; aberto, pede telefone e código.
+- [ ] Token de escopo `documentos` dura 2 h, serve à lista, à ficha e à assinatura, e é recusado em `confirm` e `payments`; o token de quiosque segue 15 min e inalterado.
 - [ ] Dados → anamnese (4 telas) → assinar funciona no celular, com retomada ao reabrir o link.
 - [ ] Documento assinado pelo link aparece na agenda como assinado; no dia, o iPad pula os passos e vai de confirmar para pagar.
 - [ ] Mensagem sai pelo número da clínica, não pausa o bot, e usa o template editável.
 - [ ] Popover mostra "Link enviado em"; reenvio permitido.
 - [ ] `FILLING` aparece na agenda como "Preenchendo pelo link".
-- [ ] Link vencido ou documento já vigente mostram tela própria, sem erro genérico.
+- [ ] Sem sessão pendente, a página mostra "nada a fazer"; token vencido volta ao telefone sem perder o progresso.
 - [ ] pytest e Vitest dos pontos acima; `npm run build` e `npm run lint` nos três apps.
 
 ---
