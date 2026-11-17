@@ -5,8 +5,8 @@
  * caixas das áreas aparecem preenchidas, em vez de ela adicionar uma a uma.
  * Inclui a área composta, que vira duas aplicações.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
+import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RegistroDeSessaoModal } from './RegistroDeSessaoModal'
 import type {
@@ -79,12 +79,21 @@ function monta(sessoes: SessaoSemRegistro[]) {
   )
 }
 
-afterEach(cleanup)
+beforeEach(() => {
+  // Só o Date: userEvent depende dos timers reais.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-10T12:00:00'))
+})
+
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 /**
  * Uma aplicação montada é uma caixa com botão "Remover <área>". Mirar nisso, e
- * não no texto da área: o rótulo do rádio também mostra as áreas do
- * agendamento, e `getByText('Axila')` casaria com ele sem provar nada.
+ * não no texto da área: a opção do select também mostra as áreas do
+ * agendamento, e `getByText('Axila')` casaria com ela sem provar nada.
  */
 function areasMontadas(): string[] {
   return screen
@@ -92,37 +101,34 @@ function areasMontadas(): string[] {
     .map((b) => (b.getAttribute('aria-label') ?? '').replace('Remover ', ''))
 }
 
-describe('escolher a sessão monta as áreas', () => {
-  it('nasce sem área nenhuma: nada está escolhido ainda', () => {
-    monta([sessao()])
-    expect(areasMontadas()).toEqual([])
-    expect(screen.getByText(/Nenhuma área ainda/)).toBeInTheDocument()
-  })
+function seletor() {
+  return screen.getByRole('combobox', { name: /qual sessão/i }) as HTMLSelectElement
+}
 
-  it('escolhida a sessão, a área aparece com o parâmetro do protocolo', async () => {
+function opcoes(): string[] {
+  return Array.from(seletor().options).map((o) => o.textContent ?? '')
+}
+
+describe('escolher a sessão monta as áreas', () => {
+  it('a pendente mais recente já vem escolhida, com as áreas e a data', async () => {
     monta([sessao({ areas: 'Axila' })])
 
-    await userEvent.click(screen.getAllByRole('radio')[0])
-
-    expect(areasMontadas()).toEqual(['Axila'])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila']))
     // Fluência sugerida para Axila/SHR/pele branca, sem ela digitar nada.
     expect(screen.getByDisplayValue('12')).toBeInTheDocument()
+    expect(screen.getByLabelText('Data')).toHaveValue('2026-11-08')
   })
 
   it('área composta vira DUAS aplicações', async () => {
     monta([sessao({ areas: 'Virilha Completa + ânus' })])
 
-    await userEvent.click(screen.getAllByRole('radio')[0])
-
-    expect(areasMontadas()).toEqual(['Virilha', 'Perianal'])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Virilha', 'Perianal']))
   })
 
   it('duas áreas no agendamento, uma composta, viram três aplicações', async () => {
     monta([sessao({ areas: 'Axila, Virilha Completa + ânus' })])
 
-    await userEvent.click(screen.getAllByRole('radio')[0])
-
-    expect(areasMontadas()).toEqual(['Axila', 'Virilha', 'Perianal'])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila', 'Virilha', 'Perianal']))
   })
 
   it('trocar de sessão SUBSTITUI as áreas, não acumula', async () => {
@@ -130,34 +136,56 @@ describe('escolher a sessão monta as áreas', () => {
       sessao({ id: 'a1', areas: 'Axila' }),
       sessao({ id: 'a2', appointment_date: '2026-10-20', areas: 'Virilha Completa + ânus' }),
     ])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila']))
 
-    const radios = screen.getAllByRole('radio')
-    await userEvent.click(radios[0])
-    expect(areasMontadas()).toEqual(['Axila'])
-
-    await userEvent.click(radios[1])
+    await userEvent.selectOptions(seletor(), 'a2')
     expect(areasMontadas()).toEqual(['Virilha', 'Perianal'])
   })
 
-  it('"sessão fora do sistema" não monta área alguma', async () => {
+  it('"Registrar manual" é escolhível e não muda a escolha de volta sozinho', async () => {
     monta([sessao()])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila']))
 
-    await userEvent.click(screen.getByRole('radio', { name: /fora do sistema/i }))
-    expect(areasMontadas()).toEqual([])
+    await userEvent.selectOptions(seletor(), 'manual')
+    expect(seletor().value).toBe('manual')
   })
+})
 
-  it('a ordem recebida é preservada: a mais recente primeiro', () => {
-    // A ordem vem do backend (`ORDER BY appointment_date DESC`). Se alguém
-    // reordenar aqui, a sessão que ela acabou de atender sai do topo.
+describe('opções do seletor', () => {
+  it('data brasileira, da mais próxima de hoje para a mais antiga, manual por último', () => {
     monta([
-      sessao({ id: 'a1', appointment_date: '2026-11-08' }),
-      sessao({ id: 'a2', appointment_date: '2026-10-20' }),
+      sessao({ id: 'a2', appointment_date: '2026-10-20', areas: 'Virilha Completa + ânus' }),
+      sessao({ id: 'a1', appointment_date: '2026-11-08', areas: 'Axila' }),
     ])
 
-    const rotulos = screen
-      .getAllByRole('radio')
-      .map((r) => r.closest('label')?.textContent ?? '')
-    expect(rotulos[0]).toContain('2026-11-08')
-    expect(rotulos[1]).toContain('2026-10-20')
+    expect(opcoes()).toEqual([
+      '08/11/2026 · 09:00 · Axila',
+      '20/10/2026 · 09:00 · Virilha Completa + ânus',
+      'Registrar manual',
+    ])
+  })
+
+  it('sessão de hoje entra e é a pré-selecionada, mesmo com horário depois de agora', async () => {
+    monta([
+      sessao({ id: 'a1', appointment_date: '2026-11-08' }),
+      sessao({ id: 'a2', appointment_date: '2026-11-10', start_time: '18:00:00' }),
+    ])
+
+    await waitFor(() => expect(seletor().value).toBe('a2'))
+  })
+
+  it('sessão futura não aparece', () => {
+    monta([
+      sessao({ id: 'a1', appointment_date: '2026-11-08' }),
+      sessao({ id: 'a2', appointment_date: '2026-11-11' }),
+    ])
+
+    expect(opcoes()).toEqual(['08/11/2026 · 09:00 · Axila', 'Registrar manual'])
+  })
+
+  it('sem pendente até hoje, não mostra o seletor', () => {
+    monta([sessao({ appointment_date: '2026-11-11' })])
+
+    expect(screen.queryByRole('combobox', { name: /qual sessão/i })).toBeNull()
   })
 })

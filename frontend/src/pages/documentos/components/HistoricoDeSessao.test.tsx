@@ -96,8 +96,10 @@ describe('HistoricoDeSessao', () => {
     monta({ records: [registro()], appointments_without_record: [sessao({ areas: 'Axila, Virilha' })] })
 
     await userEvent.click(screen.getByRole('button', { name: '+ Novo registro' }))
-    expect(screen.getByText('Axila, Virilha')).toBeInTheDocument()
-    expect(screen.getAllByRole('radio').length).toBeGreaterThan(1)
+    expect(
+      screen.getByRole('option', { name: '08/11/2026 · 09:00 · Axila, Virilha' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Registrar manual' })).toBeInTheDocument()
   })
 
   it('paciente sem registro nenhum ainda assim não abre o formulário sozinha', () => {
