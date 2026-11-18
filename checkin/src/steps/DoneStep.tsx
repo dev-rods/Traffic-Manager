@@ -24,15 +24,19 @@ export function DoneStep({
   firstName,
   message,
   onFinish,
+  remoto = false,
 }: {
   firstName: string | null
   message: string
   onFinish: () => void
+  /** Pelo celular (PRD 048): sem volta automática, a página é da pessoa. */
+  remoto?: boolean
 }) {
   useEffect(() => {
+    if (remoto) return
     const timer = window.setTimeout(onFinish, AUTO_RESET_MS)
     return () => window.clearTimeout(timer)
-  }, [onFinish])
+  }, [onFinish, remoto])
 
   return (
     <div className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden text-center">
@@ -66,9 +70,13 @@ export function DoneStep({
       <StepHeader title={firstName ? `Tudo certo, ${firstName}!` : 'Tudo certo!'}>
         {message}
       </StepHeader>
-      <Button variant="secondary" onClick={onFinish} className="w-full max-w-sm">
-        Concluir
-      </Button>
+      {remoto ? (
+        <p className="max-w-sm text-base text-ink-500">Pode fechar esta página.</p>
+      ) : (
+        <Button variant="secondary" onClick={onFinish} className="w-full max-w-sm">
+          Concluir
+        </Button>
+      )}
     </div>
   )
 }

@@ -254,7 +254,8 @@ describe('Check-in', () => {
     expect(await screen.findByRole('heading', { name: 'Olá, Ana!' })).toBeInTheDocument()
     expect(screen.getByText('R$ 225,00')).toBeInTheDocument()
     expect(checkinService.sendCode).toHaveBeenCalledWith('c1', '5511999990000')
-    expect(checkinService.confirmCode).toHaveBeenCalledWith('c1', '5511999990000', '123456')
+    // O iPad pede o token de sessão (PRD 048): o de documentos não paga.
+    expect(checkinService.confirmCode).toHaveBeenCalledWith('c1', '5511999990000', '123456', 'sessao')
 
     await userEvent.click(screen.getByRole('button', { name: 'Está certo, confirmar' }))
     expect(checkinService.confirm).toHaveBeenCalledWith(

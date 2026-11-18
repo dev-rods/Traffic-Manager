@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Keypad } from '@/components/ui/Keypad'
+import { TextField } from '@/components/ui/TextField'
 import { ErrorMessage, StepHeader } from '@/components/StepHeader'
 import { useConfirmCode, useSendCode } from '@/hooks/useCheckin'
-import { formatPhone } from '@/utils/format'
+import type { TokenScope } from '@/types'
+import { formatPhone, onlyDigits } from '@/utils/format'
 import { cx } from '@/utils/cx'
+import type { Teclado } from './PhoneStep'
 
 const LENGTH = 6
 
@@ -14,24 +17,31 @@ export function CodeStep({
   devCode,
   onVerified,
   onChangePhone,
+  teclado = 'keypad',
+  scope = 'sessao',
 }: {
   clinicId: string
   phone: string
   devCode: string | null
   onVerified: (token: string) => void
   onChangePhone: () => void
+  /** `nativo` (PRD 048): no celular, o teclado do aparelho e a sugestão do código do WhatsApp. */
+  teclado?: Teclado
+  /** Escopo do token pedido ao backend; `documentos` dura 2 h e não paga nem confirma chegada. */
+  scope?: TokenScope
 }) {
   const [code, setCode] = useState('')
-  const confirm = useConfirmCode(clinicId)
+  const confirm = useConfirmCode(clinicId, scope)
   const resend = useSendCode(clinicId)
   const shownDevCode = resend.data ?? devCode
 
   function change(next: string) {
-    setCode(next)
+    const digits = onlyDigits(next).slice(0, LENGTH)
+    setCode(digits)
     confirm.reset()
     // O sexto dígito já confirma: um toque a menos no balcão.
-    if (next.length === LENGTH) {
-      confirm.mutate({ phone, code: next }, { onSuccess: onVerified, onError: () => setCode('') })
+    if (digits.length === LENGTH) {
+      confirm.mutate({ phone, code: digits }, { onSuccess: onVerified, onError: () => setCode('') })
     }
   }
 
@@ -47,20 +57,36 @@ export function CodeStep({
           <strong className="font-bold tabular-nums">{shownDevCode}</strong>.
         </p>
       ) : null}
-      <div className="flex justify-center gap-2" aria-label="Código digitado">
-        {Array.from({ length: LENGTH }).map((_, i) => (
-          <span
-            key={i}
-            className={cx(
-              'flex h-16 w-12 items-center justify-center rounded-xl border-2 bg-surface font-display text-3xl font-semibold text-ink-900',
-              i === code.length ? 'border-accent-400' : 'border-ink-200'
-            )}
-          >
-            {code[i] ?? ''}
-          </span>
-        ))}
-      </div>
-      <Keypad value={code} maxLength={LENGTH} onChange={change} disabled={confirm.isPending} />
+      {teclado === 'keypad' ? (
+        <>
+          <div className="flex justify-center gap-2" aria-label="Código digitado">
+            {Array.from({ length: LENGTH }).map((_, i) => (
+              <span
+                key={i}
+                className={cx(
+                  'flex h-16 w-12 items-center justify-center rounded-xl border-2 bg-surface font-display text-3xl font-semibold text-ink-900',
+                  i === code.length ? 'border-accent-400' : 'border-ink-200'
+                )}
+              >
+                {code[i] ?? ''}
+              </span>
+            ))}
+          </div>
+          <Keypad value={code} maxLength={LENGTH} onChange={change} disabled={confirm.isPending} />
+        </>
+      ) : (
+        <TextField
+          label="Código de 6 dígitos"
+          value={code}
+          onChange={change}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={LENGTH}
+          placeholder="000000"
+          disabled={confirm.isPending}
+          className="mx-auto w-full max-w-sm text-center tabular-nums"
+        />
+      )}
       {confirm.isError ? <ErrorMessage>{confirm.error.message}</ErrorMessage> : null}
       {resend.isError ? <ErrorMessage>{resend.error.message}</ErrorMessage> : null}
       <div className="mx-auto flex w-full max-w-sm flex-col gap-2">
