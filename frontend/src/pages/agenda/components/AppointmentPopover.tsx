@@ -300,10 +300,13 @@ export function AppointmentPopover({
                   direto, com `?agendamento=`, e economizava um clique tirando
                   da tela justamente o parametro da ultima sessao - que e o que
                   faz a aplicadora decidir o desta. Dali, "Novo registro" lista
-                  as sessoes sem registro e escolher uma monta as areas. */}
+                  as sessoes sem registro e escolher uma monta as areas.
+
+                  Leva `?agendamento=` so como DICA: o seletor do "Novo
+                  registro" nasce nesta sessao. Nao abre o formulario. */}
               {a.patient_id && (
                 <Link
-                  to={`/pacientes/${a.patient_id}/documentos`}
+                  to={`/pacientes/${a.patient_id}/documentos?agendamento=${a.id}`}
                   onClick={onClose}
                   className="block w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
                 >

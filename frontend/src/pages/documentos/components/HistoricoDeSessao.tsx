@@ -11,6 +11,8 @@ import { RegistroDeSessaoModal } from './RegistroDeSessaoModal'
 interface HistoricoDeSessaoProps {
   patientId: string
   skinType: SkinType | null
+  /** Agendamento de onde a aplicadora veio (agenda): vem escolhido no seletor. */
+  agendamentoDeOrigem?: string | null
 }
 
 /**
@@ -20,7 +22,11 @@ interface HistoricoDeSessaoProps {
  * justifica o documento existir, e escondê-la atrás de um clique transformaria
  * consulta rápida em navegação.
  */
-export function HistoricoDeSessao({ patientId, skinType }: HistoricoDeSessaoProps) {
+export function HistoricoDeSessao({
+  patientId,
+  skinType,
+  agendamentoDeOrigem,
+}: HistoricoDeSessaoProps) {
   const { data, isLoading, isError, refetch } = useSessionRecords(patientId)
   const { data: areas } = useClinicAreas()
   const excluir = useDeleteSessionRecord()
@@ -161,6 +167,7 @@ export function HistoricoDeSessao({ patientId, skinType }: HistoricoDeSessaoProp
           skinType={skinType}
           areas={areas ?? []}
           sessoesSemRegistro={semRegistro}
+          agendamentoDeOrigem={agendamentoDeOrigem}
           registro={editando}
           onClose={() => {
             setCriando(false)

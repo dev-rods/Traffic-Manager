@@ -23,10 +23,12 @@ const ABAS: { id: Documento; label: string }[] = [
  */
 export function DocumentosPage() {
   const { patientId } = useParams<{ patientId: string }>()
-  // O atalho da agenda cai aqui direto no histórico (PRD 042). Não há mais
-  // `?agendamento=`: ele pré-selecionava a sessão no modal e era justamente a
-  // pré-seleção que deixava o rádio marcado com a lista de áreas vazia.
+  // O atalho da agenda cai aqui direto no histórico (PRD 042), nunca no
+  // formulário. `?agendamento=` volta só como dica de qual sessão o seletor do
+  // "Novo registro" deve trazer escolhida; quem monta as áreas é o mesmo
+  // `escolheSessao` de quando ela escolhe na mão.
   const [searchParams, setSearchParams] = useSearchParams()
+  const agendamentoDeOrigem = searchParams.get('agendamento')
   const doc: Documento = searchParams.get('doc') === 'termo' ? 'termo' : 'historico'
 
   function trocarAba(novo: Documento) {
@@ -116,7 +118,11 @@ export function DocumentosPage() {
 
       <section className="mt-6" role="tabpanel">
         {doc === 'historico' ? (
-          <HistoricoDeSessao patientId={patientId} skinType={paciente.skin_type} />
+          <HistoricoDeSessao
+            patientId={patientId}
+            skinType={paciente.skin_type}
+            agendamentoDeOrigem={agendamentoDeOrigem}
+          />
         ) : (
           <TermoDeConsentimento patientId={patientId} />
         )}
