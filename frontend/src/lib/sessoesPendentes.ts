@@ -2,25 +2,32 @@ import type { SessaoSemRegistro } from '@/types'
 import { formatCalendarDate, formatClock } from '@/utils/formatDate'
 
 /**
- * Sessões pendentes de registro que já aconteceram (hoje inclusive), da mais
- * próxima de hoje para a mais antiga.
+ * Sessões pendentes de registro, da data mais recente para a mais antiga.
  *
- * Compara o dia inteiro: uma sessão de hoje às 18h entra mesmo que ainda não
- * tenha chegado a hora. A primeira da lista é a pré-selecionada. O backend
- * devolve também os agendamentos futuros confirmados; esses não são registro
- * possível ainda.
+ * Inclui as futuras: a aplicadora pode registrar uma sessão agendada para os
+ * próximos dias (ex.: paciente com um único agendamento confirmado, daqui a
+ * dois dias). Filtrá-las aqui fazia o seletor sumir para essa paciente.
  */
-export function sessoesPendentesAteHoje(
-  sessoes: SessaoSemRegistro[],
+export function ordenaPendentes(sessoes: SessaoSemRegistro[]): SessaoSemRegistro[] {
+  return [...sessoes].sort(
+    (a, b) =>
+      b.appointment_date.localeCompare(a.appointment_date) ||
+      b.start_time.localeCompare(a.start_time),
+  )
+}
+
+/**
+ * A sessão que já vem escolhida: a mais recente anterior ou igual a hoje.
+ *
+ * Compara o dia inteiro: uma sessão de hoje às 18h vale mesmo antes das 18h.
+ * Recebe a lista já ordenada por `ordenaPendentes`. Sem nenhuma até hoje,
+ * devolve `undefined` e o seletor fica em "Registrar manual".
+ */
+export function sessaoPreSelecionada(
+  ordenadas: SessaoSemRegistro[],
   hoje: string,
-): SessaoSemRegistro[] {
-  return sessoes
-    .filter((s) => s.appointment_date <= hoje)
-    .sort(
-      (a, b) =>
-        b.appointment_date.localeCompare(a.appointment_date) ||
-        b.start_time.localeCompare(a.start_time),
-    )
+): SessaoSemRegistro | undefined {
+  return ordenadas.find((s) => s.appointment_date <= hoje)
 }
 
 /** "08/11/2026 · 09:00" */

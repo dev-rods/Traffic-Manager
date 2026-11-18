@@ -174,17 +174,41 @@ describe('opções do seletor', () => {
     await waitFor(() => expect(seletor().value).toBe('a2'))
   })
 
-  it('sessão futura não aparece', () => {
+  it('sessão futura aparece na lista, mas não é a pré-selecionada', async () => {
     monta([
       sessao({ id: 'a1', appointment_date: '2026-11-08' }),
       sessao({ id: 'a2', appointment_date: '2026-11-11' }),
     ])
 
-    expect(opcoes()).toEqual(['08/11/2026 · 09:00 · Axila', 'Registrar manual'])
+    expect(opcoes()).toEqual([
+      '11/11/2026 · 09:00 · Axila',
+      '08/11/2026 · 09:00 · Axila',
+      'Registrar manual',
+    ])
+    await waitFor(() => expect(seletor().value).toBe('a1'))
   })
 
-  it('sem pendente até hoje, não mostra o seletor', () => {
-    monta([sessao({ appointment_date: '2026-11-11' })])
+  it('só com sessão futura, o seletor aparece em "Registrar manual", sem montar áreas', () => {
+    // Paciente com um único agendamento confirmado, daqui a dois dias: o
+    // seletor sumia, e a aplicadora não tinha como vincular a sessão.
+    monta([sessao({ id: 'a1', appointment_date: '2026-11-12', areas: 'Axila' })])
+
+    expect(opcoes()).toEqual(['12/11/2026 · 09:00 · Axila', 'Registrar manual'])
+    expect(seletor().value).toBe('manual')
+    expect(areasMontadas()).toEqual([])
+  })
+
+  it('escolher a sessão futura monta data e áreas', async () => {
+    monta([sessao({ id: 'a1', appointment_date: '2026-11-12', areas: 'Axila' })])
+
+    await userEvent.selectOptions(seletor(), 'a1')
+
+    expect(areasMontadas()).toEqual(['Axila'])
+    expect(screen.getByLabelText('Data')).toHaveValue('2026-11-12')
+  })
+
+  it('sem nenhuma pendente, não mostra o seletor', () => {
+    monta([])
 
     expect(screen.queryByRole('combobox', { name: /qual sessão/i })).toBeNull()
   })
