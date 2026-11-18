@@ -21,6 +21,11 @@ from src.services.appointment_service import (
 )
 from src.services.duracao_manual import DuracaoInvalida
 
+# PRD 049: só a edição MANUAL pelo painel tolera encaixe. Bot
+# (`ai_tools.alterar_agendamento`) e site (`public_booking`) chamam o serviço
+# direto e ficam com tolerância zero; chegar aqui já é painel.
+TOLERANCIA_DO_PAINEL_MIN = 15
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -224,6 +229,7 @@ def handler(event, context):
                     nova_duracao_manual if mexeu_na_duracao else SEM_MUDANCA
                 ),
                 verificar_conflito=confere_conflito_agora,
+                tolerancia_minutos=TOLERANCIA_DO_PAINEL_MIN,
             )
             changed = True
             messages.append("serviço/áreas")
@@ -239,6 +245,7 @@ def handler(event, context):
             service.set_manual_duration(
                 appointment_id, nova_duracao_manual,
                 verificar_conflito=confere_conflito_agora,
+                tolerancia_minutos=TOLERANCIA_DO_PAINEL_MIN,
             )
             changed = True
 
@@ -261,7 +268,8 @@ def handler(event, context):
                 if not new_time:
                     new_time = str(existing[0]["start_time"])[:5]
 
-            service.reschedule_appointment(appointment_id, new_date, new_time)
+            service.reschedule_appointment(appointment_id, new_date, new_time,
+                                           tolerancia_minutos=TOLERANCIA_DO_PAINEL_MIN)
             changed = True
             messages.append("data/horário")
 
