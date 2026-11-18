@@ -114,6 +114,19 @@ class TestRotas(Base):
         with self.acesso(), mock.patch("src.services.consentimento.url_do_pdf", side_effect=consentimento.NaoEncontrado()):
             self.assertEqual(router.handler(evento("GET", f"{TERMO}/pdf-url"), None)["statusCode"], 404)
 
+    def test_link_dos_documentos_passa_autor_e_devolve_o_resultado(self):
+        """PRD 048."""
+        resultado = {"link": "https://documentos.x/c/documentos", "sent": True, "consent_link_sent_at": "2026-11-17T10:00:00"}
+        with self.acesso(), mock.patch.object(consentimento, "envia_link_de_documentos", return_value=resultado) as m:
+            r = router.handler(evento("POST", f"appointments/{APPT}/link"), None)
+        self.assertEqual(r["statusCode"], 200)
+        self.assertEqual(json.loads(r["body"])["link"], resultado["link"])
+        self.assertEqual(m.call_args.args[1:], (CLINIC, APPT, "Joana"))
+        with self.acesso(), mock.patch.object(consentimento, "envia_link_de_documentos",
+                                              side_effect=consentimento.ConsentimentoInvalido("sem domínio")):
+            r = router.handler(evento("POST", f"appointments/{APPT}/link"), None)
+        self.assertEqual((r["statusCode"], json.loads(r["body"])["message"]), (400, "sem domínio"))
+
     def test_rota_desconhecida(self):
         self.assertEqual(router.handler(evento("GET", "qualquer"), None)["statusCode"], 404)
         self.assertEqual(router.handler(evento("DELETE", f"patients/{PAC}"), None)["statusCode"], 404)

@@ -124,6 +124,15 @@ class Db:
             return [dict(p, guardian_name=g.get("name"), guardian_cpf=g.get("cpf"),
                          guardian_birth_date=g.get("birth_date"), guardian_phone=g.get("phone"),
                          guardian_email=g.get("email"))]
+        if "patient_phone" in sql and "FROM scheduler.appointments a" in sql:
+            appt_id, clinic = params
+            a = self.agendamentos.get(appt_id)
+            if not a or a["clinic_id"] != clinic:
+                return []
+            p = self.pacientes[a["patient_id"]]
+            return [dict(a, patient_phone=p["phone"], patient_name=p["name"], areas="Axilas, Buço")]
+        if "SELECT * FROM scheduler.clinics WHERE clinic_id" in sql:
+            return [dict(self.clinica)] if params[0] == self.clinica["clinic_id"] else []
         if "FROM scheduler.clinics c" in sql:
             prof = self.profissionais.get(self.clinica.get("responsible_professional_id")) or {}
             if not prof.get("active"):
@@ -256,6 +265,11 @@ class Db:
                 return None
             t.update(status="SIGNED", signed_at=AGORA, pdf_s3_key=pdf, pdf_sha256=sha, audit_s3_key=zipk)
             return dict(t)
+        if "SET consent_link_sent_at = NOW()" in sql:
+            appt, clinic = params
+            a = self.agendamentos[appt]
+            a["consent_link_sent_at"] = AGORA
+            return {"consent_link_sent_at": AGORA}
         if "SET consent_waived_at = NOW()" in sql:
             autor, motivo, nota, appt, clinic = params
             a = self.agendamentos.get(appt)
@@ -662,6 +676,109 @@ class TestPainel(Base):
             consentimento.url_do_zip(self.db, CLINIC, c["id"])
         with self.assertRaises(consentimento.NaoEncontrado):
             consentimento.url_do_pdf(self.db, "outra-clinica", c["id"])
+
+
+class Envio:
+    def __init__(self, sucesso=True):
+        self.sucesso = sucesso
+        self.enviados = []
+
+    def __call__(self, clinic, phone, content, origem, **kw):
+        self.enviados.append((clinic["clinic_id"], phone, content, origem))
+        return mock.Mock(success=self.sucesso, error=None if self.sucesso else "z-api fora")
+
+
+class TestLinkDosDocumentos(Base):
+    """PRD 048: o link fixo da clínica e o envio pelo painel."""
+
+    def setUp(self):
+        super().setUp()
+        self.db.clinica["custom_domain"] = "agendar.clinica-x.com.br"
+        self.db.clinica["address"] = "Rua A, 1"
+        for a in self.db.agendamentos.values():
+            a["start_time"] = "09:00:00"
+        self.envio = Envio()
+        p = mock.patch("src.services.envio_do_sistema.envia_texto", side_effect=self.envio)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def envia(self, appt=APPT):
+        return consentimento.envia_link_de_documentos(self.db, CLINIC, appt, "Joana")
+
+    def test_link_troca_agendar_por_documentos(self):
+        self.assertEqual(consentimento.link_de_documentos(self.db.clinica),
+                         "https://documentos.clinica-x.com.br/%s/documentos" % CLINIC)
+        self.assertEqual(consentimento.link_de_documentos({"clinic_id": CLINIC, "custom_domain": "clinica-x.com.br"}),
+                         "https://documentos.clinica-x.com.br/%s/documentos" % CLINIC)
+        self.assertIsNone(consentimento.link_de_documentos({"clinic_id": CLINIC, "custom_domain": ""}))
+
+    def test_envia_pelo_sistema_com_o_template_e_grava_quando(self):
+        r = self.envia()
+        self.assertTrue(r["sent"])
+        self.assertEqual(r["link"], "https://documentos.clinica-x.com.br/%s/documentos" % CLINIC)
+        self.assertEqual(r["consent_link_sent_at"], AGORA.isoformat())
+        (clinic, fone, texto, origem), = self.envio.enviados
+        self.assertEqual((clinic, fone, origem), (CLINIC, FONE, "DOCUMENTOS"))
+        self.assertIn("Olá, Ana!", texto)
+        self.assertIn("Essência", texto)
+        self.assertIn("quarta, 04/11", texto)
+        self.assertIn("09:00", texto)
+        self.assertIn(r["link"], texto)
+        self.assertNotIn("{{", texto)
+
+    def test_whatsapp_fora_devolve_o_link_sem_gravar(self):
+        self.envio.sucesso = False
+        r = self.envia()
+        self.assertFalse(r["sent"])
+        self.assertIsNone(r["consent_link_sent_at"])
+        self.assertNotIn("consent_link_sent_at", self.db.agendamentos[APPT])
+        self.assertTrue(r["link"])
+
+    def test_recusas(self):
+        self.db.agendamentos[APPT]["status"] = "CANCELLED"
+        with self.assertRaises(consentimento.ConsentimentoInvalido) as cm:
+            self.envia()
+        self.assertIn("confirmada", str(cm.exception))
+        self.db.agendamentos[APPT]["status"] = "CONFIRMED"
+
+        self.db.agendamentos[APPT]["appointment_date"] = date(2026, 11, 3)
+        with self.assertRaises(consentimento.ConsentimentoInvalido) as cm:
+            self.envia()
+        self.assertIn("já passou", str(cm.exception))
+        self.db.agendamentos[APPT]["appointment_date"] = date(2026, 11, 4)
+
+        self.db.clinica["responsible_professional_id"] = None
+        with self.assertRaises(consentimento.ConsentimentoInvalido) as cm:
+            self.envia()
+        self.assertIn("responsável técnica", str(cm.exception))
+        self.db.clinica["responsible_professional_id"] = PROF
+
+        self.db.clinica["custom_domain"] = ""
+        with self.assertRaises(consentimento.ConsentimentoInvalido) as cm:
+            self.envia()
+        self.assertIn("domínio", str(cm.exception))
+        self.db.clinica["custom_domain"] = "agendar.clinica-x.com.br"
+
+        consentimento.registra_papel(self.db, CLINIC, PAC, date(2026, 11, 1), "Joana")
+        with self.assertRaises(consentimento.ConsentimentoInvalido) as cm:
+            self.envia()
+        self.assertIn("vigente", str(cm.exception))
+        self.assertEqual(self.envio.enviados, [])
+
+        with self.assertRaises(consentimento.NaoEncontrado):
+            self.envia("nao-e-uuid")
+
+    def test_resumo_com_respostas_traz_a_ficha_gravada(self):
+        consentimento.guarda_respostas(self.db, self.prov, CLINIC, FONE, APPT, 1, {
+            **{p.chave: False for p in anamnese.PERGUNTAS if p.tela == 1 and p.tipo == anamnese.SIM_NAO},
+            "queixa_principal": "Virilha"})
+        appt = self.db.agendamentos[APPT]
+        com = consentimento.resumo_para_o_ipad(self.db, CLINIC, appt, com_respostas=True)
+        self.assertEqual(com["anamnesisAnswers"]["queixa_principal"], "Virilha")
+        self.assertNotIn("anamnesisAnswers", consentimento.resumo_para_o_ipad(self.db, CLINIC, appt))
+        outro = consentimento.resumo_para_o_ipad(self.db, CLINIC, self.db.agendamentos[APPT_MENOR],
+                                                 com_respostas=True)
+        self.assertEqual(outro["anamnesisAnswers"], {})
 
 
 class TestAnamnese(Base):

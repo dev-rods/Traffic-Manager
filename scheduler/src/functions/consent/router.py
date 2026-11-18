@@ -7,6 +7,7 @@ a stack está perto do limite de 500 recursos do CloudFormation.
     GET  patients/{patientId}            prontuario.ler    termos da paciente (todas as versões)
     POST patients/{patientId}/paper      agenda.escrever   assinado em papel {signedAt}; 201 gravou, 200 já tinha vigente
     POST appointments/{id}/waive         agenda.escrever   dispensa nesta sessão {reason, note?}
+    POST appointments/{id}/link          agenda.escrever   manda o link dos documentos pelo WhatsApp (PRD 048)
     POST {consentId}/renew               agenda.escrever   pede nova assinatura (PRD 038): o vigente vira REVOKED
     GET  {consentId}/pdf-url             prontuario.ler    URL assinada (5 min) do PDF
     GET  {consentId}/zip-url             prontuario.ler    URL assinada (5 min) do zip de auditoria
@@ -33,6 +34,7 @@ UUID = r"([0-9a-fA-F-]{36})"
 POR_PACIENTE = re.compile(r"^patients/{}$".format(UUID))
 PAPEL = re.compile(r"^patients/{}/paper$".format(UUID))
 DISPENSA = re.compile(r"^appointments/{}/waive$".format(UUID))
+LINK = re.compile(r"^appointments/{}/link$".format(UUID))
 PDF = re.compile(r"^{}/pdf-url$".format(UUID))
 ZIP = re.compile(r"^{}/zip-url$".format(UUID))
 RENOVA = re.compile(r"^{}/renew$".format(UUID))
@@ -102,6 +104,15 @@ def handler(event, context):
                                                str(corpo.get("reason") or ""), corpo.get("note"),
                                                _autor(identidade))
             return http_response(200, para_o_staff(identidade, {"status": "SUCCESS", "appointment": resultado}))
+
+        achou = LINK.match(caminho)
+        if metodo == "POST" and achou:
+            identidade, erro = require_acesso(event, "agenda.escrever")
+            if erro:
+                return erro
+            resultado = consentimento.envia_link_de_documentos(PostgresService(), clinic_id, achou.group(1),
+                                                               _autor(identidade))
+            return http_response(200, para_o_staff(identidade, {"status": "SUCCESS", **resultado}))
 
         achou = RENOVA.match(caminho)
         if metodo == "POST" and achou:

@@ -19,6 +19,11 @@ do CloudFormation e cada rota HTTP custa ~4; a coringa custa ~4 no total.
 A baixa em dinheiro é da recepção e mora no painel (`functions/caixa`), não
 aqui. Tudo exige a chave do booking-site E o token do código de WhatsApp (o mesmo de "Meus agendamentos"): sem ele, quem digitasse
 o número de outra pessoa veria e pagaria a sessão dela.
+
+Escopo do token (PRD 048): o token de `documentos`, do celular antes da
+sessão, só serve à lista, à ficha e à assinatura. Confirmar chegada e pagar
+exigem o token de sessão do iPad. Com o token de documentos, a lista também
+traz as respostas da ficha já gravadas, para a pessoa retomar de onde parou.
 """
 import logging
 import re
@@ -29,7 +34,7 @@ from src.providers.signature_provider import (
 )
 from src.services import checkin, consentimento
 from src.services.db.postgres import PostgresService
-from src.utils.booking_verification import verify_token
+from src.utils.booking_verification import DOCUMENTOS, SESSAO, escopo_do_token, verify_token
 from src.utils.http import (
     extract_path_param, extract_query_param, http_response, parse_body,
     require_booking_intake_api_key,
@@ -51,6 +56,8 @@ ROTAS = (
     ("POST", re.compile(rf"^consents/({UUID})/simulate$"), "consent_simula"),
 )
 CONSENTIMENTO = ("anamnesis", "consent", "consent_status", "consent_simula")
+# Chegar e pagar são do iPad: o token de documentos nunca passa aqui.
+SO_SESSAO = ("confirma", "cobra", "status", "simula")
 
 
 def _rota(metodo, caminho):
@@ -85,13 +92,15 @@ def handler(event, context):
         token = body.get("token") if metodo in ("POST", "PUT") else extract_query_param(event, "token")
         if not phone or not token:
             return _erro(400, "phone e token são obrigatórios")
-        if not verify_token(clinic_id, phone, token):
+        escopos = (SESSAO,) if nome in SO_SESSAO else (SESSAO, DOCUMENTOS)
+        if not verify_token(clinic_id, phone, token, scopes=escopos):
             return _erro(401, "Sua sessão expirou. Confirme o código de novo.")
 
         if nome == "lista":
             return http_response(200, {
                 "status": "SUCCESS",
-                "appointments": checkin.agendamentos_do_numero(db, clinic_id, phone),
+                "appointments": checkin.agendamentos_do_numero(
+                    db, clinic_id, phone, com_respostas=escopo_do_token(token) == DOCUMENTOS),
             })
         if nome == "confirma":
             return http_response(200, {"status": "SUCCESS", **checkin.confirma(db, clinic_id, phone, recurso_id)})

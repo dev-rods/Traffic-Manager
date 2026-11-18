@@ -415,11 +415,19 @@ class TestHandler(unittest.TestCase):
             mock.patch(f"{self.modulo}.require_booking_intake_api_key", return_value=("k", None)),
             mock.patch(f"{self.modulo}.PostgresService", return_value=self.db),
             mock.patch(f"{self.modulo}.provedor_ativo", return_value=self.prov),
-            mock.patch(f"{self.modulo}.verify_token", side_effect=lambda c, ph, t: t == "ok"),
+            # "ok" é o token de sessão; "doc" é o de documentos (PRD 048), que só
+            # vale onde a rota aceita esse escopo.
+            mock.patch(f"{self.modulo}.verify_token", side_effect=self._verify),
+            mock.patch(f"{self.modulo}.escopo_do_token",
+                       side_effect=lambda t: {"ok": "sessao", "doc": "documentos"}.get(t)),
             mock.patch("src.services.relogio.agora_na_clinica", return_value=AGORA),
         ):
             p.start()
             self.addCleanup(p.stop)
+
+    @staticmethod
+    def _verify(clinic, phone, token, scopes=("sessao",)):
+        return {"ok": "sessao", "doc": "documentos"}.get(token) in scopes
 
     def chama(self, metodo, proxy, body=None, query=None):
         from src.functions.public_booking.checkin import handler
@@ -439,6 +447,28 @@ class TestHandler(unittest.TestCase):
         self.assertEqual(s, 201)
         s, b = self.chama("GET", f"payments/{b['payment']['id']}", query={"phone": FONE, "token": "ok"})
         self.assertEqual((s, b["payment"]["status"]), (200, PENDENTE))
+
+    def test_token_de_documentos_lista_com_respostas_mas_nao_chega_nem_paga(self):
+        """PRD 048: o token do celular serve à lista (com as respostas gravadas),
+        à ficha e à assinatura; confirmar chegada e pagar respondem 401."""
+        with mock.patch("src.services.checkin.agendamentos_do_numero", return_value=[]) as lista:
+            s, _ = self.chama("GET", "appointments", query={"phone": FONE, "token": "doc"})
+            self.assertEqual(s, 200)
+            self.assertTrue(lista.call_args.kwargs["com_respostas"])
+            s, _ = self.chama("GET", "appointments", query={"phone": FONE, "token": "ok"})
+            self.assertFalse(lista.call_args.kwargs["com_respostas"])
+        s, _ = self.chama("POST", f"appointments/{APPT}/confirm", {"phone": FONE, "token": "doc"})
+        self.assertEqual(s, 401)
+        s, _ = self.chama("POST", f"appointments/{APPT}/payments", {"phone": FONE, "token": "doc", "method": "PIX"})
+        self.assertEqual(s, 401)
+        self.assertIsNone(self.db.agendamentos[APPT]["checked_in_at"])
+        self.assertEqual(self.db.pagamentos, {})
+        with mock.patch(f"{self.modulo}.provedor_de_assinatura"), \
+                mock.patch("src.services.consentimento.guarda_respostas",
+                           return_value={"anamnesis": {"screen": 1, "answered": [], "complete": False}}):
+            s, _ = self.chama("POST", f"appointments/{APPT}/anamnesis",
+                              {"phone": FONE, "token": "doc", "screen": 1, "answers": {}})
+            self.assertEqual(s, 200)
 
     def test_sem_token_valido(self):
         s, _ = self.chama("GET", "appointments", query={"phone": FONE, "token": "velho"})

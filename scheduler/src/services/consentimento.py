@@ -181,8 +181,13 @@ def _clinica_pronta(clinica: Optional[Dict]) -> bool:
                 and (clinica.get("cidade") or "").strip())
 
 
-def resumo_para_o_ipad(db, clinic_id: str, appt: Dict) -> Dict[str, Any]:
-    """`consentRequired` e o pré-preenchimento da tela de dados."""
+def resumo_para_o_ipad(db, clinic_id: str, appt: Dict, com_respostas: bool = False) -> Dict[str, Any]:
+    """`consentRequired` e o pré-preenchimento da tela de dados.
+
+    `com_respostas` (PRD 048) acrescenta `anamnesisAnswers`, as respostas da
+    ficha já gravadas (FILLING ou SIGNING): no celular a pessoa pode ter
+    parado no meio. O iPad não pede, e começa a ficha em branco de propósito.
+    """
     if not precisa_assinar(db, clinic_id, appt):
         return {"consentRequired": False, "consentPrefill": None}
     pac = _paciente(db, str(appt["patient_id"])) or {}
@@ -197,7 +202,7 @@ def resumo_para_o_ipad(db, clinic_id: str, appt: Dict) -> Dict[str, Any]:
             "phone": pac.get("guardian_phone"),
             "email": pac.get("guardian_email"),
         }
-    return {
+    resumo: Dict[str, Any] = {
         "consentRequired": True,
         "consentPrefill": {
             "name": appt.get("full_name") or pac.get("name"),
@@ -211,6 +216,112 @@ def resumo_para_o_ipad(db, clinic_id: str, appt: Dict) -> Dict[str, Any]:
             "clinicReady": _clinica_pronta(_clinica(db, clinic_id)),
         },
     }
+    if com_respostas:
+        em_andamento = _em_andamento(db, clinic_id, str(appt["patient_id"]))
+        resumo["anamnesisAnswers"] = (_respostas_de(em_andamento) if em_andamento else None) or {}
+    return resumo
+
+
+# -- Link dos documentos pelo WhatsApp (PRD 048) ----------------------------------
+
+ORIGEM_DO_LINK = "DOCUMENTOS"
+TEMPLATE_DO_LINK = "LINK_DOCUMENTOS"
+
+
+def link_de_documentos(clinic: Optional[Dict]) -> Optional[str]:
+    """O endereço fixo da clínica para termo e ficha pelo celular. Sem domínio,
+    não há link (mesma regra do autoatendimento). O domínio cadastrado é o do
+    site (`agendar.X`); o dos documentos é `documentos.X`."""
+    from src.services.autoatendimento import link_de_autoatendimento
+    base = link_de_autoatendimento(clinic)
+    if not base:
+        return None
+    dominio = base.replace("https://", "").rstrip("/")
+    rotulos = dominio.split(".")
+    if rotulos[0] == "agendar":
+        rotulos[0] = "documentos"
+    else:
+        rotulos.insert(0, "documentos")
+    return f"https://{'.'.join(rotulos)}/{clinic['clinic_id']}/documentos"
+
+
+def envia_link_de_documentos(db, clinic_id: str, appointment_id: str, autor: str) -> Dict[str, Any]:
+    """A recepção manda, pelo WhatsApp da clínica, o link para a paciente
+    conferir os dados, responder a ficha e assinar antes da sessão.
+
+    Só para sessão confirmada, de hoje ou futura, com termo pendente, em
+    clínica pronta (RT e cidade) e com domínio. O envio passa por
+    `envio_do_sistema` (não pausa o bot) e, se saiu, grava
+    `consent_link_sent_at` na sessão. Falha do WhatsApp devolve o link e
+    `sent: False`, para a recepção mandar à mão.
+    """
+    from src.services.envio_do_sistema import envia_texto
+    from src.services.lembrete_da_agenda import variaveis_do_template
+    from src.services.template_service import TemplateService
+
+    try:
+        uuid.UUID(str(appointment_id))
+    except ValueError:
+        raise NaoEncontrado()
+    rows = db.execute_query(
+        """
+        SELECT a.*, p.phone AS patient_phone, p.name AS patient_name,
+               (SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at)
+                  FROM scheduler.appointment_service_areas asa
+                 WHERE asa.appointment_id = a.id) AS areas
+        FROM scheduler.appointments a
+        JOIN scheduler.patients p ON p.id = a.patient_id
+        WHERE a.id = %s::uuid AND a.clinic_id = %s
+        """,
+        (appointment_id, clinic_id),
+    )
+    if not rows:
+        raise NaoEncontrado()
+    appt = rows[0]
+    clinicas = db.execute_query("SELECT * FROM scheduler.clinics WHERE clinic_id = %s", (clinic_id,))
+    if not clinicas:
+        raise NaoEncontrado()
+    clinica = clinicas[0]
+
+    if appt.get("status") != "CONFIRMED":
+        raise ConsentimentoInvalido("Só sessão confirmada recebe o link dos documentos.")
+    hoje = relogio.agora_na_clinica(clinica.get("timezone")).date()
+    if para_data(appt.get("appointment_date")) < hoje:
+        raise ConsentimentoInvalido("Esta sessão já passou.")
+    if not precisa_assinar(db, clinic_id, appt):
+        raise ConsentimentoInvalido("Esta paciente já tem termo vigente ou foi dispensada nesta sessão.")
+    if not _clinica_pronta(_clinica(db, clinic_id)):
+        raise ConsentimentoInvalido("Cadastre a responsável técnica e a cidade da clínica antes de enviar o link.")
+    link = link_de_documentos(clinica)
+    if not link:
+        raise ConsentimentoInvalido("Esta clínica não tem domínio próprio; o link dos documentos não existe.")
+    phone = (appt.get("patient_phone") or "").strip()
+    if not phone:
+        raise ConsentimentoInvalido("Esta paciente não tem telefone cadastrado.")
+
+    variaveis = variaveis_do_template(appt, clinica)
+    variaveis["link"] = link
+    texto = TemplateService(db).get_and_render(clinic_id, TEMPLATE_DO_LINK, variaveis)
+
+    enviado = False
+    try:
+        resposta = envia_texto(clinica, phone, texto, ORIGEM_DO_LINK)
+        enviado = bool(resposta.success)
+        if not enviado:
+            logger.error(f"[Documentos] link {clinic_id} {appointment_id} não foi pelo WhatsApp: {resposta.error}")
+    except Exception as e:
+        logger.error(f"[Documentos] link {clinic_id} {appointment_id} não foi pelo WhatsApp: {e}", exc_info=True)
+
+    enviado_em = None
+    if enviado:
+        atualizado = db.execute_write_returning(
+            "UPDATE scheduler.appointments SET consent_link_sent_at = NOW(), updated_at = NOW() "
+            "WHERE id = %s::uuid AND clinic_id = %s RETURNING consent_link_sent_at",
+            (appointment_id, clinic_id),
+        )
+        enviado_em = _iso(atualizado.get("consent_link_sent_at")) if atualizado else None
+    logger.info(f"[Documentos] link {clinic_id} {appointment_id} tel=***{phone[-4:]} enviado={enviado} por {autor}")
+    return {"link": link, "sent": enviado, "consent_link_sent_at": enviado_em}
 
 
 def _respostas_de(row: Dict) -> Optional[Dict[str, Any]]:
