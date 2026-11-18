@@ -72,6 +72,8 @@ SQL_STATEMENTS = [
         -- professionals vem por migration, porque professionals e criada
         -- depois desta tabela.
         responsible_professional_id UUID,
+        -- Quem o "Novo registro de sessao" propoe como profissional.
+        default_professional_id UUID,
         cidade VARCHAR(120),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -1250,6 +1252,15 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.professionals ADD COLUMN IF NOT EXISTS registro_conselho VARCHAR(60)",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS responsible_professional_id UUID",
     "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS cidade VARCHAR(120)",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS default_professional_id UUID",
+    """DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint
+                        WHERE conname = 'clinics_default_professional_fk') THEN
+            ALTER TABLE scheduler.clinics
+                ADD CONSTRAINT clinics_default_professional_fk
+                FOREIGN KEY (default_professional_id) REFERENCES scheduler.professionals(id);
+        END IF;
+    END $$""",
     """DO $$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_constraint
                         WHERE conname = 'clinics_responsible_professional_fk') THEN

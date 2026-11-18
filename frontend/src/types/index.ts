@@ -26,6 +26,8 @@ export interface Clinic {
   custom_domain_status?: CustomDomainStatus
   /** Termo de consentimento (PRD 036): a responsável técnica e a cidade impressas no termo. */
   responsible_professional_id: string | null
+  /** Profissional que o "Novo registro de sessão" propõe. */
+  default_professional_id: string | null
   cidade: string | null
 }
 
@@ -55,6 +57,7 @@ export interface UpdateClinicPayload {
   favicon_url?: string
   custom_domain?: string | null
   responsible_professional_id?: string | null
+  default_professional_id?: string | null
   cidade?: string | null
 }
 

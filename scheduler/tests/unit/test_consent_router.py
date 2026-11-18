@@ -179,6 +179,16 @@ class TestUpdateClinic(unittest.TestCase):
         self.assertEqual(r["statusCode"], 200)
         self.assertEqual(db.execute_query.call_args[0][1][1], CLINIC)
 
+    def test_padrao_do_registro_de_sessao_tem_de_ser_profissional_ativa_da_clinica(self):
+        corpo = {"default_professional_id": "cccccccc-0000-0000-0000-000000000002"}
+        r, _ = self._chama(corpo, ativa=False)
+        self.assertEqual(r["statusCode"], 400)
+        r, db = self._chama(corpo, ativa=True)
+        self.assertEqual(r["statusCode"], 200)
+        sql, params = db.execute_write_returning.call_args[0]
+        self.assertIn("default_professional_id", sql)
+        self.assertIn("cccccccc-0000-0000-0000-000000000002", params)
+
     def test_responsavel_nula_e_cidade_aparada(self):
         r, db = self._chama({"responsible_professional_id": None, "cidade": "  São  Paulo  "}, ativa=False)
         self.assertEqual(r["statusCode"], 200)

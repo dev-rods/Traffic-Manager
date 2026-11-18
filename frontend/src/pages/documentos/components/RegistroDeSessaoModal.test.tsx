@@ -56,7 +56,16 @@ vi.mock('@/hooks/useProtocoloLaser', () => ({
   }),
 }))
 vi.mock('@/hooks/useProfessionals', () => ({
-  useProfessionals: () => ({ data: [{ id: 'pr1', name: 'Camila' }] }),
+  useProfessionals: () => ({
+    data: [
+      { id: 'pr1', name: 'Camila' },
+      { id: 'pr2', name: 'Janaína' },
+    ],
+  }),
+}))
+const clinica = vi.hoisted(() => ({ padrao: null as string | null }))
+vi.mock('@/hooks/useClinic', () => ({
+  useClinic: () => ({ data: { default_professional_id: clinica.padrao } }),
 }))
 vi.mock('@/hooks/useSessionRecords', () => ({
   useCreateSessionRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -87,6 +96,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  clinica.padrao = null
   cleanup()
   vi.useRealTimers()
 })
@@ -246,6 +256,24 @@ describe('opções do seletor', () => {
 
     expect(areasMontadas()).toEqual(['Axila'])
     expect(screen.getByLabelText('Data')).toHaveValue('2026-11-12')
+  })
+
+  it('propõe a profissional padrão da clínica e deixa trocar', async () => {
+    clinica.padrao = 'pr2'
+    monta([sessao()])
+
+    const profissional = screen.getByLabelText('Profissional')
+    expect(profissional).toHaveValue('pr2')
+
+    await userEvent.selectOptions(profissional, 'pr1')
+    expect(profissional).toHaveValue('pr1')
+  })
+
+  it('sem padrão na clínica, o seletor começa em "Não informado"', () => {
+    clinica.padrao = null
+    monta([sessao()])
+
+    expect(screen.getByLabelText('Profissional')).toHaveValue('')
   })
 
   it('sem nenhuma pendente, não mostra o seletor', () => {

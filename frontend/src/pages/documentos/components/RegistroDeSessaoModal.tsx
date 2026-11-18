@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { useClinic } from '@/hooks/useClinic'
 import { useProfessionals } from '@/hooks/useProfessionals'
 import { useProtocoloLaser } from '@/hooks/useProtocoloLaser'
 import { useCreateSessionRecord, useUpdateSessionRecord } from '@/hooks/useSessionRecords'
@@ -53,6 +54,7 @@ export function RegistroDeSessaoModal({
   const editar = useUpdateSessionRecord()
   const { data: protocolo } = useProtocoloLaser()
   const { data: profissionais } = useProfessionals()
+  const { data: clinica } = useClinic()
 
   const parametros = useMemo(() => protocolo?.parameters ?? [], [protocolo])
   const mapaDeAreas = useMemo(() => {
@@ -69,7 +71,17 @@ export function RegistroDeSessaoModal({
     registro?.appointment_id ?? null,
   )
   const [sessionDate, setSessionDate] = useState(registro?.session_date ?? '')
-  const [professionalId, setProfessionalId] = useState(registro?.professional_id ?? '')
+  // `null` = ninguém mexeu no seletor: vale a padrão da clínica, só ao criar.
+  // Editar mostra o que foi gravado, mesmo que seja "Não informado".
+  const [escolhida, setProfessionalId] = useState<string | null>(
+    registro ? (registro.professional_id ?? '') : null,
+  )
+  const padraoDaClinica = (profissionais ?? []).some(
+    (p) => p.id === clinica?.default_professional_id,
+  )
+    ? (clinica?.default_professional_id ?? '')
+    : ''
+  const professionalId = escolhida ?? padraoDaClinica
   const [bronzeada, setBronzeada] = useState(registro?.tanned_skin ?? false)
   const [notes, setNotes] = useState(registro?.notes ?? '')
   const [aplicacoes, setAplicacoes] = useState<AplicacaoDeSessao[]>(
