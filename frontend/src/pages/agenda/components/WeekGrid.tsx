@@ -2,7 +2,6 @@ import { shortDayName, dayNumber, shortMonthName, todayStr, timeToMinutes } from
 import { distribuiEmColunas } from '@/lib/agendaLayout'
 import { PRIMEIRA_HORA, ULTIMA_HORA, MINUTOS_DO_SLOT } from '@/lib/expediente'
 import type { Appointment } from '@/types'
-import { ConfirmacaoBadge } from './ConfirmacaoBadge'
 import { TermoPendenteBadge } from './TermoPendenteBadge'
 
 // A janela e a granularidade moram em lib/expediente: a lista do celular
@@ -131,12 +130,12 @@ function AppointmentBlock({
         // sentidos na mesma tela cobra do usuario lembrar em qual metade ele
         // esta. Fucsia nao disputa com azul, ambar, vermelho nem verde.
         isPartnership
-          ? 'bg-amber-50 border-l-amber-400 text-amber-800'
+          ? 'bg-gray-100 border-l-gray-700 text-gray-800'
           : isPrimeira
             ? 'bg-fuchsia-50 border-l-fuchsia-500 text-fuchsia-900'
             : 'bg-brand-50 border-l-brand-500 text-brand-900',
         // Falta: esmaecida e riscada, NAO uma cor nova. O sistema de cores
-        // ja esta no limite (ambar=parceria, fucsia=estreia, azul=normal,
+        // ja esta no limite (grafite=parceria, fucsia=estreia, azul=normal,
         // vermelho=cancelar), e um sexto tom cobraria do usuario decorar
         // mais um. Riscado le-se "nao aconteceu" sem depender de cor, que
         // e a mesma exigencia que o marcador "1a" atende na estreia.
@@ -177,7 +176,6 @@ function AppointmentBlock({
             1ª
           </span>
         )}
-        <ConfirmacaoBadge appointment={a} compacto />
         <TermoPendenteBadge appointment={a} compacto />
         <span className={faltou ? 'line-through' : undefined}>{displayName}</span>
         {/* Com um dia só na tela a caixa fica larga demais para horário e nome,

@@ -385,4 +385,36 @@ describe('AgendaDoDia - horário real da clínica', () => {
     expect(screen.getByText('PARCERIA')).toBeInTheDocument()
     expect(screen.getByText('1ª VEZ')).toBeInTheDocument()
   })
+
+  it('parceria usa grafite no selo e na faixa lateral', () => {
+    const { container } = render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[agendamento({ discount_pct: 100, discount_reason: 'partnership' })]}
+        rules={EXPEDIENTE}
+        onAppointmentClick={clique}
+      />
+    )
+
+    expect(screen.getByText('PARCERIA').className).toContain('bg-gray-700')
+    expect(container.querySelector('span[aria-hidden].bg-gray-700')).toBeInTheDocument()
+    expect(container.innerHTML).not.toContain('amber')
+  })
+
+  it('não mostra a flag de confirmado/pendente na lista', () => {
+    render(
+      <AgendaDoDia
+        dia="2026-09-23"
+        appointments={[
+          agendamento({ lembrete_enviado_em: '2026-09-22T12:00:00Z' }),
+          agendamento({ id: 'a9', start_time: '15:00:00', confirmado_em: '2026-09-22T13:00:00Z' }),
+        ]}
+        rules={EXPEDIENTE}
+        onAppointmentClick={clique}
+      />
+    )
+
+    expect(screen.queryByText('PENDENTE')).not.toBeInTheDocument()
+    expect(screen.queryByText('CONFIRMADO')).not.toBeInTheDocument()
+  })
 })
