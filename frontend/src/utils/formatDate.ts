@@ -38,6 +38,23 @@ export function formatCalendarDate(dateOnly: string): string {
 }
 
 /**
+ * Same output as `formatDate`, for a plain calendar date (YYYY-MM-DD).
+ * Use it for DATE columns (e.g. last/next visit): `formatDate` would read the
+ * value as UTC midnight and show the previous day in America/Sao_Paulo.
+ *
+ * @example formatDateOnly("2026-11-20") → "20 de nov de 2026"
+ */
+export function formatDateOnly(dateOnly: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+    .format(new Date(`${dateOnly}T12:00:00`))
+    .replace('.', '')
+}
+
+/**
  * Formats a `HH:MM:SS` (or `HH:MM`) clock value to `HH:MM`.
  * @example formatClock("09:00:00") → "09:00"
  */
