@@ -257,12 +257,15 @@ export interface Appointment {
   consent_waived_at: string | null
   consent_waived_reason: ConsentWaiveReason | null
   consent_waived_by: string | null
+  /** Quando a recepção mandou o link dos documentos pelo WhatsApp (PRD 048); null se nunca. */
+  consent_link_sent_at: string | null
   /** Há uma versão do termo configurada: sem ela nada é pendente. */
   consent_enabled: boolean
 }
 
 // ── Termo de consentimento (PRD 036) ──────────────────────────
-export type ConsentStatus = 'SIGNED' | 'PAPER' | 'SIGNING'
+/** `FILLING`: ficha pela metade, respondida pelo link do celular (PRD 048). */
+export type ConsentStatus = 'SIGNED' | 'PAPER' | 'SIGNING' | 'FILLING'
 export type ConsentWaiveReason = 'SEM_CELULAR' | 'RECUSOU' | 'SISTEMA_FORA' | 'OUTRO'
 
 /** Um "Sim" da ficha de anamnese que muda a conduta (PRD 038). Exibido, nunca interpretado. */

@@ -6,6 +6,13 @@ export interface UrlAssinada {
   expiresInSeconds: number
 }
 
+export interface LinkDosDocumentos {
+  link: string
+  /** false quando o WhatsApp não enviou: o link é fixo, a recepção pode copiar. */
+  sent: boolean
+  consent_link_sent_at: string | null
+}
+
 export interface DispensaDoTermo {
   id: string
   consent_waived_at: string
@@ -42,6 +49,12 @@ export const consentsService = {
         { signedAt }
       )
       .then((r) => ({ consent: r.data.consent, created: r.status === 201 })),
+
+  /** Manda o link dos documentos (termo e ficha) pelo WhatsApp, para assinar pelo celular antes da sessão (PRD 048). */
+  enviarLinkDosDocumentos: (clinicId: string, appointmentId: string) =>
+    api
+      .post<LinkDosDocumentos>(`/clinics/${clinicId}/consents/appointments/${appointmentId}/link`)
+      .then((r) => r.data),
 
   /** "Pedir nova assinatura" (PRD 038): o documento vigente vira REVOKED e o próximo check-in pede tudo de novo. */
   renew: (clinicId: string, consentId: string) =>
