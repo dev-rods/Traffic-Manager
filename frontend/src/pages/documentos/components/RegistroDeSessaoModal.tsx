@@ -26,6 +26,8 @@ interface RegistroDeSessaoModalProps {
   skinType: SkinType | null
   areas: ClinicArea[]
   sessoesSemRegistro: SessaoSemRegistro[]
+  /** Vem escolhida no seletor, se ainda estiver pendente. Senão, a mais recente até hoje. */
+  agendamentoDeOrigem?: string | null
   registro?: RegistroDeSessao | null
   onClose: () => void
 }
@@ -42,6 +44,7 @@ export function RegistroDeSessaoModal({
   skinType,
   areas,
   sessoesSemRegistro,
+  agendamentoDeOrigem,
   registro,
   onClose,
 }: RegistroDeSessaoModalProps) {
@@ -76,7 +79,11 @@ export function RegistroDeSessaoModal({
 
   const [preselecionada, setPreselecionada] = useState(editando)
   const [pendentes] = useState(() => ordenaPendentes(sessoesSemRegistro))
-  const [padrao] = useState(() => sessaoPreSelecionada(pendentes, todayStr()))
+  const [padrao] = useState(
+    () =>
+      pendentes.find((s) => s.id === agendamentoDeOrigem) ??
+      sessaoPreSelecionada(pendentes, todayStr()),
+  )
 
   function sessaoPorId(id: string | null | undefined) {
     return pendentes.find((s) => s.id === id)
@@ -153,7 +160,8 @@ export function RegistroDeSessaoModal({
     }
   }
 
-  // Pré-seleciona a pendente mais recente até hoje. Passa por `escolheSessao`
+  // Pré-seleciona a sessão de onde ela veio (agenda) ou, sem ela, a pendente
+  // mais recente até hoje. Passa por `escolheSessao`
   // (um caminho só, PRD 042), que precisa do protocolo carregado para montar
   // as áreas: por isso espera por ele, uma vez, e respeita quem já escolheu.
   if (!preselecionada && protocolo && padrao) {

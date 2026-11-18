@@ -67,13 +67,14 @@ function sessao(over: Partial<SessaoSemRegistro> = {}): SessaoSemRegistro {
   return { id: 'a1', appointment_date: '2026-11-08', start_time: '09:00:00', areas: 'Axila', ...over }
 }
 
-function monta(sessoes: SessaoSemRegistro[]) {
+function monta(sessoes: SessaoSemRegistro[], agendamentoDeOrigem?: string | null) {
   render(
     <RegistroDeSessaoModal
       patientId="p1"
       skinType="BRANCA"
       areas={AREAS}
       sessoesSemRegistro={sessoes}
+      agendamentoDeOrigem={agendamentoDeOrigem}
       onClose={vi.fn()}
     />,
   )
@@ -148,6 +149,46 @@ describe('escolher a sessão monta as áreas', () => {
 
     await userEvent.selectOptions(seletor(), 'manual')
     expect(seletor().value).toBe('manual')
+  })
+})
+
+describe('sessão de origem (vindo da agenda)', () => {
+  it('a sessão futura da agenda vem escolhida, com data e áreas', async () => {
+    monta(
+      [
+        sessao({ id: 'a1', appointment_date: '2026-11-08', areas: 'Axila' }),
+        sessao({ id: 'a2', appointment_date: '2026-11-19', areas: 'Virilha Completa + ânus' }),
+      ],
+      'a2',
+    )
+
+    await waitFor(() => expect(seletor().value).toBe('a2'))
+    expect(areasMontadas()).toEqual(['Virilha', 'Perianal'])
+    expect(screen.getByLabelText('Data')).toHaveValue('2026-11-19')
+  })
+
+  it('a origem vence a pendente mais recente até hoje', async () => {
+    monta(
+      [
+        sessao({ id: 'a1', appointment_date: '2026-11-08' }),
+        sessao({ id: 'a2', appointment_date: '2026-10-01' }),
+      ],
+      'a2',
+    )
+
+    await waitFor(() => expect(seletor().value).toBe('a2'))
+  })
+
+  it('origem que já não está pendente cai na mais recente até hoje', async () => {
+    monta(
+      [
+        sessao({ id: 'a1', appointment_date: '2026-11-08' }),
+        sessao({ id: 'a2', appointment_date: '2026-11-19' }),
+      ],
+      'inexistente',
+    )
+
+    await waitFor(() => expect(seletor().value).toBe('a1'))
   })
 })
 

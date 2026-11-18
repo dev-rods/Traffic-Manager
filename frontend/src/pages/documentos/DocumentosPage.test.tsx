@@ -13,7 +13,12 @@ vi.mock('@/hooks/useSessionRecords', () => ({
   }),
 }))
 vi.mock('./components/HistoricoDeSessao', () => ({
-  HistoricoDeSessao: () => <div>historico aqui</div>,
+  HistoricoDeSessao: ({ agendamentoDeOrigem }: { agendamentoDeOrigem?: string | null }) => (
+    <div>
+      historico aqui
+      <output data-testid="origem">{agendamentoDeOrigem ?? ''}</output>
+    </div>
+  ),
 }))
 vi.mock('./components/TermoDeConsentimento', () => ({
   TermoDeConsentimento: ({ patientId }: { patientId: string }) => <div>termo de {patientId}</div>,
@@ -41,6 +46,18 @@ function renderPage(inicial = '/pacientes/p1/documentos?agendamento=a9') {
     </MemoryRouter>
   )
 }
+
+describe('DocumentosPage - agendamento de origem', () => {
+  it('repassa ?agendamento= ao histórico como dica', () => {
+    renderPage('/pacientes/p1/documentos?agendamento=a9')
+    expect(screen.getByTestId('origem')).toHaveTextContent('a9')
+  })
+
+  it('sem ?agendamento=, não há origem', () => {
+    renderPage('/pacientes/p1/documentos')
+    expect(screen.getByTestId('origem')).toBeEmptyDOMElement()
+  })
+})
 
 describe('DocumentosPage - abas', () => {
   it('abre no histórico e troca para o termo mantendo ?agendamento=', async () => {
