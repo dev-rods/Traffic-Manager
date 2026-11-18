@@ -1,6 +1,8 @@
 import logging
 from datetime import date, timedelta
 
+from src.services import relogio
+
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_REAGENDADO
@@ -77,7 +79,7 @@ def handler(event, context):
             return http_response(400, {"status": "ERROR", "message": "period invalido"})
 
         db = PostgresService()
-        today = date.today()
+        today = relogio.hoje_na_clinica()
         start, end, prev_start, prev_end, label = _period_range(period, today)
 
         # ── Summary (current period) ──────────────────────────────

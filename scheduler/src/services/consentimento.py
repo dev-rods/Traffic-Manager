@@ -357,7 +357,8 @@ def _pessoa(dados: Dict, rotulo: str, exige_telefone: bool) -> Dict[str, Any]:
     if not cpf or not cpf_valido(cpf):
         raise ConsentimentoInvalido("Confira o CPF {}: os números não batem.".format(rotulo))
     nascimento = para_data(dados.get("birthDate"))
-    if not nascimento or nascimento >= date.today() or date.today().year - nascimento.year > 120:
+    hoje = relogio.hoje_na_clinica()
+    if not nascimento or nascimento >= hoje or hoje.year - nascimento.year > 120:
         raise ConsentimentoInvalido("Confira a data de nascimento {}.".format(rotulo))
     email = normaliza_email(dados.get("email"))
     if not email:
@@ -1025,7 +1026,7 @@ def registra_papel(db, clinic_id: str, patient_id: str, assinado_em: date, autor
         uuid.UUID(str(patient_id))
     except ValueError:
         raise NaoEncontrado()
-    if not isinstance(assinado_em, date) or assinado_em > date.today():
+    if not isinstance(assinado_em, date) or assinado_em > relogio.hoje_na_clinica():
         raise ConsentimentoInvalido("Data da assinatura inválida.")
     try:
         row = db.execute_write_returning(

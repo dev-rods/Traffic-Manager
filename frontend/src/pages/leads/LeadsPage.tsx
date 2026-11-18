@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatDateBR } from '@/utils/formatDate'
 import { useAcoesDoLead, useLeads } from '@/hooks/useLeads'
 import { SkeletonTable } from '@/components/ui/Skeleton'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -145,7 +146,7 @@ export function LeadsPage() {
                       : '-'}
                   </td>
                   <td className="px-3 py-3 text-gray-600 whitespace-nowrap">
-                    {new Date(lead.created_at).toLocaleDateString('pt-BR')}
+                    {formatDateBR(lead.created_at)}
                   </td>
                 </tr>
               ))}
@@ -362,7 +363,7 @@ function LinhaDoEvento({
           a faixa inteira, esconderia isso. */}
       <p className="ml-auto text-xs text-gray-400">
         {ultimoEnvio
-          ? `Último envio em ${new Date(ultimoEnvio).toLocaleDateString('pt-BR')}`
+          ? `Último envio em ${formatDateBR(ultimoEnvio)}`
           : 'Nenhum envio ainda'}
       </p>
 

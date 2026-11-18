@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { formatTime } from '@/utils/formatDate'
 import { Button } from '@/components/ui/Button'
 import { useLembrarAgendaDoDia } from '@/hooks/useAppointments'
 import type { LembretesDoDiaResponse } from '@/types'
@@ -8,9 +9,8 @@ interface LembrarAgendaDoDiaProps {
   disabled?: boolean
 }
 
-function horaLocal(iso: string) {
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-}
+// Hora de São Paulo, seja qual for o fuso do aparelho.
+const horaLocal = formatTime
 
 function plural(n: number, um: string, varios: string) {
   return n === 1 ? um : varios

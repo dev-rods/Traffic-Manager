@@ -1,3 +1,39 @@
+/** O fuso do projeto: toda data e hora na tela é a de São Paulo, seja qual for o aparelho. */
+export const FUSO = 'America/Sao_Paulo'
+
+/**
+ * Timestamp ISO → `dd/mm/aaaa` no fuso de São Paulo.
+ * Nunca `iso.slice(0, 10)`: às 23h de 17/11 em São Paulo o ISO já diz 18/11.
+ * @example formatDateBR("2026-11-18T02:00:00Z") → "17/11/2026"
+ */
+export function formatDateBR(isoString: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: FUSO,
+  }).format(new Date(isoString))
+}
+
+/** Timestamp ISO → `dd/mm` no fuso de São Paulo. */
+export function formatDayMonth(isoString: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: FUSO,
+  }).format(new Date(isoString))
+}
+
+/** Timestamp ISO → `dd/mm/aa` no fuso de São Paulo. */
+export function formatShortDateBR(isoString: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    timeZone: FUSO,
+  }).format(new Date(isoString))
+}
+
 /**
  * Formats an ISO date string to a human-readable date in pt-BR.
  * @example formatDate("2026-03-08T09:00:00Z") → "8 Mar 2026"

@@ -16,7 +16,7 @@ e os que passaram disso eram remarcações em dois tempos no mesmo dia.
 Funções puras de SQL; o I/O é o `db` que chega por parâmetro.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ _CANDIDATO = """
 def _params(novo: Dict[str, Any], janela_min: int) -> Optional[Dict[str, Any]]:
     if not novo.get("patient_id"):
         return None
-    criado_em = novo.get("created_at") or datetime.now()
+    criado_em = novo.get("created_at") or datetime.now(timezone.utc)
     return {
         "novo": str(novo["id"]),
         "clinic": novo["clinic_id"],

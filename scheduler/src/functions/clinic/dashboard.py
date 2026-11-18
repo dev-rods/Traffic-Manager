@@ -2,6 +2,8 @@ import json
 import logging
 from datetime import datetime, date, time, timedelta
 
+from src.services import relogio
+
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_REAGENDADO
@@ -62,9 +64,9 @@ def handler(event, context):
             try:
                 target_date = datetime.strptime(date_param, "%Y-%m-%d").date()
             except ValueError:
-                target_date = date.today()
+                target_date = relogio.hoje_na_clinica()
         else:
-            target_date = date.today()
+            target_date = relogio.hoje_na_clinica()
         today = target_date
         week_start, week_end = _get_week_bounds(today)
         month_start, month_end = _get_month_bounds(today)

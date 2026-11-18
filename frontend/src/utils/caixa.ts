@@ -1,4 +1,4 @@
-import { toDateStr } from '@/utils/dateHelpers'
+import { agoraEmSaoPaulo, toDateStr } from '@/utils/dateHelpers'
 
 export type Faixa = 'hoje' | 'ontem' | '7dias' | 'mes'
 
@@ -9,7 +9,7 @@ export const FAIXAS: { value: Faixa; label: string }[] = [
   { value: 'mes', label: 'Este mês' },
 ]
 
-export function intervaloDa(faixa: Faixa, hoje: Date = new Date()): [string, string] {
+export function intervaloDa(faixa: Faixa, hoje: Date = agoraEmSaoPaulo()): [string, string] {
   const dia = (delta: number) => {
     const d = new Date(hoje)
     d.setDate(d.getDate() + delta)

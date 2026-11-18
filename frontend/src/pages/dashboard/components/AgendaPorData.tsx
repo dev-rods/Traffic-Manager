@@ -5,16 +5,18 @@ import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Badge } from '@/components/ui/Badge'
 import { formatCurrency } from '@/utils/formatCurrency'
+import { toDateStr, todayStr } from '@/utils/dateHelpers'
 import type { AgendaDay } from '@/services/reports.service'
 
 type Janela = 'proximos' | 'passados'
 
-const HOJE = new Date().toISOString().slice(0, 10)
+// Hoje em São Paulo, não em UTC: às 22h o ISO já é amanhã.
+const HOJE = todayStr()
 
 function somaDias(iso: string, dias: number) {
   const d = new Date(`${iso}T12:00:00`)
   d.setDate(d.getDate() + dias)
-  return d.toISOString().slice(0, 10)
+  return toDateStr(d)
 }
 
 /** `2026-09-23` → `qua, 23/09`. Sem `new Date(iso)` puro: ele lê UTC e volta um dia. */

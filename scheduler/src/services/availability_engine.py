@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, date, time, timedelta
 from typing import Dict, List, Optional
 
+from src.services import relogio
 from src.services.db.postgres import PostgresService
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,7 @@ class AvailabilityEngine:
             if max_dates is None:
                 max_dates = self._get_max_future_dates(clinic_id)
 
-            today = date.today()
+            today = relogio.hoje_na_clinica()
             available_days = []
 
             for target_str in self._candidate_dates(clinic_id, today, MAX_SEARCH_DAYS):
@@ -297,7 +298,7 @@ class AvailabilityEngine:
             if max_dates is None:
                 max_dates = self._get_max_future_dates(clinic_id)
 
-            today = date.today()
+            today = relogio.hoje_na_clinica()
             available_days = []
 
             for target_str in self._candidate_dates(clinic_id, today, MAX_SEARCH_DAYS):

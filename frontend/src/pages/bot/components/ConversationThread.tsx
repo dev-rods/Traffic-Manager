@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { formatDateBR } from '@/utils/formatDate'
 import { useConversationMessages } from '@/hooks/useBot'
 import { formatPhone } from '@/utils/formatPhone'
 import { Button } from '@/components/ui/Button'
@@ -136,11 +137,7 @@ export function ConversationThread({ phone, senderName, botPaused, pauseReason, 
             {silencio ? (
               <>
                 {silencio.motivo} - por {silencio.silenciado_por} em{' '}
-                {new Date(silencio.silenciado_em).toLocaleDateString('pt-BR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                })}
+                {formatDateBR(silencio.silenciado_em)}
                 .
               </>
             ) : (

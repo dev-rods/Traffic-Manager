@@ -50,6 +50,34 @@ class TestHoje(unittest.TestCase):
                             culpados.append("%s:%d" % (os.path.relpath(caminho, SRC), n))
         self.assertEqual(culpados, [])
 
+    def test_nenhum_hoje_do_servidor_em_src(self):
+        """`date.today()`, `datetime.utcnow()` e `datetime.now()` sem fuso dão o
+        dia do servidor (UTC). O dia de hoje é `relogio.hoje_na_clinica()`;
+        o instante é `relogio.agora_na_clinica()` ou `datetime.now(tz)`.
+        Em 17/11/2026 a assinatura das 23h apareceu como do dia seguinte."""
+        proibidos = re.compile(r"\bdate\.today\(\)|\bdatetime\.utcnow\(\)|\bdatetime\.now\(\)")
+        culpados = []
+        for raiz, _, arquivos in os.walk(SRC):
+            for nome in arquivos:
+                if not nome.endswith(".py"):
+                    continue
+                caminho = os.path.join(raiz, nome)
+                if os.path.relpath(caminho, SRC).replace(os.sep, "/") == "services/relogio.py":
+                    continue
+                with open(caminho, encoding="utf-8") as f:
+                    for n, linha in enumerate(f, 1):
+                        if linha.lstrip().startswith("#"):
+                            continue
+                        if proibidos.search(linha):
+                            culpados.append("%s:%d" % (os.path.relpath(caminho, SRC), n))
+        self.assertEqual(culpados, [])
+
+    def test_hoje_na_clinica_e_o_dia_de_brasilia(self):
+        # 02:00 UTC de 18/11 ainda é 23:00 de 17/11 em São Paulo.
+        utc = datetime(2026, 11, 18, 2, 0, tzinfo=timezone.utc)
+        self.assertEqual(relogio.hoje_na_clinica(None, utc), date(2026, 11, 17))
+        self.assertEqual(relogio.hoje_na_clinica("America/Sao_Paulo", utc), date(2026, 11, 17))
+
     def test_lista_do_ipad_e_meus_agendamentos_usam_a_data_de_brasilia(self):
         db = Db()
         AppointmentService(db).get_active_appointments_by_phone(CLINIC, "5511999990000")
