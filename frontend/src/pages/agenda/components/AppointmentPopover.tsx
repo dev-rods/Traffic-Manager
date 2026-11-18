@@ -148,7 +148,7 @@ export function AppointmentPopover({
             <div className="flex items-center gap-2">
               <p className="font-semibold text-gray-800 truncate">{displayName}</p>
               {a.discount_reason === 'partnership' && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-700 text-white flex-shrink-0">
                   PARCERIA
                 </span>
               )}

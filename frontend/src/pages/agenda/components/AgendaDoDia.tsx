@@ -7,7 +7,6 @@ import {
   type Vao,
 } from '@/lib/expediente'
 import type { Appointment, AvailabilityRule } from '@/types'
-import { ConfirmacaoBadge } from './ConfirmacaoBadge'
 import { TermoPendenteBadge } from './TermoPendenteBadge'
 
 interface AgendaDoDiaProps {
@@ -174,7 +173,7 @@ function LinhaDaAgenda({
           className={[
             'mt-0.5 w-1 self-stretch rounded-full',
             daParceria
-              ? 'bg-amber-400'
+              ? 'bg-gray-700'
               : a.is_first_visit
                 ? 'bg-fuchsia-500'
                 : 'bg-brand-500',
@@ -195,10 +194,9 @@ function LinhaDaAgenda({
                 FALTOU
               </span>
             )}
-            <ConfirmacaoBadge appointment={a} />
             <TermoPendenteBadge appointment={a} />
             {daParceria && (
-              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+              <span className="rounded bg-gray-700 px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 PARCERIA
               </span>
             )}

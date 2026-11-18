@@ -116,8 +116,29 @@ describe('WeekGrid: parceria e primeira vez convivem no mesmo card', () => {
     renderizar({ appointments: parceriaEstreando })
 
     const card = screen.getByRole('button', { name: /Bia/ })
-    expect(card.className).toContain('amber')
+    expect(card.className).toContain('border-l-gray-700')
+    expect(card.className).not.toContain('amber')
     expect(screen.getByTitle('Primeira vez na clínica')).toBeInTheDocument()
+  })
+
+  it('a flag de confirmado/pendente não aparece no card, mesmo com lembrete enviado ou presença confirmada', () => {
+    renderizar({
+      appointments: [
+        { ...parceriaEstreando[0], lembrete_enviado_em: '2026-09-22T12:00:00Z' } as Appointment,
+        {
+          ...parceriaEstreando[0],
+          id: 'a3',
+          start_time: '11:00:00',
+          end_time: '11:15:00',
+          patient_name: 'Cris',
+          confirmado_em: '2026-09-22T13:00:00Z',
+          confirmado_por: 'PACIENTE',
+        } as Appointment,
+      ],
+    })
+
+    expect(screen.queryByText('PENDENTE')).not.toBeInTheDocument()
+    expect(screen.queryByText('CONFIRMADO')).not.toBeInTheDocument()
   })
 
   it('na falta o marcador sai, porque a estreia não aconteceu', () => {
