@@ -489,7 +489,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
         {(dateChanged || timeChanged) && (
           <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-lg px-4 py-3">
             O agendamento será reagendado para <strong>{date}</strong> às <strong>{time}</strong>.
-            Conflitos de horário serão verificados automaticamente.
+            Até 15 minutos de sobreposição com a sessão vizinha são aceitos; acima disso o
+            servidor recusa.
           </div>
         )}
 

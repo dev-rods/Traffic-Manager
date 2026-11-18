@@ -106,6 +106,15 @@ describe('mudança com efeito fora da tela', () => {
     expect(screen.getByText('15:00')).toBeInTheDocument()
   })
 
+  it('ao mudar o horário, explica a tolerância de 15 min do painel (PRD 049)', async () => {
+    monta()
+
+    await mudaHorario('15:00')
+
+    expect(screen.getByText(/Até 15 minutos de sobreposição com a sessão vizinha são aceitos/)).toBeInTheDocument()
+    expect(screen.queryByText(/verificados automaticamente/)).toBeNull()
+  })
+
   it('o resumo nomeia a paciente, para pegar a tela errada', async () => {
     monta()
 

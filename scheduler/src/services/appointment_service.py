@@ -87,6 +87,38 @@ class AppointmentService:
             logger.warning(f"[AppointmentService] Nao li o fuso de {clinic_id}: {e}")
             return {}
 
+    # -- Conflito de horário (PRD 049) --------------------------------------
+    #
+    # Uma regra, um lugar. Há conflito quando uma sessão CONFIRMED do mesmo
+    # dia e clínica é invadida pela janela nova em MAIS de
+    # `tolerancia_minutos`, medida por vizinha (LEAST dos fins - GREATEST dos
+    # inícios). Com 0, qualquer sobreposição conta e encostar não conta: é a
+    # regra que sempre valeu. Só a edição manual pelo painel passa 15
+    # (`functions/appointment/update.py`); bot, site e criação ficam em 0.
+    def _conflitos(self, clinic_id: str, data, inicio: str, fim: str,
+                   excluir_id: Optional[str] = None, tolerancia_minutos: int = 0):
+        sql = (
+            "SELECT id FROM scheduler.appointments "
+            "WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED' "
+        )
+        params: list = [clinic_id, data]
+        if excluir_id:
+            sql += "AND id != %s::uuid "
+            params.append(excluir_id)
+        sql += (
+            "AND start_time < %s::time AND end_time > %s::time "
+            "AND (LEAST(end_time, %s::time) - GREATEST(start_time, %s::time)) > (%s * interval '1 minute')"
+        )
+        params += [fim, inicio, fim, inicio, int(tolerancia_minutos or 0)]
+        return self.db.execute_query(sql, tuple(params))
+
+    @staticmethod
+    def _mensagem_de_conflito(padrao: str, tolerancia_minutos: int, data, inicio: str, fim: str) -> str:
+        if tolerancia_minutos:
+            return (f"Conflito de horário: a sessão invadiria a vizinha em mais de "
+                    f"{int(tolerancia_minutos)} minutos ({data} {inicio}-{fim})")
+        return padrao
+
     def create_appointment(
         self,
         clinic_id: str,
@@ -198,19 +230,8 @@ class AppointmentService:
         end_hour, end_min = total_minutes // 60, total_minutes % 60
         end_time = f"{end_hour:02d}:{end_min:02d}"
 
-        # 4. Check for conflicts
-        conflicts = self.db.execute_query(
-            """
-            SELECT id FROM scheduler.appointments
-            WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
-            AND (
-                (start_time < %s::time AND end_time > %s::time)
-                OR (start_time < %s::time AND end_time > %s::time)
-                OR (start_time >= %s::time AND end_time <= %s::time)
-            )
-            """,
-            (clinic_id, date, end_time, time, end_time, time, time, end_time),
-        )
+        # 4. Check for conflicts (criação nunca tolera sobreposição, PRD 049)
+        conflicts = self._conflitos(clinic_id, date, time, end_time)
 
         if conflicts:
             raise ConflictError(f"Conflito de horário: já existe agendamento para {date} {time}-{end_time}")
@@ -389,8 +410,7 @@ class AppointmentService:
         return result
 
     def reschedule_appointment(
-        self, appointment_id: str, new_date: str, new_time: str
-    ) -> Dict[str, Any]:
+        self, appointment_id: str, new_date: str, new_time: str, tolerancia_minutos: int = 0) -> Dict[str, Any]:
         # 1. Fetch with optimistic lock
         appointments = self.db.execute_query(
             "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
@@ -452,22 +472,13 @@ class AppointmentService:
         new_end_time = f"{end_hour:02d}:{end_min:02d}"
 
         # 4. Check conflicts in new slot
-        conflicts = self.db.execute_query(
-            """
-            SELECT id FROM scheduler.appointments
-            WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
-            AND id != %s::uuid
-            AND (
-                (start_time < %s::time AND end_time > %s::time)
-                OR (start_time < %s::time AND end_time > %s::time)
-                OR (start_time >= %s::time AND end_time <= %s::time)
-            )
-            """,
-            (clinic_id, new_date, appointment_id, new_end_time, new_time, new_end_time, new_time, new_time, new_end_time),
-        )
+        conflicts = self._conflitos(clinic_id, new_date, new_time, new_end_time,
+                                    excluir_id=appointment_id, tolerancia_minutos=tolerancia_minutos)
 
         if conflicts:
-            raise ConflictError(f"Conflito de horário no novo slot: {new_date} {new_time}-{new_end_time}")
+            raise ConflictError(self._mensagem_de_conflito(
+                f"Conflito de horário no novo slot: {new_date} {new_time}-{new_end_time}",
+                tolerancia_minutos, new_date, new_time, new_end_time))
 
         # 5. Update with optimistic lock
         updated_rows = self.db.execute_write(
@@ -535,8 +546,7 @@ class AppointmentService:
         service_id: str,
         service_area_pairs: Optional[List[Dict[str, str]]] = None,
         manual_duration_minutes=SEM_MUDANCA,
-        verificar_conflito: bool = True,
-    ) -> Dict[str, Any]:
+        verificar_conflito: bool = True, tolerancia_minutos: int = 0) -> Dict[str, Any]:
         """Troca o servico e as areas, recalculando duracao e fim da sessao.
 
         `manual_duration_minutes` existe porque trocar a area e fixar a duracao
@@ -642,24 +652,12 @@ class AppointmentService:
         new_end_time = f"{end_hour:02d}:{end_min:02d}"
 
         # 5. Check conflicts with new duration
-        conflicts = self.db.execute_query(
-            """
-            SELECT id FROM scheduler.appointments
-            WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
-            AND id != %s::uuid
-            AND (
-                (start_time < %s::time AND end_time > %s::time)
-                OR (start_time < %s::time AND end_time > %s::time)
-                OR (start_time >= %s::time AND end_time <= %s::time)
-            )
-            """,
-            (clinic_id, appt_date, appointment_id, new_end_time, start_time, new_end_time, start_time, start_time, new_end_time),
-        )
+        conflicts = self._conflitos(clinic_id, appt_date, start_time, new_end_time,
+                                    excluir_id=appointment_id, tolerancia_minutos=tolerancia_minutos)
         if conflicts and verificar_conflito:
-            raise ConflictError(
-                f"Conflito de horário com nova duração: {appt_date} "
-                f"{start_time}-{new_end_time}"
-            )
+            raise ConflictError(self._mensagem_de_conflito(
+                f"Conflito de horário com nova duração: {appt_date} {start_time}-{new_end_time}",
+                tolerancia_minutos, appt_date, start_time, new_end_time))
 
         # 6. Update appointment record
         updated_rows = self.db.execute_write(
@@ -747,8 +745,7 @@ class AppointmentService:
         self,
         appointment_id: str,
         minutos: Optional[int],
-        verificar_conflito: bool = True,
-    ) -> Dict[str, Any]:
+        verificar_conflito: bool = True, tolerancia_minutos: int = 0) -> Dict[str, Any]:
         """Fixa (ou solta) a duração de UM agendamento.
 
         `minutos=None` solta: a duração volta a ser CALCULADA a partir das áreas
@@ -807,25 +804,13 @@ class AppointmentService:
         new_end_time = f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
 
         if verificar_conflito:
-            conflicts = self.db.execute_query(
-                """
-                SELECT id FROM scheduler.appointments
-                WHERE clinic_id = %s AND appointment_date = %s AND status = 'CONFIRMED'
-                AND id != %s::uuid
-                AND (
-                    (start_time < %s::time AND end_time > %s::time)
-                    OR (start_time < %s::time AND end_time > %s::time)
-                    OR (start_time >= %s::time AND end_time <= %s::time)
-                )
-                """,
-                (clinic_id, appt_date, appointment_id, new_end_time, start_time,
-                 new_end_time, start_time, start_time, new_end_time),
-            )
+            conflicts = self._conflitos(clinic_id, appt_date, start_time, new_end_time,
+                                        excluir_id=appointment_id, tolerancia_minutos=tolerancia_minutos)
             if conflicts:
-                raise ConflictError(
+                raise ConflictError(self._mensagem_de_conflito(
                     f"Conflito de horário com a duração de {duration_minutes} minutos: "
-                    f"{appt_date} {start_time}-{new_end_time}"
-                )
+                    f"{appt_date} {start_time}-{new_end_time}",
+                    tolerancia_minutos, appt_date, start_time, new_end_time))
 
         updated_rows = self.db.execute_write(
             """
