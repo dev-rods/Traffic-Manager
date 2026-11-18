@@ -14,7 +14,7 @@ import type {
 import { metodosDaArea, sugestao } from '@/lib/protocolo'
 import { paraPayload } from '@/lib/prontuario'
 import { normaliza } from '@/lib/aplicacoes'
-import { rotuloDaSessao, sessoesPendentesAteHoje } from '@/lib/sessoesPendentes'
+import { ordenaPendentes, rotuloDaSessao, sessaoPreSelecionada } from '@/lib/sessoesPendentes'
 import { todayStr } from '@/utils/dateHelpers'
 import { AplicacoesField } from './AplicacoesField'
 import { AvisosDoProtocolo } from './AvisosDoProtocolo'
@@ -58,9 +58,9 @@ export function RegistroDeSessaoModal({
     return m
   }, [protocolo])
 
-  // Quem escolhe a sessão é o rádio, e só ele (PRD 042). Até 08/11/2026 o
+  // Quem escolhe a sessão é o seletor, e só ele (PRD 042). Até 08/11/2026 o
   // atalho da agenda pré-selecionava aqui, sem passar por `escolheSessao`: o
-  // rádio aparecia marcado e a lista de áreas vinha vazia, então a aplicadora
+  // item aparecia marcado e a lista de áreas vinha vazia, então a aplicadora
   // tinha de adicionar área por área. Um caminho só, uma regra só.
   const [appointmentId, setAppointmentId] = useState<string | null>(
     registro?.appointment_id ?? null,
@@ -75,7 +75,8 @@ export function RegistroDeSessaoModal({
   const [erro, setErro] = useState<string | null>(null)
 
   const [preselecionada, setPreselecionada] = useState(editando)
-  const [pendentes] = useState(() => sessoesPendentesAteHoje(sessoesSemRegistro, todayStr()))
+  const [pendentes] = useState(() => ordenaPendentes(sessoesSemRegistro))
+  const [padrao] = useState(() => sessaoPreSelecionada(pendentes, todayStr()))
 
   function sessaoPorId(id: string | null | undefined) {
     return pendentes.find((s) => s.id === id)
@@ -155,9 +156,9 @@ export function RegistroDeSessaoModal({
   // Pré-seleciona a pendente mais recente até hoje. Passa por `escolheSessao`
   // (um caminho só, PRD 042), que precisa do protocolo carregado para montar
   // as áreas: por isso espera por ele, uma vez, e respeita quem já escolheu.
-  if (!preselecionada && protocolo && pendentes.length > 0) {
+  if (!preselecionada && protocolo && padrao) {
     setPreselecionada(true)
-    escolheSessao(pendentes[0].id)
+    escolheSessao(padrao.id)
   }
 
   const salvando = criar.isPending || editar.isPending
