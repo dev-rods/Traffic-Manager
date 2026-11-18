@@ -318,5 +318,5 @@ Fechadas pelo André em 17/11/2026.
 
 - [x] Pendente
 - [x] Spec gerada: `spec/048-documentos-antes-da-sessao-pelo-whatsapp.md` (17/11/2026)
-- [ ] Implementado em prod: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em prod: 17/11/2026 (PR #203; migration rodada, scheduler layer 154, `checkin-prod` publicado, painel pela Vercel). Só Essência: o DNS de `documentos.nobrelaser.com.br` ficou pendente por decisão. E2E no celular do André ainda a fazer (1 crédito da ClickSign).
+- [x] Registrado em `TASKS_LOG.md`
