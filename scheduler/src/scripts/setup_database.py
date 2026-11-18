@@ -194,6 +194,7 @@ SQL_STATEMENTS = [
         consent_waived_by VARCHAR(120),
         consent_waived_reason VARCHAR(20),
         consent_waived_note VARCHAR(200),
+        consent_link_sent_at TIMESTAMPTZ,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -1266,6 +1267,8 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_waived_by VARCHAR(120)",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_waived_reason VARCHAR(20)",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_waived_note VARCHAR(200)",
+    # PRD 048: quando a recepcao mandou o link dos documentos pelo WhatsApp.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_link_sent_at TIMESTAMPTZ",
 
     # Responsável legal de paciente menor: anexo do termo, não cadastro. Um
     # por paciente; o CPF fica em 11 dígitos normalizados (patients.cpf é

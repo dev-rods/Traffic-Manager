@@ -8,6 +8,7 @@ import { TemplateField } from '@/components/TemplateField'
 import type { UpdateClinicPayload } from '@/types'
 import { buildDefaultMessage } from '@/utils/buildDefaultMessage'
 import { EXEMPLO_DO_LEMBRETE, LEMBRETE_PADRAO } from '@/lib/lembretePadrao'
+import { EXEMPLO_DO_LINK, LINK_DOCUMENTOS_PADRAO } from '@/lib/linkDocumentosPadrao'
 import { ResponsavelTecnica } from './components/ResponsavelTecnica'
 
 function buildFormFromClinic(clinic: NonNullable<ReturnType<typeof useClinic>['data']>): UpdateClinicPayload {
@@ -181,6 +182,14 @@ export function ConfiguracoesPage() {
             padrao={LEMBRETE_PADRAO}
             exemplo={EXEMPLO_DO_LEMBRETE}
             help="Use {{nome}}, {{areas}}, {{clinic_name}}, {{dia}}, {{hora}} e {{endereco}} (o endereço cadastrado em Dados gerais). Vazio volta ao texto padrão."
+          />
+          {/* Link dos documentos antes da sessão (PRD 048) */}
+          <TemplateField
+            templateKey="LINK_DOCUMENTOS"
+            label="Link dos documentos (termo e ficha)"
+            padrao={LINK_DOCUMENTOS_PADRAO}
+            exemplo={EXEMPLO_DO_LINK}
+            help="Enviado pela agenda para quem ainda não assinou, para preencher e assinar pelo celular. Use {{nome}}, {{clinic_name}}, {{dia}}, {{hora}} e {{link}}. Vazio volta ao texto padrão."
           />
         </Section>
 

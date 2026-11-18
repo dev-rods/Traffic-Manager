@@ -9,6 +9,7 @@ import type {
   Payment,
   PaymentMethod,
   Session,
+  TokenScope,
 } from '@/types'
 
 const base = (clinicId: string) => `/public/clinics/${clinicId}`
@@ -24,9 +25,9 @@ export const checkinService = {
       .post<{ devCode?: string }>(`${base(clinicId)}/verify/send`, { phone })
       .then((r) => r.data.devCode ?? null),
 
-  confirmCode: (clinicId: string, phone: string, code: string) =>
+  confirmCode: (clinicId: string, phone: string, code: string, scope: TokenScope = 'sessao') =>
     api
-      .post<{ token: string }>(`${base(clinicId)}/verify/confirm`, { phone, code })
+      .post<{ token: string }>(`${base(clinicId)}/verify/confirm`, { phone, code, scope })
       .then((r) => r.data.token),
 
   appointments: (clinicId: string, s: Session) =>

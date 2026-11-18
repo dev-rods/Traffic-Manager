@@ -98,10 +98,11 @@ def _pagamentos_vivos(db, ids: List[str]) -> Dict[str, Dict]:
     return {str(r["appointment_id"]): r for r in rows}
 
 
-def agendamentos_do_numero(db, clinic_id: str, phone: str) -> List[Dict[str, Any]]:
+def agendamentos_do_numero(db, clinic_id: str, phone: str, com_respostas: bool = False) -> List[Dict[str, Any]]:
     """Os próximos agendamentos confirmados do número, do mais próximo ao mais
     distante, com o que a tela precisa para a paciente reconhecer o seu: data,
-    horário, nome de quem agendou, áreas e valor."""
+    horário, nome de quem agendou, áreas e valor. `com_respostas` (PRD 048)
+    acrescenta as respostas da ficha já gravadas, para retomar pelo celular."""
     linhas = AppointmentService.completo(db).get_active_appointments_by_phone(clinic_id, phone)[:MAX_AGENDAMENTOS]
     vivos = _pagamentos_vivos(db, [str(r["id"]) for r in linhas])
     return [
@@ -118,7 +119,7 @@ def agendamentos_do_numero(db, clinic_id: str, phone: str) -> List[Dict[str, Any
             "checkedInAt": _iso(r.get("checked_in_at")),
             "payment": pagamento_para_tela(vivos.get(str(r["id"]))),
             # Termo de consentimento (PRD 036): quem decide é o serviço.
-            **consentimento.resumo_para_o_ipad(db, clinic_id, r),
+            **consentimento.resumo_para_o_ipad(db, clinic_id, r, com_respostas=com_respostas),
         }
         for r in linhas
     ]

@@ -1,6 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { checkinService } from '@/services/checkin.service'
-import type { AnamneseRespostas, ConsentStartPayload, PaymentMethod, Session } from '@/types'
+import type {
+  AnamneseRespostas,
+  ConsentStartPayload,
+  PaymentMethod,
+  Session,
+  TokenScope,
+} from '@/types'
 
 export const checkinKeys = {
   bootstrap: (clinicId: string) => ['checkin', 'bootstrap', clinicId] as const,
@@ -35,10 +41,10 @@ export function useSendCode(clinicId: string) {
   return useMutation({ mutationFn: (phone: string) => checkinService.sendCode(clinicId, phone) })
 }
 
-export function useConfirmCode(clinicId: string) {
+export function useConfirmCode(clinicId: string, scope: TokenScope = 'sessao') {
   return useMutation({
     mutationFn: ({ phone, code }: { phone: string; code: string }) =>
-      checkinService.confirmCode(clinicId, phone, code),
+      checkinService.confirmCode(clinicId, phone, code, scope),
   })
 }
 

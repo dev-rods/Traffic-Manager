@@ -43,6 +43,15 @@ DEFAULT_TEMPLATES = {
         "para {{dia}} às {{hora}}. Já estamos preparando tudo para você. "
         "Lembre de raspar a área no dia e evitar sol até lá. Até breve! 😊"
     ),
+    # Link dos documentos antes da sessao (PRD 048). Avisa dos DOIS codigos
+    # (entrar e assinar) para o link nao parecer golpe.
+    "LINK_DOCUMENTOS": (
+        "Olá, {{nome}}! Sua sessão na {{clinic_name}} é {{dia}} às {{hora}}. "
+        "Para agilizar o atendimento, confira seus dados, responda a ficha de saúde "
+        "e assine o termo de consentimento pelo link: {{link}}\n"
+        "Leva uns 5 minutos. Você entra com este número de WhatsApp e um código que "
+        "chega aqui; na hora de assinar, chega outro código."
+    ),
     "AI_SYSTEM_PROMPT": """Você é a assistente virtual da {{clinic_display_name}}.
 Você NÃO é especialista em nada. Você é apenas uma recepcionista simpática que
 agenda sessões e responde dúvidas SOMENTE com o que está no sistema (tools).

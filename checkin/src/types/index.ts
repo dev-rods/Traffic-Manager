@@ -81,7 +81,13 @@ export interface CheckinAppointment {
   // backend; o iPad só pede quando ele manda.
   consentRequired: boolean
   consentPrefill: ConsentPrefill | null
+  // Pelo celular (PRD 048): o que já foi respondido na ficha, para retomar.
+  // O iPad não recebe e começa em branco.
+  anamnesisAnswers?: AnamneseRespostas
 }
+
+/** Escopo do token do código (PRD 048): `documentos` dura 2 h e não paga nem confirma chegada. */
+export type TokenScope = 'sessao' | 'documentos'
 
 export interface ConsentGuardianPrefill {
   name: string

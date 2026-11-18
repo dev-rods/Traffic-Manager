@@ -7,6 +7,7 @@ import type { Appointment, ListConsentsResponse, PatientConsent } from '@/types'
 const dispensar = vi.fn()
 const registrarPapel = vi.fn()
 const renovar = vi.fn()
+const enviarLink = vi.fn()
 const showToast = vi.fn()
 let documentos: { data?: ListConsentsResponse } = {}
 
@@ -15,6 +16,7 @@ vi.mock('@/hooks/useConsents', () => ({
   useDispensarTermo: () => ({ mutate: dispensar, isPending: false, isSuccess: false }),
   useRegistrarPapel: () => ({ mutate: registrarPapel, isPending: false, isSuccess: false }),
   useRenovarTermo: () => ({ mutate: renovar, isPending: false, isSuccess: false }),
+  useEnviarLinkDosDocumentos: () => ({ mutate: enviarLink, isPending: false }),
 }))
 vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast }) }))
 vi.mock('@/hooks/useOverlayLock', () => ({ useOverlayLock: () => undefined }))
@@ -23,6 +25,8 @@ function agendamento(over: Partial<Appointment> = {}): Appointment {
   return {
     id: 'a1',
     patient_id: 'p1',
+    appointment_date: '2099-01-10',
+    consent_link_sent_at: null,
     status: 'CONFIRMED',
     consent_enabled: true,
     consent_status: null,
@@ -140,10 +144,33 @@ describe('TermoDoAgendamento', () => {
     )
   })
 
-  it('assinando no iPad: ainda pendente para a recepção', () => {
+  it('assinando: ainda pendente para a recepção', () => {
     render(<TermoDoAgendamento appointment={agendamento({ consent_status: 'SIGNING' })} />)
-    expect(screen.getByText('Assinando no iPad')).toBeInTheDocument()
+    expect(screen.getByText('Assinando')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Dispensar nesta sessão' })).toBeInTheDocument()
+  })
+
+  it('preenchendo pelo link (FILLING): pendente, com reenvio (PRD 048)', () => {
+    render(
+      <TermoDoAgendamento
+        appointment={agendamento({ consent_status: 'FILLING', consent_link_sent_at: '2026-11-16T10:00:00Z' })}
+      />
+    )
+    expect(screen.getByText('Preenchendo pelo link')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reenviar link dos documentos' })).toBeInTheDocument()
+    expect(screen.getByText(/Link enviado em/)).toBeInTheDocument()
+  })
+
+  it('pendente e futura: oferece o link dos documentos; passada ou assinada, não (PRD 048)', async () => {
+    render(<TermoDoAgendamento appointment={agendamento()} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar link dos documentos' }))
+    expect(enviarLink).toHaveBeenCalledWith('a1', expect.anything())
+
+    render(<TermoDoAgendamento appointment={agendamento({ id: 'a2', appointment_date: '2020-01-01' })} />)
+    expect(screen.getAllByRole('button', { name: /link dos documentos/ })).toHaveLength(1)
+
+    render(<TermoDoAgendamento appointment={agendamento({ id: 'a3', consent_status: 'SIGNED' })} />)
+    expect(screen.getAllByRole('button', { name: /link dos documentos/ })).toHaveLength(1)
   })
 
   it('sessão cancelada pendente: sem ação', () => {

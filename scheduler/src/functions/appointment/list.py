@@ -99,6 +99,7 @@ def handler(event, context):
                 -- quem decide "precisa assinar" e consentimento.precisa_assinar.
                 -- NULL = nenhum termo da versao vigente (pendente).
                 a.consent_waived_at, a.consent_waived_reason, a.consent_waived_by,
+                a.consent_link_sent_at,
                 ct.consent_status
             FROM scheduler.appointments a
             LEFT JOIN scheduler.patients p ON a.patient_id = p.id
@@ -122,11 +123,12 @@ def handler(event, context):
                 LIMIT 1
             ) vivo ON TRUE
             LEFT JOIN LATERAL (
-                SELECT CASE WHEN pc.status IN ('SIGNED', 'PAPER') THEN pc.status ELSE 'SIGNING' END AS consent_status
+                -- FILLING (ficha pela metade, pelo link - PRD 048) tambem aparece.
+                SELECT pc.status AS consent_status
                 FROM scheduler.patient_consents pc
                 WHERE pc.clinic_id = a.clinic_id AND pc.patient_id = a.patient_id
-                  AND pc.term_version = %s AND pc.status IN ('SIGNED', 'PAPER', 'SIGNING')
-                ORDER BY CASE pc.status WHEN 'SIGNED' THEN 0 WHEN 'PAPER' THEN 0 ELSE 1 END
+                  AND pc.term_version = %s AND pc.status IN ('SIGNED', 'PAPER', 'SIGNING', 'FILLING')
+                ORDER BY CASE pc.status WHEN 'SIGNED' THEN 0 WHEN 'PAPER' THEN 0 WHEN 'SIGNING' THEN 1 ELSE 2 END
                 LIMIT 1
             ) ct ON TRUE
             WHERE a.clinic_id = %s

@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/toastContext'
 import { useConsentsDoPaciente, useDispensarTermo, useRenovarTermo } from '@/hooks/useConsents'
 import { RegistrarPapelModal } from '@/components/RegistrarPapelModal'
+import { todayStr } from '@/utils/dateHelpers'
 import { AlertasDaAnamnese } from './AlertasDaAnamnese'
+import { EnviarLinkDosDocumentos } from './EnviarLinkDosDocumentos'
 import { MOTIVO_DA_DISPENSA, situacaoDoTermo } from '@/utils/termo'
 import type { Appointment, ConsentWaiveReason } from '@/types'
 
@@ -35,6 +37,11 @@ interface TermoDoAgendamentoProps {
  *
  * O modal do papel é o `RegistrarPapelModal`, o mesmo da pasta do paciente e
  * da lista (PRD 047).
+ *
+ * Para sessão de hoje ou futura ainda pendente, "Enviar link dos documentos"
+ * (PRD 048): a paciente confere os dados, responde a ficha e assina pelo
+ * celular, e no dia o iPad pula esses passos. Clínica sem domínio recebe a
+ * recusa do servidor; o painel não conhece o domínio.
  */
 export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) {
   const dispensar = useDispensarTermo()
@@ -150,6 +157,13 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
             Pedir nova assinatura
           </button>
         ))}
+
+      {situacao.pendente && a.patient_id && a.appointment_date >= todayStr() && (
+        <EnviarLinkDosDocumentos
+          appointmentId={a.id}
+          linkEnviadoEm={a.consent_link_sent_at ?? null}
+        />
+      )}
 
       {situacao.pendente && (
         <div className="flex gap-2 pt-1">

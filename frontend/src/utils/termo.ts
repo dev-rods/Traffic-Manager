@@ -40,8 +40,12 @@ export function situacaoDoTermo(a: Appointment): SituacaoDoTermo {
       pendente: false,
     }
   }
+  // Pelo link do celular (PRD 048) ou no iPad: ainda falta terminar.
   if (a.consent_status === 'SIGNING') {
-    return { label: 'Assinando no iPad', tom: 'atencao', pendente: true }
+    return { label: 'Assinando', tom: 'atencao', pendente: true }
+  }
+  if (a.consent_status === 'FILLING') {
+    return { label: 'Preenchendo pelo link', tom: 'atencao', pendente: true }
   }
   return { label: 'Pendente', tom: 'pendente', pendente: a.status === 'CONFIRMED' }
 }

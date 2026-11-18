@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { ConfiguracoesPage } from './ConfiguracoesPage'
 import { LEMBRETE_PADRAO } from '@/lib/lembretePadrao'
+import { LINK_DOCUMENTOS_PADRAO } from '@/lib/linkDocumentosPadrao'
 
 const mutateAsync = vi.fn()
 vi.mock('@/hooks/useClinic', () => ({
@@ -34,6 +35,13 @@ describe('ConfiguracoesPage - lembrete de sessao', () => {
     for (const v of ['{{nome}}', '{{areas}}', '{{clinic_name}}', '{{dia}}', '{{hora}}']) expect(LEMBRETE_PADRAO).toContain(v)
   })
 
+  it('o padrao do link dos documentos leva o link e avisa dos dois codigos (PRD 048)', () => {
+    for (const v of ['{{nome}}', '{{clinic_name}}', '{{dia}}', '{{hora}}', '{{link}}']) {
+      expect(LINK_DOCUMENTOS_PADRAO).toContain(v)
+    }
+    expect(LINK_DOCUMENTOS_PADRAO.toLowerCase()).toContain('outro código')
+  })
+
   it('ligar o automatico e mudar a antecedencia vao no payload', async () => {
     mutateAsync.mockResolvedValue({})
     render(<ConfiguracoesPage />)
@@ -45,6 +53,9 @@ describe('ConfiguracoesPage - lembrete de sessao', () => {
 
   it('a previa do texto usa dados de exemplo', () => {
     render(<ConfiguracoesPage />)
-    expect(screen.getByTestId('preview')).toHaveTextContent('Oi Maria! Sua sessão de Axilas e Virilha Completa')
+    // Dois templates na pagina: o lembrete e o link dos documentos (PRD 048).
+    const [lembrete, link] = screen.getAllByTestId('preview')
+    expect(lembrete).toHaveTextContent('Oi Maria! Sua sessão de Axilas e Virilha Completa')
+    expect(link).toHaveTextContent('https://documentos.suaclinica.com.br/sua-clinica/documentos')
   })
 })

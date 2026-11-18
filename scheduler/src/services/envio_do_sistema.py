@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 SITE_OTP = "SITE_OTP"
 SITE_AGENDAMENTO = "SITE_AGENDAMENTO"
 CHECKIN = "CHECKIN"
-ORIGENS = {SITE_OTP, SITE_AGENDAMENTO, CHECKIN}
+# Link dos documentos (termo e ficha) antes da sessão, pelo painel (PRD 048).
+DOCUMENTOS = "DOCUMENTOS"
+ORIGENS = {SITE_OTP, SITE_AGENDAMENTO, CHECKIN, DOCUMENTOS}
 
 
 def _tracker():

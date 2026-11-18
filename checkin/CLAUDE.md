@@ -50,6 +50,14 @@ pode ser afetado por mudanças daqui.
   assinatura (teste)". Os campos do termo usam o teclado do iPad
   (`TextField`), não o `Keypad`: são cinco a dez campos numa tela só.
 - Rota: `/:clinicId`.
+- **Pelo celular, antes da sessão (PRD 048).** `/:clinicId/documentos`
+  (`DocumentosPage`): telefone e código com o teclado do aparelho, token de
+  escopo `documentos` (2 h; o backend recusa `confirm` e `payments` com ele),
+  boas-vindas, os mesmos passos de termo e ficha, fim. Sem `useIdleReset`,
+  sem pagamento. A ficha abre com `anamnesisAnswers` (o que já foi
+  respondido), ao contrário do iPad. Domínios: `documentos.<domínio da
+  clínica>` apontando para o `checkin-prod`; o link é fixo por clínica e a
+  recepção o manda pelo popover da agenda.
 
 ## Comandos
 

@@ -35,6 +35,19 @@ export function useDispensarTermo() {
   })
 }
 
+/** Link dos documentos pelo WhatsApp (PRD 048). A agenda recarrega para mostrar "enviado em". */
+export function useEnviarLinkDosDocumentos() {
+  const { clinicId } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (appointmentId: string) =>
+      consentsService.enviarLinkDosDocumentos(clinicId!, appointmentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: appointmentKeys.lists() })
+    },
+  })
+}
+
 export function useRegistrarPapel() {
   const { clinicId } = useAuth()
   const queryClient = useQueryClient()

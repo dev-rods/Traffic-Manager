@@ -1,7 +1,7 @@
 import logging
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
-from src.utils.booking_verification import confirm_code, InvalidCodeError
+from src.utils.booking_verification import SESSAO, TTL_POR_ESCOPO, confirm_code, InvalidCodeError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -10,11 +10,12 @@ logger.setLevel(logging.INFO)
 def handler(event, context):
     """
     POST /public/clinics/{clinicId}/verify/confirm
-    Body: { "phone": "string", "code": "string" }
+    Body: { "phone": "string", "code": "string", "scope"?: "sessao" | "documentos" }
 
     Valida o código enviado por WhatsApp e devolve um token de sessão
-    (15min, assinado) que autoriza criar/listar/cancelar agendamentos
-    daquele telefone nesta clínica.
+    assinado que autoriza criar/listar/cancelar agendamentos daquele
+    telefone nesta clínica (15 min). Com `scope: "documentos"` (PRD 048) o
+    token dura 2 h e só serve à ficha e à assinatura no check-in.
     """
     try:
         api_key, error_response = require_booking_intake_api_key(event)
@@ -31,7 +32,11 @@ def handler(event, context):
         if not phone or not code:
             return http_response(400, {"status": "ERROR", "message": "phone e code são obrigatórios"})
 
-        token = confirm_code(clinic_id, phone, code)
+        scope = body.get("scope") or SESSAO
+        if scope not in TTL_POR_ESCOPO:
+            return http_response(400, {"status": "ERROR", "message": "scope inválido"})
+
+        token = confirm_code(clinic_id, phone, code, scope)
 
         return http_response(200, {"status": "SUCCESS", "verified": True, "token": token})
 

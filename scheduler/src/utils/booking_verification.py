@@ -7,14 +7,19 @@ já que o campo do formulário sempre foi "Celular (WhatsApp)".
 Fluxo:
   1. generate_and_send_code(clinic, phone) -> guarda o código no DynamoDB
      (TTL 5min) e envia por WhatsApp.
-  2. confirm_code(clinic_id, phone, code) -> valida o código e devolve um
-     token de sessão assinado (HMAC, 15min), escopado a (clinic_id, phone).
-  3. verify_token(clinic_id, phone, token) -> valida o token nas chamadas
-     que exigem posse do telefone (criar/listar/cancelar agendamento).
+  2. confirm_code(clinic_id, phone, code, scope) -> valida o código e devolve
+     um token de sessão assinado (HMAC), escopado a (clinic_id, phone, scope).
+  3. verify_token(clinic_id, phone, token, scopes) -> valida o token nas
+     chamadas que exigem posse do telefone (criar/listar/cancelar agendamento).
 
 O token é stateless (não precisa de tabela própria): carrega
-clinic_id|phone|expires_at|assinatura e é validado por comparação
+clinic_id|phone|expires_at|scope|assinatura e é validado por comparação
 constante (hmac.compare_digest).
+
+Escopos (PRD 048): `SESSAO` é o token de sempre (site, "Meus agendamentos",
+iPad), 15 min. `DOCUMENTOS` é o do celular, antes da sessão: 2 h, e só as
+rotas de ficha e assinatura o aceitam - nunca confirmar chegada nem pagar.
+Tokens de 4 partes, emitidos antes do escopo existir, valem como `SESSAO`.
 """
 import base64
 import hashlib
@@ -41,6 +46,10 @@ CODE_TTL_SECONDS = 5 * 60
 # tentativas ERRADAS por código, abaixo.
 MAX_VERIFY_ATTEMPTS = 5
 TOKEN_TTL_SECONDS = 15 * 60
+
+SESSAO = "sessao"
+DOCUMENTOS = "documentos"
+TTL_POR_ESCOPO = {SESSAO: TOKEN_TTL_SECONDS, DOCUMENTOS: 2 * 60 * 60}
 
 
 class InvalidCodeError(Exception):
@@ -109,8 +118,10 @@ def generate_and_send_code(clinic: dict, phone: str) -> Optional[str]:
     return None
 
 
-def confirm_code(clinic_id: str, phone: str, code: str) -> str:
+def confirm_code(clinic_id: str, phone: str, code: str, scope: str = SESSAO) -> str:
     """Valida o código digitado e devolve um token de sessão assinado."""
+    if scope not in TTL_POR_ESCOPO:
+        raise ValueError(f"escopo desconhecido: {scope!r}")
     phone = normalize_phone(phone)
     table = _table()
     pk = _item_key(clinic_id, phone)
@@ -137,43 +148,70 @@ def confirm_code(clinic_id: str, phone: str, code: str) -> str:
         ExpressionAttributeValues={":v": True},
     )
 
-    logger.info(f"[BookingVerification] Código confirmado: clinic={clinic_id}")
-    return _issue_token(clinic_id, phone)
+    logger.info(f"[BookingVerification] Código confirmado: clinic={clinic_id} scope={scope}")
+    return _issue_token(clinic_id, phone, scope)
 
 
-def _issue_token(clinic_id: str, phone: str) -> str:
-    expires_at = int(time.time()) + TOKEN_TTL_SECONDS
-    payload = f"{clinic_id}|{normalize_phone(phone)}|{expires_at}"
+def _assina(payload: str) -> str:
     secret = os.environ.get("BOOKING_VERIFICATION_SECRET", "")
-    signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    raw = f"{payload}|{signature}"
+    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+
+
+def _issue_token(clinic_id: str, phone: str, scope: str = SESSAO) -> str:
+    expires_at = int(time.time()) + TTL_POR_ESCOPO[scope]
+    payload = f"{clinic_id}|{normalize_phone(phone)}|{expires_at}|{scope}"
+    raw = f"{payload}|{_assina(payload)}"
     return base64.urlsafe_b64encode(raw.encode()).decode()
 
 
-def verify_token(clinic_id: str, phone: str, token: str) -> bool:
-    """Valida um token de sessão emitido por confirm_code."""
-    try:
-        if not token:
-            return False
-        raw = base64.urlsafe_b64decode(token.encode()).decode()
-        parts = raw.split("|")
-        if len(parts) != 4:
-            return False
+def _abre(token: str):
+    """(clinic_id, phone, expires_at, scope) de um token com assinatura válida; None se não vale."""
+    if not token:
+        return None
+    raw = base64.urlsafe_b64decode(token.encode()).decode()
+    parts = raw.split("|")
+    if len(parts) == 4:
+        # Emitido antes do escopo existir: vale como sessão comum.
         token_clinic_id, token_phone, expires_at_str, signature = parts
+        scope = SESSAO
+    elif len(parts) == 5:
+        token_clinic_id, token_phone, expires_at_str, scope, signature = parts
+    else:
+        return None
+    payload = "|".join(parts[:-1])
+    if not hmac.compare_digest(signature, _assina(payload)):
+        return None
+    return token_clinic_id, token_phone, int(expires_at_str), scope
 
-        payload = f"{token_clinic_id}|{token_phone}|{expires_at_str}"
-        secret = os.environ.get("BOOKING_VERIFICATION_SECRET", "")
-        expected_signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected_signature):
+
+def escopo_do_token(token: str) -> Optional[str]:
+    """O escopo de um token já validado por `verify_token`; None se o token não vale."""
+    try:
+        aberto = _abre(token)
+    except Exception:
+        return None
+    return aberto[3] if aberto else None
+
+
+def verify_token(clinic_id: str, phone: str, token: str, scopes=(SESSAO,)) -> bool:
+    """Valida um token de sessão emitido por confirm_code.
+
+    `scopes` são os escopos que a rota aceita; por padrão só o de sessão,
+    para que as rotas de hoje continuem recusando o token de documentos.
+    """
+    try:
+        aberto = _abre(token)
+        if not aberto:
             return False
+        token_clinic_id, token_phone, expires_at, scope = aberto
 
         if token_clinic_id != clinic_id or token_phone != normalize_phone(phone):
             return False
 
-        if int(expires_at_str) < int(time.time()):
+        if expires_at < int(time.time()):
             return False
 
-        return True
+        return scope in scopes
     except Exception as e:
         logger.warning(f"[BookingVerification] Token inválido: {e}")
         return False
