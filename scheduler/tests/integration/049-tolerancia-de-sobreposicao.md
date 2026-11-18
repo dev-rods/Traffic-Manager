@@ -20,10 +20,13 @@ D=2026-11-25   # dia com availability_rule em dev (fixture do 045)
 ## Fixtures
 
 ```bash
-# A às 16:30 (Axilas, 10 min → termina 16:40) e B às 16:40 (Axilas)
+# A às 16:30 (Axilas, 10 min → termina 16:40) e B às 16:40 (Axilas), depois B com 30 min.
+# B PRECISA ser mais longa que 15 min: vizinha curta engolida inteira nunca passa de 15
+# (foi o que fez o roteiro de 18/11 "falhar" na primeira rodada, com B de 10 min).
 curl -s -X POST "${H[@]}" "$URL/appointments" -d "{\"clinicId\":\"$C\",\"phone\":\"5511999990049\",\"fullName\":\"Paciente Teste 049\",\"serviceId\":\"$S\",\"date\":\"$D\",\"time\":\"16:30\",\"serviceAreaPairs\":[{\"serviceId\":\"$S\",\"areaId\":\"$AX\"}]}"
 curl -s -X POST "${H[@]}" "$URL/appointments" -d "{\"clinicId\":\"$C\",\"phone\":\"5511999990050\",\"fullName\":\"Vizinha Teste 049\",\"serviceId\":\"$S\",\"date\":\"$D\",\"time\":\"16:40\",\"serviceAreaPairs\":[{\"serviceId\":\"$S\",\"areaId\":\"$AX\"}]}"
-A=<id de A>
+A=<id de A>; B=<id de B>
+curl -s -X PUT "${H[@]}" "$URL/appointments/$B" -d '{"manualDurationMinutes":30}'   # B: 16:40-17:10
 ```
 
 ## Casos
@@ -36,7 +39,10 @@ A=<id de A>
 | 4 | `PUT ... {"manualDurationMinutes":null}` | 200, volta a 16:40 |
 | 5 | `PUT ... {"time":"16:35"}` (16:35-16:45, invade 5) | 200 |
 | 6 | `PUT ... {"time":"16:45"}` (16:45-16:55, dentro de B em 10) | 200 |
+| 6b | `PUT ... {"time":"16:55"}` (16:55-17:05, dentro de B em 10; A só tem 10 min) | 200 |
 | 7 | `PUT ... {"time":"16:30"}` | 200, volta |
+| 7b | `PUT ... {"time":"16:30","manualDurationMinutes":26}` (remarcação + duração: confere no `reschedule`) | **409** com "mais de 15 minutos" |
+| 7c | `PUT ... {"manualDurationMinutes":null}` | 200 |
 | 8 | `POST $URL/appointments` às 16:45 (criação) | **409** sem tolerância (mensagem antiga) |
 
 ```bash
@@ -50,4 +56,13 @@ curl -s -w "\n%{http_code}\n" -X PUT "${H[@]}" "$URL/appointments/$A" -d '{"manu
 
 ## Resultado
 
-Preencher ao rodar: data, stage, códigos obtidos por caso.
+**Dev, 18/11/2026** (stack dev layer 198, dia 2026-11-27, script de sessão
+`valida_049.sh`): casos 1, 2, 4, 5, 6, 6b, 7, 7c → 200; 3 e 7b → 409 com
+"Conflito de horário: a sessão invadiria a vizinha em mais de 15 minutos
+(2026-11-27 16:30-16:56)"; 8 → 409 "Conflito de horário: já existe
+agendamento para 2026-11-27 16:45-16:55". Fixtures canceladas ao fim.
+
+**Prod, 18/11/2026:** `serverless deploy --stage prod` → stack
+`UPDATE_COMPLETE`, layer 156. Sem fixtures em prod (não se cria sessão de
+teste em clínica real sem o André); o smoke de prod é a primeira edição real
+pela recepção que invadir a vizinha em até 15 min.

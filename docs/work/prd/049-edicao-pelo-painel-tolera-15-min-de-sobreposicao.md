@@ -151,6 +151,6 @@ Sem migration. Sem rota nova.
 
 - [x] Pendente
 - [x] Spec gerada: `spec/049-edicao-pelo-painel-tolera-15-min-de-sobreposicao.md` (17/11/2026)
-- [ ] Implementado em dev: (data)
-- [ ] Implementado em prod: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em dev: 18/11/2026 (PR #211; dev alinhado com prod antes, layer 197 → 198; roteiro curl verde)
+- [x] Implementado em prod: 18/11/2026 (layer 156; painel pela Vercel no merge)
+- [x] Registrado em `TASKS_LOG.md`
