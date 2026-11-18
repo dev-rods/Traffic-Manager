@@ -41,6 +41,8 @@ ALLOWED_FIELDS = {
     # Termo de consentimento (PRD 036): responsavel tecnica e cidade do termo.
     "responsible_professional_id",
     "cidade",
+    # Profissional proposta no registro de sessao.
+    "default_professional_id",
 }
 
 TAMANHO_CIDADE = 120
@@ -162,19 +164,21 @@ def handler(event, context):
         if "cidade" in body:
             cidade = " ".join(str(body["cidade"] or "").split())[:TAMANHO_CIDADE]
             body["cidade"] = cidade or None
-        if "responsible_professional_id" in body:
-            responsavel = body["responsible_professional_id"] or None
-            if responsavel is not None:
+        for campo_profissional in ("responsible_professional_id", "default_professional_id"):
+            if campo_profissional not in body:
+                continue
+            profissional = body[campo_profissional] or None
+            if profissional is not None:
                 ativa = db.execute_query(
                     "SELECT 1 FROM scheduler.professionals WHERE id = %s::uuid AND clinic_id = %s AND active = true",
-                    (str(responsavel), clinic_id),
-                ) if _parece_uuid(responsavel) else []
+                    (str(profissional), clinic_id),
+                ) if _parece_uuid(profissional) else []
                 if not ativa:
                     return http_response(400, {
                         "status": "ERROR",
-                        "message": "responsible_professional_id deve ser uma profissional ativa desta clínica",
+                        "message": f"{campo_profissional} deve ser uma profissional ativa desta clínica",
                     })
-            body["responsible_professional_id"] = responsavel
+            body[campo_profissional] = profissional
 
         # Precisa do domínio ANTIGO antes de sobrescrever: é o que vai ser
         # removido do projeto Vercel se a clínica trocar ou limpar o domínio.

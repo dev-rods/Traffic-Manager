@@ -29,6 +29,7 @@ vi.mock('@/hooks/useProtocoloLaser', () => ({
   useProtocoloLaser: () => ({ data: { parameters: [], area_map: [] } }),
 }))
 vi.mock('@/hooks/useProfessionals', () => ({ useProfessionals: () => ({ data: [] }) }))
+vi.mock('@/hooks/useClinic', () => ({ useClinic: () => ({ data: undefined }) }))
 
 function registro(over: Partial<RegistroDeSessao> = {}): RegistroDeSessao {
   return {
