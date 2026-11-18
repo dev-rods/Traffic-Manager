@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon, PenIcon } from '@/components/ui/Icons'
-import { formatDate } from '@/utils/formatDate'
+import { formatDateOnly } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
 import { semTermo } from '@/utils/termo'
 import type { PatientWithStats } from '@/types'
@@ -88,11 +88,11 @@ export function PatientCard({
 
           <span className="mt-1.5 block text-xs leading-relaxed text-gray-500">
             {p.total_visits} {p.total_visits === 1 ? 'visita' : 'visitas'}
-            {p.last_visit && <> · última {formatDate(p.last_visit)}</>}
+            {p.last_visit && <> · última {formatDateOnly(p.last_visit)}</>}
           </span>
           {p.next_visit && (
             <span className="mt-1 inline-block rounded bg-brand-50 px-1.5 py-0.5 text-[11px] font-medium text-brand-700">
-              próxima {formatDate(p.next_visit)}
+              próxima {formatDateOnly(p.next_visit)}
             </span>
           )}
         </button>

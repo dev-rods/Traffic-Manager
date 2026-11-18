@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { WhatsAppIcon, PauseIcon, PlayIcon, TrashIcon, DocumentIcon, PenIcon } from '@/components/ui/Icons'
 import { semTermo } from '@/utils/termo'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { formatDate } from '@/utils/formatDate'
+import { formatDate, formatDateOnly } from '@/utils/formatDate'
 import { formatPhone } from '@/utils/formatPhone'
 import { PatientCard } from './PatientCard'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
@@ -139,11 +139,11 @@ export function PatientsTable({ patients, onSelect, onWhatsApp, onPauseBot, onDe
                 <span className="font-medium text-gray-800">{p.total_visits}</span>
               </td>
               <td className="px-3 py-3 text-gray-600 whitespace-nowrap">
-                {p.last_visit ? formatDate(p.last_visit) : '—'}
+                {p.last_visit ? formatDateOnly(p.last_visit) : '—'}
               </td>
               <td className="px-3 py-3 whitespace-nowrap">
                 {p.next_visit ? (
-                  <Badge variant="info">{formatDate(p.next_visit)}</Badge>
+                  <Badge variant="info">{formatDateOnly(p.next_visit)}</Badge>
                 ) : (
                   <span className="text-gray-400">—</span>
                 )}

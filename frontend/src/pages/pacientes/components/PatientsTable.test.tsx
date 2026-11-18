@@ -98,6 +98,19 @@ describe('PatientsTable', () => {
     expect(screen.getByText('Beatriz Nogueira')).toBeInTheDocument()
   })
 
+  it('última e próxima visita mostram o dia real, sem recuar um dia, nos dois modos', () => {
+    telaDe(1200)
+    renderiza()
+    expect(screen.getByText('15 de set de 2026')).toBeInTheDocument()
+    expect(screen.getByText('23 de set de 2026')).toBeInTheDocument()
+    cleanup()
+
+    telaDe(375)
+    renderiza()
+    expect(screen.getByText(/última 15 de set de 2026/)).toBeInTheDocument()
+    expect(screen.getByText(/próxima 23 de set de 2026/)).toBeInTheDocument()
+  })
+
   it('o selo de bot silenciado aparece nos dois modos, e só quando é verdade', () => {
     // Decisão §4.2 do PRD 039: quem não está silenciado não ganha rótulo -
     // senão o selo some no meio dos outros justo onde importa.
