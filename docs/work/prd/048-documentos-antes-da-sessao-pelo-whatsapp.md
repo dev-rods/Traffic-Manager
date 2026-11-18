@@ -317,6 +317,6 @@ Fechadas pelo André em 17/11/2026.
 ## Status
 
 - [x] Pendente
-- [ ] Spec gerada: `spec/048-documentos-antes-da-sessao-pelo-whatsapp.md`
+- [x] Spec gerada: `spec/048-documentos-antes-da-sessao-pelo-whatsapp.md` (17/11/2026)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`
