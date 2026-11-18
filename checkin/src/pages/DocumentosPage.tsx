@@ -253,6 +253,7 @@ export function DocumentosPage() {
             clinicId={clinicId}
             session={state.session}
             consent={state.consent}
+            remoto
             onSigned={() => go({ step: 'done', firstName: firstNameOf(state.appointment) })}
             onRestart={() => entrarDeNovo(null)}
           />

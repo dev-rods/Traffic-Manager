@@ -12,6 +12,8 @@ interface ConsentSignStepProps {
   consent: Consent
   onSigned: (consent: Consent) => void
   onRestart: () => void
+  /** Pelo celular, antes da sessão (PRD 048): depois de assinar não há conferência nem pagamento. */
+  remoto?: boolean
 }
 
 const CONTAINER_ID = 'clicksign-widget'
@@ -29,6 +31,7 @@ export function ConsentSignStep({
   consent: created,
   onSigned,
   onRestart,
+  remoto = false,
 }: ConsentSignStepProps) {
   const consentId = created.id ?? ''
   const [assinou, setAssinou] = useState(false)
@@ -211,8 +214,8 @@ export function ConsentSignStep({
                 <Spinner size="md" className="text-success-500" />
                 <span>
                   <strong className="font-bold">Assinatura recebida!</strong> Aguarde alguns
-                  segundos: estamos registrando o documento e já levamos você para conferir o
-                  agendamento e pagar.
+                  segundos: estamos registrando o documento
+                  {remoto ? '.' : ' e já levamos você para conferir o agendamento e pagar.'}
                 </span>
               </div>
             ) : null}
