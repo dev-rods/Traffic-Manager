@@ -1,4 +1,5 @@
 import { Fragment, useState } from 'react'
+import { formatCalendarDate, formatDateBR } from '@/utils/formatDate'
 import {
   useConsentsDoPaciente,
   useAbrirDocumentoDoTermo,
@@ -25,10 +26,14 @@ const SITUACAO: Record<PatientConsent['status'], { label: string; cor: string }>
   REVOKED: { label: 'Nova assinatura pedida', cor: 'bg-gray-100 text-gray-600' },
 }
 
+/**
+ * `paper_signed_at` é DATE (`2026-01-10`); `signed_at` e `created_at` são
+ * timestamps. O timestamp vira dia em São Paulo: às 23h de 17/11 o ISO já
+ * diz 18/11, e foi assim que a assinatura do E2E de 17/11 apareceu errada.
+ */
 function dataDe(iso: string | null): string {
   if (!iso) return '-'
-  const [y, m, d] = iso.slice(0, 10).split('-')
-  return `${d}/${m}/${y}`
+  return iso.length === 10 ? formatCalendarDate(iso) : formatDateBR(iso)
 }
 
 /**

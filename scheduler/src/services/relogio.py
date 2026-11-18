@@ -6,7 +6,7 @@ de 31/10 em São Paulo ainda é dia 31, mesmo com a Lambda já em novembro. Caix
 check-in e o site público perguntam aqui.
 """
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 import pytz
@@ -34,6 +34,15 @@ def agora_na_clinica(timezone: Optional[str], agora_utc: Optional[datetime] = No
         logger.warning(f"[Relogio] fuso desconhecido {timezone!r}; usando {FUSO_PADRAO}")
         fuso = pytz.timezone(FUSO_PADRAO)
     return (agora_utc or datetime.now(pytz.utc)).astimezone(fuso)
+
+
+def hoje_na_clinica(timezone: Optional[str] = None, agora_utc: Optional[datetime] = None) -> date:
+    """O dia de hoje no fuso da clínica (São Paulo sem fuso informado).
+
+    É o `date.today()` deste projeto: a Lambda roda em UTC, e entre 21h e
+    meia-noite em Brasília o `date.today()` do servidor já é amanhã.
+    """
+    return agora_na_clinica(timezone, agora_utc).date()
 
 
 def minutos_de_agora(agora: datetime) -> int:

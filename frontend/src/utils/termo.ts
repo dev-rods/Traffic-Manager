@@ -1,4 +1,5 @@
 import type { Appointment, ConsentStatus, ConsentWaiveReason } from '@/types'
+import { formatShortDateBR } from '@/utils/formatDate'
 
 export const MOTIVO_DA_DISPENSA: Record<ConsentWaiveReason, string> = {
   SEM_CELULAR: 'Sem celular na mão',
@@ -16,10 +17,8 @@ export interface SituacaoDoTermo {
   pendente: boolean
 }
 
-function dataCurta(iso: string): string {
-  const [y, m, d] = iso.slice(0, 10).split('-')
-  return `${d}/${m}/${y.slice(2)}`
-}
+// Timestamp → dia em São Paulo. Cortar o ISO daria o dia de UTC.
+const dataCurta = formatShortDateBR
 
 /**
  * O estado do termo como a agenda o conta. Só EXPÕE o que o servidor mandou:

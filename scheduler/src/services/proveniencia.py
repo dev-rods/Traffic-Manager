@@ -14,6 +14,8 @@ import re
 import unicodedata
 from datetime import date
 
+from src.services import relogio
+
 MESES = {
     "janeiro": 1, "fevereiro": 2, "marco": 3, "abril": 4, "maio": 5, "junho": 6,
     "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11,
@@ -146,7 +148,7 @@ def fatos_sensiveis(texto, ano=None):
     Perguntas não entram: quem pergunta não está afirmando nada.
     """
     texto = texto or ""
-    ano = ano or date.today().year
+    ano = ano or relogio.hoje_na_clinica().year
     achados = set()
 
     for trecho in _frases_afirmativas(texto):
@@ -281,7 +283,7 @@ def _valor_simples(chave, valor, encontrados):
     elif isinstance(valor, str):
         # Datas e horas também aparecem no meio de textos que a tool devolve.
         for d, m, a in _DATA_NUMERICA.findall(texto):
-            achado = _data(d, m, a, date.today().year)
+            achado = _data(d, m, a, relogio.hoje_na_clinica().year)
             if achado:
                 encontrados.add(achado)
 

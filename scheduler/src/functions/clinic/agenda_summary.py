@@ -17,6 +17,8 @@ não é a mesma coisa que 6 de 50.
 import logging
 from datetime import date, datetime, timedelta
 
+from src.services import relogio
+
 from src.services.db.postgres import PostgresService
 from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_REAGENDADO
 from src.utils.http import (
@@ -52,7 +54,7 @@ def handler(event, context):
         if not clinic_id:
             return http_response(400, {"status": "ERROR", "message": "clinicId e obrigatorio"})
 
-        hoje = date.today()
+        hoje = relogio.hoje_na_clinica()
         # O padrão olha para a frente: a pergunta da gerência é sobre o que vem.
         # Passado se pede explicitamente, e a tela deixa.
         inicio = _data(extract_query_param(event, "start"), hoje)

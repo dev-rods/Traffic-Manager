@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { formatTime } from '@/utils/formatDate'
 import { useEffect, useRef } from 'react'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
@@ -41,7 +42,7 @@ function estadoDoLembrete(a: Appointment): string {
   switch (a.lembrete_status) {
     case 'ENVIADO':
       return a.lembrete_enviado_em
-        ? `Lembrete enviado às ${new Date(a.lembrete_enviado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+        ? `Lembrete enviado às ${formatTime(a.lembrete_enviado_em)}`
         : 'Lembrete enviado'
     case 'ADIADO':
       return 'Lembrete aguardando o horário de envio'

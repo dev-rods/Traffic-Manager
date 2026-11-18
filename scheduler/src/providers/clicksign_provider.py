@@ -34,7 +34,7 @@ Decisões que a API impõe:
 """
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 import requests
@@ -265,5 +265,8 @@ def _venceu(deadline: Optional[str]) -> bool:
         limite = datetime.fromisoformat(str(deadline).replace("Z", "+00:00"))
     except ValueError:
         return False
-    agora = datetime.now(limite.tzinfo) if limite.tzinfo else datetime.now()
+    # Prazo sem fuso é UTC (é como a ClickSign devolve); nunca o relógio do servidor.
+    if not limite.tzinfo:
+        limite = limite.replace(tzinfo=timezone.utc)
+    agora = datetime.now(timezone.utc)
     return agora > limite

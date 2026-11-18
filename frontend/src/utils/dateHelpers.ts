@@ -12,9 +12,29 @@ export function toDateStr(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
-/** Today as YYYY-MM-DD */
+/**
+ * Agora, com os campos locais (ano, mês, dia, hora) iguais ao relógio de
+ * São Paulo. É o "new Date()" deste projeto: o painel pode estar aberto em
+ * qualquer fuso, mas a agenda é a da clínica.
+ */
+export function agoraEmSaoPaulo(): Date {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const n = (tipo: string) => Number(partes.find((p) => p.type === tipo)?.value)
+  return new Date(n('year'), n('month') - 1, n('day'), n('hour'), n('minute'), n('second'))
+}
+
+/** Today as YYYY-MM-DD, no fuso de São Paulo. */
 export function todayStr(): string {
-  return toDateStr(new Date())
+  return toDateStr(agoraEmSaoPaulo())
 }
 
 

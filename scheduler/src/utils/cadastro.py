@@ -42,7 +42,8 @@ def normaliza_data_nascimento(valor):
             continue
         # Data futura ou de mais de 120 anos atras e erro de digitacao, nao
         # nascimento. Deixar passar polui o cadastro em silencio.
-        hoje = datetime.now().date()
+        from src.services.relogio import hoje_na_clinica
+        hoje = hoje_na_clinica()
         if d > hoje or (hoje.year - d.year) > 120:
             return False
         return d.isoformat()

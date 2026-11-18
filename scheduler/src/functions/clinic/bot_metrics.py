@@ -1,7 +1,7 @@
 import calendar
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
 import boto3
@@ -9,7 +9,7 @@ from boto3.dynamodb.conditions import Key
 
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
-from src.services import atendimento
+from src.services import atendimento, relogio
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -47,16 +47,17 @@ def handler(event, context):
     if not clinic_id:
         return http_response(400, {"status": "ERROR", "message": "clinicId obrigatório"})
 
-    # Use BRT (UTC-3) for period boundaries so "today" matches the clinic's local day
-    now_utc = datetime.utcnow()
-    now_brt = now_utc - timedelta(hours=3)
+    # "Hoje" é o dia da clínica (relogio), não UTC-3 fixo: horário de verão
+    # ou outro fuso quebrariam a conta à mão.
+    agora = relogio.agora_na_clinica(None)
+    now_utc = agora.astimezone(timezone.utc).replace(tzinfo=None)
     if period == "week":
         start = (now_utc - timedelta(days=7)).isoformat() + "Z"
     elif period == "month":
         start = (now_utc - timedelta(days=30)).isoformat() + "Z"
     else:
-        # Midnight BRT = 03:00 UTC
-        start = now_brt.strftime("%Y-%m-%dT03:00:00Z")
+        meia_noite = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = meia_noite.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     try:
         # 1. Query MessageEvents for the period

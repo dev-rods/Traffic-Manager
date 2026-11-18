@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AgendaPorData } from './AgendaPorData'
+import { todayStr } from '@/utils/dateHelpers'
 import type { AgendaSummary } from '@/services/reports.service'
 
 const mockUseAgendaSummary = vi.fn()
@@ -112,7 +113,7 @@ describe('AgendaPorData', () => {
     mockUseAgendaSummary.mockReturnValue(resposta())
     render(<AgendaPorData />)
 
-    const hoje = new Date().toISOString().slice(0, 10)
+    const hoje = todayStr()
     expect(mockUseAgendaSummary).toHaveBeenCalledWith(
       expect.objectContaining({ start: hoje }),
     )
@@ -124,7 +125,7 @@ describe('AgendaPorData', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Já passou' }))
 
-    const hoje = new Date().toISOString().slice(0, 10)
+    const hoje = todayStr()
     const chamadas = mockUseAgendaSummary.mock.calls
     const ultima = chamadas[chamadas.length - 1][0]
     expect(ultima.end < hoje).toBe(true)

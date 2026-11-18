@@ -1,3 +1,4 @@
+import { formatDayMonth, formatTime } from '@/utils/formatDate'
 import type { PaymentMethod, PaymentStatus } from '@/types'
 
 export const METODO_LABEL: Record<PaymentMethod, string> = {
@@ -23,14 +24,14 @@ export function situacaoDoPagamento(
   return { label: 'Não pago', tom: 'nada' }
 }
 
-/** `2026-10-19T02:30:00Z` → `18/10`: a data no relógio de quem está na tela, não a de UTC. */
+/** `2026-10-19T02:30:00Z` → `18/10`: a data no relógio de São Paulo, não a de UTC nem a do aparelho. */
 export function dataDe(iso: string): string {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+  return formatDayMonth(iso)
 }
 
-/** `2026-10-19T12:52:00Z` → `09:52`, no relógio de quem está na tela. */
+/** `2026-10-19T12:52:00Z` → `09:52`, no relógio de São Paulo. */
 export function horaDe(iso: string): string {
-  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return formatTime(iso)
 }
 
 /** A mensagem que o backend mandou no erro, ou a padrão. */
