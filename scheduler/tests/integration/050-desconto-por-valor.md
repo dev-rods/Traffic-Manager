@@ -69,4 +69,4 @@ final 9000); 9 → lista traz `discount_cents` (dashboard sem sessão no dia par
 conferir `today`); 10a/10b/10c → 400. Fixtures canceladas ao fim. Smoke do
 painel pendente (sobe pela Vercel no merge).
 
-**Prod:** pendente (migration + deploy com o André).
+**Prod, 19/11/2026:** migration idempotente aplicada (coluna e CHECK confirmados, 0 linhas com `discount_cents`), `serverless deploy --stage prod` → `UPDATE_COMPLETE`, layer 157. Smoke de leitura: lista, dashboard e relatório respondem 200. Sem fixture em prod; o smoke de escrita é o primeiro desconto em reais pela recepção.
