@@ -59,4 +59,14 @@ put '{"discountCents": 2000, "discountReason": "custom"}' | python -X utf8 -c "i
 
 ## Resultado
 
-Preencher ao rodar: data, stage, códigos por caso.
+**Dev, 19/11/2026** (layer 199, dia 2026-11-27, fixture Axilas R$ 95,00, script
+de sessão `valida_050.sh`): 1 e 2 → 200 (`pct 12.5`, `cents null`, final 8312);
+3 → 200 (`cents 2000`, `pct 21.05`, final 7500); 4 → 400 "desconto de R$ 9999.99
+maior que o valor de R$ 95.00"; 5 → 400 "Mande discountPct ou discountCents";
+6 (segunda área, subtotal 25000) → 200 (final 23000, `pct` reescrito 8.00);
+7 → 200 (`cents null`, final 25000); 8 → 201 (`cents 500`, `pct 5.26`,
+final 9000); 9 → lista traz `discount_cents` (dashboard sem sessão no dia para
+conferir `today`); 10a/10b/10c → 400. Fixtures canceladas ao fim. Smoke do
+painel pendente (sobe pela Vercel no merge).
+
+**Prod:** pendente (migration + deploy com o André).
