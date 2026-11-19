@@ -176,8 +176,8 @@ tabela no "Novo agendamento", que usa os mesmos campos:
 
 ## Status (preencher após conclusão)
 
-- [x] Pendente
-- [ ] Spec gerada: `spec/050-desconto-por-valor-e-duracao-editavel.md`
+- [ ] Pendente
+- [x] Spec gerada: `spec/050-desconto-por-valor-e-duracao-editavel.md` (19/11/2026)
 - [ ] Implementado em dev: (data)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`
