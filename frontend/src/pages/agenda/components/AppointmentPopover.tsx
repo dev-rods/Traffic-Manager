@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { formatTime } from '@/utils/formatDate'
 import { useEffect, useRef } from 'react'
 import { formatCurrency } from '@/utils/formatCurrency'
+import { temDesconto, textoCurtoDoDesconto } from '@/lib/desconto'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
 import type { Appointment } from '@/types'
 import { PagamentoDoAgendamento } from './PagamentoDoAgendamento'
@@ -253,10 +254,10 @@ export function AppointmentPopover({
                 <span className="text-gray-800">{formatCurrency(a.original_price_cents)}</span>
               </div>
             )}
-            {a.discount_pct > 0 && a.original_price_cents != null && (
+            {temDesconto(a) && a.original_price_cents != null && (
               <div className="flex justify-between text-emerald-600">
                 <span>
-                  -{a.discount_pct}% ({DISCOUNT_LABELS[a.discount_reason ?? ''] ?? a.discount_reason})
+                  {textoCurtoDoDesconto(a)} ({DISCOUNT_LABELS[a.discount_reason ?? ''] ?? a.discount_reason})
                 </span>
                 <span>-{formatCurrency(a.original_price_cents - a.final_price_cents)}</span>
               </div>

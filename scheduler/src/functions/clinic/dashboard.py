@@ -82,7 +82,7 @@ def handler(event, context):
                 COUNT(*) FILTER (WHERE {E_REAGENDADO.format(a='appointments')}) as rescheduled_appointments,
                 COALESCE(SUM(final_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as net_revenue_cents,
                 COALESCE(SUM(original_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as gross_revenue_cents,
-                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND discount_pct > 0), 0) as total_discount_cents,
+                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents,
                 COUNT(*) FILTER (WHERE status = 'PENDING') as pending_appointments
             FROM scheduler.appointments
             WHERE clinic_id = %s AND appointment_date = %s
@@ -119,6 +119,7 @@ def handler(event, context):
                 a.total_duration_minutes as duration_minutes,
                 a.manual_duration_minutes,
                 a.discount_pct,
+                a.discount_cents,
                 a.discount_reason,
                 a.original_price_cents,
                 a.final_price_cents,
@@ -168,6 +169,7 @@ def handler(event, context):
                 "status": (row.get("status") or "PENDING").lower(),
                 "original_price_cents": row.get("original_price_cents") or 0,
                 "discount_pct": row.get("discount_pct") or 0,
+                "discount_cents": row.get("discount_cents"),
                 "discount_reason": row.get("discount_reason"),
                 "final_price_cents": row.get("final_price_cents") or 0,
                 "rescheduled_to_id": str(row["rescheduled_to_id"]) if row.get("rescheduled_to_id") else None,
@@ -203,7 +205,7 @@ def handler(event, context):
             FROM scheduler.appointments
             WHERE clinic_id = %s
               AND appointment_date BETWEEN %s AND %s
-              AND discount_pct > 0
+              AND (discount_pct > 0 OR discount_cents > 0)
               AND discount_reason IS NOT NULL
               AND status != 'CANCELLED'
             GROUP BY discount_reason

@@ -178,6 +178,6 @@ tabela no "Novo agendamento", que usa os mesmos campos:
 
 - [ ] Pendente
 - [x] Spec gerada: `spec/050-desconto-por-valor-e-duracao-editavel.md` (19/11/2026)
-- [ ] Implementado em dev: (data)
+- [x] Implementado em dev: 19/11/2026 (PR #214, layer 199; roteiro curl verde)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`

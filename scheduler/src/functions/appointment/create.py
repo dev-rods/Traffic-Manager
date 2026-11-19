@@ -13,6 +13,7 @@ from src.utils.http import parse_body, http_response
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
 from src.services.duracao_manual import DuracaoInvalida
+from src.services.desconto_personalizado import DescontoInvalido, normaliza_centavos
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -94,6 +95,16 @@ def handler(event, context):
         if not service_id:
             service_id = service_ids[0]
 
+        # Desconto em reais (PRD 050). Exclusivo com o percentual.
+        if "discountCents" in body and body.get("discountPct"):
+            return http_response(400, {
+                "status": "ERROR", "message": "Mande discountPct ou discountCents, nao os dois"})
+        ok, discount_cents = normaliza_centavos(body.get("discountCents"))
+        if not ok:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "discountCents deve ser um inteiro de centavos maior que zero"})
+
         db = PostgresService()
 
         # `.completo(db)` e nao o construtor: sem o lead_service, a conversao
@@ -126,6 +137,7 @@ def handler(event, context):
             notes=(body.get("notes") or "").strip()[:500] or None,
             discount_pct=body.get("discountPct", 0),
             discount_reason=body.get("discountReason"),
+            discount_cents=discount_cents,
             # Sempre um booleano, nunca None: pelo painel a estreia e decisao de
             # quem esta na recepcao, e o padrao e desmarcado. A contagem
             # automatica so enxerga este banco, e a clinica atende desde antes
@@ -145,7 +157,7 @@ def handler(event, context):
             "appointment": appointment,
         }))
 
-    except DuracaoInvalida as e:
+    except (DuracaoInvalida, DescontoInvalido) as e:
         # Dedo errado no formulario e 400, nao 500.
         return http_response(400, {"status": "ERROR", "message": str(e)})
 

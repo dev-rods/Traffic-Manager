@@ -197,6 +197,10 @@ SQL_STATEMENTS = [
         consent_waived_reason VARCHAR(20),
         consent_waived_note VARCHAR(200),
         consent_link_sent_at TIMESTAMPTZ,
+        -- Desconto em reais (PRD 050). NULL = o desconto e o percentual de
+        -- discount_pct; preenchido = e este valor, e discount_pct guarda o
+        -- equivalente so para leitura. Zero nao existe.
+        discount_cents INTEGER CHECK (discount_cents IS NULL OR discount_cents > 0),
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW(),
         version INTEGER DEFAULT 1
@@ -1280,6 +1284,18 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_waived_note VARCHAR(200)",
     # PRD 048: quando a recepcao mandou o link dos documentos pelo WhatsApp.
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_link_sent_at TIMESTAMPTZ",
+    # PRD 050: desconto em reais. NULL = percentual (tudo que ja existia).
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_cents INTEGER",
+    """DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'appointments_discount_cents_positivo'
+        ) THEN
+            ALTER TABLE scheduler.appointments
+                ADD CONSTRAINT appointments_discount_cents_positivo
+                CHECK (discount_cents IS NULL OR discount_cents > 0);
+        END IF;
+    END $$;""",
 
     # Responsável legal de paciente menor: anexo do termo, não cadastro. Um
     # por paciente; o CPF fica em 11 dígitos normalizados (patients.cpf é

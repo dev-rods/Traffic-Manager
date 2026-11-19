@@ -10,7 +10,12 @@ from src.services.visao_do_staff import (
     pode_tocar_agendamento,
 )
 from src.utils.http import parse_body, http_response, extract_path_param
+from decimal import Decimal
+
 from src.services.desconto_personalizado import aplica as aplica_desconto
+from src.services.desconto_personalizado import (
+    DescontoInvalido, normaliza_centavos, normaliza_entrada as normaliza_pct, pct_equivalente,
+)
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import (
     SEM_MUDANCA,
@@ -98,7 +103,13 @@ def handler(event, context):
         new_time = body.get("time")
         new_service_id = body.get("serviceId")
         new_service_area_pairs = body.get("serviceAreaPairs")
-        new_discount_pct = body.get("discountPct")
+        # Desconto (PRD 050): percentual com duas casas OU valor em centavos,
+        # nunca os dois - cada um e uma fonte, e duas fontes divergem.
+        veio_pct = "discountPct" in body
+        veio_cents = "discountCents" in body
+        if veio_pct and veio_cents:
+            return http_response(400, {
+                "status": "ERROR", "message": "Mande discountPct ou discountCents, nao os dois"})
         new_discount_reason = body.get("discountReason")
         nova_primeira_visita = body.get("isFirstVisit")
         # `in body` e nao `.get()`: o payload manda `null` para SOLTAR a duracao
@@ -294,23 +305,39 @@ def handler(event, context):
             params.append(notes)
             messages.append("observações")
 
-        if new_discount_pct is not None:
-            discount_pct = int(new_discount_pct)
-            if discount_pct < 0 or discount_pct > 100:
-                return http_response(400, {"status": "ERROR", "message": "Desconto deve ser entre 0 e 100"})
-            updates.append("discount_pct = %s")
-            params.append(discount_pct)
-            updates.append("discount_reason = %s")
-            params.append(new_discount_reason)
-            # Recalculate final price
+        if veio_pct or veio_cents:
+            # Depois da etapa 1 de proposito: o preco de tabela ja e o das
+            # areas novas, e o desconto novo e gravado por cima do antigo.
             existing = db.execute_query(
                 "SELECT original_price_cents FROM scheduler.appointments WHERE id = %s::uuid",
                 (appointment_id,),
             )
-            if existing and existing[0].get("original_price_cents") is not None:
-                orig = existing[0]["original_price_cents"]
+            orig = existing[0].get("original_price_cents") if existing else None
+            if veio_cents:
+                ok, cents = normaliza_centavos(body.get("discountCents"))
+                if not ok or cents is None:
+                    return http_response(400, {
+                        "status": "ERROR",
+                        "message": "discountCents deve ser um inteiro de centavos maior que zero"})
+                if orig is None:
+                    return http_response(400, {
+                        "status": "ERROR", "message": "desconto em reais exige preco de tabela"})
+                final = aplica_desconto(orig, None, cents=cents)
+                pct = pct_equivalente(orig, cents)
+            else:
+                ok, pct = normaliza_pct(body.get("discountPct"))
+                if not ok:
+                    return http_response(400, {
+                        "status": "ERROR",
+                        "message": "discountPct deve ser de 0 a 100, com ate duas casas decimais"})
+                pct = pct if pct is not None else Decimal(0)
+                cents = None
+                final = aplica_desconto(orig, pct) if orig is not None else None
+            updates += ["discount_pct = %s", "discount_cents = %s", "discount_reason = %s"]
+            params += [pct, cents, new_discount_reason]
+            if final is not None:
                 updates.append("final_price_cents = %s")
-                params.append(aplica_desconto(orig, discount_pct))
+                params.append(final)
             messages.append("desconto")
 
         if updates:
@@ -339,7 +366,7 @@ def handler(event, context):
             "appointment": _serialize_row(final[0]),
         }))
 
-    except DuracaoInvalida as e:
+    except (DuracaoInvalida, DescontoInvalido) as e:
         # Dedo errado no formulario e 400, nao 500.
         return http_response(400, {"status": "ERROR", "message": str(e)})
 

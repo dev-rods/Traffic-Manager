@@ -94,7 +94,7 @@ def handler(event, context):
                 COUNT(*) FILTER (WHERE {E_REAGENDADO.format(a='appointments')}) as rescheduled_appointments,
                 COALESCE(SUM(original_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as gross_revenue_cents,
                 COALESCE(SUM(final_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as net_revenue_cents,
-                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND discount_pct > 0), 0) as total_discount_cents
+                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents
             FROM scheduler.appointments
             WHERE clinic_id = %s AND appointment_date BETWEEN %s AND %s
         """, (clinic_id, start, end))
@@ -121,7 +121,7 @@ def handler(event, context):
             SELECT
                 COUNT(*) FILTER (WHERE status != 'CANCELLED') as total_appointments,
                 COALESCE(SUM(original_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as gross_revenue_cents,
-                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND discount_pct > 0), 0) as total_discount_cents
+                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents
             FROM scheduler.appointments
             WHERE clinic_id = %s AND appointment_date BETWEEN %s AND %s
         """, (clinic_id, prev_start, prev_end))
@@ -193,7 +193,7 @@ def handler(event, context):
             FROM scheduler.appointments
             WHERE clinic_id = %s
               AND appointment_date BETWEEN %s AND %s
-              AND discount_pct > 0
+              AND (discount_pct > 0 OR discount_cents > 0)
               AND discount_reason IS NOT NULL
               AND status != 'CANCELLED'
             GROUP BY discount_reason

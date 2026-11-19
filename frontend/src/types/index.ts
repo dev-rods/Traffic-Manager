@@ -227,6 +227,12 @@ export interface Appointment {
   /** Duracao que uma pessoa fixou para ESTE agendamento. null = segue o calculo. */
   manual_duration_minutes: number | null
   discount_pct: number
+  /**
+   * Desconto em reais (PRD 050). null = o desconto e o percentual acima;
+   * preenchido = e este valor, e discount_pct e so o equivalente para leitura.
+   * Opcional ate o prod servir a coluna.
+   */
+  discount_cents?: number | null
   discount_reason: DiscountReason
   original_price_cents: number | null
   final_price_cents: number | null
@@ -358,6 +364,8 @@ export interface CreateAppointmentPayload {
   professionalId?: string
   fullName?: string
   discountPct?: number
+  /** Desconto em reais, em centavos. Exclusivo com discountPct. */
+  discountCents?: number
   discountReason?: string
   /** Observacao curta da atendente. Aparece no popover da agenda. */
   notes?: string
@@ -381,6 +389,8 @@ export interface UpdateAppointmentPayload {
   serviceId?: string
   serviceAreaPairs?: { serviceId: string; areaId: string }[]
   discountPct?: number
+  /** Desconto em reais, em centavos. Exclusivo com discountPct. */
+  discountCents?: number
   discountReason?: string | null
   /**
    * Fixa a duracao DESTE agendamento. `null` volta ao calculado; omitir nao mexe.

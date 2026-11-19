@@ -1,18 +1,15 @@
-/**
- * Faixa de sanidade da duração manual.
- *
- * Espelha MINIMO/MAXIMO em scheduler/src/services/duracao_manual.py. Quem
- * decide é o backend; isto aqui é para a atendente descobrir o erro digitando,
- * não depois de salvar.
- */
-export const DURACAO_MANUAL = { minimo: 5, maximo: 480 } as const
+import { DURACAO_MANUAL, parseDuracao } from '@/lib/duracaoFixada'
 
 interface DuracaoFieldProps {
   /** O que a regra da clínica calcula para as áreas escolhidas. */
   calculada?: number
-  /** O que uma pessoa fixou. `null` = seguindo o cálculo. */
-  manual: number | null
-  onChange: (minutos: number | null) => void
+  /**
+   * O que uma pessoa fixou, como foi digitado. `null` = seguindo o cálculo.
+   * String vazia é "fixada, mas ainda sem número": o campo continua na tela
+   * (PRD 050), e é o submit que exige um valor.
+   */
+  manual: string | null
+  onChange: (texto: string | null) => void
   /** Aviso de que o override foi descartado porque as áreas mudaram. */
   avisoDeDescarte?: boolean
   disabled?: boolean
@@ -30,6 +27,9 @@ interface DuracaoFieldProps {
  * tocada. O texto diz isso em voz alta de propósito: quem mexe aqui está
  * resolvendo um caso, e achar que mudou a regra de todo mundo seria o erro caro.
  * Para mudar a regra existe a tela de Duração.
+ *
+ * Apagar o campo NÃO volta ao cálculo: antes voltava, e o input sumia debaixo
+ * do dedo de quem só queria redigitar. Voltar é pelo botão.
  */
 export function DuracaoField({
   calculada,
@@ -39,8 +39,9 @@ export function DuracaoField({
   disabled = false,
 }: DuracaoFieldProps) {
   const fixada = manual !== null
-  const foraDaFaixa =
-    fixada && (manual < DURACAO_MANUAL.minimo || manual > DURACAO_MANUAL.maximo)
+  const numero = parseDuracao(manual)
+  const vazio = fixada && manual.trim() === ''
+  const foraDaFaixa = fixada && !vazio && numero === null
 
   return (
     <div>
@@ -61,7 +62,7 @@ export function DuracaoField({
           calculada !== undefined && (
             <button
               type="button"
-              onClick={() => onChange(calculada)}
+              onClick={() => onChange(String(calculada))}
               disabled={disabled}
               className="text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
             >
@@ -82,15 +83,16 @@ export function DuracaoField({
               min={DURACAO_MANUAL.minimo}
               max={DURACAO_MANUAL.maximo}
               disabled={disabled}
-              onChange={(e) => {
-                const v = e.target.value
-                onChange(v === '' ? null : Number(v))
-              }}
+              onChange={(e) => onChange(e.target.value)}
               className="w-24 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
             />
             <span className="text-sm text-gray-500">minutos</span>
           </div>
-          {foraDaFaixa ? (
+          {vazio ? (
+            <p className="mt-1.5 text-xs text-gray-500">
+              Informe a duração ou volte ao cálculo.
+            </p>
+          ) : foraDaFaixa ? (
             <p className="mt-1.5 text-xs text-red-500">
               A duração precisa estar entre {DURACAO_MANUAL.minimo} e{' '}
               {DURACAO_MANUAL.maximo} minutos.

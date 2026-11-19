@@ -10,6 +10,8 @@ import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
 import { DuracaoField } from './DuracaoField'
+import { parseDuracao } from '@/lib/duracaoFixada'
+import { DescontoField } from './DescontoField'
 import { TimeField } from './TimeField'
 import { ObservacaoField } from './ObservacaoField'
 import { PrimeiraVisitaField } from './PrimeiraVisitaField'
@@ -23,7 +25,13 @@ import {
   type AlteracaoPretendida,
 } from '@/lib/alteracaoDeAgendamento'
 import type { Appointment, UpdateAppointmentPayload } from '@/types'
-import { precoComDesconto } from '@/lib/cadastroPaciente'
+import {
+  descontoDoAgendamento,
+  payloadDoDesconto,
+  resumoDoDesconto,
+  validaDesconto,
+  type DescontoEscolhido,
+} from '@/lib/desconto'
 
 interface EditAppointmentModalProps {
   appointment: Appointment | null
@@ -43,29 +51,23 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const [serviceId, setServiceId] = useState(appointment?.service_id ?? '')
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>(initialAreaIds)
   const [prevServiceId, setPrevServiceId] = useState(serviceId)
-  const [manualDuration, setManualDuration] = useState<number | null>(
-    appointment?.manual_duration_minutes ?? null
+  // Como foi digitado (PRD 050): `null` segue o cálculo, string é fixada,
+  // inclusive vazia. O número só é exigido ao salvar.
+  const [duracaoFixada, setDuracaoFixada] = useState<string | null>(
+    appointment?.manual_duration_minutes == null ? null : String(appointment.manual_duration_minutes)
   )
+  const manualDuration = parseDuracao(duracaoFixada)
   const [duracaoDescartada, setDuracaoDescartada] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Segundo passo DENTRO do mesmo modal (PRD 043): dois overlays empilhados
   // escondem o formulário que a pessoa precisa poder revisar.
   const [confirmando, setConfirmando] = useState(false)
 
-  // Discount state
-  const initDiscountMode = appointment?.discount_reason === 'partnership'
-    ? 'partnership' as const
-    : appointment?.discount_reason === 'custom'
-      ? 'custom' as const
-      : appointment?.discount_pct && appointment.discount_pct > 0
-        ? 'custom' as const
-        : 'none' as const
-  const [discountMode, setDiscountMode] = useState<'none' | 'partnership' | 'custom'>(initDiscountMode)
-  const [customDiscountPct, setCustomDiscountPct] = useState(
-    initDiscountMode === 'custom' && appointment?.discount_pct
-      ? String(appointment.discount_pct)
-      : ''
-  )
+  // Desconto, nas duas formas (PRD 050). O gravado é a referência do "mudou".
+  const descontoGravado: DescontoEscolhido = appointment
+    ? descontoDoAgendamento(appointment)
+    : { modo: 'none', tipo: 'pct', texto: '' }
+  const [desconto, setDesconto] = useState<DescontoEscolhido>(descontoGravado)
 
   const { data: serviceAreas } = useServiceAreas(serviceId || undefined)
   const { data: durationRulesData } = useDurationRules()
@@ -81,7 +83,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     somaDasAreas === undefined ? undefined : calculaDuracao(somaDasAreas, durationRules)
   // A duração que a sessão vai de fato ocupar. Os horários têm de ser buscados
   // com ela, não com a calculada: senão a tela oferece um horário em que a
-  // sessão não cabe, e o conflito só aparece ao salvar.
+  // sessão não cabe, e o conflito só aparece ao salvar. Texto fixado ainda
+  // inválido (vazio, fora da faixa) cai na calculada: nunca NaN no pedido.
   const duracaoEfetiva = manualDuration ?? totalDuration
 
   // Fetch available slots
@@ -125,8 +128,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   const [prevAreasKey, setPrevAreasKey] = useState(areasKey)
   if (areasKey !== prevAreasKey) {
     setPrevAreasKey(areasKey)
-    if (manualDuration !== null) {
-      setManualDuration(null)
+    if (duracaoFixada !== null) {
+      setDuracaoFixada(null)
       setDuracaoDescartada(true)
     }
   }
@@ -146,14 +149,20 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     const origSorted = [...initialAreaIds].sort()
     return sorted.length !== origSorted.length || sorted.some((v, i) => v !== origSorted[i])
   })()
-  const discountChanged = (() => {
-    const origMode = initDiscountMode
-    if (discountMode !== origMode) return true
-    if (discountMode === 'custom' && Number(customDiscountPct) !== (a.discount_pct ?? 0)) return true
-    return false
-  })()
+  const discountChanged =
+    JSON.stringify(payloadDoDesconto(desconto)) !== JSON.stringify(payloadDoDesconto(descontoGravado))
 
-  const manualChanged = manualDuration !== (a.manual_duration_minutes ?? null)
+  // Fixada e apagada conta como mudança: é o que deixa o Salvar acusar.
+  const manualChanged =
+    duracaoFixada === null
+      ? a.manual_duration_minutes != null
+      : manualDuration !== (a.manual_duration_minutes ?? null)
+
+  const subtotal = selectedAreaIds.length > 0 && serviceAreas
+    ? serviceAreas
+        .filter((ar) => selectedAreaIds.includes(ar.area_id))
+        .reduce((sum, ar) => sum + ar.effective_price_cents, 0)
+    : undefined
 
   /**
    * Trocar a área faz o servidor DESCARTAR o override, a menos que o pedido
@@ -202,8 +211,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     ...(discountChanged
       ? {
           desconto: {
-            de: textoDoDesconto(initDiscountMode, a.discount_pct ?? 0),
-            para: textoDoDesconto(discountMode, customDiscountPct),
+            de: textoDoDesconto(descontoGravado),
+            para: textoDoDesconto(desconto),
           },
         }
       : {}),
@@ -235,8 +244,15 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
       return
     }
 
-    if (discountMode === 'custom' && (!customDiscountPct || Number(customDiscountPct) <= 0 || Number(customDiscountPct) > 100)) {
-      setError('Informe um desconto válido entre 1 e 100%.')
+    // A obrigação de a duração fixada ter número é daqui, não do campo (PRD 050).
+    if (duracaoFixada !== null && manualDuration === null) {
+      setError('Informe a duração fixada entre 5 e 480 minutos, ou volte ao cálculo.')
+      return
+    }
+
+    const erroDesconto = validaDesconto(desconto, subtotal)
+    if (erroDesconto) {
+      setError(erroDesconto)
       return
     }
 
@@ -281,18 +297,7 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
         }
       }
 
-      if (discountChanged) {
-        if (discountMode === 'partnership') {
-          payload.discountPct = 100
-          payload.discountReason = 'partnership'
-        } else if (discountMode === 'custom') {
-          payload.discountPct = Number(customDiscountPct)
-          payload.discountReason = 'custom'
-        } else {
-          payload.discountPct = 0
-          payload.discountReason = null
-        }
-      }
+      if (discountChanged) Object.assign(payload, payloadDoDesconto(desconto))
 
       await updateAppointment.mutateAsync({
         appointmentId: a.id,
@@ -389,9 +394,9 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
         {/* Antes do horário de propósito: a duração decide quais horários cabem. */}
         <DuracaoField
           calculada={totalDuration}
-          manual={manualDuration}
+          manual={duracaoFixada}
           onChange={(v) => {
-            setManualDuration(v)
+            setDuracaoFixada(v)
             setDuracaoDescartada(false)
           }}
           avisoDeDescarte={duracaoDescartada}
@@ -405,60 +410,11 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           enabled={Boolean(date && serviceId)}
         />
 
-        {/* Discount section */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Desconto</label>
-          <div className="flex gap-2">
-            {([
-              { key: 'none', label: 'Sem desconto' },
-              { key: 'partnership', label: 'Parceria (100%)' },
-              { key: 'custom', label: 'Personalizado' },
-            ] as const).map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setDiscountMode(key)}
-                className={[
-                  'flex-1 py-2 rounded-lg text-xs font-semibold transition-all duration-150 border',
-                  discountMode === key
-                    ? key === 'partnership'
-                      ? 'bg-amber-50 border-amber-300 text-amber-700'
-                      : key === 'custom'
-                        ? 'bg-brand-50 border-brand-300 text-brand-700'
-                        : 'bg-gray-900 border-gray-900 text-white'
-                    : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600',
-                ].join(' ')}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {discountMode === 'custom' && (
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                max="99"
-                placeholder="Ex: 30"
-                value={customDiscountPct}
-                onChange={(e) => setCustomDiscountPct(e.target.value)}
-                className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-              />
-              <span className="text-sm text-gray-500">% de desconto</span>
-            </div>
-          )}
-        </div>
+        <DescontoField valor={desconto} onChange={setDesconto} subtotalCents={subtotal} />
 
         {/* Price summary */}
-        {selectedAreaIds.length > 0 && serviceAreas && (() => {
-          const subtotal = serviceAreas
-            .filter((a) => selectedAreaIds.includes(a.area_id))
-            .reduce((sum, a) => sum + a.effective_price_cents, 0)
-          const discountPct = discountMode === 'partnership' ? 100
-            : discountMode === 'custom' && customDiscountPct ? Number(customDiscountPct)
-            : 0
-          const total = precoComDesconto(subtotal, discountPct)
-          const discountAmount = subtotal - total
+        {subtotal !== undefined && (() => {
+          const resumo = resumoDoDesconto(desconto, subtotal)
           const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
           return (
@@ -467,15 +423,15 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
                 <span>{selectedAreaIds.length} área{selectedAreaIds.length !== 1 ? 's' : ''}</span>
                 <span>{fmt(subtotal)}</span>
               </div>
-              {discountPct > 0 && (
+              {resumo && (
                 <div className="flex justify-between text-sm text-amber-600">
-                  <span>Desconto ({discountPct}%)</span>
-                  <span>-{fmt(discountAmount)}</span>
+                  <span>Desconto ({resumo.rotulo})</span>
+                  <span>-{fmt(resumo.descontoCents)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm font-semibold text-gray-900 border-t border-gray-200 pt-1.5">
                 <span>Total</span>
-                <span>{fmt(total)}</span>
+                <span>{fmt(resumo ? resumo.totalCents : subtotal)}</span>
               </div>
             </div>
           )
