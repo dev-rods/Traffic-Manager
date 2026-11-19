@@ -112,12 +112,15 @@ describe('avisosDaAlteracao', () => {
 
 describe('textoDoDesconto', () => {
   it.each([
-    ['none', '', 'sem desconto'],
-    ['partnership', '', 'parceria (100%)'],
-    ['custom', '20', '20%'],
-    ['custom', '', 'sem desconto'],
-    ['custom', '0', 'sem desconto'],
-  ] as const)('%s / %s -> %s', (modo, pct, esperado) => {
-    expect(textoDoDesconto(modo, pct)).toBe(esperado)
+    ['none', 'pct', '', 'sem desconto'],
+    ['partnership', 'pct', '', 'parceria (100%)'],
+    ['custom', 'pct', '20', '20%'],
+    ['custom', 'pct', '12,5', '12,5%'],
+    ['custom', 'pct', '', 'sem desconto'],
+    ['custom', 'pct', '0', 'sem desconto'],
+    ['custom', 'cents', '20', 'R$\u00a020,00'],
+    ['custom', 'cents', '37,9', 'R$\u00a037,90'],
+  ] as const)('%s / %s / %s -> %s', (modo, tipo, texto, esperado) => {
+    expect(textoDoDesconto({ modo, tipo, texto })).toBe(esperado)
   })
 })

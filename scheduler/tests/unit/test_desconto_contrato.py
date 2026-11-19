@@ -44,6 +44,23 @@ class TestCompatibilidadeComOInteiro(unittest.TestCase):
                     self.assertEqual(aplica(total, pct), total * (100 - pct) // 100)
 
 
+CASOS_EM_CENTAVOS = (
+    (19500, 2000, 17500),
+    (1, 1, 0),
+    (20000, 20000, 0),
+    (0, 0, 0),
+)
+
+
+class TestContratoEmCentavos(unittest.TestCase):
+    """PRD 050: desconto em reais e subtracao exata, nos dois lados."""
+
+    def test_tabela_de_referencia(self):
+        for total, cents, esperado in CASOS_EM_CENTAVOS:
+            with self.subTest(total=total, cents=cents):
+                self.assertEqual(aplica(total, None, cents=cents), esperado)
+
+
 class TestBordas(unittest.TestCase):
     def test_sem_percentual_nao_desconta(self):
         self.assertEqual(aplica(20000, None), 20000)

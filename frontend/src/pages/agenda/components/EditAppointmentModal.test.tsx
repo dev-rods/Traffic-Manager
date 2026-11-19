@@ -172,3 +172,90 @@ describe('mudança sem efeito fora da tela', () => {
     expect(mutateAsync).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('desconto por valor ou percentual com centavos (PRD 050)', () => {
+  const personalizado = () => screen.getByRole('button', { name: 'Personalizado' })
+
+  it('R$ 20 sobre R$ 200 mostra o total exato e manda centavos', async () => {
+    monta()
+
+    await userEvent.click(personalizado())
+    await userEvent.click(screen.getByRole('button', { name: 'R$' }))
+    await userEvent.type(screen.getByLabelText('Desconto em reais'), '20')
+
+    // O formatador usa espaço inviolável; o matcher normaliza espaços.
+    expect(screen.getByText('Desconto (R$ 20,00)')).toBeInTheDocument()
+    expect(screen.getByText('R$ 180,00')).toBeInTheDocument()
+
+    await userEvent.click(salvar())
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar alteração' }))
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      appointmentId: 'ap1',
+      payload: { discountCents: 2000, discountReason: 'custom' },
+    })
+  })
+
+  it('12,5% com vírgula manda 12.5, sem truncar', async () => {
+    monta()
+
+    await userEvent.click(personalizado())
+    await userEvent.type(screen.getByLabelText('Desconto em porcento'), '12,5')
+    await userEvent.click(salvar())
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar alteração' }))
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      appointmentId: 'ap1',
+      payload: { discountPct: 12.5, discountReason: 'custom' },
+    })
+  })
+
+  it('reais acima do valor da sessão não saem da tela', async () => {
+    monta()
+
+    await userEvent.click(personalizado())
+    await userEvent.click(screen.getByRole('button', { name: 'R$' }))
+    await userEvent.type(screen.getByLabelText('Desconto em reais'), '250')
+    await userEvent.click(salvar())
+
+    expect(mutateAsync).not.toHaveBeenCalled()
+    expect(screen.getAllByText('O desconto não pode passar do valor da sessão.').length).toBeGreaterThan(0)
+  })
+
+  it('agendamento com desconto em reais abre com R$ selecionado', () => {
+    monta({ discount_pct: 10, discount_cents: 2000, discount_reason: 'custom' })
+
+    expect(screen.getByRole('button', { name: 'R$' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Desconto em reais')).toHaveValue('20,00')
+  })
+})
+
+describe('duração fixada pode ser apagada enquanto se digita (PRD 050)', () => {
+  it('apagar mantém o campo; salvar vazio acusa e não grava', async () => {
+    monta({ manual_duration_minutes: 45 })
+
+    await userEvent.clear(screen.getByLabelText('Duração'))
+
+    expect(screen.getByLabelText('Duração')).toBeInTheDocument()
+    expect(screen.getByText('Informe a duração ou volte ao cálculo.')).toBeInTheDocument()
+
+    await userEvent.click(salvar())
+
+    expect(mutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByText(/Informe a duração fixada entre 5 e 480/)).toBeInTheDocument()
+  })
+
+  it('redigitar depois de apagar manda o número novo', async () => {
+    monta({ manual_duration_minutes: 45 })
+
+    await userEvent.clear(screen.getByLabelText('Duração'))
+    await userEvent.type(screen.getByLabelText('Duração'), '50')
+    await userEvent.click(salvar())
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar alteração' }))
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      appointmentId: 'ap1',
+      payload: expect.objectContaining({ manualDurationMinutes: 50 }),
+    })
+  })
+})

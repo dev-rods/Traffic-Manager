@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DuracaoField } from './DuracaoField'
+import { parseDuracao } from '@/lib/duracaoFixada'
 
 /**
  * O contrato do campo, do ponto de vista de quem está na recepção.
@@ -24,25 +25,25 @@ describe('DuracaoField', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Ajustar' }))
 
-    expect(onChange).toHaveBeenCalledWith(30)
+    expect(onChange).toHaveBeenCalledWith('30')
   })
 
   it('com duração fixada, diz quanto a regra calcularia', () => {
-    render(<DuracaoField calculada={30} manual={75} onChange={vi.fn()} />)
+    render(<DuracaoField calculada={30} manual="75" onChange={vi.fn()} />)
 
     expect(screen.getByRole('spinbutton')).toHaveValue(75)
     expect(screen.getByText(/A regra calcula 30 min/)).toBeInTheDocument()
   })
 
   it('deixa explícito que vale só para este agendamento', () => {
-    render(<DuracaoField calculada={30} manual={75} onChange={vi.fn()} />)
+    render(<DuracaoField calculada={30} manual="75" onChange={vi.fn()} />)
 
     expect(screen.getByText(/Vale só para este agendamento/)).toBeInTheDocument()
   })
 
   it('"Voltar ao cálculo" manda null, que é o que solta o override', async () => {
     const onChange = vi.fn()
-    render(<DuracaoField calculada={30} manual={75} onChange={onChange} />)
+    render(<DuracaoField calculada={30} manual="75" onChange={onChange} />)
 
     await userEvent.click(screen.getByRole('button', { name: 'Voltar ao cálculo' }))
 
@@ -60,15 +61,41 @@ describe('DuracaoField', () => {
   })
 
   it('acusa valor fora da faixa antes de a atendente salvar', () => {
-    render(<DuracaoField calculada={30} manual={600} onChange={vi.fn()} />)
+    render(<DuracaoField calculada={30} manual="600" onChange={vi.fn()} />)
 
     expect(screen.getByText(/precisa estar entre 5 e 480/)).toBeInTheDocument()
   })
 
   it('não acusa nada dentro da faixa', () => {
-    render(<DuracaoField calculada={30} manual={75} onChange={vi.fn()} />)
+    render(<DuracaoField calculada={30} manual="75" onChange={vi.fn()} />)
 
     expect(screen.queryByText(/precisa estar entre/)).not.toBeInTheDocument()
+  })
+
+  it('apagar o campo repassa o vazio, em vez de voltar ao cálculo (PRD 050)', async () => {
+    const onChange = vi.fn()
+    render(<DuracaoField calculada={30} manual="7" onChange={onChange} />)
+
+    await userEvent.clear(screen.getByRole('spinbutton'))
+
+    expect(onChange).toHaveBeenCalledWith('')
+    expect(onChange).not.toHaveBeenCalledWith(null)
+  })
+
+  it('vazio mantém o input na tela e pede a duração, sem acusar erro', () => {
+    render(<DuracaoField calculada={30} manual="" onChange={vi.fn()} />)
+
+    expect(screen.getByRole('spinbutton')).toBeInTheDocument()
+    expect(screen.getByText('Informe a duração ou volte ao cálculo.')).toBeInTheDocument()
+    expect(screen.queryByText(/precisa estar entre/)).not.toBeInTheDocument()
+  })
+
+  it('parseDuracao: inteiro na faixa ou null', () => {
+    expect(parseDuracao('45')).toBe(45)
+    expect(parseDuracao(' 5 ')).toBe(5)
+    for (const t of ['', '4', '481', '4.5', 'abc', null]) {
+      expect(parseDuracao(t)).toBeNull()
+    }
   })
 
   it('sem áreas escolhidas, não inventa uma duração', () => {

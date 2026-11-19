@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 from src.services.db.postgres import PostgresService
 from src.services.relogio import HOJE_SQL
 from src.services.desconto_personalizado import aplica as aplica_desconto
+from src.services.desconto_personalizado import DescontoInvalido, RAZAO as RAZAO_PERSONALIZADO
+from src.services.desconto_personalizado import pct_equivalente
 from src.services.desconto_personalizado import razao_de as razao_do_personalizado
 from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
@@ -141,8 +143,13 @@ class AppointmentService:
         cpf: Optional[str] = None,
         birth_date: Optional[str] = None,
         email: Optional[str] = None,
+        discount_cents: Optional[int] = None,
     ) -> Dict[str, Any]:
         """`is_first_visit=None` deixa o sistema decidir; um booleano manda.
+
+        `discount_cents` (PRD 050) e o desconto em reais, so pelo painel. Quando
+        vem, e a fonte do preco: vence o percentual e o combinado da paciente,
+        e `discount_pct` recebe o equivalente so para leitura.
 
         O bot passa None: ele conversa com quem chega da landing page e nao tem
         ninguem para conferir. O painel manda o valor da caixinha, porque quem
@@ -209,7 +216,7 @@ class AppointmentService:
         # Fica antes do bloco de precos de proposito: o final_price_cents e
         # calculado logo abaixo a partir do discount_pct, e mudar o desconto
         # depois deixaria o valor gravado divergente do desconto gravado.
-        if not discount_pct and not discount_reason:
+        if discount_cents is None and not discount_pct and not discount_reason:
             personalizado = desconto_do_paciente(self.db, clinic_id, phone)
             if personalizado is not None:
                 discount_pct, discount_reason = personalizado, razao_do_personalizado(personalizado)
@@ -222,6 +229,15 @@ class AppointmentService:
 
             if original_price_cents is not None:
                 final_price_cents = aplica_desconto(original_price_cents, discount_pct)
+
+        # 2c. Desconto em reais (PRD 050): subtracao exata sobre o preco de
+        # tabela. Sem preco de tabela nao ha do que tirar.
+        if discount_cents is not None:
+            if original_price_cents is None:
+                raise DescontoInvalido("desconto em reais exige preco de tabela")
+            final_price_cents = aplica_desconto(original_price_cents, None, cents=discount_cents)
+            discount_pct = pct_equivalente(original_price_cents, discount_cents)
+            discount_reason = discount_reason or RAZAO_PERSONALIZADO
 
         # 3. Calculate end_time
         start_parts = time.split(":")
@@ -255,14 +271,14 @@ class AppointmentService:
                 clinic_id, patient_id, professional_id, service_id,
                 appointment_date, start_time, end_time,
                 total_duration_minutes, manual_duration_minutes,
-                discount_pct, discount_reason, original_price_cents, final_price_cents,
+                discount_pct, discount_cents, discount_reason, original_price_cents, final_price_cents,
                 full_name, notes,
                 status, created_at, updated_at, version
             ) VALUES (
                 %s, %s::uuid, %s::uuid, %s::uuid,
                 %s, %s::time, %s::time,
                 %s, %s,
-                %s, %s, %s, %s,
+                %s, %s, %s, %s, %s,
                 %s, %s,
                 'CONFIRMED', NOW(), NOW(), 1
             )
@@ -271,7 +287,7 @@ class AppointmentService:
             (clinic_id, patient_id, prof_id_param, primary_service_id,
              date, time, end_time,
              duration_minutes, manual,
-             discount_pct, discount_reason, original_price_cents, final_price_cents,
+             discount_pct, discount_cents, discount_reason, original_price_cents, final_price_cents,
              full_name, (notes or None)),
         )
 
@@ -611,6 +627,10 @@ class AppointmentService:
 
         # 3. Calculate new duration and price
         discount_pct = appointment.get("discount_pct") or 0
+        # PRD 050: desconto em reais e a fonte; o percentual e copia e e
+        # reescrito abaixo. Subtotal novo menor que o desconto fixado recusa a
+        # troca (DescontoInvalido -> 400): zerar em silencio seria parceria.
+        discount_cents = appointment.get("discount_cents")
         if service_area_pairs:
             values_clause = ", ".join(["(%s::uuid, %s::uuid)"] * len(service_area_pairs))
             params: tuple = ()
@@ -641,8 +661,12 @@ class AppointmentService:
             manual_do_pedido = valida_duracao_manual(manual_duration_minutes)
             duration_minutes = duracao_efetiva(duration_minutes, manual_do_pedido)
 
-        final_price_cents = (aplica_desconto(original_price_cents, discount_pct)
-                             if original_price_cents else original_price_cents)
+        if original_price_cents:
+            final_price_cents = aplica_desconto(original_price_cents, discount_pct, cents=discount_cents)
+            if discount_cents is not None:
+                discount_pct = pct_equivalente(original_price_cents, discount_cents)
+        else:
+            final_price_cents = original_price_cents
 
         # 4. Calculate new end_time
         start_parts = start_time.split(":")
@@ -665,12 +689,13 @@ class AppointmentService:
             UPDATE scheduler.appointments
             SET service_id = %s::uuid, end_time = %s::time, total_duration_minutes = %s,
                 manual_duration_minutes = %s,
-                original_price_cents = %s, final_price_cents = %s,
+                original_price_cents = %s, final_price_cents = %s, discount_pct = %s,
                 version = version + 1, updated_at = NOW()
             WHERE id = %s::uuid AND version = %s
             """,
             (service_id, new_end_time, duration_minutes, manual_do_pedido,
-             original_price_cents, final_price_cents, appointment_id, current_version),
+             original_price_cents, final_price_cents, discount_pct,
+             appointment_id, current_version),
         )
         if updated_rows == 0:
             raise OptimisticLockError("Agendamento foi modificado por outro processo")

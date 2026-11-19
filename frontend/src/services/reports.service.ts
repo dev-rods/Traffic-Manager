@@ -70,6 +70,8 @@ export interface DashboardAppointment {
   rescheduled_to_date: string | null
   original_price_cents: number
   discount_pct: number
+  /** Desconto em reais (PRD 050); null quando e percentual. */
+  discount_cents?: number | null
   discount_reason: 'first_session' | 'tier_2' | 'tier_3' | null
   final_price_cents: number
 }

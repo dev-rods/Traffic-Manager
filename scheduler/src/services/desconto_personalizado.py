@@ -18,8 +18,8 @@ Fica num modulo proprio porque a pergunta e feita em dois lugares - a tool do
 bot e a criacao pelo painel - e resposta duplicada diverge em silencio.
 """
 import logging
-from decimal import Decimal, InvalidOperation
-from typing import Optional, Union
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,14 @@ CASAS = 2
 PASSO = Decimal("0.01")
 
 
+class DescontoInvalido(ValueError):
+    """Desconto que nao cabe no preco ou chegou ilegivel. Vira 400 no handler.
+
+    E erro, nao zero: um desconto em reais maior que a sessao, aceito em
+    silencio, seria uma parceria que ninguem pediu (PRD 050, decisao 4).
+    """
+
+
 def razao_de(pct: Union[int, float, Decimal, None]) -> str:
     """A razao gravada no agendamento para um combinado: parceria em 100%."""
     try:
@@ -45,8 +53,13 @@ def razao_de(pct: Union[int, float, Decimal, None]) -> str:
         return RAZAO
 
 
-def aplica(total_cents: int, pct: Union[int, float, Decimal, None]) -> int:
+def aplica(total_cents: int, pct: Union[int, float, Decimal, None],
+           cents: Optional[int] = None) -> int:
     """O preco em centavos depois do desconto.
+
+    `cents` e o desconto em reais do PRD 050 e, quando vem, VENCE o percentual:
+    subtracao exata, sem arredondamento. Maior que o total levanta
+    `DescontoInvalido` - quem chamou decide o que dizer a quem digitou.
 
     Existe porque o calculo estava repetido em cinco lugares do backend, cada um
     com sua divisao inteira. Com percentual fracionario isso viraria cinco
@@ -61,6 +74,12 @@ def aplica(total_cents: int, pct: Union[int, float, Decimal, None]) -> int:
     Decimal e nao float porque 0.1 nao existe exato em binario, e preco errado
     por um centavo e o tipo de defeito que ninguem consegue explicar depois.
     """
+    if cents is not None:
+        total = int(total_cents or 0)
+        if int(cents) > total:
+            raise DescontoInvalido(
+                "desconto de R$ %.2f maior que o valor de R$ %.2f" % (int(cents) / 100, total / 100))
+        return total - int(cents)
     if not total_cents:
         return total_cents or 0
     if pct is None:
@@ -112,6 +131,43 @@ def do_paciente(db, clinic_id: str, phone: str) -> Optional[Decimal]:
         return None
 
     return pct
+
+
+def normaliza_centavos(valor) -> Tuple[bool, Optional[int]]:
+    """O desconto em reais que chega da API, em centavos inteiros.
+
+    Devolve (ok, valor). Vazio e nulo viram None ("nao e por valor"). Aceita
+    int ou string de digitos; exige inteiro >= 1. Nao aceita "20,00": o front
+    ja manda centavos, e reais com virgula e assunto da tela.
+    """
+    if valor is None or (isinstance(valor, str) and not valor.strip()):
+        return True, None
+    if isinstance(valor, bool):
+        return False, None
+    if isinstance(valor, float):
+        if not valor.is_integer():
+            return False, None
+        valor = int(valor)
+    if isinstance(valor, str):
+        valor = valor.strip()
+        if not valor.isdigit():
+            return False, None
+        valor = int(valor)
+    if not isinstance(valor, int) or valor < 1:
+        return False, None
+    return True, valor
+
+
+def pct_equivalente(total_cents: int, cents: int) -> Decimal:
+    """O percentual que um desconto em reais representa, com duas casas.
+
+    E copia para leitura (relatorios, check-in, filtros `discount_pct > 0`);
+    a fonte, quando `discount_cents` existe, e ele. Arredonda (nao trunca)
+    porque aqui nao ha preco em jogo, so exibicao.
+    """
+    if not total_cents:
+        return Decimal(0)
+    return (Decimal(int(cents)) * 100 / Decimal(int(total_cents))).quantize(PASSO, rounding=ROUND_HALF_UP)
 
 
 def normaliza_entrada(valor):

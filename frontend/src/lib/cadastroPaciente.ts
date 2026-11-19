@@ -70,10 +70,9 @@ export function descontoParaApi(valor: string | undefined): number | null {
  * mostrar o total que vai ser gravado. Divergindo, a atendente combina um
  * valor com a paciente e o sistema cobra outro.
  */
-export function precoComDesconto(totalCents: number, pct: number): number {
-  if (!totalCents) return totalCents || 0
-  return Math.trunc((totalCents * (100 - pct)) / 100)
-}
+// A conta mora em lib/desconto.ts desde o PRD 050; fica reexportada para o
+// teste de contrato e quem mais importava daqui.
+export { precoComDesconto } from './desconto'
 
 /** `07903984519` → `079.039.845-19`. Só formata quando está completo. */
 export function formataCpf(valor: string): string {

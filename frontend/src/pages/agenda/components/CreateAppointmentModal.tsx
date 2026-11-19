@@ -11,6 +11,8 @@ import { useCreateAppointment } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
 import { calculaDuracao } from '@/lib/duracao'
 import { DuracaoField } from './DuracaoField'
+import { parseDuracao } from '@/lib/duracaoFixada'
+import { DescontoField } from './DescontoField'
 import { useDurationRules } from '@/hooks/useDurationRules'
 import { useServiceAreas } from '@/hooks/useAreas'
 import { usePatients, useCreatePatient } from '@/hooks/usePatients'
@@ -19,7 +21,14 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useAuth } from '@/hooks/useAuth'
 import { formatPhone } from '@/utils/formatPhone'
 import type { PatientWithStats } from '@/types'
-import { precoComDesconto } from '@/lib/cadastroPaciente'
+import {
+  SEM_DESCONTO,
+  formataPct,
+  payloadDoDesconto,
+  resumoDoDesconto,
+  validaDesconto,
+  type DescontoEscolhido,
+} from '@/lib/desconto'
 
 interface CreateAppointmentModalProps {
   open: boolean
@@ -42,9 +51,10 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     services?.length === 1 ? services[0].id : ''
   )
   const [selectedAreaIds, setSelectedAreaIds] = useState<string[]>([])
-  const [manualDuration, setManualDuration] = useState<number | null>(null)
-  const [discountMode, setDiscountMode] = useState<'none' | 'partnership' | 'custom'>('none')
-  const [customDiscountPct, setCustomDiscountPct] = useState('')
+  // Como foi digitado (PRD 050): `null` segue o cálculo, string é fixada.
+  const [duracaoFixada, setDuracaoFixada] = useState<string | null>(null)
+  const manualDuration = parseDuracao(duracaoFixada)
+  const [desconto, setDesconto] = useState<DescontoEscolhido>(SEM_DESCONTO)
   const [error, setError] = useState<string | null>(null)
   const [prevServiceId, setPrevServiceId] = useState('')
 
@@ -91,6 +101,11 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   // Preview: o backend reaplica a mesma regra antes de devolver horários.
   const totalDuration =
     somaDasAreas === undefined ? undefined : calculaDuracao(somaDasAreas, durationRules)
+  const subtotal = selectedAreaIds.length > 0 && serviceAreas
+    ? serviceAreas
+        .filter((a) => selectedAreaIds.includes(a.area_id))
+        .reduce((sum, a) => sum + a.effective_price_cents, 0)
+    : undefined
 
   // A duração que a sessão vai de fato ocupar. Os horários vêm dela, não da
   // calculada: senão a tela oferece um horário em que a sessão não cabe.
@@ -110,7 +125,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     setSelectedAreaIds([])
     // Trocar de serviço zera as áreas, e a duração fixada foi decidida para
     // elas. Mesma razão do descarte na edição.
-    setManualDuration(null)
+    setDuracaoFixada(null)
   }
 
   // Trocar as áreas também solta a duração fixada.
@@ -118,7 +133,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   const [prevAreasKey, setPrevAreasKey] = useState(areasKey)
   if (areasKey !== prevAreasKey) {
     setPrevAreasKey(areasKey)
-    setManualDuration(null)
+    setDuracaoFixada(null)
   }
 
   // Mudou data, serviço ou áreas, os horários disponíveis mudam junto: manter a
@@ -162,8 +177,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     // `!= null` e nao `?` de proposito: 0 e um combinado legitimo - "esta
     // paciente nunca recebe desconto" - e cairia fora com teste de verdade.
     if (patient.custom_discount_pct != null) {
-      setDiscountMode('custom')
-      setCustomDiscountPct(String(patient.custom_discount_pct))
+      setDesconto({ modo: 'custom', tipo: 'pct', texto: formataPct(patient.custom_discount_pct) })
     }
   }
 
@@ -219,6 +233,16 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
       setError('Horário inválido. Use o formato HH:MM.')
       return
     }
+    // A obrigação de a duração fixada ter número é daqui, não do campo (PRD 050).
+    if (duracaoFixada !== null && manualDuration === null) {
+      setError('Informe a duração fixada entre 5 e 480 minutos, ou volte ao cálculo.')
+      return
+    }
+    const erroDesconto = validaDesconto(desconto, subtotal)
+    if (erroDesconto) {
+      setError(erroDesconto)
+      return
+    }
 
     setError(null)
     try {
@@ -238,11 +262,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         // backend, que e exatamente o que se reverteu.
         isFirstVisit: primeiraVisita,
         ...(manualDuration !== null ? { manualDurationMinutes: manualDuration } : {}),
-        ...(discountMode === 'partnership'
-          ? { discountPct: 100, discountReason: 'partnership' }
-          : discountMode === 'custom' && customDiscountPct
-            ? { discountPct: Number(customDiscountPct), discountReason: 'custom' }
-            : {}),
+        // Na criação `none` é omitir: o backend aplica o combinado da paciente.
+        ...(desconto.modo === 'none' ? {} : descontoParaCriacao(desconto)),
       })
       handleClose()
     } catch (err: unknown) {
@@ -253,6 +274,12 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         setError('Erro ao criar agendamento')
       }
     }
+  }
+
+  /** Na criação a razão nunca é nula: `none` nem chega aqui. */
+  const descontoParaCriacao = (d: DescontoEscolhido) => {
+    const { discountReason, ...resto } = payloadDoDesconto(d)
+    return { ...resto, discountReason: discountReason ?? undefined }
   }
 
   const handleClose = () => {
@@ -456,8 +483,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         {/* Antes do horário de propósito: a duração decide quais horários cabem. */}
         <DuracaoField
           calculada={totalDuration}
-          manual={manualDuration}
-          onChange={setManualDuration}
+          manual={duracaoFixada}
+          onChange={setDuracaoFixada}
         />
 
         <TimeField
@@ -468,60 +495,11 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           enabled={Boolean(date && serviceId)}
         />
 
-        {/* Discount section */}
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1.5">Desconto</label>
-          <div className="flex gap-2">
-            {([
-              { key: 'none', label: 'Sem desconto' },
-              { key: 'partnership', label: 'Parceria (100%)' },
-              { key: 'custom', label: 'Personalizado' },
-            ] as const).map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setDiscountMode(key)}
-                className={[
-                  'flex-1 py-2 rounded-lg text-xs font-semibold transition-all duration-150 border',
-                  discountMode === key
-                    ? key === 'partnership'
-                      ? 'bg-amber-50 border-amber-300 text-amber-700'
-                      : key === 'custom'
-                        ? 'bg-brand-50 border-brand-300 text-brand-700'
-                        : 'bg-gray-900 border-gray-900 text-white'
-                    : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600',
-                ].join(' ')}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {discountMode === 'custom' && (
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                max="99"
-                placeholder="Ex: 30"
-                value={customDiscountPct}
-                onChange={(e) => setCustomDiscountPct(e.target.value)}
-                className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
-              />
-              <span className="text-sm text-gray-500">% de desconto</span>
-            </div>
-          )}
-        </div>
+        <DescontoField valor={desconto} onChange={setDesconto} subtotalCents={subtotal} />
 
         {/* Price summary */}
-        {selectedAreaIds.length > 0 && serviceAreas && (() => {
-          const subtotal = serviceAreas
-            .filter((a) => selectedAreaIds.includes(a.area_id))
-            .reduce((sum, a) => sum + a.effective_price_cents, 0)
-          const discountPct = discountMode === 'partnership' ? 100
-            : discountMode === 'custom' && customDiscountPct ? Number(customDiscountPct)
-            : 0
-          const total = precoComDesconto(subtotal, discountPct)
-          const discountAmount = subtotal - total
+        {subtotal !== undefined && (() => {
+          const resumo = resumoDoDesconto(desconto, subtotal)
           const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
           return (
@@ -530,15 +508,15 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
                 <span>{selectedAreaIds.length} área{selectedAreaIds.length !== 1 ? 's' : ''}</span>
                 <span>{fmt(subtotal)}</span>
               </div>
-              {discountPct > 0 && (
+              {resumo && (
                 <div className="flex justify-between text-sm text-amber-600">
-                  <span>Desconto ({discountPct}%)</span>
-                  <span>-{fmt(discountAmount)}</span>
+                  <span>Desconto ({resumo.rotulo})</span>
+                  <span>-{fmt(resumo.descontoCents)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm font-semibold text-gray-900 border-t border-gray-200 pt-1.5">
                 <span>Total</span>
-                <span>{fmt(total)}</span>
+                <span>{fmt(resumo ? resumo.totalCents : subtotal)}</span>
               </div>
             </div>
           )

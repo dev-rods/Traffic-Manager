@@ -3,6 +3,7 @@ import { Badge, StatusBadge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatTime } from '@/utils/formatDate'
 import { formatCurrency } from '@/utils/formatCurrency'
+import { temDesconto, textoCurtoDoDesconto } from '@/lib/desconto'
 import type { DashboardAppointment } from '@/services/reports.service'
 
 interface TodayAppointmentsProps {
@@ -77,7 +78,7 @@ export function TodayAppointments({ appointments }: TodayAppointmentsProps) {
 }
 
 function PriceCell({ appointment: apt }: { appointment: DashboardAppointment }) {
-  if (apt.discount_pct === 0 || !apt.discount_reason) {
+  if (!temDesconto(apt) || !apt.discount_reason) {
     return <span className="font-medium text-gray-800">{formatCurrency(apt.final_price_cents)}</span>
   }
 
@@ -90,7 +91,7 @@ function PriceCell({ appointment: apt }: { appointment: DashboardAppointment }) 
         {formatCurrency(apt.final_price_cents)}
       </span>
       <p className="text-xs text-emerald-600 mt-0.5">
-        -{apt.discount_pct}% {DISCOUNT_LABELS[apt.discount_reason] ?? apt.discount_reason}
+        {textoCurtoDoDesconto(apt)} {DISCOUNT_LABELS[apt.discount_reason] ?? apt.discount_reason}
       </p>
     </div>
   )

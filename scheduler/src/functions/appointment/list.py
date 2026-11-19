@@ -71,7 +71,7 @@ def handler(event, context):
                 -- nunca mostrava: a atendente marcava, salvava, reabria e via
                 -- desmarcado - parecendo que nao salvou.
                 a.is_first_visit,
-                a.discount_pct, a.discount_reason, a.original_price_cents, a.final_price_cents,
+                a.discount_pct, a.discount_cents, a.discount_reason, a.original_price_cents, a.final_price_cents,
                 a.full_name, a.total_duration_minutes as duration_minutes,
                 a.manual_duration_minutes,
                 -- Lembrete de sessao e confirmacao (PRD 027): a agenda mostra

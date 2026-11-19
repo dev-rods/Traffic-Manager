@@ -81,15 +81,5 @@ export function temEfeitoForaDaTela(a: AlteracaoPretendida): boolean {
   return linhasDaAlteracao(a).length > 0
 }
 
-/** Texto do desconto, para o resumo. */
-export function textoDoDesconto(
-  modo: 'none' | 'partnership' | 'custom',
-  pct: number | string,
-): string {
-  if (modo === 'partnership') return 'parceria (100%)'
-  if (modo === 'custom') {
-    const n = Number(pct)
-    return Number.isFinite(n) && n > 0 ? `${n}%` : 'sem desconto'
-  }
-  return 'sem desconto'
-}
+/** Texto do desconto, para o resumo. Mora em lib/desconto desde o PRD 050. */
+export { textoDoDesconto } from './desconto'
