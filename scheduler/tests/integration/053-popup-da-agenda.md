@@ -59,4 +59,13 @@ faixa 3 = 15%):
 - 10 → lista do dia coerente; fixtures canceladas.
 - 7, 8, 9 (painel): pelo André após a Vercel subir.
 
-**Prod:** pendente.
+**Prod, 20/11/2026** (layer 160; stack seguiu em 494/500 recursos, como
+previsto: nenhuma Lambda nova). Smoke de LEITURA, Essência:
+
+- `POST appointments?simular=true` com 1 área: pct 0, razão `null`,
+  `isFirst: false`. Com 3 áreas: `tier_2` 10%, 28500 → 25650.
+- Nenhuma clínica de prod tem desconto de estreia (as três estão com
+  `first_session_discount_pct = 0`): a razão `first_session` só aparece se
+  alguém ligar a regra na página Descontos. Nada a conferir hoje.
+- Sem escrita em dados reais; casos 4-6 cobertos em dev e por teste unitário.
+- Painel (7-9): pelo André após a Vercel.
