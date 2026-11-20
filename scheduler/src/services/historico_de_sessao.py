@@ -71,15 +71,18 @@ def aplicacoes_do_agendamento(db, appointment_id: str,
     """As aplicações com que o registro nasce, vindas do agendamento.
 
     Cada área do agendamento é expandida pelo mapa: a composta `Virilha Completa
-    + ânus` vira DUAS aplicações, virilha no SHR e perianal no Stacking, que é o
-    que a profissional de fato aplica.
+    + ânus` vira TRÊS aplicações, virilha no SHR, grandes lábios e perianal no
+    Stacking, que é o que a profissional de fato aplica.
 
     Área sem mapa entra assim mesmo, com o nome preenchido e os parâmetros
     vazios. "Sem parâmetro sugerido" é resposta válida; inventar não é.
 
-    `area_name` é o nome COMERCIAL do agendamento; `protocol_area_name` é o
-    protocolo de referência, para a tela mostrar como subtítulo (PRD 051). É a
-    única montagem que existe: a tela chama o endpoint que devolve isto.
+    Nomes (PRDs 051 e 052): área de UMA chave mantém o nome comercial em
+    `area_name` e leva o protocolo em `protocol_area_name`, como subtítulo
+    ("Perna Completa" / "Meia perna"). Área de MAIS de uma chave é desmembrada:
+    cada parte leva o nome do protocolo ("Virilha completa", "Grandes lábios",
+    "Perianal") e guarda a origem comercial em `source_area_name`. É a única
+    montagem que existe: a tela chama o endpoint que devolve isto.
     """
     areas = db.execute_query(
         """
@@ -95,20 +98,34 @@ def aplicacoes_do_agendamento(db, appointment_id: str,
         (appointment_id,),
     ) or []
 
+    # Quantas chaves cada área do agendamento tem: é o que decide se ela é
+    # desmembrada. Conta por área (id ou nome), não por posição.
+    chaves_por_area: Dict[str, int] = {}
+    for linha in areas:
+        if linha.get("protocol_area_key"):
+            k = str(linha.get("area_id") or linha["area_name"])
+            chaves_por_area[k] = chaves_por_area.get(k, 0) + 1
+
     saida = []
     for linha in areas:
         chave = linha.get("protocol_area_key")
         metodos = metodos_disponiveis(chave) if chave else []
         # Um método só: a tela já deixa escolhido. Mais de um (Buço tem Stacking
-        # e HR) fica em branco - escolher por ela seria decidir conduta.
+        # e HR; Grandes lábios tem os três) fica em branco - escolher por ela
+        # seria decidir conduta.
         metodo = metodos[0] if len(metodos) == 1 else None
         sugerido = sugestao(chave, metodo, skin_type) if (chave and metodo) else None
 
+        nome_comercial = linha["area_name"]
+        nome_do_protocolo = nome_da_area(chave)
+        desmembrada = chaves_por_area.get(str(linha.get("area_id") or nome_comercial), 0) > 1
         saida.append({
             "area_id": str(linha["area_id"]) if linha.get("area_id") else None,
-            "area_name": linha["area_name"],
+            "area_name": (nome_do_protocolo if (desmembrada and nome_do_protocolo)
+                          else nome_comercial),
+            "source_area_name": nome_comercial if desmembrada else None,
             "protocol_area_key": chave,
-            "protocol_area_name": nome_da_area(chave),
+            "protocol_area_name": nome_do_protocolo,
             "method": metodo,
             "fluence_j": sugerido["fluence_j"] if sugerido else None,
             "energy_kj": sugerido["energy_kj"] if sugerido else None,
@@ -179,6 +196,8 @@ def valida_aplicacoes(aplicacoes: Sequence[Dict]) -> List[Dict]:
         limpas.append({
             "area_id": ap.get("area_id") or None,
             "area_name": nome[:160],
+            # Origem comercial quando a linha é parte de uma composta (PRD 052).
+            "source_area_name": (ap.get("source_area_name") or "").strip()[:160] or None,
             "protocol_area_key": ap.get("protocol_area_key") or None,
             "method": metodo,
             "display_order": ap.get("display_order", i),

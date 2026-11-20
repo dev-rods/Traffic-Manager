@@ -1,4 +1,4 @@
-import type { MetodoLaser, ParametroDoProtocolo, SkinType } from '@/types'
+import type { AplicacaoDeSessao, MetodoLaser, ParametroDoProtocolo, SkinType } from '@/types'
 
 /**
  * Quais campos cada método do laser usa.
@@ -29,15 +29,22 @@ export const TODOS_OS_METODOS: MetodoLaser[] = ['SHR', 'SHR_STACKING', 'HR']
 /**
  * Áreas que a tela sempre sugere ao registrar a sessão, fora do catálogo.
  *
- * "Interno de Virilha" não é vendida — não pode ser área da clínica, senão
+ * "Grandes lábios" não é vendida — não pode ser área da clínica, senão
  * aparece no agendamento e no site. Mas é aplicada com parâmetro próprio (mais
  * baixo que o da virilha), e o protocolo já tem a linha dela. Entrar como texto
  * livre perderia a sugestão e espalharia grafias diferentes pelo histórico.
- * Ver PRD 030.
+ * Ver PRD 030; chamava-se "Interno de Virilha" até o PRD 052.
  */
 export const AREAS_PADRAO: readonly { nome: string; protocol_area_key: string }[] = [
-  { nome: 'Interno de Virilha', protocol_area_key: 'interno_virilha' },
+  { nome: 'Grandes lábios', protocol_area_key: 'interno_virilha' },
 ]
+
+/**
+ * Energia do HR: 1,0 kJ do início ao fim do tratamento (PDF). Ao escolher HR a
+ * tela pré-preenche com isto SEMPRE, mesmo sem pele ou sem linha para a área;
+ * o campo segue editável e o backend não força (decisão do André, 19/11/2026).
+ */
+export const ENERGIA_DO_HR = 1
 
 export const ROTULO_DO_METODO: Record<MetodoLaser, string> = {
   SHR: 'SHR',
@@ -86,6 +93,26 @@ export function sugestao(
         p.skin_type === skinType,
     ) ?? null
   )
+}
+
+/**
+ * Com o que uma linha começa ao receber um método: a sugestão do protocolo e,
+ * no HR, a energia fixa. É a única porta para isso (PRD 052): escolher o
+ * método, adicionar área e adicionar método passam todos por aqui.
+ */
+export function parametrosIniciais(
+  parametros: ParametroDoProtocolo[],
+  protocolAreaKey: string | null,
+  metodo: MetodoLaser | null,
+  skinType: SkinType | null,
+): Pick<AplicacaoDeSessao, 'fluence_j' | 'energy_kj' | 'stacks' | 'passes'> {
+  const s = sugestao(parametros, protocolAreaKey, metodo, skinType)
+  return {
+    fluence_j: s?.fluence_j ?? null,
+    energy_kj: metodo === 'HR' ? (s?.energy_kj ?? ENERGIA_DO_HR) : (s?.energy_kj ?? null),
+    stacks: s?.stacks ?? null,
+    passes: s?.passes ?? null,
+  }
 }
 
 /**

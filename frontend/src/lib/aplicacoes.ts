@@ -1,5 +1,5 @@
 import type { AplicacaoDeSessao, MetodoLaser, ParametroDoProtocolo, SkinType } from '@/types'
-import { CAMPOS_POR_METODO, ROTULO_DO_CAMPO, metodosDaArea, sugestao } from '@/lib/protocolo'
+import { CAMPOS_POR_METODO, ROTULO_DO_CAMPO, metodosDaArea, parametrosIniciais } from '@/lib/protocolo'
 
 /**
  * O que falta para o registro poder ser salvo (PRD 051).
@@ -60,6 +60,8 @@ export interface BlocoDeArea {
   area_name: string
   area_id: string | null
   protocol_area_key: string | null
+  /** Origem comercial quando o bloco é parte de uma composta (PRD 052). */
+  source_area_name: string | null
   /** Aplicações do bloco, na ordem em que aparecem. */
   linhas: AplicacaoDeSessao[]
 }
@@ -91,6 +93,7 @@ export function agrupaPorArea(aplicacoes: readonly AplicacaoDeSessao[]): BlocoDe
         area_name: ap.area_name,
         area_id: ap.area_id,
         protocol_area_key: ap.protocol_area_key,
+        source_area_name: ap.source_area_name ?? null,
         linhas: [ap],
       })
     }
@@ -135,19 +138,18 @@ export function adicionaMetodo(
   const usados = new Set(bloco.linhas.map((l) => l.method))
   const restantes = metodosDaArea(parametros, bloco.protocol_area_key).filter((m) => !usados.has(m))
   const metodo: MetodoLaser | null = restantes.length === 1 ? restantes[0] : null
-  const s = sugestao(parametros, bloco.protocol_area_key, metodo, skinType)
+  const primeira = bloco.linhas[0]
 
   bloco.linhas = [
     ...bloco.linhas,
     {
       area_id: bloco.area_id,
       area_name: bloco.area_name,
+      source_area_name: bloco.source_area_name,
       protocol_area_key: bloco.protocol_area_key,
+      protocol_area_name: primeira?.protocol_area_name ?? null,
       method: metodo,
-      fluence_j: s?.fluence_j ?? null,
-      energy_kj: s?.energy_kj ?? null,
-      stacks: s?.stacks ?? null,
-      passes: s?.passes ?? null,
+      ...parametrosIniciais(parametros, bloco.protocol_area_key, metodo, skinType),
       display_order: 0,
     },
   ]

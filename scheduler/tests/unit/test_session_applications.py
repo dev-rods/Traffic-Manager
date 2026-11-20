@@ -36,7 +36,9 @@ class BancoFalso:
             {"area_id": "a3", "area_name": "Virilha Completa + ânus",
              "protocol_area_key": "virilha_completa", "map_order": 1, "created_at": 2},
             {"area_id": "a3", "area_name": "Virilha Completa + ânus",
-             "protocol_area_key": "regiao_perianal", "map_order": 2, "created_at": 2},
+             "protocol_area_key": "interno_virilha", "map_order": 2, "created_at": 2},
+            {"area_id": "a3", "area_name": "Virilha Completa + ânus",
+             "protocol_area_key": "regiao_perianal", "map_order": 3, "created_at": 2},
         ]
         self.consultas = []
 
@@ -76,12 +78,28 @@ class TestEndpoint(unittest.TestCase):
         self.assertEqual(costeleta["area_name"], "Costeleta")
         self.assertIsNone(costeleta["method"])
 
-    def test_composta_vira_duas(self):
+    def test_composta_vira_tres_com_nome_por_parte_e_origem(self):
         _, corpo = _chama(BancoFalso())
-        nomes = [(a["area_name"], a["protocol_area_key"]) for a in corpo["applications"][2:]]
-        self.assertEqual(nomes, [("Virilha Completa + ânus", "virilha_completa"),
-                                 ("Virilha Completa + ânus", "regiao_perianal")])
-        self.assertEqual([a["display_order"] for a in corpo["applications"]], [0, 1, 2, 3])
+        partes = corpo["applications"][2:]
+        self.assertEqual([(a["area_name"], a["protocol_area_key"]) for a in partes],
+                         [("Virilha completa", "virilha_completa"),
+                          ("Grandes lábios", "interno_virilha"),
+                          ("Perianal", "regiao_perianal")])
+        self.assertEqual({a["source_area_name"] for a in partes}, {"Virilha Completa + ânus"})
+        self.assertIsNone(corpo["applications"][0]["source_area_name"])
+        self.assertEqual([a["display_order"] for a in corpo["applications"]], [0, 1, 2, 3, 4])
+
+    def test_post_grava_a_origem(self):
+        codigo, _, banco = _post({"appointmentId": AGENDAMENTO, "applications": [
+            {"areaName": "Perianal", "sourceAreaName": "Virilha Completa + ânus",
+             "protocolAreaKey": "regiao_perianal", "method": "SHR_STACKING",
+             "fluenceJ": 6, "stacks": 3, "passes": 2}]})
+        self.assertEqual(codigo, 201)
+        insert = [c for c in banco.inserts if "patient_session_applications" in c[0]]
+        self.assertEqual(len(insert), 1)
+        sql, params = insert[0]
+        self.assertIn("source_area_name", sql)
+        self.assertIn("Virilha Completa + ânus", params)
 
     def test_pele_da_paciente_do_agendamento(self):
         banco = BancoFalso(pele="NEGRA")
@@ -107,6 +125,7 @@ class TestEndpoint(unittest.TestCase):
 class BancoDeEscrita:
     def __init__(self):
         self.escreveu = False
+        self.inserts = []
 
     def execute_query(self, sql, params=None):
         if "FROM scheduler.appointments" in sql:
@@ -123,6 +142,8 @@ class BancoDeEscrita:
 
     def execute_write(self, sql, params=None):
         self.escreveu = True
+        if "INSERT" in sql:
+            self.inserts.append((sql, params))
         return 1
 
     def execute_many(self, sql, params_list=None):

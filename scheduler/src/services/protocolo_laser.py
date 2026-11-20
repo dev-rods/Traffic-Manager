@@ -19,7 +19,7 @@ a profissional lê no material dela, e prontuário não é lugar de inventar uni
 O mapa é tabela, e isso não é detalhe
 -------------------------------------
 Os nomes do protocolo NÃO são os do catálogo: `1/2 Braço` aqui é `Meio braço`,
-`Orelhas` é `Orelha externa`, `Perianal/ânus` é `Região perianal`. Oito áreas
+`Orelhas` é `Orelha externa`, `Perianal/ânus` é `Perianal`. Oito áreas
 vendidas não têm protocolo e quatro do protocolo não são vendidas.
 
 Em 16/09/2026 uma trava comparou nomes de área por aproximação e `Virilha Comp. +
@@ -94,9 +94,13 @@ def _stack(pele, chave, nome, fluencia, stacks=3, passadas=2, origem=ORIGEM_PDF)
     return (pele, SHR_STACKING, chave, nome, fluencia, None, stacks, passadas, origem)
 
 
+# A energia do HR é 1,0 do início ao fim do tratamento. A tela pré-preenche
+# com este valor ao escolher HR (PRD 052), mas o campo segue editável.
+ENERGIA_DO_HR = 1.0
+
+
 def _hr(pele, chave, nome, fluencia, origem=ORIGEM_PDF):
-    # A energia do HR é fixa em 1,0 do início ao fim do tratamento.
-    return (pele, HR, chave, nome, fluencia, 1.0, None, None, origem)
+    return (pele, HR, chave, nome, fluencia, ENERGIA_DO_HR, None, None, origem)
 
 
 PROTOCOLO = (
@@ -111,7 +115,7 @@ PROTOCOLO = (
     _shr(BRANCA, "virilha_simples", "Virilha simples", 7, 5),
     _shr(BRANCA, "virilha_cavada", "Virilha cavada", 7, 5),
     _shr(BRANCA, "virilha_completa", "Virilha completa", 7, 6),
-    _shr(BRANCA, "interno_virilha", "Interno da virilha (lábios)", 6, 3),
+    _shr(BRANCA, "interno_virilha", "Grandes lábios", 6, 3),
     _shr(BRANCA, "peitoral", "Peitoral", 7, 8),
     _shr(BRANCA, "abdomen", "Abdômen", 7, 8),
     _shr(BRANCA, "costas", "Costas", 7, 8),
@@ -127,7 +131,7 @@ PROTOCOLO = (
     _shr(NEGRA, "virilha_simples", "Virilha simples", 5, 4),
     _shr(NEGRA, "virilha_cavada", "Virilha cavada", 5, 4),
     _shr(NEGRA, "virilha_completa", "Virilha completa", 5, 5),
-    _shr(NEGRA, "interno_virilha", "Interno da virilha (lábios)", 4, 2.5),
+    _shr(NEGRA, "interno_virilha", "Grandes lábios", 4, 2.5),
     _shr(NEGRA, "peitoral", "Peitoral", 5, 7),
     _shr(NEGRA, "abdomen", "Abdômen", 5, 7),
     _shr(NEGRA, "costas", "Costas", 5, 7),
@@ -146,8 +150,8 @@ PROTOCOLO = (
     _stack(BRANCA, "pescoco", "Pescoço", 6),
     _stack(BRANCA, "areola", "Aréola", 6),
     _stack(BRANCA, "mao_pe_dedos", "Mão ou pé e dedos", 6),
-    _stack(BRANCA, "regiao_perianal", "Região perianal", 6),
-    _stack(BRANCA, "interno_virilha", "Interno da virilha (reforço)", 6),
+    _stack(BRANCA, "regiao_perianal", "Perianal", 6),
+    _stack(BRANCA, "interno_virilha", "Grandes lábios", 6),
     _stack(BRANCA, "costeleta", "Costeleta", 6),
     _stack(BRANCA, "barba_contorno", "Contorno ou desenho da barba", 6),
     _stack(BRANCA, "barba_completa", "Barba completa", 5),
@@ -160,8 +164,8 @@ PROTOCOLO = (
     _stack(NEGRA, "pescoco", "Pescoço", 5),
     _stack(NEGRA, "areola", "Aréola", 5),
     _stack(NEGRA, "mao_pe_dedos", "Mão ou pé e dedos", 5),
-    _stack(NEGRA, "regiao_perianal", "Região perianal", 5),
-    _stack(NEGRA, "interno_virilha", "Interno da virilha (reforço)", 4),
+    _stack(NEGRA, "regiao_perianal", "Perianal", 5),
+    _stack(NEGRA, "interno_virilha", "Grandes lábios", 4),
     _stack(NEGRA, "costeleta", "Costeleta", 5),
     _stack(NEGRA, "barba_contorno", "Contorno ou desenho da barba", 5),
     _stack(NEGRA, "barba_completa", "Barba completa", 4),
@@ -187,7 +191,7 @@ PROTOCOLO = (
     _hr(BRANCA, "areola", "Aréola", 17),
     _hr(BRANCA, "costeleta", "Costeleta", 17),
     _hr(BRANCA, "barba_contorno", "Contorno ou desenho da barba", 15),
-    _hr(BRANCA, "interno_virilha", "Interno da virilha (reforço)", 15),
+    _hr(BRANCA, "interno_virilha", "Grandes lábios", 15),
     _hr(BRANCA, "axilas", "Axila", 17),
     _hr(BRANCA, "joelho", "Joelho", 15),
     _hr(BRANCA, "cotovelo", "Cotovelo", 17),
@@ -197,7 +201,7 @@ PROTOCOLO = (
     _hr(NEGRA, "areola", "Aréola", 14),
     _hr(NEGRA, "costeleta", "Costeleta", 14),
     _hr(NEGRA, "barba_contorno", "Contorno ou desenho da barba", 12),
-    _hr(NEGRA, "interno_virilha", "Interno da virilha (reforço)", 12),
+    _hr(NEGRA, "interno_virilha", "Grandes lábios", 12),
     _hr(NEGRA, "axilas", "Axila", 14),
     _hr(NEGRA, "joelho", "Joelho", 12),
     _hr(NEGRA, "cotovelo", "Cotovelo", 14),
@@ -206,9 +210,13 @@ PROTOCOLO = (
 # ─────────────────────────────────────────────────────────────────────────────
 # Do nome da área no catálogo para a chave do protocolo.
 #
-# Revisado pelo André em 19/09/2026. Uma área pode abrir em DUAS linhas: a
-# composta `Virilha Completa + ânus` é virilha (SHR) e perianal (Stacking), que é
-# o que a profissional de fato aplica.
+# Revisado pelo André em 19/09/2026. Uma área pode abrir em mais de uma linha:
+# a composta `Virilha Completa + ânus` é virilha (SHR), grandes lábios e
+# perianal (Stacking), que é o que a profissional de fato aplica.
+#
+# PRD 052 (19/11/2026): Virilha Cavada e Virilha Completa trazem `interno_virilha`
+# (Grandes lábios) como segunda linha, porque é aplicada junto, com parâmetro
+# próprio. Virilha Simples e 1/2 Virilha não.
 #
 # Área que não está aqui não é erro: é "sem parâmetro sugerido".
 # ─────────────────────────────────────────────────────────────────────────────
@@ -226,8 +234,8 @@ MAPA_DE_AREAS = {
     "Perna Completa": ("meia_perna",),
     "Pernas Completas": ("meia_perna",),
     "Virilha Simples": ("virilha_simples",),
-    "Virilha Cavada": ("virilha_cavada",),
-    "Virilha Completa": ("virilha_completa",),
+    "Virilha Cavada": ("virilha_cavada", "interno_virilha"),
+    "Virilha Completa": ("virilha_completa", "interno_virilha"),
     "1/2 Virilha": ("interno_virilha",),
     "Perianal/ânus": ("regiao_perianal",),
     "Peitoral": ("peitoral",),
@@ -247,7 +255,7 @@ MAPA_DE_AREAS = {
     "Nariz": ("nariz",),
 
     # Compostas: abrem em duas aplicações, na ordem em que ela aplica.
-    "Virilha Completa + ânus": ("virilha_completa", "regiao_perianal"),
+    "Virilha Completa + ânus": ("virilha_completa", "interno_virilha", "regiao_perianal"),
     "Costas total + ombros": ("costas", "ombros"),
     "Peitoral + abdômen": ("peitoral", "abdomen"),
     "Barba Comp. + Pescoço": ("barba_completa", "pescoco"),
