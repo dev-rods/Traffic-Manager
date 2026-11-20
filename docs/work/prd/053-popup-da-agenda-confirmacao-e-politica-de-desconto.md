@@ -309,7 +309,7 @@ Sem migration: `discount_reason` já é texto livre.
 ## Status (preencher após conclusão)
 
 - [ ] Pendente
-- [ ] Spec gerada: `spec/053-popup-da-agenda-confirmacao-e-politica-de-desconto.md`
+- [x] Spec gerada: `spec/053-popup-da-agenda-confirmacao-e-politica-de-desconto.md` (20/11/2026)
 - [ ] Implementado em dev: (data)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`
