@@ -1454,6 +1454,9 @@ def _seed_do_mapa():
     Casamento exato aqui e so aqui, porque e seed conferido contra o catalogo
     real por tests/unit/test_mapa_de_areas.py. Area renomeada no painel deixa
     de casar, e quem avisa e aquele teste - nao o silencio.
+
+    A ordem e do codigo: ligacao que ja existe recebe a display_order atual.
+    Sem isso, chave inserida no meio de uma composta (PRD 052) ficava no fim.
     """
     valores, params = [], []
     for nome, chaves in MAPA_DE_AREAS.items():
@@ -1466,7 +1469,7 @@ def _seed_do_mapa():
         + ", ".join(valores) +
         ") AS m(area_name, chave, ordem) "
         "JOIN scheduler.areas a ON a.name = m.area_name "
-        "ON CONFLICT (area_id, protocol_area_key) DO NOTHING"
+        "ON CONFLICT (area_id, protocol_area_key) DO UPDATE SET display_order = EXCLUDED.display_order"
     )
     return sql, tuple(params)
 

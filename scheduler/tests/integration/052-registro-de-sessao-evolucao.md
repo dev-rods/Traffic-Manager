@@ -50,4 +50,19 @@ seed do protocolo renomeou, seed do mapa inseriu 4 ligações):
 - Fixtures canceladas e registro apagado. Smoke do painel (caso 8) pendente:
   sobe pela Vercel no merge.
 
-**Prod:** pendente (migration + seeds + deploy com o André).
+**Prod, 20/11/2026** (layer 159; `setup_database.py` em prod: coluna criada,
+protocolo renomeado, mapa com as ligações novas):
+
+- 1 → "Grandes lábios" ×6, "Perianal" ×2.
+- 2 → na primeira passada a composta ficou `virilha_completa > regiao_perianal >
+  interno_virilha` em Premium e Essência: o seed era `ON CONFLICT DO NOTHING` e
+  a ligação antiga do perianal guardou a ordem velha (Nobre, inserção nova,
+  saiu certa). Seed passou a `DO UPDATE SET display_order`; reaplicado, as três
+  clínicas ficaram `virilha_completa > interno_virilha > regiao_perianal`.
+  Cavada e Completa com `interno_virilha` em segundo nas três.
+- 3 → agendamento real da Essência com Axilas e Virilha Completa + ânus:
+  `Axilas` (sem origem), `Virilha completa` (SHR), `Grandes lábios` (sem
+  método), `Perianal` (Stacking), os três com origem "Virilha Completa + ânus".
+  Paciente sem pele cadastrada: sem fluência sugerida, como esperado.
+- 6/7 não repetidos em prod (sem fixture de escrita em dados reais); cobertos
+  em dev e por teste unitário. Caso 8 (painel) é do André após a Vercel.
