@@ -126,8 +126,8 @@ Fazer o registro técnico refletir o que de fato se aplica na sala, sem tocar na
 
 ## Status (preencher após conclusão)
 
-- [x] Pendente
-- [ ] Spec gerada: `spec/052-registro-de-sessao-grandes-labios-compostas-e-hr.md`
+- [ ] Pendente
+- [x] Spec gerada: `spec/052-registro-de-sessao-grandes-labios-compostas-e-hr.md` (19/11/2026)
 - [ ] Implementado em dev: (data)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`
