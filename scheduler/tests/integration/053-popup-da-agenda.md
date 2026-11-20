@@ -68,4 +68,4 @@ previsto: nenhuma Lambda nova). Smoke de LEITURA, Essência:
   `first_session_discount_pct = 0`): a razão `first_session` só aparece se
   alguém ligar a regra na página Descontos. Nada a conferir hoje.
 - Sem escrita em dados reais; casos 4-6 cobertos em dev e por teste unitário.
-- Painel (7-9): pelo André após a Vercel.
+- Painel (7-9): conferido pelo André em prod em 20/11: ok.
