@@ -6,7 +6,7 @@ from src.utils.http import parse_body, http_response, require_api_key, extract_p
 from src.services.db.postgres import PostgresService
 from src.services.historico_de_sessao import (
     RegistroInvalido,
-    aplicacoes_do_agendamento,
+    exige_aplicacoes,
     grava_trilha,
     valida_aplicacoes,
 )
@@ -110,13 +110,14 @@ def handler(event, context):
 
         pele = tipo_de_pele(db, patient_id)
 
-        if "applications" in body:
-            aplicacoes = valida_aplicacoes(_do_corpo(body["applications"]))
-        elif appointment_id:
-            aplicacoes = valida_aplicacoes(
-                aplicacoes_do_agendamento(db, appointment_id, pele))
-        else:
-            aplicacoes = []
+        # Sem fallback pelo agendamento (PRD 051): a montagem das areas e um
+        # GET proprio (session_applications.py) que a tela chama antes; aqui
+        # so se grava o que a profissional conferiu, e nunca em branco.
+        if "applications" not in body:
+            return http_response(400, {
+                "status": "ERROR",
+                "message": "Informe applications: as áreas aplicadas e seus parâmetros"})
+        aplicacoes = exige_aplicacoes(valida_aplicacoes(_do_corpo(body["applications"])))
 
         criado = db.execute_write_returning(
             """INSERT INTO scheduler.patient_session_records

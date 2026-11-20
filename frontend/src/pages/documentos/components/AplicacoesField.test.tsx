@@ -309,3 +309,58 @@ describe('Interno de Virilha', () => {
     expect(screen.queryByRole('button', { name: 'Interno de Virilha' })).not.toBeInTheDocument()
   })
 })
+
+describe('nome comercial com o protocolo de subtítulo (PRD 051)', () => {
+  it('mostra "parâmetros de X" quando o protocolo tem outro nome', () => {
+    monta([{ ...AXILAS, area_name: 'Perna Completa', protocol_area_key: 'meia_perna', protocol_area_name: 'Meia perna' }])
+
+    expect(screen.getByText('Perna Completa')).toBeInTheDocument()
+    expect(screen.getByText('parâmetros de Meia perna')).toBeInTheDocument()
+  })
+
+  it('não repete quando o nome é o mesmo', () => {
+    monta([{ ...AXILAS, protocol_area_name: 'Axilas' }])
+
+    expect(screen.queryByText(/parâmetros de/)).toBeNull()
+  })
+
+  it('"+ Adicionar área" guarda o nome comercial e o protocolo à parte', async () => {
+    const onChange = monta([], {
+      areas: [{ id: 'a2', clinic_id: 'c', name: 'Lombar inteira', display_order: 0, active: true }],
+      mapaDeAreas: new Map([['a2', 'lombar']]),
+      parametros: [P('BRANCA', 'SHR', 'lombar', 7, { protocol_area_name: 'Lombar' })],
+    })
+
+    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'lomb')
+    await userEvent.click(screen.getByRole('button', { name: 'Lombar inteira' }))
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ area_name: 'Lombar inteira', protocol_area_key: 'lombar', protocol_area_name: 'Lombar' }),
+    ])
+  })
+})
+
+describe('pendências destacadas (PRD 051)', () => {
+  it('método pendente marca o seletor; campo pendente marca o input', () => {
+    monta(
+      [AXILAS, { ...AXILAS, area_name: 'Lombar', protocol_area_key: 'lombar', method: 'SHR', fluence_j: 7 }],
+      {
+        pendencias: [
+          { indice: 0, area_name: 'Axilas', campo: 'method', mensagem: 'x' },
+          { indice: 1, area_name: 'Lombar', campo: 'energy_kj', mensagem: 'y' },
+        ],
+      },
+    )
+
+    const seletores = screen.getAllByRole('combobox', { name: /Método/ })
+    expect(seletores[0]).toHaveAttribute('aria-invalid', 'true')
+    expect(seletores[1]).not.toHaveAttribute('aria-invalid')
+    expect(screen.getByLabelText(/Energia \(kJ\)/)).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText(/Fluência \(J\)/)).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('sem pendências, nada é marcado', () => {
+    monta([{ ...AXILAS, method: 'SHR', fluence_j: 7, energy_kj: 8 }])
+    expect(screen.queryAllByText(/obrigatório/)).toEqual([])
+  })
+})

@@ -4,10 +4,14 @@ import { CAMPOS_POR_METODO, ROTULO_DO_CAMPO, bolinhas } from '@/lib/protocolo'
 interface ParametrosDoMetodoProps {
   aplicacao: AplicacaoDeSessao
   onChange: (campo: string, valor: number | null) => void
+  /** Campos que o submit apontou como faltando (PRD 051). */
+  pendentes?: ReadonlySet<string>
   disabled?: boolean
 }
 
-const CAMPO_NUMERICO = 'w-24 rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500'
+const CAMPO_NUMERICO = 'w-24 rounded-lg border px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2'
+const CAMPO_OK = 'border-gray-200 focus:ring-brand-500/20 focus:border-brand-500'
+const CAMPO_PENDENTE = 'border-red-400 ring-2 ring-red-500/20 focus:ring-red-500/30 focus:border-red-500'
 
 /**
  * Os campos de parâmetro, que mudam conforme o método.
@@ -21,7 +25,7 @@ const CAMPO_NUMERICO = 'w-24 rounded-lg border border-gray-200 px-2.5 py-1.5 tex
  * Stacks aparecem com as bolinhas do material (●●●) ao lado do número: é assim
  * que ela lê a tabela impressa, e reconhecer bate mais rápido do que converter.
  */
-export function ParametrosDoMetodo({ aplicacao, onChange, disabled }: ParametrosDoMetodoProps) {
+export function ParametrosDoMetodo({ aplicacao, onChange, pendentes, disabled }: ParametrosDoMetodoProps) {
   const metodo = aplicacao.method as MetodoLaser | null
 
   if (!metodo) {
@@ -38,10 +42,12 @@ export function ParametrosDoMetodo({ aplicacao, onChange, disabled }: Parametros
     <div className="flex flex-wrap items-end gap-3">
       {campos.map((campo) => {
         const valor = aplicacao[campo as keyof AplicacaoDeSessao] as number | null
+        const pendente = pendentes?.has(campo) ?? false
         return (
           <label key={campo} className="flex flex-col gap-1">
-            <span className="text-[11px] font-medium text-gray-500">
+            <span className={`text-[11px] font-medium ${pendente ? 'text-red-500' : 'text-gray-500'}`}>
               {ROTULO_DO_CAMPO[campo] ?? campo}
+              {pendente && <span className="ml-1 font-normal">· obrigatório</span>}
             </span>
             <span className="flex items-center gap-1.5">
               <input
@@ -52,10 +58,11 @@ export function ParametrosDoMetodo({ aplicacao, onChange, disabled }: Parametros
                 max={campo === 'stacks' ? 5 : undefined}
                 value={valor ?? ''}
                 disabled={disabled}
+                aria-invalid={pendente || undefined}
                 onChange={(e) =>
                   onChange(campo, e.target.value === '' ? null : Number(e.target.value))
                 }
-                className={CAMPO_NUMERICO}
+                className={`${CAMPO_NUMERICO} ${pendente ? CAMPO_PENDENTE : CAMPO_OK}`}
               />
               {campo === 'stacks' && valor ? (
                 <span className="select-none text-xs text-gray-400" aria-hidden="true">

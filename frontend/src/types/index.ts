@@ -753,6 +753,11 @@ export interface AplicacaoDeSessao {
   /** Snapshot: renomear a area no catalogo nao reescreve o passado. */
   area_name: string
   protocol_area_key: string | null
+  /**
+   * Nome do protocolo de referencia ("Meia perna" para "Perna Completa"), so
+   * para a tela mostrar como subtitulo (PRD 051). Nao e gravado.
+   */
+  protocol_area_name?: string | null
   method: MetodoLaser | null
   fluence_j: number | null
   energy_kj: number | null
@@ -800,6 +805,12 @@ export interface ListaDeRegistros {
   patient: PacienteDoProntuario
   records: RegistroDeSessao[]
   appointments_without_record: SessaoSemRegistro[]
+}
+
+/** GET .../appointments/{id}/session-applications (PRD 051). */
+export interface AplicacoesDoAgendamento {
+  skin_type: SkinType | null
+  applications: AplicacaoDeSessao[]
 }
 
 export interface AplicacaoPayload {

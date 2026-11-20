@@ -52,8 +52,15 @@ class BancoFalso:
         return len(params_list or [])
 
 
+APLICACAO = {"areaName": "Axilas", "method": "SHR", "fluenceJ": 8, "energyKj": 8}
+
+
 def chama(banco, corpo):
     from src.functions.patient_record import create
+
+    # Desde o PRD 051 o POST exige applications: o que se testa aqui e o
+    # status do agendamento, entao toda chamada leva uma aplicacao valida.
+    corpo = {"applications": [APLICACAO], **corpo}
 
     evento = {
         "pathParameters": {"clinicId": CLINICA, "patientId": PACIENTE},

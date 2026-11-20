@@ -33,8 +33,10 @@ import logging
 from typing import Dict, List, Optional, Sequence
 
 from src.services.protocolo_laser import (
+    ROTULO_DO_CAMPO,
     campos_do_metodo,
     metodos_disponiveis,
+    nome_da_area,
     sugestao,
 )
 
@@ -74,6 +76,10 @@ def aplicacoes_do_agendamento(db, appointment_id: str,
 
     Área sem mapa entra assim mesmo, com o nome preenchido e os parâmetros
     vazios. "Sem parâmetro sugerido" é resposta válida; inventar não é.
+
+    `area_name` é o nome COMERCIAL do agendamento; `protocol_area_name` é o
+    protocolo de referência, para a tela mostrar como subtítulo (PRD 051). É a
+    única montagem que existe: a tela chama o endpoint que devolve isto.
     """
     areas = db.execute_query(
         """
@@ -102,6 +108,7 @@ def aplicacoes_do_agendamento(db, appointment_id: str,
             "area_id": str(linha["area_id"]) if linha.get("area_id") else None,
             "area_name": linha["area_name"],
             "protocol_area_key": chave,
+            "protocol_area_name": nome_da_area(chave),
             "method": metodo,
             "fluence_j": sugerido["fluence_j"] if sugerido else None,
             "energy_kj": sugerido["energy_kj"] if sugerido else None,
@@ -112,8 +119,21 @@ def aplicacoes_do_agendamento(db, appointment_id: str,
     return saida
 
 
+def exige_aplicacoes(aplicacoes: List[Dict]) -> List[Dict]:
+    """Registro sem nenhuma área aplicada não é registro (PRD 051)."""
+    if not aplicacoes:
+        raise RegistroInvalido("Informe ao menos uma área aplicada.")
+    return aplicacoes
+
+
 def valida_aplicacoes(aplicacoes: Sequence[Dict]) -> List[Dict]:
     """Normaliza as aplicações e recusa o que não faz sentido.
+
+    Desde o PRD 051 toda aplicação exige o método e TODOS os campos do método
+    (`METODOS[m]["campos"]`), maiores que zero. Antes nada era obrigatório, e
+    uma sessão inteira ia ao banco como "sem parâmetro registrado". Quem não
+    aplicou numa área a remove; deixar em branco não é opção. As mensagens
+    nomeiam a área e o campo, e a tela gera as mesmas (`pendenciasDoRegistro`).
 
     O filtro por método não é preciosismo: gravar `stacks` num SHR sujaria a
     consulta que justifica a tabela existir. Se a tela mandar campo que o método
@@ -132,23 +152,28 @@ def valida_aplicacoes(aplicacoes: Sequence[Dict]) -> List[Dict]:
             raise RegistroInvalido("Toda aplicação precisa do nome da área.")
 
         metodo = ap.get("method") or None
-        if metodo and not campos_do_metodo(metodo):
+        if not metodo:
+            raise RegistroInvalido(f"{nome}: escolha o método.")
+        permitidos = campos_do_metodo(metodo)
+        if not permitidos:
             raise RegistroInvalido(f"Método desconhecido: {metodo!r}")
 
-        permitidos = set(campos_do_metodo(metodo)) if metodo else set()
         valores = {}
         for campo in CAMPOS_NUMERICOS:
             bruto = _num(ap.get(campo))
-            if bruto is not None and campo not in permitidos:
+            if campo in permitidos:
+                if bruto is None:
+                    raise RegistroInvalido(f"{nome}: informe {ROTULO_DO_CAMPO[campo]}.")
+                if bruto <= 0:
+                    raise RegistroInvalido(
+                        f"{nome}: {ROTULO_DO_CAMPO[campo]} precisa ser maior que zero."
+                    )
+            elif bruto is not None:
                 logger.info(
                     f"[Prontuario] descartando {campo}={bruto} numa aplicação "
                     f"de método {metodo!r}: o método não usa este campo"
                 )
                 bruto = None
-            if bruto is not None and bruto <= 0:
-                raise RegistroInvalido(
-                    f"{campo} precisa ser maior que zero (recebido: {bruto})."
-                )
             valores[campo] = bruto
 
         limpas.append({

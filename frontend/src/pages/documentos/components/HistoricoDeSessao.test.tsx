@@ -20,6 +20,7 @@ let consulta: {
 
 vi.mock('@/hooks/useSessionRecords', () => ({
   useSessionRecords: () => consulta,
+  useAplicacoesDoAgendamento: () => () => Promise.resolve([]),
   useDeleteSessionRecord: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateSessionRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useUpdateSessionRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),

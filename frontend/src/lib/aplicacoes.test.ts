@@ -4,9 +4,12 @@ import {
   adicionaMetodo,
   agrupaPorArea,
   chaveDaArea,
+  chaveDaPendencia,
   normaliza,
+  pendenciasDoRegistro,
   removeArea,
   removeLinha,
+  resumoDasPendencias,
 } from './aplicacoes'
 import { resumoDoBloco } from './prontuario'
 
@@ -123,5 +126,58 @@ describe('resumoDoBloco', () => {
 
   it('linha vazia diz que não tem parâmetro', () => {
     expect(resumoDoBloco(agrupaPorArea([ap('Axilas', null)])[0])).toBe('sem parâmetro registrado')
+  })
+})
+
+/** Espelho de `valida_aplicacoes` (PRD 051): mesmas mensagens que o backend. */
+describe('pendenciasDoRegistro', () => {
+  it('registro vazio é uma pendência geral', () => {
+    expect(pendenciasDoRegistro([])).toEqual([
+      { indice: -1, area_name: '', campo: 'method', mensagem: 'Informe ao menos uma área aplicada.' },
+    ])
+  })
+
+  it('sem método, pede o método e não olha os campos', () => {
+    expect(pendenciasDoRegistro([ap('Costeleta', 'costeleta', { fluence_j: 6 })])).toEqual([
+      { indice: 0, area_name: 'Costeleta', campo: 'method', mensagem: 'Costeleta: escolha o método.' },
+    ])
+  })
+
+  it('SHR sem energia: o caso do relato', () => {
+    const p = pendenciasDoRegistro([ap('Axilas', 'axilas', { method: 'SHR', fluence_j: 8 })])
+    expect(p).toEqual([
+      { indice: 0, area_name: 'Axilas', campo: 'energy_kj', mensagem: 'Axilas: informe Energia (kJ).' },
+    ])
+    expect(chaveDaPendencia(p[0])).toBe('0|energy_kj')
+  })
+
+  it('Stacking exige fluência, stacks e passadas; zero também acusa', () => {
+    const p = pendenciasDoRegistro([ap('Buço', 'buco', { method: 'SHR_STACKING', fluence_j: 0, stacks: 3 })])
+    expect(p.map((x) => x.mensagem)).toEqual([
+      'Buço: Fluência (J) precisa ser maior que zero.',
+      'Buço: informe Passadas.',
+    ])
+  })
+
+  it('índices seguem a lista normalizada', () => {
+    const p = pendenciasDoRegistro(
+      normaliza([
+        ap('Axilas', 'axilas', { method: 'SHR', fluence_j: 8, energy_kj: 8 }),
+        ap('Buço', 'buco', { method: 'HR', fluence_j: 17 }),
+      ]),
+    )
+    expect(p).toEqual([{ indice: 1, area_name: 'Buço', campo: 'energy_kj', mensagem: 'Buço: informe Energia (kJ).' }])
+  })
+
+  it('completo não tem pendência', () => {
+    expect(pendenciasDoRegistro([ap('Axilas', 'axilas', { method: 'SHR', fluence_j: 8, energy_kj: 8 })])).toEqual([])
+  })
+
+  it('resumo: uma vira a própria mensagem, várias viram contagem', () => {
+    const uma = [{ indice: 0, area_name: 'A', campo: 'method', mensagem: 'A: escolha o método.' }]
+    expect(resumoDasPendencias(uma)).toBe('A: escolha o método.')
+    expect(resumoDasPendencias([...uma, ...uma])).toBe(
+      'Faltam 2 campos. Preencha os destacados ou remova a área que não foi aplicada.',
+    )
   })
 })

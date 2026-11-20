@@ -6,6 +6,7 @@ from src.utils.http import parse_body, http_response, require_api_key, extract_p
 from src.services.db.postgres import PostgresService
 from src.services.historico_de_sessao import (
     RegistroInvalido,
+    exige_aplicacoes,
     grava_trilha,
     valida_aplicacoes,
 )
@@ -78,8 +79,8 @@ def handler(event, context):
                 })
 
         if "applications" in body:
-            grava_aplicacoes(db, record_id,
-                             valida_aplicacoes(_do_corpo(body["applications"])))
+            grava_aplicacoes(db, record_id, exige_aplicacoes(
+                valida_aplicacoes(_do_corpo(body["applications"]))))
 
         registro = registro_com_aplicacoes(db, record_id)
         grava_trilha(db, record_id, clinic_id, "UPDATE", registro,

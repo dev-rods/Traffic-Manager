@@ -4,12 +4,17 @@
  * É o pedido do André em palavras de teste: a aplicadora escolhe a data e as
  * caixas das áreas aparecem preenchidas, em vez de ela adicionar uma a uma.
  * Inclui a área composta, que vira duas aplicações.
+ *
+ * Desde o PRD 051 quem monta é o backend (`GET session-applications`); aqui o
+ * dublê `backend()` faz a mesma conta que ele, com nome COMERCIAL e o
+ * protocolo como subtítulo.
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, cleanup, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { RegistroDeSessaoModal } from './RegistroDeSessaoModal'
 import type {
+  AplicacaoDeSessao,
   ClinicArea,
   LigacaoDeArea,
   ParametroDoProtocolo,
@@ -67,9 +72,43 @@ const clinica = vi.hoisted(() => ({ padrao: null as string | null }))
 vi.mock('@/hooks/useClinic', () => ({
   useClinic: () => ({ data: { default_professional_id: clinica.padrao } }),
 }))
+const gravacao = vi.hoisted(() => ({ mutateAsync: vi.fn().mockResolvedValue({}) }))
+// O que o GET session-applications devolveria para cada sessão: o dublê faz a
+// conta do backend (nome comercial, uma aplicação por chave do mapa).
+const backend = vi.hoisted(() => ({
+  sessoes: [] as { id: string; areas: string }[],
+  falha: false,
+}))
+
 vi.mock('@/hooks/useSessionRecords', () => ({
-  useCreateSessionRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateSessionRecord: () => ({ mutateAsync: gravacao.mutateAsync, isPending: false }),
   useUpdateSessionRecord: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useAplicacoesDoAgendamento: () => (id: string) => {
+    if (backend.falha) return Promise.reject(new Error('rede'))
+    const s = backend.sessoes.find((x) => x.id === id)
+    const nomes = (s?.areas ?? '').split(',').map((n) => n.trim()).filter(Boolean)
+    const out: AplicacaoDeSessao[] = []
+    for (const nome of nomes) {
+      const area = AREAS.find((a) => a.name === nome)
+      const chaves = MAPA.filter((l) => l.area_id === area?.id).map((l) => l.protocol_area_key)
+      for (const chave of chaves.length ? chaves : [null]) {
+        const p = PARAMETROS.find((x) => x.protocol_area_key === chave)
+        out.push({
+          area_id: area?.id ?? null,
+          area_name: nome,
+          protocol_area_key: chave,
+          protocol_area_name: p?.protocol_area_name ?? null,
+          method: p ? 'SHR' : null,
+          fluence_j: p?.fluence_j ?? null,
+          energy_kj: p ? 8 : null,
+          stacks: null,
+          passes: null,
+          display_order: out.length,
+        })
+      }
+    }
+    return Promise.resolve(out)
+  },
 }))
 
 function sessao(over: Partial<SessaoSemRegistro> = {}): SessaoSemRegistro {
@@ -77,6 +116,7 @@ function sessao(over: Partial<SessaoSemRegistro> = {}): SessaoSemRegistro {
 }
 
 function monta(sessoes: SessaoSemRegistro[], agendamentoDeOrigem?: string | null) {
+  backend.sessoes = sessoes
   render(
     <RegistroDeSessaoModal
       patientId="p1"
@@ -97,6 +137,8 @@ beforeEach(() => {
 
 afterEach(() => {
   clinica.padrao = null
+  backend.falha = false
+  gravacao.mutateAsync.mockClear()
   cleanup()
   vi.useRealTimers()
 })
@@ -130,16 +172,58 @@ describe('escolher a sessão monta as áreas', () => {
     expect(screen.getByLabelText('Data')).toHaveValue('2026-11-08')
   })
 
-  it('área composta vira DUAS aplicações', async () => {
+  it('área composta vira DUAS aplicações, com o nome comercial e o protocolo de subtítulo', async () => {
     monta([sessao({ areas: 'Virilha Completa + ânus' })])
 
-    await waitFor(() => expect(areasMontadas()).toEqual(['Virilha', 'Perianal']))
+    await waitFor(() =>
+      expect(areasMontadas()).toEqual([
+        'Virilha Completa + ânus (Virilha)',
+        'Virilha Completa + ânus (Perianal)',
+      ]),
+    )
+    expect(screen.getByText('parâmetros de Virilha')).toBeInTheDocument()
+    expect(screen.getByText('parâmetros de Perianal')).toBeInTheDocument()
   })
 
   it('duas áreas no agendamento, uma composta, viram três aplicações', async () => {
     monta([sessao({ areas: 'Axila, Virilha Completa + ânus' })])
 
-    await waitFor(() => expect(areasMontadas()).toEqual(['Axila', 'Virilha', 'Perianal']))
+    await waitFor(() =>
+      expect(areasMontadas()).toEqual([
+        'Axila',
+        'Virilha Completa + ânus (Virilha)',
+        'Virilha Completa + ânus (Perianal)',
+      ]),
+    )
+  })
+
+  it('o nome comercial fica: "Perna Completa" não vira "Meia perna" (PRD 051)', async () => {
+    AREAS.push({ id: 'ar-perna', clinic_id: 'c1', name: 'Perna Completa', display_order: 3, active: true })
+    MAPA.push({ area_id: 'ar-perna', area_name: 'Perna Completa', protocol_area_key: 'meia_perna', display_order: 1 })
+    PARAMETROS.push(parametro({ protocol_area_key: 'meia_perna', protocol_area_name: 'Meia perna', fluence_j: 9 }))
+    try {
+      monta([sessao({ areas: 'Perna Completa' })])
+
+      await waitFor(() => expect(areasMontadas()).toEqual(['Perna Completa (Meia perna)']))
+      expect(screen.getByText('Perna Completa')).toBeInTheDocument()
+      expect(screen.getByText('parâmetros de Meia perna')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('9')).toBeInTheDocument()
+    } finally {
+      AREAS.pop()
+      MAPA.pop()
+      PARAMETROS.pop()
+    }
+  })
+
+  it('se o backend falhar, avisa e deixa adicionar manualmente', async () => {
+    backend.falha = true
+    monta([sessao()])
+
+    await waitFor(() =>
+      expect(screen.getByText(/Não foi possível carregar as áreas/)).toBeInTheDocument(),
+    )
+    expect(areasMontadas()).toEqual([])
+    expect(screen.getByPlaceholderText('+ Adicionar área')).toBeEnabled()
   })
 
   it('trocar de sessão SUBSTITUI as áreas, não acumula', async () => {
@@ -150,7 +234,12 @@ describe('escolher a sessão monta as áreas', () => {
     await waitFor(() => expect(areasMontadas()).toEqual(['Axila']))
 
     await userEvent.selectOptions(seletor(), 'a2')
-    expect(areasMontadas()).toEqual(['Virilha', 'Perianal'])
+    await waitFor(() =>
+      expect(areasMontadas()).toEqual([
+        'Virilha Completa + ânus (Virilha)',
+        'Virilha Completa + ânus (Perianal)',
+      ]),
+    )
   })
 
   it('"Registrar manual" é escolhível e não muda a escolha de volta sozinho', async () => {
@@ -173,7 +262,12 @@ describe('sessão de origem (vindo da agenda)', () => {
     )
 
     await waitFor(() => expect(seletor().value).toBe('a2'))
-    expect(areasMontadas()).toEqual(['Virilha', 'Perianal'])
+    await waitFor(() =>
+      expect(areasMontadas()).toEqual([
+        'Virilha Completa + ânus (Virilha)',
+        'Virilha Completa + ânus (Perianal)',
+      ]),
+    )
     expect(screen.getByLabelText('Data')).toHaveValue('2026-11-19')
   })
 
@@ -280,5 +374,75 @@ describe('opções do seletor', () => {
     monta([])
 
     expect(screen.queryByRole('combobox', { name: /qual sessão/i })).toBeNull()
+  })
+})
+
+describe('nenhum registro incompleto (PRD 051)', () => {
+  const salvar = () => screen.getByRole('button', { name: /salvar/i })
+
+  it('Energia apagada: destaca o campo, mostra a mensagem e não grava', async () => {
+    monta([sessao({ areas: 'Axila' })])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila']))
+
+    const energia = screen.getByLabelText(/Energia \(kJ\)/)
+    await userEvent.clear(energia)
+    expect(screen.queryByText(/informe Energia/)).toBeNull() // durante a edição nada acusa
+
+    await userEvent.click(salvar())
+
+    expect(gravacao.mutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByText('Axila: informe Energia (kJ).')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Energia \(kJ\)/)).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('preencher o que faltava libera o salvamento', async () => {
+    monta([sessao({ areas: 'Axila' })])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila']))
+
+    await userEvent.clear(screen.getByLabelText(/Energia \(kJ\)/))
+    await userEvent.click(salvar())
+    await userEvent.type(screen.getByLabelText(/Energia \(kJ\)/), '8')
+
+    expect(screen.getByLabelText(/Energia \(kJ\)/)).not.toHaveAttribute('aria-invalid')
+    await userEvent.click(salvar())
+    expect(gravacao.mutateAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('área sem método: destaca o seletor; "Remover" a área resolve', async () => {
+    monta([sessao({ areas: 'Axila, Área nova' })])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila', 'Área nova']))
+
+    await userEvent.click(salvar())
+
+    expect(gravacao.mutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByText('Área nova: escolha o método.')).toBeInTheDocument()
+    const seletores = screen.getAllByRole('combobox', { name: /Método/ })
+    expect(seletores[1]).toHaveAttribute('aria-invalid', 'true')
+    expect(seletores[0]).not.toHaveAttribute('aria-invalid')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remover Área nova' }))
+    await userEvent.click(salvar())
+    expect(gravacao.mutateAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('registro sem nenhuma área não grava', async () => {
+    monta([sessao({ id: 'f1', appointment_date: '2026-12-01', areas: 'Axila' })])
+    await userEvent.type(screen.getByLabelText('Data'), '2026-11-09')
+
+    await userEvent.click(salvar())
+
+    expect(gravacao.mutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByText('Informe ao menos uma área aplicada.')).toBeInTheDocument()
+  })
+
+  it('várias pendências viram um resumo contado', async () => {
+    monta([sessao({ areas: 'Axila' })])
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila']))
+
+    await userEvent.clear(screen.getByLabelText(/Energia \(kJ\)/))
+    await userEvent.clear(screen.getByLabelText(/Fluência \(J\)/))
+    await userEvent.click(salvar())
+
+    expect(screen.getByText(/Faltam 2 campos/)).toBeInTheDocument()
   })
 })

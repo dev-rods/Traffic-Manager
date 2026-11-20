@@ -4,7 +4,11 @@ import { Button } from '@/components/ui/Button'
 import { useClinic } from '@/hooks/useClinic'
 import { useProfessionals } from '@/hooks/useProfessionals'
 import { useProtocoloLaser } from '@/hooks/useProtocoloLaser'
-import { useCreateSessionRecord, useUpdateSessionRecord } from '@/hooks/useSessionRecords'
+import {
+  useAplicacoesDoAgendamento,
+  useCreateSessionRecord,
+  useUpdateSessionRecord,
+} from '@/hooks/useSessionRecords'
 import type {
   AplicacaoDeSessao,
   RegistroDeSessao,
@@ -12,9 +16,8 @@ import type {
   ClinicArea,
   SkinType,
 } from '@/types'
-import { metodosDaArea, sugestao } from '@/lib/protocolo'
 import { paraPayload } from '@/lib/prontuario'
-import { normaliza } from '@/lib/aplicacoes'
+import { normaliza, pendenciasDoRegistro, resumoDasPendencias } from '@/lib/aplicacoes'
 import { ordenaPendentes, rotuloDaSessao, sessaoPreSelecionada } from '@/lib/sessoesPendentes'
 import { todayStr } from '@/utils/dateHelpers'
 import { AplicacoesField } from './AplicacoesField'
@@ -52,6 +55,7 @@ export function RegistroDeSessaoModal({
   const editando = Boolean(registro)
   const criar = useCreateSessionRecord(patientId)
   const editar = useUpdateSessionRecord()
+  const buscaAplicacoes = useAplicacoesDoAgendamento()
   const { data: protocolo } = useProtocoloLaser()
   const { data: profissionais } = useProfessionals()
   const { data: clinica } = useClinic()
@@ -88,6 +92,11 @@ export function RegistroDeSessaoModal({
     registro?.applications ?? [],
   )
   const [erro, setErro] = useState<string | null>(null)
+  // Enquanto o backend monta as áreas da sessão escolhida (PRD 051).
+  const [montando, setMontando] = useState(false)
+  // As pendências só aparecem depois da primeira tentativa de salvar: durante
+  // a digitação nada acusa (mesma lição do PRD 050).
+  const [tentouSalvar, setTentouSalvar] = useState(false)
 
   const [preselecionada, setPreselecionada] = useState(editando)
   const [pendentes] = useState(() => ordenaPendentes(sessoesSemRegistro))
@@ -104,82 +113,37 @@ export function RegistroDeSessaoModal({
   /**
    * Escolher a sessão traz data e áreas prontas.
    *
-   * A expansão da composta acontece aqui e no backend pela mesma tabela: a
-   * `Virilha Completa + ânus` vira duas aplicações, virilha no SHR e perianal
-   * no Stacking, porque é o que ela de fato aplica.
+   * As áreas vêm montadas do backend (PRD 051): nome comercial, protocolo de
+   * referência, método quando é um só e a sugestão pela pele. Até 19/11/2026 a
+   * tela montava por conta própria, casando nomes por string, e trocava o nome
+   * comercial pelo do protocolo ("Perna Completa" virava "Meia perna").
    */
-  const escolheSessao = (id: string | null) => {
+  const escolheSessao = async (id: string | null) => {
     setAppointmentId(id)
     const sessao = sessaoPorId(id)
     if (!sessao) return
     setSessionDate(sessao.appointment_date)
-
-    const nomes = sessao.areas.split(',').map((n) => n.trim()).filter(Boolean)
-    const novas: AplicacaoDeSessao[] = []
-    for (const nome of nomes) {
-      const area = areas.find((a) => a.name === nome)
-      const chaves = area
-        ? (protocolo?.area_map ?? [])
-            .filter((l) => l.area_id === area.id)
-            .sort((a, b) => a.display_order - b.display_order)
-            .map((l) => l.protocol_area_key)
-        : []
-
-      if (chaves.length === 0) {
-        novas.push(vazia(nome, area?.id ?? null, null, novas.length))
-        continue
-      }
-      for (const chave of chaves) {
-        const metodos = metodosDaArea(parametros, chave)
-        const metodo = metodos.length === 1 ? metodos[0] : null
-        const s = sugestao(parametros, chave, metodo, skinType)
-        novas.push({
-          area_id: area?.id ?? null,
-          area_name: nomeDoProtocolo(chave) ?? nome,
-          protocol_area_key: chave,
-          method: metodo,
-          fluence_j: s?.fluence_j ?? null,
-          energy_kj: s?.energy_kj ?? null,
-          stacks: s?.stacks ?? null,
-          passes: s?.passes ?? null,
-          display_order: novas.length,
-        })
-      }
-    }
-    setAplicacoes(novas)
-  }
-
-  function nomeDoProtocolo(chave: string) {
-    return parametros.find((p) => p.protocol_area_key === chave)?.protocol_area_name
-  }
-
-  function vazia(
-    nome: string,
-    areaId: string | null,
-    chave: string | null,
-    ordem: number,
-  ): AplicacaoDeSessao {
-    return {
-      area_id: areaId,
-      area_name: nome,
-      protocol_area_key: chave,
-      method: null,
-      fluence_j: null,
-      energy_kj: null,
-      stacks: null,
-      passes: null,
-      display_order: ordem,
+    setMontando(true)
+    try {
+      setAplicacoes(await buscaAplicacoes(sessao.id))
+      setErro(null)
+    } catch {
+      setAplicacoes([])
+      setErro('Não foi possível carregar as áreas do agendamento. Adicione-as manualmente.')
+    } finally {
+      setMontando(false)
     }
   }
 
   // Pré-seleciona a sessão de onde ela veio (agenda) ou, sem ela, a pendente
-  // mais recente até hoje. Passa por `escolheSessao`
-  // (um caminho só, PRD 042), que precisa do protocolo carregado para montar
-  // as áreas: por isso espera por ele, uma vez, e respeita quem já escolheu.
-  if (!preselecionada && protocolo && padrao) {
+  // mais recente até hoje. Passa por `escolheSessao` (um caminho só, PRD 042),
+  // uma vez, e respeita quem já escolheu.
+  if (!preselecionada && padrao) {
     setPreselecionada(true)
-    escolheSessao(padrao.id)
+    void escolheSessao(padrao.id)
   }
+
+  const pendencias = tentouSalvar ? pendenciasDoRegistro(normaliza(aplicacoes)) : []
 
   const salvando = criar.isPending || editar.isPending
 
@@ -187,6 +151,14 @@ export function RegistroDeSessaoModal({
     e.preventDefault()
     if (!sessionDate) {
       setErro('Informe a data da sessão.')
+      return
+    }
+    // Nenhum registro incompleto (PRD 051): o backend recusa igual, mas aqui
+    // dá para apontar o campo.
+    const faltam = pendenciasDoRegistro(normaliza(aplicacoes))
+    if (faltam.length > 0) {
+      setTentouSalvar(true)
+      setErro(resumoDasPendencias(faltam))
       return
     }
     setErro(null)
@@ -238,7 +210,7 @@ export function RegistroDeSessaoModal({
               value={appointmentId ?? MANUAL}
               onChange={(e) => {
                 setPreselecionada(true)
-                escolheSessao(e.target.value === MANUAL ? null : e.target.value)
+                void escolheSessao(e.target.value === MANUAL ? null : e.target.value)
               }}
               className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800"
             >
@@ -299,6 +271,12 @@ export function RegistroDeSessaoModal({
           </p>
         )}
 
+        {montando && (
+          <p className="text-xs text-gray-400" role="status">
+            Carregando áreas do agendamento…
+          </p>
+        )}
+
         <AplicacoesField
           aplicacoes={aplicacoes}
           onChange={setAplicacoes}
@@ -307,7 +285,8 @@ export function RegistroDeSessaoModal({
           mapaDeAreas={mapaDeAreas}
           skinType={skinType}
           bronzeada={bronzeada}
-          disabled={salvando}
+          pendencias={pendencias}
+          disabled={salvando || montando}
         />
 
         <label className="block">
