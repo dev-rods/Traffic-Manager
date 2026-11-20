@@ -129,8 +129,8 @@ O seed do mapa (`setup_database._seed_do_mapa`) casa por nome exato e só roda n
 
 ## Status (preencher após conclusão)
 
-- [x] Pendente
-- [ ] Spec gerada: `spec/051-registro-de-sessao-areas-certas-e-sem-registro-incompleto.md`
+- [ ] Pendente
+- [x] Spec gerada: `spec/051-registro-de-sessao-areas-certas-e-sem-registro-incompleto.md` (19/11/2026)
 - [ ] Implementado em dev: (data)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`
