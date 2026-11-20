@@ -49,4 +49,30 @@ WHERE a.name ILIKE '%costel%';
 
 ## Resultado
 
-Preencher ao rodar: data, stage, códigos por caso, resultado das consultas.
+**Dev, 19/11/2026** (layer 200; fixture com Perna Completa, Costeleta e a
+composta; paciente de teste sem tipo de pele):
+
+- 1 → 200 com 3 aplicações: `Costeleta`/`costeleta`/"Costeleta"/método null;
+  `Perna Completa`/`meia_perna`/"Meia perna"/SHR (sem sugestão porque a paciente
+  não tem pele marcada); `Virilha Comp. + ânus` sem chave (o catálogo de DEV
+  ainda tem a grafia abreviada, que o mapa não conhece; em prod o nome é
+  "Virilha Completa + ânus" e está mapeado). A ordem entre áreas criadas no
+  mesmo instante não é determinística (`asa.created_at` empata).
+- 2 → 404. 3 → 400 "Informe applications". 4 → 400 "Informe ao menos uma área
+  aplicada.". 5 → 400 "Costeleta: escolha o método.". 6 → 400 "Axilas: informe
+  Energia (kJ).". 7 → 201 com `area_name` "Perna Completa". 8 → 400 "Informe ao
+  menos uma área aplicada.". 8b → 400 "Buco: informe Passadas.".
+- Registro e agendamento de teste apagados ao fim. Smoke do painel (caso 9)
+  pendente: sobe pela Vercel no merge.
+
+**Costeleta em prod (consultas de leitura, 19/11/2026):** a área está ativa e
+mapeada (`costeleta`) nas três clínicas; o mapa não é a causa. Nos 60 dias
+houve 4 sessões confirmadas com Costeleta e 1 aplicação gravada com ela: no
+registro de 19/11 a primeira parte das áreas veio com nome do protocolo
+("Glúteos", "Virilha completa") e Perna Completa, Braço Completo e Costeleta
+foram acrescentadas à mão no fim, com o nome comercial, ou seja, o caminho
+antigo do navegador as perdia. Com a montagem no backend (caso 1) as três
+entram. Áreas ativas sem mapa em prod: Essência "Testa"; Nobre "Mãos" e
+"Pés" (sem linha no protocolo; entram sem sugestão, como desenhado).
+
+**Prod:** pendente (deploy com o André; sem migration).
