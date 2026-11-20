@@ -164,6 +164,8 @@ describe('TermoDoAgendamento', () => {
   it('pendente e futura: oferece o link dos documentos; passada ou assinada, não (PRD 048)', async () => {
     render(<TermoDoAgendamento appointment={agendamento()} />)
     await userEvent.click(screen.getByRole('button', { name: 'Enviar link dos documentos' }))
+    expect(enviarLink).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar' }))
     expect(enviarLink).toHaveBeenCalledWith('a1', expect.anything())
 
     render(<TermoDoAgendamento appointment={agendamento({ id: 'a2', appointment_date: '2020-01-01' })} />)

@@ -1,4 +1,4 @@
-import type { Appointment } from '@/types'
+import type { Appointment, Cotacao } from '@/types'
 
 /**
  * O desconto de um agendamento, nas duas formas (PRD 050).
@@ -10,7 +10,8 @@ import type { Appointment } from '@/types'
  */
 
 export type TipoDeDesconto = 'pct' | 'cents'
-export type ModoDeDesconto = 'none' | 'partnership' | 'custom'
+/** `policy` = a política da clínica decide, no backend (PRD 053). */
+export type ModoDeDesconto = 'policy' | 'none' | 'partnership' | 'custom'
 
 export interface DescontoEscolhido {
   modo: ModoDeDesconto
@@ -21,6 +22,31 @@ export interface DescontoEscolhido {
 }
 
 export const SEM_DESCONTO: DescontoEscolhido = { modo: 'none', tipo: 'pct', texto: '' }
+/** O padrão do "Novo agendamento" (PRD 053), salvo paciente com combinado. */
+export const POLITICA_DA_CLINICA: DescontoEscolhido = { modo: 'policy', tipo: 'pct', texto: '' }
+
+/** As razões que o backend grava quando a política decide sozinho. */
+export const RAZOES_DA_POLITICA = ['first_session', 'tier_2', 'tier_3'] as const
+
+const ROTULOS: Record<string, string> = {
+  first_session: '1ª sessão',
+  tier_2: '2-4 áreas',
+  tier_3: '5+ áreas',
+  partnership: 'Parceria',
+  custom: 'Personalizado',
+  personalizado: 'Personalizado',
+  none: 'Sem desconto',
+}
+
+/**
+ * O rótulo de uma razão gravada, para popover, "Hoje", cotação e resumo. Era
+ * um mapa igual em dois arquivos; o contrato com o backend
+ * (`test_desconto_contrato.py`) lê daqui.
+ */
+export function rotuloDaRazao(razao: string | null | undefined): string {
+  if (!razao) return 'Sem desconto'
+  return ROTULOS[razao] ?? razao
+}
 
 /** "12,5" | "12.5" | "20" -> 12.5. Vazio, lixo ou mais de duas casas -> null. */
 export function parseDecimal(texto: string): number | null {
@@ -65,7 +91,20 @@ export function formataPct(pct: number): string {
 export function resumoDoDesconto(
   d: DescontoEscolhido,
   subtotalCents: number,
+  cotacao?: Cotacao | null,
 ): { rotulo: string; descontoCents: number; totalCents: number } | null {
+  if (d.modo === 'policy') {
+    // O backend é a fonte: o total vem dos centavos da cotação, não de uma
+    // conta refeita aqui.
+    if (!cotacao || !cotacao.discountPct || cotacao.originalPriceCents == null || cotacao.finalPriceCents == null) {
+      return null
+    }
+    return {
+      rotulo: `${rotuloDaRazao(cotacao.discountReason)}: ${formataPct(cotacao.discountPct)}%`,
+      descontoCents: cotacao.originalPriceCents - cotacao.finalPriceCents,
+      totalCents: cotacao.finalPriceCents,
+    }
+  }
   if (d.modo === 'partnership') {
     return { rotulo: '100%', descontoCents: subtotalCents, totalCents: 0 }
   }
@@ -118,14 +157,18 @@ export function validaDesconto(
 export interface PayloadDoDesconto {
   discountPct?: number
   discountCents?: number
-  discountReason: string | null
+  discountReason?: string | null
+  discountPolicy?: boolean
 }
 
 /**
- * O pedaço do payload. `none` vira percentual zero sem razão, que é como a
- * edição tira um desconto; na criação quem chama omite o bloco quando é `none`.
+ * O pedaço do payload. `none` vira percentual zero com razão `none`: "zero de
+ * propósito", o que impede o backend de aplicar a política por cima (PRD 053).
+ * `policy` vira `discountPolicy`, que só a edição manda; na criação quem chama
+ * omite o bloco e o backend decide.
  */
 export function payloadDoDesconto(d: DescontoEscolhido): PayloadDoDesconto {
+  if (d.modo === 'policy') return { discountPolicy: true }
   if (d.modo === 'partnership') return { discountPct: 100, discountReason: 'partnership' }
   if (d.modo === 'custom') {
     if (d.tipo === 'cents') {
@@ -133,7 +176,7 @@ export function payloadDoDesconto(d: DescontoEscolhido): PayloadDoDesconto {
     }
     return { discountPct: parseDecimal(d.texto) ?? 0, discountReason: 'custom' }
   }
-  return { discountPct: 0, discountReason: null }
+  return { discountPct: 0, discountReason: 'none' }
 }
 
 type Gravado = Pick<Appointment, 'discount_pct' | 'discount_reason'> & {
@@ -144,6 +187,7 @@ type Gravado = Pick<Appointment, 'discount_pct' | 'discount_reason'> & {
 /** Do agendamento gravado para o estado do campo. */
 export function descontoDoAgendamento(a: Gravado): DescontoEscolhido {
   if (a.discount_reason === 'partnership') return { modo: 'partnership', tipo: 'pct', texto: '' }
+  if ((RAZOES_DA_POLITICA as readonly string[]).includes(a.discount_reason ?? '')) return POLITICA_DA_CLINICA
   if (a.discount_cents) {
     return { modo: 'custom', tipo: 'cents', texto: (a.discount_cents / 100).toFixed(2).replace('.', ',') }
   }
@@ -165,8 +209,20 @@ export function textoCurtoDoDesconto(a: Pick<Gravado, 'discount_pct' | 'discount
   return `-${formataPct(a.discount_pct ?? 0)}%`
 }
 
-/** "12,5%" | "R$ 20,00" | "parceria (100%)" | "sem desconto", para o resumo do PRD 043. */
-export function textoDoDesconto(d: DescontoEscolhido): string {
+/**
+ * "12,5%" | "R$ 20,00" | "parceria (100%)" | "sem desconto" |
+ * "política da clínica (1ª sessão: 10%)", para o resumo do PRD 043.
+ * Em `policy`, `decisao` é a cotação (lado "para") ou o gravado (lado "de").
+ */
+export function textoDoDesconto(
+  d: DescontoEscolhido,
+  decisao?: { discountReason: string | null; discountPct: number } | null,
+): string {
+  if (d.modo === 'policy') {
+    if (!decisao) return 'política da clínica'
+    if (!decisao.discountPct) return 'política da clínica (sem desconto)'
+    return `política da clínica (${rotuloDaRazao(decisao.discountReason)}: ${formataPct(decisao.discountPct)}%)`
+  }
   if (d.modo === 'partnership') return 'parceria (100%)'
   if (d.modo === 'custom') {
     if (d.tipo === 'cents') {

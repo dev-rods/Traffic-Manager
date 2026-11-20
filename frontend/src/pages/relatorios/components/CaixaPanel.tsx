@@ -185,6 +185,7 @@ function Pendencias({ pendentes }: { pendentes: CaixaPending[] }) {
                     appointmentId={p.appointmentId}
                     linkPendente={p.method === 'LINK' && p.paymentStatus === 'PENDING'}
                     compacto
+                    valorCents={p.amountCents}
                   />
                 </div>
               </li>

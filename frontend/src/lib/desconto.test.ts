@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { precoComDesconto } from './cadastroPaciente'
 import {
+  POLITICA_DA_CLINICA,
   SEM_DESCONTO,
   descontoDoAgendamento,
   parseDecimal,
@@ -8,10 +9,13 @@ import {
   precoComDescontoEmCentavos,
   reaisParaCentavos,
   resumoDoDesconto,
+  rotuloDaRazao,
   textoCurtoDoDesconto,
+  textoDoDesconto,
   validaDesconto,
   type DescontoEscolhido,
 } from './desconto'
+import type { Cotacao } from '@/types'
 
 /**
  * A MESMA tabela existe em scheduler/tests/unit/test_desconto_contrato.py.
@@ -110,8 +114,11 @@ describe('validaDesconto', () => {
 })
 
 describe('payloadDoDesconto', () => {
-  it('os quatro caminhos', () => {
-    expect(payloadDoDesconto(SEM_DESCONTO)).toEqual({ discountPct: 0, discountReason: null })
+  it('os cinco caminhos', () => {
+    // "Sem desconto" é zero DE PROPÓSITO (PRD 053): a razão `none` impede o
+    // backend de aplicar a política por cima.
+    expect(payloadDoDesconto(SEM_DESCONTO)).toEqual({ discountPct: 0, discountReason: 'none' })
+    expect(payloadDoDesconto(POLITICA_DA_CLINICA)).toEqual({ discountPolicy: true })
     expect(payloadDoDesconto({ ...SEM_DESCONTO, modo: 'partnership' })).toEqual({
       discountPct: 100,
       discountReason: 'partnership',
@@ -140,6 +147,34 @@ describe('do agendamento gravado para o campo, e de volta', () => {
   it('a coluna ausente (API antiga) conta como percentual', () => {
     expect(descontoDoAgendamento({ discount_pct: 30, discount_reason: 'custom' })).toEqual(custom({ texto: '30' }))
     expect(descontoDoAgendamento({ discount_pct: 0, discount_reason: null })).toEqual(SEM_DESCONTO)
+    expect(descontoDoAgendamento({ discount_pct: 0, discount_reason: 'none' })).toEqual(SEM_DESCONTO)
+  })
+
+  it('razão da política abre em "Política da clínica", não em Personalizado (PRD 053)', () => {
+    for (const razao of ['first_session', 'tier_2', 'tier_3'] as const) {
+      expect(descontoDoAgendamento({ discount_pct: 15, discount_reason: razao })).toEqual(POLITICA_DA_CLINICA)
+    }
+  })
+
+  it('rótulo das razões, fonte única do popover, do Hoje e da cotação', () => {
+    expect(rotuloDaRazao('first_session')).toBe('1ª sessão')
+    expect(rotuloDaRazao('tier_2')).toBe('2-4 áreas')
+    expect(rotuloDaRazao('tier_3')).toBe('5+ áreas')
+    expect(rotuloDaRazao('partnership')).toBe('Parceria')
+    expect(rotuloDaRazao('custom')).toBe('Personalizado')
+    expect(rotuloDaRazao('none')).toBe('Sem desconto')
+    expect(rotuloDaRazao(null)).toBe('Sem desconto')
+    expect(rotuloDaRazao('zzz')).toBe('zzz')
+  })
+
+  it('texto da política para o resumo do 043', () => {
+    expect(textoDoDesconto(POLITICA_DA_CLINICA)).toBe('política da clínica')
+    expect(textoDoDesconto(POLITICA_DA_CLINICA, { discountReason: 'tier_2', discountPct: 15 })).toBe(
+      'política da clínica (2-4 áreas: 15%)',
+    )
+    expect(textoDoDesconto(POLITICA_DA_CLINICA, { discountReason: null, discountPct: 0 })).toBe(
+      'política da clínica (sem desconto)',
+    )
   })
 
   it('texto curto para popover e Hoje', () => {
@@ -167,5 +202,19 @@ describe('resumoDoDesconto', () => {
     expect(resumoDoDesconto(custom({}), 19500)).toBeNull()
     expect(resumoDoDesconto(custom({ tipo: 'cents', texto: '250' }), 19500)).toBeNull()
     expect(resumoDoDesconto(SEM_DESCONTO, 19500)).toBeNull()
+  })
+
+  it('política: os centavos vêm da cotação, não de uma conta refeita aqui (PRD 053)', () => {
+    const cotacao: Cotacao = {
+      originalPriceCents: 19500, discountPct: 10, discountReason: 'first_session',
+      finalPriceCents: 17550, areaCount: 1, isFirst: true,
+    }
+    expect(resumoDoDesconto(POLITICA_DA_CLINICA, 19500, cotacao)).toEqual({
+      rotulo: '1ª sessão: 10%',
+      descontoCents: 1950,
+      totalCents: 17550,
+    })
+    expect(resumoDoDesconto(POLITICA_DA_CLINICA, 19500)).toBeNull()
+    expect(resumoDoDesconto(POLITICA_DA_CLINICA, 19500, { ...cotacao, discountPct: 0, discountReason: null })).toBeNull()
   })
 })

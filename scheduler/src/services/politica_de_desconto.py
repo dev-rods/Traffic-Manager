@@ -39,13 +39,26 @@ logger = logging.getLogger(__name__)
 RAZAO_PRIMEIRA_SESSAO = "first_session"
 RAZAO_FAIXA_2 = "tier_2"
 RAZAO_FAIXA_3 = "tier_3"
+# "Zero de proposito": a recepcao escolheu "Sem desconto" no painel (PRD 053).
+# Diferente de razao None com pct 0, que e "ninguem decidiu" e manda aplicar a
+# politica. Na tela os dois aparecem iguais; a diferenca e so para o backend
+# nao aplicar a politica por cima de uma escolha.
+RAZAO_NENHUM = "none"
+# As razoes que `decide` grava por conta propria (sem o combinado da paciente).
+# Um agendamento com uma delas segue a politica: trocar as areas re-decide.
+RAZOES_DA_POLITICA = (RAZAO_PRIMEIRA_SESSAO, RAZAO_FAIXA_2, RAZAO_FAIXA_3)
 
 Percentual = Union[int, Decimal]
 
 __all__ = [
     "Decisao", "decide", "faixas_de_desconto", "preco_de_tabela", "texto_do_preco", "aplica_desconto",
     "RAZAO_PERSONALIZADA", "RAZAO_PARCERIA", "RAZAO_PRIMEIRA_SESSAO", "RAZAO_FAIXA_2", "RAZAO_FAIXA_3",
+    "RAZAO_NENHUM", "RAZOES_DA_POLITICA", "razao_e_da_politica",
 ]
+
+
+def razao_e_da_politica(razao) -> bool:
+    return razao in RAZOES_DA_POLITICA
 
 
 class Decisao(NamedTuple):

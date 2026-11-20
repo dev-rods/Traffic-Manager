@@ -37,6 +37,9 @@ describe('PagamentoDoAgendamento', () => {
   it('não pago e com valor: oferece o link pelo WhatsApp (PRD 029)', async () => {
     render(<PagamentoDoAgendamento appointment={agendamento({ final_price_cents: 13500 })} />)
     await userEvent.click(screen.getByRole('button', { name: 'Enviar link pelo WhatsApp' }))
+    // A confirmação diz o valor da sessão (PRD 053).
+    expect(screen.getByRole('group', { name: /R\$.135,00/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar' }))
     expect(enviarLink).toHaveBeenCalledWith(
       { appointmentId: 'a1', cpf: undefined },
       expect.any(Object)
@@ -116,7 +119,23 @@ describe('PagamentoDoAgendamento', () => {
     )
     expect(screen.getByText('Aguardando dinheiro')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Recebi em dinheiro' }))
+    // Nada no primeiro clique: a baixa vai ao Asaas (PRD 053).
+    expect(mutate).not.toHaveBeenCalled()
+    expect(screen.getByText('O pagamento fica como pago aqui e no Asaas.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Registrar' }))
     expect(mutate).toHaveBeenCalledWith('p1', expect.any(Object))
+  })
+
+  it('dinheiro: Voltar não dá a baixa', async () => {
+    render(
+      <PagamentoDoAgendamento
+        appointment={agendamento({ payment_id: 'p1', payment_method: 'CASH', payment_status: 'AWAITING_CASH' })}
+      />
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Recebi em dinheiro' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(mutate).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Recebi em dinheiro' })).toBeInTheDocument()
   })
 
   it('depois da baixa mostra pago, sem esperar a agenda recarregar', () => {

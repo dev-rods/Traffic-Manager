@@ -189,7 +189,26 @@ export interface DurationRule {
   is_active: boolean
 }
 
-export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'partnership' | 'custom' | null
+/** `none` = "Sem desconto" escolhido no painel, de propósito (PRD 053). */
+export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'partnership' | 'custom' | 'none' | null
+
+/** `POST appointments?simular=true`: o que a política da clínica decide (PRD 053). */
+export interface CotacaoPayload {
+  clinicId: string
+  serviceIds: string[]
+  serviceAreaPairs?: { serviceId: string; areaId: string }[]
+  phone?: string | null
+}
+
+export interface Cotacao {
+  originalPriceCents: number | null
+  discountPct: number
+  discountReason: DiscountReason
+  finalPriceCents: number | null
+  areaCount: number
+  /** O banco considera esta a primeira sessão (só CONFIRMED conta). */
+  isFirst: boolean
+}
 
 export interface DiscountBreakdown {
   original_price_cents: number
@@ -392,6 +411,11 @@ export interface UpdateAppointmentPayload {
   /** Desconto em reais, em centavos. Exclusivo com discountPct. */
   discountCents?: number
   discountReason?: string | null
+  /**
+   * Re-decide o desconto pela política da clínica, depois de trocar as áreas
+   * (PRD 053). Exclusivo com discountPct/discountCents.
+   */
+  discountPolicy?: boolean
   /**
    * Fixa a duracao DESTE agendamento. `null` volta ao calculado; omitir nao mexe.
    * A distincao importa: e `null` que solta o override.

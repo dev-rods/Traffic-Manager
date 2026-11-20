@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { DateSelect } from '@/components/ui/DateSelect'
 import { Button } from '@/components/ui/Button'
-import { useUpdateAppointment } from '@/hooks/useAppointments'
+import { useUpdateAppointment, useCotacao } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
 import { calculaDuracao } from '@/lib/duracao'
 import { precisaMandarDuracao } from '@/lib/duracaoNoPedido'
@@ -68,6 +68,18 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     ? descontoDoAgendamento(appointment)
     : { modo: 'none', tipo: 'pct', texto: '' }
   const [desconto, setDesconto] = useState<DescontoEscolhido>(descontoGravado)
+
+  // "Política da clínica" na edição (PRD 053): a cotação mostra o que a
+  // política decide para as áreas ATUAIS do formulário.
+  const cotacao = useCotacao(
+    appointment && desconto.modo === 'policy' && serviceId && selectedAreaIds.length > 0
+      ? {
+          serviceIds: [serviceId],
+          serviceAreaPairs: selectedAreaIds.map((areaId) => ({ serviceId, areaId })),
+          phone: appointment.patient_phone ?? null,
+        }
+      : null,
+  )
 
   const { data: serviceAreas } = useServiceAreas(serviceId || undefined)
   const { data: durationRulesData } = useDurationRules()
@@ -149,8 +161,13 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     const origSorted = [...initialAreaIds].sort()
     return sorted.length !== origSorted.length || sorted.some((v, i) => v !== origSorted[i])
   })()
+  // Em "Política da clínica", trocar áreas ou serviço conta como mudança de
+  // desconto: a faixa por quantidade de áreas depende das áreas, e o backend
+  // re-decide ao salvar (decisão 5 do PRD 053).
   const discountChanged =
-    JSON.stringify(payloadDoDesconto(desconto)) !== JSON.stringify(payloadDoDesconto(descontoGravado))
+    desconto.modo === 'policy'
+      ? descontoGravado.modo !== 'policy' || areasChanged || serviceChanged
+      : JSON.stringify(payloadDoDesconto(desconto)) !== JSON.stringify(payloadDoDesconto(descontoGravado))
 
   // Fixada e apagada conta como mudança: é o que deixa o Salvar acusar.
   const manualChanged =
@@ -211,8 +228,8 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
     ...(discountChanged
       ? {
           desconto: {
-            de: textoDoDesconto(descontoGravado),
-            para: textoDoDesconto(desconto),
+            de: textoDoDesconto(descontoGravado, { discountReason: a.discount_reason, discountPct: a.discount_pct }),
+            para: textoDoDesconto(desconto, cotacao.data),
           },
         }
       : {}),
@@ -410,11 +427,18 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           enabled={Boolean(date && serviceId)}
         />
 
-        <DescontoField valor={desconto} onChange={setDesconto} subtotalCents={subtotal} />
+        <DescontoField
+          valor={desconto}
+          onChange={setDesconto}
+          subtotalCents={subtotal}
+          cotacao={cotacao.data ?? (cotacao.isError ? null : undefined)}
+          cotando={cotacao.isPending && cotacao.fetchStatus === 'fetching'}
+          erroDaCotacao={cotacao.isError}
+        />
 
         {/* Price summary */}
         {subtotal !== undefined && (() => {
-          const resumo = resumoDoDesconto(desconto, subtotal)
+          const resumo = resumoDoDesconto(desconto, subtotal, cotacao.data)
           const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
           return (
