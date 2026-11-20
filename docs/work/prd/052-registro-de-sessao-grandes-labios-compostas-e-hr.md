@@ -129,5 +129,5 @@ Fazer o registro técnico refletir o que de fato se aplica na sala, sem tocar na
 - [ ] Pendente
 - [x] Spec gerada: `spec/052-registro-de-sessao-grandes-labios-compostas-e-hr.md` (19/11/2026)
 - [x] Implementado em dev: 20/11/2026 (PR #221, layer 201; migration e seeds em dev; roteiro curl verde)
-- [ ] Implementado em prod: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em prod: 20/11/2026 (layer 159; migration e seeds em prod; seed do mapa corrigido para reordenar ligações existentes; smoke de leitura com composta real em três partes)
+- [x] Registrado em `TASKS_LOG.md`

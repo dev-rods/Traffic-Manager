@@ -153,3 +153,17 @@ class TestSemSugestaoEUmaRespostaValida(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSeedDoMapa(unittest.TestCase):
+    def test_o_seed_reordena_ligacao_existente(self):
+        """PRD 052 inseriu interno_virilha no MEIO da composta. Com DO NOTHING
+        a ligacao antiga do perianal ficava com a ordem velha e a tela mostrava
+        Perianal antes de Grandes labios."""
+        from src.scripts.setup_database import _seed_do_mapa
+
+        sql, params = _seed_do_mapa()
+        self.assertIn("DO UPDATE SET display_order = EXCLUDED.display_order", sql)
+        triplas = [params[i:i + 3] for i in range(0, len(params), 3)]
+        composta = [(c, o) for n, c, o in triplas if n == "Virilha Completa + ânus"]
+        self.assertEqual(composta, [("virilha_completa", 0), ("interno_virilha", 1), ("regiao_perianal", 2)])
