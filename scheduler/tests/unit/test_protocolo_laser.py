@@ -15,6 +15,7 @@ import unittest
 
 from src.services.protocolo_laser import (
     BRANCA,
+    ENERGIA_DO_HR,
     HR,
     NEGRA,
     PROTOCOLO,
@@ -24,6 +25,7 @@ from src.services.protocolo_laser import (
     campos_do_metodo,
     hr_desaconselhado,
     metodos_disponiveis,
+    nome_da_area,
     sugestao,
     tabela_para_a_tela,
 )
@@ -121,6 +123,25 @@ class TestTranscricaoHR(unittest.TestCase):
                     s = sugestao(chave, HR, pele)
                     self.assertIsNotNone(s, f"{chave} sumiu do HR {pele}")
                     self.assertEqual(float(s["fluence_j"]), float(esperado))
+
+    def test_os_nomes_do_prd_052(self):
+        """"Interno da virilha" virou "Grandes lábios" nas três linhas e "Região
+        perianal" virou "Perianal". A chave não muda: registros antigos seguem
+        apontando para ela."""
+        nomes = {(p[1], p[2]): p[3] for p in PROTOCOLO}
+        self.assertEqual(nome_da_area("interno_virilha"), "Grandes lábios")
+        self.assertEqual(nome_da_area("regiao_perianal"), "Perianal")
+        for metodo in (SHR, SHR_STACKING, HR):
+            self.assertEqual(nomes[(metodo, "interno_virilha")], "Grandes lábios", metodo)
+        self.assertEqual(nomes[(SHR_STACKING, "regiao_perianal")], "Perianal")
+        self.assertNotIn("Interno da virilha", str(PROTOCOLO))
+        self.assertNotIn("Região perianal", str(PROTOCOLO))
+
+    def test_a_constante_da_energia_do_hr(self):
+        self.assertEqual(ENERGIA_DO_HR, 1.0)
+        for p in PROTOCOLO:
+            if p[1] == HR:
+                self.assertEqual(p[5], ENERGIA_DO_HR, p[2])
 
     def test_a_energia_do_hr_e_fixa_em_um(self):
         """"O valor em kJ é mantido fixo do início ao fim do tratamento.\""""

@@ -37,6 +37,7 @@ export function paraPayload(a: AplicacaoDeSessao, indice: number): AplicacaoPayl
   return {
     areaId: a.area_id,
     areaName: a.area_name,
+    sourceAreaName: a.source_area_name ?? null,
     protocolAreaKey: a.protocol_area_key,
     method: a.method,
     fluenceJ: a.fluence_j,

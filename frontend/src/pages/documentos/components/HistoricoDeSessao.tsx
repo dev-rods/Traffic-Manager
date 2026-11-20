@@ -142,7 +142,12 @@ export function HistoricoDeSessao({
                 <dl className="mt-2 space-y-1">
                   {agrupaPorArea(r.applications).map((bloco) => (
                     <div key={bloco.chave} className="flex flex-wrap gap-x-3 text-sm">
-                      <dt className="text-gray-700">{bloco.area_name}</dt>
+                      <dt className="text-gray-700">
+                        {bloco.area_name}
+                        {bloco.source_area_name && bloco.source_area_name !== bloco.area_name && (
+                          <span className="ml-1 text-xs text-gray-400">(de {bloco.source_area_name})</span>
+                        )}
+                      </dt>
                       <dd className="text-gray-500">{resumoDoBloco(bloco)}</dd>
                     </div>
                   ))}

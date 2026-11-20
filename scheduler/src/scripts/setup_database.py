@@ -958,6 +958,9 @@ SQL_STATEMENTS = [
         record_id UUID NOT NULL REFERENCES scheduler.patient_session_records(id) ON DELETE CASCADE,
         area_id UUID REFERENCES scheduler.areas(id),
         area_name VARCHAR(160) NOT NULL,
+        -- PRD 052: area comercial de origem quando esta linha e parte de uma
+        -- composta desmembrada ("Virilha Completa + anus" -> 3 linhas).
+        source_area_name VARCHAR(160),
         protocol_area_key VARCHAR(60),
         method VARCHAR(20),
         fluence_j NUMERIC(5,2),
@@ -1286,6 +1289,8 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS consent_link_sent_at TIMESTAMPTZ",
     # PRD 050: desconto em reais. NULL = percentual (tudo que ja existia).
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_cents INTEGER",
+    # PRD 052: origem comercial da parte de uma composta no registro de sessao.
+    "ALTER TABLE scheduler.patient_session_applications ADD COLUMN IF NOT EXISTS source_area_name VARCHAR(160)",
     """DO $$
     BEGIN
         IF NOT EXISTS (

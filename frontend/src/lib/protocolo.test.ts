@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { ParametroDoProtocolo } from '@/types'
 import {
+  AREAS_PADRAO,
+  ENERGIA_DO_HR,
+  parametrosIniciais,
   CAMPOS_POR_METODO,
   avisos,
   bolinhas,
@@ -146,5 +149,37 @@ describe('bolinhas', () => {
   it('sem stacks, nada', () => {
     expect(bolinhas(null)).toBe('')
     expect(bolinhas(0)).toBe('')
+  })
+})
+
+describe('parametrosIniciais (PRD 052)', () => {
+  it('HR sem pele e sem linha: Energia 1, o resto vazio', () => {
+    expect(parametrosIniciais(TABELA, 'lombar', 'HR', null)).toEqual({
+      fluence_j: null,
+      energy_kj: ENERGIA_DO_HR,
+      stacks: null,
+      passes: null,
+    })
+  })
+
+  it('HR com linha: a linha', () => {
+    expect(parametrosIniciais(TABELA, 'axilas', 'HR', 'BRANCA')).toMatchObject({ fluence_j: 17, energy_kj: 1 })
+  })
+
+  it('SHR sem pele: nada preenchido', () => {
+    expect(parametrosIniciais(TABELA, 'axilas', 'SHR', null)).toEqual({
+      fluence_j: null,
+      energy_kj: null,
+      stacks: null,
+      passes: null,
+    })
+  })
+
+  it('sem método: nada', () => {
+    expect(parametrosIniciais(TABELA, 'axilas', null, 'BRANCA').energy_kj).toBeNull()
+  })
+
+  it('a área padrão é Grandes lábios, com a chave de sempre', () => {
+    expect(AREAS_PADRAO).toEqual([{ nome: 'Grandes lábios', protocol_area_key: 'interno_virilha' }])
   })
 })

@@ -160,6 +160,7 @@ def _do_corpo(aplicacoes):
     return [{
         "area_id": a.get("areaId"),
         "area_name": a.get("areaName"),
+        "source_area_name": a.get("sourceAreaName"),
         "protocol_area_key": a.get("protocolAreaKey"),
         "method": a.get("method"),
         "fluence_j": a.get("fluenceJ"),

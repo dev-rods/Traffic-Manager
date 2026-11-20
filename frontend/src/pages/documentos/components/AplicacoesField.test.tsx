@@ -238,10 +238,10 @@ describe('vários métodos na mesma área', () => {
 })
 
 /**
- * PRD 030: "Interno de Virilha" não é vendida, então não é área da clínica —
+ * PRD 030: "Grandes lábios" (até o PRD 052, "Interno de Virilha") não é vendida, então não é área da clínica —
  * mas é aplicada com parâmetro próprio e precisa aparecer na busca.
  */
-describe('Interno de Virilha', () => {
+describe('Grandes lábios (área padrão, fora do catálogo)', () => {
   const COM_INTERNO = [
     ...TABELA,
     P('BRANCA', 'SHR', 'interno_virilha', 6, { energy_kj: 3 }),
@@ -251,20 +251,20 @@ describe('Interno de Virilha', () => {
   it('aparece na busca mesmo sem estar no catálogo', async () => {
     monta([], { parametros: COM_INTERNO })
 
-    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'vir')
+    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'lábi')
 
-    expect(screen.getByRole('button', { name: 'Interno de Virilha' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Grandes lábios' })).toBeInTheDocument()
   })
 
   it('entra com a chave do protocolo, sem area_id', async () => {
     const onChange = monta([], { parametros: COM_INTERNO })
 
-    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'interno')
-    await userEvent.click(screen.getByRole('button', { name: 'Interno de Virilha' }))
+    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'grandes')
+    await userEvent.click(screen.getByRole('button', { name: 'Grandes lábios' }))
 
     expect(onChange).toHaveBeenLastCalledWith([
       expect.objectContaining({
-        area_name: 'Interno de Virilha',
+        area_name: 'Grandes lábios',
         area_id: null,
         protocol_area_key: 'interno_virilha',
         // SHR e HR no protocolo: escolher por ela seria decidir conduta.
@@ -277,7 +277,7 @@ describe('Interno de Virilha', () => {
     const interno: AplicacaoDeSessao = {
       ...AXILAS,
       area_id: null,
-      area_name: 'Interno de Virilha',
+      area_name: 'Grandes lábios',
       protocol_area_key: 'interno_virilha',
     }
     const onChange = monta([interno], { parametros: COM_INTERNO })
@@ -292,13 +292,13 @@ describe('Interno de Virilha', () => {
   it('não duplica se a clínica tiver área com o mesmo nome', async () => {
     monta([], {
       areas: [
-        { id: 'iv', clinic_id: 'c', name: 'Interno de Virilha', display_order: 0, active: true },
+        { id: 'iv', clinic_id: 'c', name: 'Grandes lábios', display_order: 0, active: true },
       ],
     })
 
-    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'interno')
+    await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'grandes')
 
-    expect(screen.getAllByRole('button', { name: 'Interno de Virilha' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Grandes lábios' })).toHaveLength(1)
   })
 
   it('não aparece quando a busca não casa', async () => {
@@ -306,7 +306,7 @@ describe('Interno de Virilha', () => {
 
     await userEvent.type(screen.getByPlaceholderText('+ Adicionar área'), 'axi')
 
-    expect(screen.queryByRole('button', { name: 'Interno de Virilha' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Grandes lábios' })).not.toBeInTheDocument()
   })
 })
 
@@ -362,5 +362,49 @@ describe('pendências destacadas (PRD 051)', () => {
   it('sem pendências, nada é marcado', () => {
     monta([{ ...AXILAS, method: 'SHR', fluence_j: 7, energy_kj: 8 }])
     expect(screen.queryAllByText(/obrigatório/)).toEqual([])
+  })
+})
+
+describe('HR pré-preenche Energia = 1 (PRD 052)', () => {
+  it('mesmo sem sugestão para a área e sem pele, e o campo continua editável', async () => {
+    const semProtocolo: AplicacaoDeSessao = { ...AXILAS, area_name: 'Área nova', protocol_area_key: null }
+    const onChange = monta([semProtocolo], { skinType: null })
+
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'HR')
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ method: 'HR', energy_kj: 1, fluence_j: null }),
+    ])
+  })
+
+  it('com linha no protocolo, vale a linha (que também é 1)', async () => {
+    const onChange = monta([AXILAS])
+
+    await userEvent.selectOptions(screen.getByRole('combobox'), 'HR')
+
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ method: 'HR', fluence_j: 17, energy_kj: 1 }),
+    ])
+  })
+
+  it('a Energia do HR não é travada: dá para apagar', async () => {
+    const onChange = monta([{ ...AXILAS, method: 'HR', fluence_j: 17, energy_kj: 1 }])
+
+    const energia = screen.getByLabelText(/Energia \(kJ\)/)
+    expect(energia).not.toHaveAttribute('readonly')
+    await userEvent.clear(energia)
+
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ energy_kj: null })])
+  })
+})
+
+describe('parte de composta mostra a origem (PRD 052)', () => {
+  it('"de: Virilha Completa + ânus" no lugar do subtítulo do protocolo', () => {
+    monta([
+      { ...AXILAS, area_name: 'Perianal', protocol_area_key: 'regiao_perianal', protocol_area_name: 'Perianal', source_area_name: 'Virilha Completa + ânus' },
+    ])
+
+    expect(screen.getByText('de: Virilha Completa + ânus')).toBeInTheDocument()
+    expect(screen.queryByText(/parâmetros de/)).toBeNull()
   })
 })

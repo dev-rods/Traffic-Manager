@@ -91,11 +91,14 @@ vi.mock('@/hooks/useSessionRecords', () => ({
     for (const nome of nomes) {
       const area = AREAS.find((a) => a.name === nome)
       const chaves = MAPA.filter((l) => l.area_id === area?.id).map((l) => l.protocol_area_key)
+      const desmembrada = chaves.length > 1
       for (const chave of chaves.length ? chaves : [null]) {
         const p = PARAMETROS.find((x) => x.protocol_area_key === chave)
         out.push({
           area_id: area?.id ?? null,
-          area_name: nome,
+          // PRD 052: parte de composta leva o nome do protocolo e a origem.
+          area_name: desmembrada && p ? p.protocol_area_name : nome,
+          source_area_name: desmembrada ? nome : null,
           protocol_area_key: chave,
           protocol_area_name: p?.protocol_area_name ?? null,
           method: p ? 'SHR' : null,
@@ -172,29 +175,18 @@ describe('escolher a sessão monta as áreas', () => {
     expect(screen.getByLabelText('Data')).toHaveValue('2026-11-08')
   })
 
-  it('área composta vira DUAS aplicações, com o nome comercial e o protocolo de subtítulo', async () => {
+  it('área composta vira DUAS aplicações, cada parte com o nome do protocolo e a origem (PRD 052)', async () => {
     monta([sessao({ areas: 'Virilha Completa + ânus' })])
 
-    await waitFor(() =>
-      expect(areasMontadas()).toEqual([
-        'Virilha Completa + ânus (Virilha)',
-        'Virilha Completa + ânus (Perianal)',
-      ]),
-    )
-    expect(screen.getByText('parâmetros de Virilha')).toBeInTheDocument()
-    expect(screen.getByText('parâmetros de Perianal')).toBeInTheDocument()
+    await waitFor(() => expect(areasMontadas()).toEqual(['Virilha', 'Perianal']))
+    expect(screen.getAllByText('de: Virilha Completa + ânus')).toHaveLength(2)
+    expect(screen.queryByText(/parâmetros de/)).toBeNull()
   })
 
   it('duas áreas no agendamento, uma composta, viram três aplicações', async () => {
     monta([sessao({ areas: 'Axila, Virilha Completa + ânus' })])
 
-    await waitFor(() =>
-      expect(areasMontadas()).toEqual([
-        'Axila',
-        'Virilha Completa + ânus (Virilha)',
-        'Virilha Completa + ânus (Perianal)',
-      ]),
-    )
+    await waitFor(() => expect(areasMontadas()).toEqual(['Axila', 'Virilha', 'Perianal']))
   })
 
   it('o nome comercial fica: "Perna Completa" não vira "Meia perna" (PRD 051)', async () => {
@@ -234,12 +226,7 @@ describe('escolher a sessão monta as áreas', () => {
     await waitFor(() => expect(areasMontadas()).toEqual(['Axila']))
 
     await userEvent.selectOptions(seletor(), 'a2')
-    await waitFor(() =>
-      expect(areasMontadas()).toEqual([
-        'Virilha Completa + ânus (Virilha)',
-        'Virilha Completa + ânus (Perianal)',
-      ]),
-    )
+    await waitFor(() => expect(areasMontadas()).toEqual(['Virilha', 'Perianal']))
   })
 
   it('"Registrar manual" é escolhível e não muda a escolha de volta sozinho', async () => {
@@ -262,12 +249,7 @@ describe('sessão de origem (vindo da agenda)', () => {
     )
 
     await waitFor(() => expect(seletor().value).toBe('a2'))
-    await waitFor(() =>
-      expect(areasMontadas()).toEqual([
-        'Virilha Completa + ânus (Virilha)',
-        'Virilha Completa + ânus (Perianal)',
-      ]),
-    )
+    await waitFor(() => expect(areasMontadas()).toEqual(['Virilha', 'Perianal']))
     expect(screen.getByLabelText('Data')).toHaveValue('2026-11-19')
   })
 

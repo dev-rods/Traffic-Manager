@@ -73,11 +73,23 @@ class TestAreasCompostas(unittest.TestCase):
     """No catálogo é uma área; no protocolo são duas, às vezes com métodos
     diferentes. O registro nasce com as duas linhas, que é o que ela aplica."""
 
-    def test_virilha_completa_mais_anus_abre_em_duas(self):
+    def test_virilha_completa_mais_anus_abre_em_tres(self):
+        """PRD 052: virilha, grandes lábios (aplicados junto) e perianal, nesta
+        ordem - a tela mostra um abaixo do outro."""
         self.assertEqual(
             chaves_da_area("Virilha Completa + ânus"),
-            ("virilha_completa", "regiao_perianal"),
+            ("virilha_completa", "interno_virilha", "regiao_perianal"),
         )
+
+    def test_virilha_cavada_e_completa_trazem_grandes_labios(self):
+        """PRD 052, decisão 10: só a cavada e a completa. Simples e meia não."""
+        self.assertEqual(chaves_da_area("Virilha Cavada"), ("virilha_cavada", "interno_virilha"))
+        self.assertEqual(chaves_da_area("Virilha Completa"), ("virilha_completa", "interno_virilha"))
+        self.assertEqual(chaves_da_area("Virilha Simples"), ("virilha_simples",))
+        self.assertEqual(chaves_da_area("1/2 Virilha"), ("interno_virilha",))
+
+    def test_grandes_labios_tem_tres_metodos_e_por_isso_entra_sem_metodo(self):
+        self.assertEqual(metodos_disponiveis("interno_virilha"), ["SHR", "SHR_STACKING", "HR"])
 
     def test_e_as_duas_tem_metodos_diferentes(self):
         """Virilha no SHR, perianal no Stacking - por isso não dá para tratar a

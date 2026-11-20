@@ -758,6 +758,12 @@ export interface AplicacaoDeSessao {
    * para a tela mostrar como subtitulo (PRD 051). Nao e gravado.
    */
   protocol_area_name?: string | null
+  /**
+   * Area comercial de origem quando esta linha e parte de uma composta
+   * desmembrada ("Virilha Completa + anus" -> Virilha completa, Grandes labios,
+   * Perianal). null = nao e parte (PRD 052). Gravado.
+   */
+  source_area_name?: string | null
   method: MetodoLaser | null
   fluence_j: number | null
   energy_kj: number | null
@@ -816,6 +822,7 @@ export interface AplicacoesDoAgendamento {
 export interface AplicacaoPayload {
   areaId: string | null
   areaName: string
+  sourceAreaName: string | null
   protocolAreaKey: string | null
   method: MetodoLaser | null
   fluenceJ: number | null

@@ -12,7 +12,7 @@ import {
   TODOS_OS_METODOS,
   hrDesaconselhado,
   metodosDaArea,
-  sugestao,
+  parametrosIniciais,
 } from '@/lib/protocolo'
 import {
   adicionaMetodo,
@@ -84,38 +84,35 @@ export function AplicacoesField({
     onChange(aplicacoes.map((a, i) => (i === indice ? { ...a, ...mudanca } : a)))
   }
 
-  /** Trocar o método repõe a sugestão e limpa o que o método novo não usa. */
+  /**
+   * Trocar o método repõe a sugestão e limpa o que o método novo não usa.
+   * No HR a Energia vem 1 sempre (PRD 052), editável.
+   */
   const trocaMetodo = (indice: number, metodo: MetodoLaser | null) => {
     const atual = aplicacoes[indice]
-    const nova = sugestao(parametros, atual.protocol_area_key, metodo, skinType)
     altera(indice, {
       method: metodo,
-      fluence_j: nova?.fluence_j ?? null,
-      energy_kj: nova?.energy_kj ?? null,
-      stacks: nova?.stacks ?? null,
-      passes: nova?.passes ?? null,
+      ...parametrosIniciais(parametros, atual.protocol_area_key, metodo, skinType),
     })
   }
 
   const adiciona = (nome: string, areaId: string | null, chave: string | null) => {
     const metodos = metodosDaArea(parametros, chave)
     const metodo = metodos.length === 1 ? metodos[0] : null
-    const nova = sugestao(parametros, chave, metodo, skinType)
     onChange(
       normaliza([
         ...aplicacoes,
         {
           area_id: areaId,
-          // Nome comercial fica; o protocolo é subtítulo (PRD 051).
+          // Nome comercial fica; o protocolo é subtítulo (PRD 051). Área
+          // adicionada à mão não é parte de composta: sem origem.
           area_name: nome,
+          source_area_name: null,
           protocol_area_key: chave,
           protocol_area_name:
             parametros.find((p) => p.protocol_area_key === chave)?.protocol_area_name ?? null,
           method: metodo,
-          fluence_j: nova?.fluence_j ?? null,
-          energy_kj: nova?.energy_kj ?? null,
-          stacks: nova?.stacks ?? null,
-          passes: nova?.passes ?? null,
+          ...parametrosIniciais(parametros, chave, metodo, skinType),
           display_order: aplicacoes.length,
         },
       ])
@@ -129,7 +126,7 @@ export function AplicacoesField({
     busca.length < 2
       ? []
       : [
-          // As padrão primeiro: ela não acha "Interno de Virilha" em lugar
+          // As padrão primeiro: ela não acha "Grandes lábios" em lugar
           // nenhum além daqui. Se a clínica tiver área com o mesmo nome, vale
           // a do catálogo.
           ...AREAS_PADRAO.filter(
@@ -178,14 +175,23 @@ export function AplicacoesField({
             // isso ao lado, em vez de trocar o nome da área tratada (PRD 051).
             const protocolo = bloco.linhas[0]?.protocol_area_name ?? null
             const subtitulo = protocolo && protocolo !== bloco.area_name ? protocolo : null
+            // Parte de uma composta: diz de onde veio (PRD 052).
+            const origem =
+              bloco.source_area_name && bloco.source_area_name !== bloco.area_name
+                ? bloco.source_area_name
+                : null
 
             return (
               <li key={bloco.chave} className="rounded-lg border border-gray-200 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <span className="flex flex-col">
                     <span className="text-sm font-medium text-gray-800">{bloco.area_name}</span>
-                    {subtitulo && (
-                      <span className="text-xs text-gray-400">parâmetros de {subtitulo}</span>
+                    {origem ? (
+                      <span className="text-xs text-gray-400">de: {origem}</span>
+                    ) : (
+                      subtitulo && (
+                        <span className="text-xs text-gray-400">parâmetros de {subtitulo}</span>
+                      )
                     )}
                   </span>
                   <button

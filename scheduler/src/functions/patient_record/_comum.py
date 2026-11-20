@@ -48,10 +48,10 @@ def grava_aplicacoes(db, record_id, aplicacoes):
     for ordem, ap in enumerate(aplicacoes or []):
         db.execute_write(
             """INSERT INTO scheduler.patient_session_applications
-               (record_id, area_id, area_name, protocol_area_key, method,
+               (record_id, area_id, area_name, source_area_name, protocol_area_key, method,
                 fluence_j, energy_kj, stacks, passes, display_order)
-               VALUES (%s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (record_id, ap.get("area_id"), ap["area_name"],
+               VALUES (%s::uuid, %s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (record_id, ap.get("area_id"), ap["area_name"], ap.get("source_area_name"),
              ap.get("protocol_area_key"), ap.get("method"),
              ap.get("fluence_j"), ap.get("energy_kj"),
              ap.get("stacks"), ap.get("passes"), ordem),

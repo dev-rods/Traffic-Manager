@@ -63,20 +63,53 @@ class TestONascimentoDoRegistro(unittest.TestCase):
                 self.assertIsNone(aps[0]["method"])
                 self.assertIsNone(aps[0]["fluence_j"])
 
-    def test_area_composta_vira_duas_aplicacoes(self):
-        """No catálogo é uma área; no protocolo são duas, com métodos
-        diferentes. É o que ela de fato aplica."""
+    def test_area_composta_vira_tres_aplicacoes_com_nome_por_parte(self):
+        """No catálogo é uma área; no protocolo são três (PRD 052). Cada parte
+        leva o nome do protocolo e guarda a origem comercial."""
         aps = aplicacoes_do_agendamento(db_com_areas([
             area("Virilha Completa + ânus", "virilha_completa", ordem=0),
-            area("Virilha Completa + ânus", "regiao_perianal", ordem=1),
+            area("Virilha Completa + ânus", "interno_virilha", ordem=1),
+            area("Virilha Completa + ânus", "regiao_perianal", ordem=2),
         ]), APPT, "BRANCA")
 
-        self.assertEqual(len(aps), 2)
+        self.assertEqual([a["area_name"] for a in aps],
+                         ["Virilha completa", "Grandes lábios", "Perianal"])
+        self.assertEqual({a["source_area_name"] for a in aps}, {"Virilha Completa + ânus"})
         self.assertEqual(aps[0]["method"], "SHR")
         self.assertEqual(aps[0]["fluence_j"], 7)
-        self.assertEqual(aps[1]["method"], "SHR_STACKING")
-        self.assertEqual(aps[1]["stacks"], 3)
-        self.assertEqual(aps[1]["passes"], 2)
+        self.assertIsNone(aps[1]["method"], "três métodos no protocolo: ela escolhe")
+        self.assertIsNone(aps[1]["fluence_j"])
+        self.assertEqual(aps[2]["method"], "SHR_STACKING")
+        self.assertEqual(aps[2]["stacks"], 3)
+        self.assertEqual(aps[2]["passes"], 2)
+
+    def test_virilha_cavada_traz_grandes_labios(self):
+        aps = aplicacoes_do_agendamento(db_com_areas([
+            area("Virilha Cavada", "virilha_cavada", ordem=0),
+            area("Virilha Cavada", "interno_virilha", ordem=1),
+        ]), APPT, "BRANCA")
+
+        self.assertEqual([a["area_name"] for a in aps], ["Virilha cavada", "Grandes lábios"])
+        self.assertEqual([a["source_area_name"] for a in aps], ["Virilha Cavada"] * 2)
+
+    def test_area_de_uma_chave_nao_tem_origem(self):
+        """Uma chave só: nome comercial (PRD 051), sem origem."""
+        aps = aplicacoes_do_agendamento(db_com_areas([
+            area("Perna Completa", "meia_perna", area_id="a1"),
+            area("Axilas", "axilas", area_id="a2", ordem=1),
+        ]), APPT, "BRANCA")
+
+        self.assertEqual([a["area_name"] for a in aps], ["Perna Completa", "Axilas"])
+        self.assertEqual([a["source_area_name"] for a in aps], [None, None])
+
+    def test_duas_areas_diferentes_nao_sao_confundidas_com_composta(self):
+        """Contar chaves por área, não por posição: duas áreas de uma chave cada
+        não podem virar "desmembrada"."""
+        aps = aplicacoes_do_agendamento(db_com_areas([
+            area("Axilas", "axilas", area_id="a1", ordem=0),
+            area("Lombar", "lombar", area_id="a2", ordem=1),
+        ]), APPT, "BRANCA")
+        self.assertEqual([a["source_area_name"] for a in aps], [None, None])
 
     def test_area_sem_mapa_entra_sem_parametro(self):
         """Sem sugestão é resposta válida. O que não pode é inventar."""
@@ -231,6 +264,15 @@ class TestValidacao(unittest.TestCase):
         limpa = valida_aplicacoes([{"area_name": "Buço", "method": "HR",
                                     "fluence_j": 17, "energy_kj": 1}])[0]
         self.assertEqual(limpa["energy_kj"], 1.0)
+
+    def test_origem_passa_cortada_e_vazia_vira_nulo(self):
+        limpa = valida_aplicacoes([{"area_name": "Perianal", "method": "SHR_STACKING",
+                                    "fluence_j": 6, "stacks": 3, "passes": 2,
+                                    "source_area_name": "  Virilha Completa + ânus  "}])[0]
+        self.assertEqual(limpa["source_area_name"], "Virilha Completa + ânus")
+        limpa = valida_aplicacoes([{"area_name": "Axilas", "method": "SHR",
+                                    "fluence_j": 7, "energy_kj": 8, "source_area_name": ""}])[0]
+        self.assertIsNone(limpa["source_area_name"])
 
     def test_completa_passa_e_descarta_o_que_o_metodo_nao_usa(self):
         limpa = valida_aplicacoes([{"area_name": "Área nova", "method": "SHR",
