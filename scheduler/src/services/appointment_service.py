@@ -7,11 +7,9 @@ from src.services.relogio import HOJE_SQL
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.desconto_personalizado import DescontoInvalido, RAZAO as RAZAO_PERSONALIZADO
 from src.services.desconto_personalizado import pct_equivalente
-from src.services.desconto_personalizado import razao_de as razao_do_personalizado
-from src.services.desconto_personalizado import do_paciente as desconto_do_paciente
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
 from src.services.reagendamento import vincula_antecessor
-from src.services.politica_de_desconto import preco_de_tabela
+from src.services.politica_de_desconto import decide, preco_de_tabela
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, duracao_do_carrinho, get_duration_rules)
 from src.services.duracao_manual import efetiva as duracao_efetiva
@@ -204,22 +202,27 @@ class AppointmentService:
             )
         duration_minutes = duracao_efetiva(duration_minutes, manual)
 
-        # 2a-bis. Desconto combinado com a paciente.
+        # 2a-bis. Ninguem opinou: vale a politica da clinica (PRD 053).
         #
-        # So quando o chamador NAO opinou: `discount_pct` zerado E sem razao
-        # significa "ninguem decidiu". O bot sempre opina, porque a
-        # calculate_discount ja considera o personalizado; o painel opina quando
-        # a atendente escolhe parceria ou digita um percentual - e a escolha
-        # dela vale para AQUELE agendamento, porque e decisao de agora contra
-        # uma regra permanente.
+        # `discount_pct` zerado E sem razao significa "ninguem decidiu", e a
+        # resposta e a MESMA do bot e do site: `decide` (combinado da paciente
+        # vence; senao o maior entre primeira sessao e faixa de areas). Ate
+        # 20/11/2026 so o combinado era aplicado aqui, e um agendamento feito
+        # pela recepcao nunca ganhava primeira sessao nem faixa.
+        #
+        # O painel opina quando escolhe parceria, personalizado ou "Sem
+        # desconto" - este ultimo chega como pct 0 com razao "none", e e o que
+        # o deixa fora deste if. Bot e site passam pct 0 sem razao quando a
+        # politica deles nao deu nada: `decide` roda de novo com os mesmos
+        # dados e o mesmo resultado, uma consulta a mais.
         #
         # Fica antes do bloco de precos de proposito: o final_price_cents e
         # calculado logo abaixo a partir do discount_pct, e mudar o desconto
         # depois deixaria o valor gravado divergente do desconto gravado.
         if discount_cents is None and not discount_pct and not discount_reason:
-            personalizado = desconto_do_paciente(self.db, clinic_id, phone)
-            if personalizado is not None:
-                discount_pct, discount_reason = personalizado, razao_do_personalizado(personalizado)
+            decisao = decide(self.db, clinic_id, phone, len(service_area_pairs or []))
+            if decisao.pct:
+                discount_pct, discount_reason = decisao.pct, decisao.razao
 
         # 2b. Auto-calculate prices when not provided by caller
         if original_price_cents is None:
@@ -765,6 +768,54 @@ class AppointmentService:
         updated_appointment["manual_duration_descartada"] = duracao_manual_descartada
 
         return updated_appointment
+
+    def aplica_politica(self, appointment_id: str) -> Dict[str, Any]:
+        """Re-decide o desconto pela politica da clinica sobre o preco de
+        tabela ATUAL (PRD 053, decisao 5).
+
+        Chamado pela edicao, depois da troca de areas: a faixa por quantidade
+        de areas depende das areas, e congelar o percentual gravado deixaria
+        15% de "2-4 areas" numa sessao de seis. Zera `discount_cents`: a
+        politica e percentual.
+
+        A razao gravada e a de `decide`, inclusive None quando a politica nao
+        da nada - "none" fica reservado a escolha explicita do painel.
+        """
+        linhas = self.db.execute_query(
+            """
+            SELECT a.clinic_id, a.original_price_cents, a.version, p.phone,
+                   (SELECT COUNT(*) FROM scheduler.appointment_service_areas x
+                     WHERE x.appointment_id = a.id) AS qtd_areas
+            FROM scheduler.appointments a
+            LEFT JOIN scheduler.patients p ON p.id = a.patient_id
+            WHERE a.id = %s::uuid AND a.status = 'CONFIRMED'
+            """,
+            (appointment_id,),
+        )
+        if not linhas:
+            raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou não confirmado")
+        atual = linhas[0]
+        original = atual.get("original_price_cents")
+        decisao = decide(self.db, atual["clinic_id"], atual.get("phone"), int(atual.get("qtd_areas") or 0))
+        final = aplica_desconto(original, decisao.pct) if original is not None else None
+
+        logger.info(
+            f"[Desconto] {appointment_id}: politica re-decidida -> "
+            f"{decisao.razao} {decisao.pct}% (original={original}, final={final})"
+        )
+        resultado = self.db.execute_write_returning(
+            """
+            UPDATE scheduler.appointments
+            SET discount_pct = %s, discount_cents = NULL, discount_reason = %s,
+                final_price_cents = %s, version = version + 1, updated_at = NOW()
+            WHERE id = %s::uuid AND version = %s
+            RETURNING *
+            """,
+            (decisao.pct, decisao.razao, final, appointment_id, atual.get("version", 1)),
+        )
+        if not resultado:
+            raise ConflictError("Agendamento foi modificado por outro processo")
+        return resultado
 
     def set_manual_duration(
         self,

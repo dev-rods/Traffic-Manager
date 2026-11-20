@@ -310,6 +310,6 @@ Sem migration: `discount_reason` já é texto livre.
 
 - [ ] Pendente
 - [x] Spec gerada: `spec/053-popup-da-agenda-confirmacao-e-politica-de-desconto.md` (20/11/2026)
-- [ ] Implementado em dev: (data)
+- [x] Implementado em dev: 20/11/2026 (PR #226, layer 202; cotação em `POST appointments?simular=true` porque prod está em 494/500 recursos do CloudFormation; roteiro API verde, painel pendente)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`

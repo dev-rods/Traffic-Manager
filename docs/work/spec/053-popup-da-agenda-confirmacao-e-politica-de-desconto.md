@@ -103,7 +103,19 @@ def aplica_politica(self, appointment_id: str) -> Dict[str, Any]:
 - Nova etapa **1-bis**, logo após a etapa 1 (serviço/áreas) e antes da duração: `if aplicar_politica: service.aplica_politica(appointment_id); changed = True; messages.append("desconto pela política")`. Fica depois da etapa 1 porque o preço de tabela já é o das áreas novas, pela mesma razão que o bloco de pct/cents da etapa 4.
 - Docstring: documentar `discountPolicy` e `discountReason: "none"`.
 
-### 3.6 `functions/appointment/quote.py` (novo)
+### 3.6 Cotação: `POST appointments?simular=true` (ajuste de 20/11/2026)
+
+> **Mudou na implementação.** A spec previa `POST clinics/{clinicId}/quote`
+> numa Lambda nova. Ao implementar, `test_limite_de_recursos` acusou a 87ª
+> função; medido o stack de prod: **494 dos 500** recursos do CloudFormation.
+> Uma função nova custa 5 (função, permission, resource, POST, OPTIONS). A
+> cotação foi para `create.py` como `?simular=true`, o mesmo padrão dos
+> lembretes do dia, sem recurso novo e com a permissão `agenda.escrever` (quem
+> cota é quem está criando). O corpo e a resposta são os descritos abaixo,
+> com `clinicId` no corpo em vez do path. A seção abaixo fica como registro
+> do desenho original.
+
+### 3.6-original `functions/appointment/quote.py` (não criado)
 
 ```
 POST clinics/{clinicId}/quote          agenda.ler

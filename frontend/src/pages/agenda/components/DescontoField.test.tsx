@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DescontoField } from './DescontoField'
-import { SEM_DESCONTO, type DescontoEscolhido } from '@/lib/desconto'
+import { POLITICA_DA_CLINICA, SEM_DESCONTO, type DescontoEscolhido } from '@/lib/desconto'
 
 const custom = (over: Partial<DescontoEscolhido> = {}): DescontoEscolhido => ({
   modo: 'custom',
@@ -15,6 +15,42 @@ describe('DescontoField', () => {
   it('sem desconto não mostra o campo', () => {
     render(<DescontoField valor={SEM_DESCONTO} onChange={vi.fn()} />)
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('"Política da clínica" é o primeiro modo e explica o que a política decide (PRD 053)', () => {
+    const { rerender } = render(<DescontoField valor={POLITICA_DA_CLINICA} onChange={vi.fn()} />)
+    const botoes = screen.getAllByRole('button').map((b) => b.textContent)
+    expect(botoes.slice(0, 4)).toEqual(['Política da clínica', 'Sem desconto', 'Parceria (100%)', 'Personalizado'])
+    expect(screen.getByTestId('cotacao')).toHaveTextContent('Escolha a paciente e as áreas')
+
+    rerender(<DescontoField valor={POLITICA_DA_CLINICA} onChange={vi.fn()} cotando />)
+    expect(screen.getByTestId('cotacao')).toHaveTextContent('Consultando')
+
+    rerender(
+      <DescontoField
+        valor={POLITICA_DA_CLINICA}
+        onChange={vi.fn()}
+        cotacao={{ originalPriceCents: 20000, discountPct: 15, discountReason: 'tier_2', finalPriceCents: 17000, areaCount: 3, isFirst: false }}
+      />,
+    )
+    expect(screen.getByTestId('cotacao')).toHaveTextContent('2-4 áreas: 15% (-R$ 30,00)')
+
+    rerender(
+      <DescontoField
+        valor={POLITICA_DA_CLINICA}
+        onChange={vi.fn()}
+        cotacao={{ originalPriceCents: 20000, discountPct: 0, discountReason: null, finalPriceCents: 20000, areaCount: 1, isFirst: false }}
+      />,
+    )
+    expect(screen.getByTestId('cotacao')).toHaveTextContent('Sem desconto pela política')
+
+    rerender(<DescontoField valor={POLITICA_DA_CLINICA} onChange={vi.fn()} cotacao={null} erroDaCotacao />)
+    expect(screen.getByTestId('cotacao')).toHaveTextContent('Não foi possível consultar a política')
+  })
+
+  it('a cotação só aparece no modo política', () => {
+    render(<DescontoField valor={SEM_DESCONTO} onChange={vi.fn()} cotando />)
+    expect(screen.queryByTestId('cotacao')).not.toBeInTheDocument()
   })
 
   it('"Personalizado" abre o seletor % / R$ e o campo em porcento', async () => {

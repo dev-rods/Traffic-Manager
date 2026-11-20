@@ -7,7 +7,7 @@ import { ObservacaoField } from './ObservacaoField'
 import { PrimeiraVisitaField } from './PrimeiraVisitaField'
 import { ehHorarioValido } from '@/lib/horario'
 import { Button } from '@/components/ui/Button'
-import { useCreateAppointment } from '@/hooks/useAppointments'
+import { useCreateAppointment, useCotacao } from '@/hooks/useAppointments'
 import { useServices } from '@/hooks/useServices'
 import { calculaDuracao } from '@/lib/duracao'
 import { DuracaoField } from './DuracaoField'
@@ -22,7 +22,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { formatPhone } from '@/utils/formatPhone'
 import type { PatientWithStats } from '@/types'
 import {
-  SEM_DESCONTO,
+  POLITICA_DA_CLINICA,
   formataPct,
   payloadDoDesconto,
   resumoDoDesconto,
@@ -54,8 +54,12 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   // Como foi digitado (PRD 050): `null` segue o cálculo, string é fixada.
   const [duracaoFixada, setDuracaoFixada] = useState<string | null>(null)
   const manualDuration = parseDuracao(duracaoFixada)
-  const [desconto, setDesconto] = useState<DescontoEscolhido>(SEM_DESCONTO)
+  // "Política da clínica" é o padrão (PRD 053): o backend decide com a mesma
+  // função do bot e do site. A exceção é a paciente com combinado, que entra
+  // em "Personalizado N%" ao ser escolhida (ver handleSelectPatient).
+  const [desconto, setDesconto] = useState<DescontoEscolhido>(POLITICA_DA_CLINICA)
   const [error, setError] = useState<string | null>(null)
+  const [preSelecionadoPelaPaciente, setPreSelecionadoPelaPaciente] = useState(false)
   const [prevServiceId, setPrevServiceId] = useState('')
 
   // Patient search state
@@ -106,6 +110,20 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         .filter((a) => selectedAreaIds.includes(a.area_id))
         .reduce((sum, a) => sum + a.effective_price_cents, 0)
     : undefined
+
+  // A cotação (PRD 053): o que a política decide para ESTA paciente e ESTAS
+  // áreas, pela conta do backend. Só em "Política da clínica" e com áreas.
+  const telefoneDaCotacao = selectedPatient?.phone ?? (newPhone.trim() || null)
+  const cotacao = useCotacao(
+    desconto.modo === 'policy' && serviceId && selectedAreaIds.length > 0
+      ? {
+          serviceIds: [serviceId],
+          serviceAreaPairs: selectedAreaIds.map((areaId) => ({ serviceId, areaId })),
+          phone: telefoneDaCotacao,
+        }
+      : null,
+  )
+  const cotacaoPronta = cotacao.data ?? (cotacao.isError ? null : undefined)
 
   // A duração que a sessão vai de fato ocupar. Os horários vêm dela, não da
   // calculada: senão a tela oferece um horário em que a sessão não cabe.
@@ -170,14 +188,22 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     setShowResults(false)
     setShowNewPatient(false)
 
-    // Desconto combinado com a paciente entra JA SELECIONADO. O backend tambem
-    // o aplica quando ninguem escolhe nada, mas deixa-lo invisivel aqui faria a
-    // atendente ver um total e a paciente pagar outro.
+    // Desconto combinado com a paciente entra JA SELECIONADO (decisao 8 do
+    // PRD 053): e o unico caso em que "Politica da clinica" nao e o padrao. A
+    // politica gravaria o mesmo (o combinado vence tudo), mas mostra-lo como
+    // Personalizado deixa claro de onde veio e permite trocar.
     //
     // `!= null` e nao `?` de proposito: 0 e um combinado legitimo - "esta
     // paciente nunca recebe desconto" - e cairia fora com teste de verdade.
+    //
+    // Trocar para uma paciente SEM combinado volta a politica so se o modo
+    // atual veio da pre-selecao: um personalizado digitado a mao fica.
     if (patient.custom_discount_pct != null) {
       setDesconto({ modo: 'custom', tipo: 'pct', texto: formataPct(patient.custom_discount_pct) })
+      setPreSelecionadoPelaPaciente(true)
+    } else if (preSelecionadoPelaPaciente) {
+      setDesconto(POLITICA_DA_CLINICA)
+      setPreSelecionadoPelaPaciente(false)
     }
   }
 
@@ -262,8 +288,9 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         // backend, que e exatamente o que se reverteu.
         isFirstVisit: primeiraVisita,
         ...(manualDuration !== null ? { manualDurationMinutes: manualDuration } : {}),
-        // Na criação `none` é omitir: o backend aplica o combinado da paciente.
-        ...(desconto.modo === 'none' ? {} : descontoParaCriacao(desconto)),
+        // "Política da clínica" é omitir: o backend decide (PRD 053). Os demais
+        // modos opinam, inclusive "Sem desconto" (pct 0 com razão `none`).
+        ...(desconto.modo === 'policy' ? {} : descontoParaCriacao(desconto)),
       })
       handleClose()
     } catch (err: unknown) {
@@ -276,9 +303,10 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     }
   }
 
-  /** Na criação a razão nunca é nula: `none` nem chega aqui. */
+  /** Na criação a razão nunca é nula: `policy` nem chega aqui. */
   const descontoParaCriacao = (d: DescontoEscolhido) => {
-    const { discountReason, ...resto } = payloadDoDesconto(d)
+    const { discountReason, discountPolicy: _ignorado, ...resto } = payloadDoDesconto(d)
+    void _ignorado
     return { ...resto, discountReason: discountReason ?? undefined }
   }
 
@@ -477,6 +505,15 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         )}
 
         <PrimeiraVisitaField checked={primeiraVisita} onChange={setPrimeiraVisita} />
+        {/* O botão marca o registro; o desconto de estreia é do banco (decisão 7
+            do PRD 053). Quando discordam, a pessoa vê antes de salvar. */}
+        {cotacao.data && desconto.modo === 'policy' && primeiraVisita !== cotacao.data.isFirst && (
+          <p className="text-xs text-amber-600" role="note">
+            {primeiraVisita
+              ? 'O sistema não considera esta a primeira sessão (já há sessão confirmada). A política não dá o desconto de estreia.'
+              : 'Para o sistema esta é a primeira sessão: a política aplica o desconto de estreia.'}
+          </p>
+        )}
 
         <ObservacaoField value={notes} onChange={setNotes} />
 
@@ -495,11 +532,18 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           enabled={Boolean(date && serviceId)}
         />
 
-        <DescontoField valor={desconto} onChange={setDesconto} subtotalCents={subtotal} />
+        <DescontoField
+          valor={desconto}
+          onChange={setDesconto}
+          subtotalCents={subtotal}
+          cotacao={cotacaoPronta}
+          cotando={cotacao.isPending && cotacao.fetchStatus === 'fetching'}
+          erroDaCotacao={cotacao.isError}
+        />
 
         {/* Price summary */}
         {subtotal !== undefined && (() => {
-          const resumo = resumoDoDesconto(desconto, subtotal)
+          const resumo = resumoDoDesconto(desconto, subtotal, cotacao.data)
           const fmt = (v: number) => (v / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
           return (

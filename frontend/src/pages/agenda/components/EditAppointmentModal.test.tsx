@@ -10,7 +10,7 @@ import { render, screen, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
 import { EditAppointmentModal } from './EditAppointmentModal'
-import type { Appointment } from '@/types'
+import type { Appointment, Cotacao } from '@/types'
 
 const mutateAsync = vi.fn().mockResolvedValue({})
 
@@ -19,8 +19,12 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ clinicId: 'c1', isAuthenticated: true }),
 }))
 
+let cotacao: { data?: Cotacao; isPending: boolean; isError: boolean; fetchStatus: string } = {
+  data: undefined, isPending: false, isError: false, fetchStatus: 'idle',
+}
 vi.mock('@/hooks/useAppointments', () => ({
   useUpdateAppointment: () => ({ mutateAsync, isPending: false }),
+  useCotacao: () => cotacao,
 }))
 vi.mock('@/hooks/useServices', () => ({
   useServices: () => ({ data: [{ id: 's1', name: 'Laser', duration_minutes: 30, price_cents: 20000 }] }),
@@ -256,6 +260,48 @@ describe('duração fixada pode ser apagada enquanto se digita (PRD 050)', () =>
     expect(mutateAsync).toHaveBeenCalledWith({
       appointmentId: 'ap1',
       payload: expect.objectContaining({ manualDurationMinutes: 50 }),
+    })
+  })
+})
+
+describe('política da clínica na edição (PRD 053)', () => {
+  const politica = () => screen.getByRole('button', { name: 'Política da clínica' })
+
+  it('agendamento gravado pela política abre em "Política da clínica" e, sem mexer, não grava', async () => {
+    monta({ discount_pct: 15, discount_reason: 'tier_2' })
+    expect(politica()).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(salvar())
+    expect(mutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('trocar para a política manda discountPolicy, e o resumo mostra de → para com a cotação', async () => {
+    cotacao = {
+      data: { originalPriceCents: 20000, discountPct: 10, discountReason: 'first_session', finalPriceCents: 18000, areaCount: 1, isFirst: true },
+      isPending: false, isError: false, fetchStatus: 'idle',
+    }
+    monta({ discount_pct: 12.5, discount_reason: 'custom' })
+
+    await userEvent.click(politica())
+    expect(screen.getByText('Desconto (1ª sessão: 10%)')).toBeInTheDocument()
+    expect(screen.getByText('R$ 180,00')).toBeInTheDocument()
+
+    await userEvent.click(salvar())
+    expect(screen.getByText('12,5%')).toBeInTheDocument()
+    expect(screen.getByText('política da clínica (1ª sessão: 10%)')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar alteração' }))
+
+    expect(mutateAsync).toHaveBeenCalledWith({ appointmentId: 'ap1', payload: { discountPolicy: true } })
+    cotacao = { data: undefined, isPending: false, isError: false, fetchStatus: 'idle' }
+  })
+
+  it('"Sem desconto" grava a razão none, não null', async () => {
+    monta({ discount_pct: 12.5, discount_reason: 'custom' })
+    await userEvent.click(screen.getByRole('button', { name: 'Sem desconto' }))
+    await userEvent.click(salvar())
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar alteração' }))
+    expect(mutateAsync).toHaveBeenCalledWith({
+      appointmentId: 'ap1',
+      payload: { discountPct: 0, discountReason: 'none' },
     })
   })
 })

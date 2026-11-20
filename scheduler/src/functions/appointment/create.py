@@ -9,11 +9,15 @@ from src.services.visao_do_staff import (
     fora_da_janela,
     para_o_staff,
 )
-from src.utils.http import parse_body, http_response
+from src.utils.http import parse_body, http_response, extract_query_param
+from src.utils.phone import is_valid_br_phone
+from src.services import carrinho
+from src.services.carrinho import CarrinhoInvalido
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
 from src.services.duracao_manual import DuracaoInvalida
 from src.services.desconto_personalizado import DescontoInvalido, normaliza_centavos
+from src.services.politica_de_desconto import RAZAO_NENHUM
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -29,9 +33,55 @@ def _serialize_row(row):
     return result
 
 
+def _final_do_telefone(phone):
+    return f"***{str(phone)[-4:]}" if phone else "-"
+
+
+def _simula(clinic_id, body, identidade):
+    """A cotacao do painel (PRD 053). Diferente da rota publica do site:
+    devolve a razao mesmo com telefone (e a recepcao olhando a propria
+    paciente) e diz se o banco considera esta a primeira sessao."""
+    phone = body.get("phone") or None
+    if phone and not is_valid_br_phone(str(phone)):
+        return http_response(400, {"status": "ERROR", "message": "Telefone invalido"})
+    service_ids = body.get("serviceIds") or ([body.get("serviceId")] if body.get("serviceId") else None)
+    try:
+        db = PostgresService()
+        pares = carrinho.pares_do_corpo(body.get("serviceAreaPairs"))
+        service_ids = carrinho.valida_carrinho(db, clinic_id, service_ids, pares)
+        cotacao = carrinho.cota(db, clinic_id, service_ids, pares, phone)
+    except CarrinhoInvalido as e:
+        return http_response(400, {"status": "ERROR", "message": str(e)})
+
+    logger.info(
+        f"[Quote] {clinic_id} tel={_final_do_telefone(phone)}: pares={cotacao.qtd_areas} "
+        f"original={cotacao.original_cents} final={cotacao.final_cents} "
+        f"razao={cotacao.desconto.razao} pct={cotacao.desconto.pct}"
+    )
+    return http_response(200, para_o_staff(identidade, {
+        "status": "SUCCESS",
+        "quote": {
+            "originalPriceCents": cotacao.original_cents,
+            "discountPct": float(cotacao.desconto.pct or 0),
+            "discountReason": cotacao.desconto.razao,
+            "finalPriceCents": cotacao.final_cents,
+            "areaCount": cotacao.qtd_areas,
+            "isFirst": bool(cotacao.desconto.is_first),
+        },
+    }))
+
+
 def handler(event, context):
     """
-    POST /appointments
+    POST /appointments[?simular=true]
+
+    `simular=true` NAO cria: devolve o que a politica da clinica decide para
+    esta paciente e estas areas (`quote`), com a MESMA conta da criacao
+    (`carrinho.cota`), para o modal mostrar o total que vai ser gravado
+    (PRD 053). Mora aqui, e nao numa rota propria, porque o stack de prod
+    esta em 494 dos 500 recursos do CloudFormation (medido em 20/11/2026) e
+    uma Lambda nova custa 5. No modo simular so clinicId e as areas sao
+    obrigatorios; `phone` e opcional (sem ele, so a faixa por areas vale).
 
     Body:
     {
@@ -73,6 +123,9 @@ def handler(event, context):
                 "status": "ERROR",
                 "message": "Seu usuario nao tem acesso a esta clinica"})
 
+        if (extract_query_param(event, "simular") or "").lower() in ("1", "true"):
+            return _simula(clinic_id, body, identidade)
+
         if not dentro_da_janela(identidade, appt_date):
             return fora_da_janela()
 
@@ -104,6 +157,12 @@ def handler(event, context):
             return http_response(400, {
                 "status": "ERROR",
                 "message": "discountCents deve ser um inteiro de centavos maior que zero"})
+        # "Sem desconto" escolhido no painel (PRD 053): pct 0 com razao "none".
+        # E o que impede o servico de aplicar a politica da clinica por cima.
+        # Razao "none" com desconto junto e contradicao, nao escolha.
+        if body.get("discountReason") == RAZAO_NENHUM and (body.get("discountPct") or discount_cents):
+            return http_response(400, {
+                "status": "ERROR", "message": "discountReason 'none' nao combina com desconto"})
 
         db = PostgresService()
 

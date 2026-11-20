@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { Confirmacao } from '@/components/ui/Confirmacao'
 import { useToast } from '@/components/ui/toastContext'
 import { useConsentsDoPaciente, useDispensarTermo, useRenovarTermo } from '@/hooks/useConsents'
 import { RegistrarPapelModal } from '@/components/RegistrarPapelModal'
@@ -126,28 +127,14 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
         vigente &&
         !renovar.isSuccess &&
         (confirmaRenovar ? (
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <span className="text-xs text-gray-600">
-              Pedir termo e ficha de novo no próximo check-in?
-            </span>
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={confirmarRenovar}
-                disabled={renovar.isPending}
-                className="rounded-lg bg-gray-800 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-50 cursor-pointer"
-              >
-                Sim, pedir
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmaRenovar(false)}
-                className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
-              >
-                Não
-              </button>
-            </div>
-          </div>
+          <Confirmacao
+            pergunta="Pedir termo e ficha de novo no próximo check-in?"
+            detalhe="O documento vigente deixa de valer."
+            acao="Sim, pedir"
+            loading={renovar.isPending}
+            onConfirmar={confirmarRenovar}
+            onVoltar={() => setConfirmaRenovar(false)}
+          />
         ) : (
           <button
             type="button"
@@ -162,6 +149,7 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
         <EnviarLinkDosDocumentos
           appointmentId={a.id}
           linkEnviadoEm={a.consent_link_sent_at ?? null}
+          telefone={a.patient_phone ?? null}
         />
       )}
 

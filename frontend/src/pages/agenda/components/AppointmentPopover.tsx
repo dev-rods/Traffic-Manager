@@ -1,20 +1,13 @@
 import { Link } from 'react-router-dom'
 import { formatTime } from '@/utils/formatDate'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { temDesconto, textoCurtoDoDesconto } from '@/lib/desconto'
+import { rotuloDaRazao, temDesconto, textoCurtoDoDesconto } from '@/lib/desconto'
+import { Confirmacao } from '@/components/ui/Confirmacao'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
 import type { Appointment } from '@/types'
 import { PagamentoDoAgendamento } from './PagamentoDoAgendamento'
 import { TermoDoAgendamento } from './TermoDoAgendamento'
-
-const DISCOUNT_LABELS: Record<string, string> = {
-  first_session: '1a sessao',
-  tier_2: '2-4 areas',
-  tier_3: '5+ areas',
-  partnership: 'Parceria',
-  custom: 'Personalizado',
-}
 
 interface AppointmentPopoverProps {
   appointment: Appointment | null
@@ -74,6 +67,11 @@ export function AppointmentPopover({
 }: AppointmentPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
   const ehDesktop = useEhDesktop()
+  // Falta e confirmado passam pela confirmação inline (PRD 053, decisão do
+  // André em 20/11/2026, revertendo o PRD 027): têm "Desfazer", mas o status
+  // muda na agenda de todo mundo no clique e o toast dura segundos. Os
+  // desfazeres seguem diretos: são a volta.
+  const [confirmando, setConfirmando] = useState<'falta' | 'confirmar' | null>(null)
 
   useEffect(() => {
     if (!appointment) return
@@ -257,7 +255,7 @@ export function AppointmentPopover({
             {temDesconto(a) && a.original_price_cents != null && (
               <div className="flex justify-between text-emerald-600">
                 <span>
-                  {textoCurtoDoDesconto(a)} ({DISCOUNT_LABELS[a.discount_reason ?? ''] ?? a.discount_reason})
+                  {textoCurtoDoDesconto(a)} ({rotuloDaRazao(a.discount_reason)})
                 </span>
                 <span>-{formatCurrency(a.original_price_cents - a.final_price_cents)}</span>
               </div>
@@ -324,15 +322,31 @@ export function AppointmentPopover({
                   Quem decide se foi falta ou cancelamento é quem está no
                   balcão, com contexto que a tela não tem.
 
-                  Sem modal, ao contrário de cancelar: cancelar é irreversível
-                  ("Essa acao nao pode ser desfeita") e a confirmação se paga;
-                  falta tem "Desfazer" no próprio toast. Cerimônia que não
-                  compra nada treina a clicar sem ler. */}
-              {/* Quem confirma por telefone e marcado aqui (PRD 027). Reversivel,
-                  pela mesma logica da falta: sem modal, com desfazer. */}
-              {onConfirmar && !a.confirmado_em && (
+                  Confirmação inline, não modal (PRD 053): cancelar continua
+                  em modal porque tem o desvio "vai remarcar?". */}
+              {confirmando === 'confirmar' && (
+                <Confirmacao
+                  pergunta={`Marcar ${displayName} como confirmada?`}
+                  detalhe="A presença aparece confirmada pela equipe. Dá para desfazer depois."
+                  acao="Confirmar"
+                  onConfirmar={() => { setConfirmando(null); onConfirmar?.(a); onClose() }}
+                  onVoltar={() => setConfirmando(null)}
+                />
+              )}
+              {confirmando === 'falta' && (
+                <Confirmacao
+                  pergunta={`Marcar falta de ${displayName} às ${a.start_time.slice(0, 5)}?`}
+                  detalhe='Dá para desfazer depois em "Desmarcar falta".'
+                  acao="Marcar falta"
+                  tom="perigo"
+                  onConfirmar={() => { setConfirmando(null); onMarcarFalta(a); onClose() }}
+                  onVoltar={() => setConfirmando(null)}
+                />
+              )}
+              {/* Quem confirma por telefone e marcado aqui (PRD 027). */}
+              {onConfirmar && !a.confirmado_em && confirmando === null && (
                 <button
-                  onClick={() => { onConfirmar(a); onClose() }}
+                  onClick={() => setConfirmando('confirmar')}
                   className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
                 >
                   Marcar como confirmado
@@ -346,12 +360,14 @@ export function AppointmentPopover({
                   Desfazer confirmação
                 </button>
               )}
-              <button
-                onClick={() => { onMarcarFalta(a); onClose() }}
-                className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-              >
-                Marcar falta
-              </button>
+              {confirmando === null && (
+                <button
+                  onClick={() => setConfirmando('falta')}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Marcar falta
+                </button>
+              )}
               <button
                 onClick={() => { onCancel(a); onClose() }}
                 className="w-full text-left px-3 py-2 rounded-lg text-sm text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
@@ -370,8 +386,7 @@ export function AppointmentPopover({
             </button>
           )}
 
-          {/* O caminho de volta. Sem ele, marcar errado seria permanente - e é
-              justamente por ele existir que marcar não pede confirmação. */}
+          {/* O caminho de volta: direto, sem confirmação. */}
           {faltou && (
             <button
               onClick={() => { onDesmarcarFalta(a); onClose() }}

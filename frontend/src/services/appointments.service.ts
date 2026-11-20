@@ -4,6 +4,8 @@ import type {
   CreateAppointmentPayload,
   UpdateAppointmentPayload,
   LembretesDoDiaResponse,
+  Cotacao,
+  CotacaoPayload,
 } from '@/types'
 
 export interface ListAppointmentsParams {
@@ -24,6 +26,13 @@ export const appointmentsService = {
     return api
       .post('/appointments', payload)
       .then((r) => r.data)
+  },
+
+  /** O que a política da clínica decide, sem criar nada (PRD 053). */
+  cotar(payload: CotacaoPayload) {
+    return api
+      .post<{ status: string; quote: Cotacao }>('/appointments', payload, { params: { simular: 'true' } })
+      .then((r) => r.data.quote)
   },
 
   update(appointmentId: string, payload: UpdateAppointmentPayload) {

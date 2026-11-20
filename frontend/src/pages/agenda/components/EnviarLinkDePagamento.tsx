@@ -1,5 +1,8 @@
 import { useId, useState } from 'react'
+import { Confirmacao } from '@/components/ui/Confirmacao'
 import { useToast } from '@/components/ui/toastContext'
+import { formataReais } from '@/lib/desconto'
+import { formatPhone } from '@/utils/formatPhone'
 import { useEnviarLink } from '@/hooks/useCaixa'
 import { codigoDoErro, mensagemDoErro } from '@/utils/pagamento'
 
@@ -9,6 +12,9 @@ interface EnviarLinkDePagamentoProps {
   linkPendente: boolean
   /** Linha do Caixa: botão menor, alinhado à direita. */
   compacto?: boolean
+  /** Para a confirmação dizer quanto e para quem (PRD 053). Sem eles, a pergunta omite. */
+  valorCents?: number | null
+  telefone?: string | null
 }
 
 function soDigitos(valor: string): string {
@@ -25,6 +31,10 @@ function mascaraCpf(digitos: string): string {
 /**
  * Link de cobrança pelo WhatsApp para quem não pagou no check-in (PRD 029).
  *
+ * Nada sai no primeiro clique (PRD 053): a confirmação inline diz quanto, para
+ * quem, e se a cobrança será criada. O CPF, quando o backend pede, vem DEPOIS
+ * da confirmação e não pede outra.
+ *
  * Três desvios do caminho feliz, todos na própria linha, sem modal:
  * - sem CPF conhecido, o backend responde `CPF_REQUIRED` e aparece o campo;
  * - o WhatsApp falhou: a cobrança existe, então o link aparece para copiar;
@@ -34,9 +44,12 @@ export function EnviarLinkDePagamento({
   appointmentId,
   linkPendente,
   compacto = false,
+  valorCents = null,
+  telefone = null,
 }: EnviarLinkDePagamentoProps) {
   const enviar = useEnviarLink()
   const { showToast } = useToast()
+  const [confirmando, setConfirmando] = useState(false)
   const [pedindoCpf, setPedindoCpf] = useState(false)
   const [cpf, setCpf] = useState('')
   const [linkParaCopiar, setLinkParaCopiar] = useState<string | null>(null)
@@ -147,10 +160,25 @@ export function EnviarLinkDePagamento({
     )
   }
 
+  if (confirmando) {
+    const quanto = valorCents ? ` de ${formataReais(valorCents)}` : ''
+    const paraQuem = telefone ? ` para ${formatPhone(telefone)}` : ' para a paciente'
+    return (
+      <Confirmacao
+        pergunta={`${linkPendente ? 'Reenviar' : 'Mandar'} o link de cobrança${quanto}${paraQuem} pelo WhatsApp?`}
+        detalhe={linkPendente ? 'Reenvia o mesmo link; não cria cobrança nova.' : 'A cobrança é criada no Asaas.'}
+        acao="Enviar"
+        loading={enviar.isPending}
+        onConfirmar={() => { setConfirmando(false); mandar() }}
+        onVoltar={() => setConfirmando(false)}
+      />
+    )
+  }
+
   return (
     <button
       type="button"
-      onClick={() => mandar()}
+      onClick={() => setConfirmando(true)}
       disabled={enviar.isPending}
       className={
         compacto

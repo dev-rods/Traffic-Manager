@@ -1,9 +1,13 @@
 import {
+  formataPct,
+  formataReais,
+  rotuloDaRazao,
   validaDesconto,
   type DescontoEscolhido,
   type ModoDeDesconto,
   type TipoDeDesconto,
 } from '@/lib/desconto'
+import type { Cotacao } from '@/types'
 
 interface DescontoFieldProps {
   valor: DescontoEscolhido
@@ -11,9 +15,14 @@ interface DescontoFieldProps {
   /** Teto do desconto em reais. Sem ele, o teto só é conferido pelo servidor. */
   subtotalCents?: number
   disabled?: boolean
+  /** O que a política decide (PRD 053). `undefined` = ainda sem áreas ou paciente. */
+  cotacao?: Cotacao | null
+  cotando?: boolean
+  erroDaCotacao?: boolean
 }
 
 const MODOS: ReadonlyArray<{ key: ModoDeDesconto; label: string }> = [
+  { key: 'policy', label: 'Política da clínica' },
   { key: 'none', label: 'Sem desconto' },
   { key: 'partnership', label: 'Parceria (100%)' },
   { key: 'custom', label: 'Personalizado' },
@@ -24,6 +33,19 @@ const TIPOS: ReadonlyArray<{ key: TipoDeDesconto; label: string }> = [
   { key: 'cents', label: 'R$' },
 ]
 
+/** A linha abaixo de "Política da clínica": o que o backend vai gravar. */
+function textoDaCotacao(cotacao: Cotacao | null | undefined, cotando: boolean, erro: boolean): string {
+  if (erro) return 'Não foi possível consultar a política. O desconto é aplicado ao salvar.'
+  if (cotando) return 'Consultando a política…'
+  if (cotacao === undefined) return 'Escolha a paciente e as áreas para ver o desconto.'
+  if (!cotacao || !cotacao.discountPct) return 'Sem desconto pela política para esta paciente e estas áreas.'
+  const economia =
+    cotacao.originalPriceCents != null && cotacao.finalPriceCents != null
+      ? ` (-${formataReais(cotacao.originalPriceCents - cotacao.finalPriceCents)})`
+      : ''
+  return `${rotuloDaRazao(cotacao.discountReason)}: ${formataPct(cotacao.discountPct)}%${economia}`
+}
+
 /**
  * O desconto de um agendamento, nas duas formas (PRD 050).
  *
@@ -33,7 +55,15 @@ const TIPOS: ReadonlyArray<{ key: TipoDeDesconto; label: string }> = [
  * ou ponto. O erro só aparece quando há texto e ele é inválido; campo em
  * branco é problema do submit, não de quem está digitando.
  */
-export function DescontoField({ valor, onChange, subtotalCents, disabled = false }: DescontoFieldProps) {
+export function DescontoField({
+  valor,
+  onChange,
+  subtotalCents,
+  disabled = false,
+  cotacao,
+  cotando = false,
+  erroDaCotacao = false,
+}: DescontoFieldProps) {
   const erro = valor.texto.trim() ? validaDesconto(valor, subtotalCents) : null
 
   return (
@@ -54,7 +84,9 @@ export function DescontoField({ valor, onChange, subtotalCents, disabled = false
                   ? 'bg-amber-50 border-amber-300 text-amber-700'
                   : key === 'custom'
                     ? 'bg-brand-50 border-brand-300 text-brand-700'
-                    : 'bg-gray-900 border-gray-900 text-white'
+                    : key === 'policy'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                      : 'bg-gray-900 border-gray-900 text-white'
                 : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600',
             ].join(' ')}
           >
@@ -62,6 +94,12 @@ export function DescontoField({ valor, onChange, subtotalCents, disabled = false
           </button>
         ))}
       </div>
+
+      {valor.modo === 'policy' && (
+        <p className={`mt-2 text-xs ${erroDaCotacao ? 'text-amber-600' : 'text-gray-500'}`} data-testid="cotacao">
+          {textoDaCotacao(cotacao, cotando, erroDaCotacao)}
+        </p>
+      )}
 
       {valor.modo === 'custom' && (
         <>

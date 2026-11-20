@@ -3,19 +3,11 @@ import { Badge, StatusBadge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { formatTime } from '@/utils/formatDate'
 import { formatCurrency } from '@/utils/formatCurrency'
-import { temDesconto, textoCurtoDoDesconto } from '@/lib/desconto'
+import { rotuloDaRazao, temDesconto, textoCurtoDoDesconto } from '@/lib/desconto'
 import type { DashboardAppointment } from '@/services/reports.service'
 
 interface TodayAppointmentsProps {
   appointments: DashboardAppointment[]
-}
-
-const DISCOUNT_LABELS: Record<string, string> = {
-  first_session: '1a sessao',
-  tier_2: '2-4 areas',
-  tier_3: '5+ areas',
-  partnership: 'Parceria',
-  custom: 'Personalizado',
 }
 
 export function TodayAppointments({ appointments }: TodayAppointmentsProps) {
@@ -91,7 +83,7 @@ function PriceCell({ appointment: apt }: { appointment: DashboardAppointment }) 
         {formatCurrency(apt.final_price_cents)}
       </span>
       <p className="text-xs text-emerald-600 mt-0.5">
-        {textoCurtoDoDesconto(apt)} {DISCOUNT_LABELS[apt.discount_reason] ?? apt.discount_reason}
+        {textoCurtoDoDesconto(apt)} {rotuloDaRazao(apt.discount_reason)}
       </p>
     </div>
   )

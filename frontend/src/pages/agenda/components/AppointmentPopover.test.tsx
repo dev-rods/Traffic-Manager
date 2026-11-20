@@ -99,11 +99,20 @@ describe('AppointmentPopover', () => {
     expect(caixa.className).toContain('overflow-y-auto')
   })
 
-  it('confirma presença mesmo sem lembrete enviado (quem confirma por telefone)', async () => {
+  it('confirma presença mesmo sem lembrete enviado (quem confirma por telefone), com confirmação inline (PRD 053)', async () => {
     const props = abre(agendamento({ lembrete_enviado_em: null }))
     await userEvent.click(screen.getByRole('button', { name: 'Marcar como confirmado' }))
+    expect(props.onConfirmar).not.toHaveBeenCalled()
+    expect(screen.getByRole('group', { name: 'Marcar Ana Clara como confirmada?' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
     expect(props.onConfirmar).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }))
     expect(props.onClose).toHaveBeenCalled()
+  })
+
+  it('"Desfazer confirmação" segue direto: é a volta', async () => {
+    const props = abre(agendamento({ confirmado_em: '2026-11-05T20:00:00Z', confirmado_por: 'EQUIPE' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Desfazer confirmação' }))
+    expect(props.onDesconfirmar).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }))
   })
 
   it('confirmada pela equipe sem lembrete: a linha Presença aparece e o botão vira "Desfazer"', () => {

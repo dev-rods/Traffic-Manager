@@ -8,6 +8,9 @@ e o sistema cobra outro - e quem descobre e a paciente, no caixa.
 A regra e TRUNCAR, nao arredondar, porque era o que a divisao inteira ja fazia
 com percentual inteiro. Trocar por arredondamento mudaria precos antigos.
 """
+import io
+import os
+import re
 import unittest
 from decimal import Decimal
 
@@ -72,6 +75,27 @@ class TestBordas(unittest.TestCase):
 
     def test_total_zerado(self):
         self.assertEqual(aplica(0, 50), 0)
+
+
+class TestRazoesConhecidasDoFrontend(unittest.TestCase):
+    """PRD 053: toda razao que o backend grava em `discount_reason` tem rotulo
+    em `rotuloDaRazao` (frontend/src/lib/desconto.ts). Sem isto, uma razao nova
+    apareceria crua no popover e no Hoje ("tier_4"), e ninguem veria no teste."""
+
+    FRONT = os.path.join(os.path.dirname(__file__), "..", "..", "..",
+                         "frontend", "src", "lib", "desconto.ts")
+
+    def test_toda_razao_do_backend_tem_rotulo_no_painel(self):
+        from src.services.desconto_personalizado import RAZAO, RAZAO_PARCERIA
+        from src.services.politica_de_desconto import RAZAO_NENHUM, RAZOES_DA_POLITICA
+
+        with io.open(self.FRONT, encoding="utf-8") as f:
+            fonte = f.read()
+        bloco = fonte.split("const ROTULOS", 1)[1].split("}", 1)[0]
+        rotuladas = set(re.findall(r"^\s*(\w+):", bloco, re.M))
+
+        esperadas = set(RAZOES_DA_POLITICA) | {RAZAO, RAZAO_PARCERIA, RAZAO_NENHUM, "custom"}
+        self.assertTrue(esperadas <= rotuladas, esperadas - rotuladas)
 
 
 if __name__ == "__main__":

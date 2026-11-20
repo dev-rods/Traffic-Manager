@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { AppointmentPopover } from './AppointmentPopover'
 import { AgendaDoDia } from './AgendaDoDia'
 import type { Appointment, AvailabilityRule } from '@/types'
@@ -30,8 +31,9 @@ vi.mock('@/components/ui/toastContext', () => ({ useToast: () => ({ showToast: v
  * 1. **A falta aparece na agenda**, ao contrário do cancelado (que os dois
  *    componentes filtram). Não é só fidelidade histórica: é pelo card que se
  *    alcança "Desmarcar falta". Filtrar deixaria o desfazer inalcançável.
- * 2. **Marcar falta não abre modal.** A confirmação se paga quando a ação é
- *    irreversível - cancelar é, falta não.
+ * 2. **Marcar falta confirma inline, não em modal.** Até 20/11/2026 não pedia
+ *    confirmação nenhuma, porque tem "Desfazer"; o PRD 053 reverteu: o status
+ *    muda na agenda de todo mundo no clique. Desmarcar segue direto.
  */
 
 const HOJE = new Date()
@@ -106,14 +108,26 @@ describe('a ação de marcar falta', () => {
     expect(screen.getByText('Marcar falta')).toBeInTheDocument()
   })
 
-  it('chama onMarcarFalta sem passar por modal', () => {
+  it('pede confirmação inline e só então chama onMarcarFalta (PRD 053)', async () => {
     const props = montaPopover({ appointment_date: ONTEM })
 
-    screen.getByText('Marcar falta').click()
+    await userEvent.click(screen.getByText('Marcar falta'))
+    expect(props.onMarcarFalta).not.toHaveBeenCalled()
+    expect(screen.getByRole('group', { name: 'Marcar falta de Ana Clara às 09:00?' })).toBeInTheDocument()
 
-    expect(props.onMarcarFalta).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'a1' }),
-    )
+    await userEvent.click(screen.getByRole('button', { name: 'Marcar falta' }))
+    expect(props.onMarcarFalta).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }))
+    expect(props.onClose).toHaveBeenCalled()
+  })
+
+  it('"Voltar" não marca e devolve a lista de ações', async () => {
+    const props = montaPopover({ appointment_date: ONTEM })
+
+    await userEvent.click(screen.getByText('Marcar falta'))
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+
+    expect(props.onMarcarFalta).not.toHaveBeenCalled()
+    expect(screen.getByText('Cancelar agendamento')).toBeInTheDocument()
   })
 })
 

@@ -13,6 +13,7 @@ from src.utils.http import parse_body, http_response, extract_path_param
 from decimal import Decimal
 
 from src.services.desconto_personalizado import aplica as aplica_desconto
+from src.services.politica_de_desconto import RAZAO_NENHUM
 from src.services.desconto_personalizado import (
     DescontoInvalido, normaliza_centavos, normaliza_entrada as normaliza_pct, pct_equivalente,
 )
@@ -68,9 +69,14 @@ def handler(event, context):
         "time": "14:00",
         "serviceId": "uuid",
         "serviceAreaPairs": [{"serviceId":"..","areaId":".."}],
-        "manualDurationMinutes": 75      // fixa a duracao DESTE agendamento.
+        "manualDurationMinutes": 75,     // fixa a duracao DESTE agendamento.
                                          // null volta ao calculado; ausente
                                          // nao mexe.
+        "discountPct": 10 | "discountCents": 2000, "discountReason": "custom",
+        "discountReason": "none"         // com pct 0: "Sem desconto" de proposito (PRD 053)
+        "discountPolicy": true           // re-decide pela politica da clinica, depois
+                                         // de trocar as areas (PRD 053). Exclusivo com
+                                         // discountPct/discountCents.
     }
 
     Supports combined operations in a single request (e.g. reschedule + change service + update notes).
@@ -111,6 +117,15 @@ def handler(event, context):
             return http_response(400, {
                 "status": "ERROR", "message": "Mande discountPct ou discountCents, nao os dois"})
         new_discount_reason = body.get("discountReason")
+        # PRD 053: "Politica da clinica" na edicao. Re-decide depois da etapa 1,
+        # com o preco de tabela das areas novas.
+        aplicar_politica = body.get("discountPolicy") is True
+        if aplicar_politica and (veio_pct or veio_cents):
+            return http_response(400, {
+                "status": "ERROR", "message": "Mande discountPolicy ou um desconto, nao os dois"})
+        if new_discount_reason == RAZAO_NENHUM and (body.get("discountPct") or body.get("discountCents")):
+            return http_response(400, {
+                "status": "ERROR", "message": "discountReason 'none' nao combina com desconto"})
         nova_primeira_visita = body.get("isFirstVisit")
         # `in body` e nao `.get()`: o payload manda `null` para SOLTAR a duracao
         # manual, e `.get()` devolve None tanto para "null" quanto para "nao
@@ -248,6 +263,13 @@ def handler(event, context):
             # A atendente precisa saber por que o valor que ela fixou sumiu.
             if resultado_areas.get("manual_duration_descartada"):
                 messages.append("duração manual descartada (as áreas mudaram)")
+
+        # 1-bis. Politica da clinica (PRD 053), DEPOIS das areas: o preco de
+        #    tabela ja e o das areas novas, e a faixa por quantidade tambem.
+        if aplicar_politica:
+            service.aplica_politica(appointment_id)
+            changed = True
+            messages.append("desconto pela política")
 
         # 2. Duração manual, ANTES do reschedule - e só se a etapa 1 não a
         #    aplicou. Repetir aqui refaria a conta e conferiria o conflito duas

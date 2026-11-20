@@ -1,4 +1,7 @@
+import { useState } from 'react'
+import { Confirmacao } from '@/components/ui/Confirmacao'
 import { useToast } from '@/components/ui/toastContext'
+import { formataReais } from '@/lib/desconto'
 import { useReceberDinheiro } from '@/hooks/useCaixa'
 import { horaDe, situacaoDoPagamento } from '@/utils/pagamento'
 import { EnviarLinkDePagamento } from './EnviarLinkDePagamento'
@@ -25,6 +28,7 @@ interface PagamentoDoAgendamentoProps {
 export function PagamentoDoAgendamento({ appointment: a }: PagamentoDoAgendamentoProps) {
   const receber = useReceberDinheiro()
   const { showToast } = useToast()
+  const [confirmando, setConfirmando] = useState(false)
   // O popover guarda o agendamento de quando foi aberto; depois da baixa, o
   // estado novo vem da própria resposta, sem esperar a agenda recarregar.
   const status = receber.data?.status ?? a.payment_status
@@ -60,16 +64,27 @@ export function PagamentoDoAgendamento({ appointment: a }: PagamentoDoAgendament
           {status === 'PAID' && pagoEm ? ` às ${horaDe(pagoEm)}` : ''}
         </span>
       </div>
-      {status === 'AWAITING_CASH' && a.payment_id && (
+      {/* A baixa vai ao Asaas e o estorno é outra ação, noutra tela (PRD 053):
+          nada acontece no primeiro clique. */}
+      {status === 'AWAITING_CASH' && a.payment_id && (confirmando ? (
+        <Confirmacao
+          pergunta={`Registrar ${a.final_price_cents != null ? formataReais(a.final_price_cents) : 'o valor'} recebido em dinheiro?`}
+          detalhe="O pagamento fica como pago aqui e no Asaas."
+          acao="Registrar"
+          loading={receber.isPending}
+          onConfirmar={() => { setConfirmando(false); confirmarDinheiro() }}
+          onVoltar={() => setConfirmando(false)}
+        />
+      ) : (
         <button
           type="button"
-          onClick={confirmarDinheiro}
+          onClick={() => setConfirmando(true)}
           disabled={receber.isPending}
           className="mt-1 w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60 cursor-pointer"
         >
           {receber.isPending ? 'Registrando…' : 'Recebi em dinheiro'}
         </button>
-      )}
+      ))}
       {/* Quem não pagou no check-in recebe o link pelo WhatsApp (PRD 029). */}
       {a.status === 'CONFIRMED' &&
         status !== 'PAID' &&
@@ -77,6 +92,8 @@ export function PagamentoDoAgendamento({ appointment: a }: PagamentoDoAgendament
           <EnviarLinkDePagamento
             appointmentId={a.id}
             linkPendente={a.payment_method === 'LINK' && status === 'PENDING'}
+            valorCents={a.final_price_cents ?? null}
+            telefone={a.patient_phone ?? null}
           />
         )}
     </div>

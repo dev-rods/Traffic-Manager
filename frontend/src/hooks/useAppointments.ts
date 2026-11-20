@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { appointmentsService } from '@/services/appointments.service'
 import type { ListAppointmentsParams } from '@/services/appointments.service'
-import type { CreateAppointmentPayload, UpdateAppointmentPayload } from '@/types'
+import type { CotacaoPayload, CreateAppointmentPayload, UpdateAppointmentPayload } from '@/types'
 import { useAuth } from './useAuth'
 import { slotKeys } from './useAvailabilityRules'
 import { dashboardKeys } from './useDashboard'
@@ -11,6 +11,24 @@ export const appointmentKeys = {
   lists: () => [...appointmentKeys.all, 'list'] as const,
   list: (clinicId: string, params?: ListAppointmentsParams) =>
     [...appointmentKeys.lists(), clinicId, params] as const,
+  cotacao: (payload: Omit<CotacaoPayload, 'clinicId'>) =>
+    [...appointmentKeys.all, 'cotacao', payload] as const,
+}
+
+/**
+ * A cotação do modal (PRD 053): o que a política da clínica decide para esta
+ * paciente e estas áreas. `null` desliga (modo que não é "Política da clínica",
+ * ou ainda sem áreas).
+ */
+export function useCotacao(payload: Omit<CotacaoPayload, 'clinicId'> | null) {
+  const { clinicId } = useAuth()
+
+  return useQuery({
+    queryKey: appointmentKeys.cotacao(payload ?? { serviceIds: [] }),
+    queryFn: () => appointmentsService.cotar({ clinicId: clinicId!, ...payload! }),
+    enabled: !!clinicId && !!payload,
+    staleTime: 30_000,
+  })
 }
 
 export function useAppointments(params?: ListAppointmentsParams) {
