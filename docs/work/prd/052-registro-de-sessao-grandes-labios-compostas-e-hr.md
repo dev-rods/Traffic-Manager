@@ -1,6 +1,6 @@
 # PRD - 052 Registro de sessão: Grandes lábios, compostas desmembradas e Energia fixa no HR (evolução)
 
-> Gerado na fase **Research**. Use como input para a fase Spec.
+> Gerado na fase **Research**. Use como input para a fase Spec. Decisões da §4 confirmadas pelo André em 19/11/2026 (a 5 alterada: sem trava).
 > Par do PRD 051 (bugs do mesmo fluxo). Depende dele: a montagem das áreas tem de estar num lugar só antes de mudar a regra de montagem.
 > Fora dos dois PRDs, por decisão do André em 19/11: alterar áreas e recalcular descontos durante o atendimento.
 
@@ -13,7 +13,7 @@ Fazer o registro técnico refletir o que de fato se aplica na sala, sem tocar na
 1. **Compostas desmembradas** no registro: "Virilha Completa + ânus" vira "Virilha completa" e "Perianal", cada uma com método e parâmetros próprios.
 2. **"Interno da virilha" passa a se chamar "Grandes lábios"**, mesma chave e mesmos parâmetros.
 3. **Virilha cavada ou completa agendada traz "Grandes lábios" automaticamente** como segunda área do registro, logo abaixo da virilha, configurável à parte.
-4. **HR fixa Energia (kJ) = 1** e bloqueia o campo.
+4. **HR pré-preenche Energia (kJ) = 1 sempre** ao ser escolhido; o campo continua editável (decisão do André em 19/11: sem trava).
 
 ---
 
@@ -47,9 +47,9 @@ Fazer o registro técnico refletir o que de fato se aplica na sala, sem tocar na
 - "Grandes lábios" tem três métodos no protocolo, então entra **sem método escolhido** (regra "um só, já escolhe" do PRD 012) e o PRD 051 obriga a escolher ou remover antes de salvar. A profissional que não aplicou nos lábios remove a linha.
 - Seed do mapa em dev e prod (linhas novas); teste `test_mapa_de_areas` atualizado (a virilha deixa de ser "uma chave").
 
-**D. HR com Energia fixa**
-- Backend: `valida_aplicacoes` força `energy_kj = 1.0` em toda aplicação HR, ignorando o que veio (log quando divergente). Constante `ENERGIA_DO_HR = Decimal("1.0")` em `protocolo_laser`, usada também por `_hr`.
-- Frontend: ao escolher HR, o campo Energia recebe 1 e fica `readOnly` com texto "fixa no HR"; não entra na lista de pendências do 051.
+**D. HR com Energia pré-preenchida**
+- Frontend: ao escolher HR (`trocaMetodo`), Energia recebe 1 **sempre**, inclusive sem tipo de pele ou sem sugestão para a área; o campo continua editável e entra na validação do 051 como qualquer outro (vazio bloqueia).
+- Constante `ENERGIA_DO_HR = 1` em `lib/protocolo.ts`, espelho de `protocolo_laser._hr` (que já grava 1.0 em toda linha HR). Backend não força nem valida o valor além de "maior que zero".
 
 **E. Comercial intocado**
 - `appointment_service_areas`, preços e descontos do agendamento não mudam. Teste de guarda: o fluxo de registro não escreve em `appointments` nem em `appointment_service_areas` (varredura de SQL nos módulos do prontuário).
@@ -62,7 +62,7 @@ Fazer o registro técnico refletir o que de fato se aplica na sala, sem tocar na
 
 ---
 
-## 4. Decisões propostas (confirmar no spec)
+## 4. Decisões (confirmadas pelo André em 19/11/2026)
 
 | # | Decisão | Alternativa descartada |
 |---|---|---|
@@ -70,7 +70,7 @@ Fazer o registro técnico refletir o que de fato se aplica na sala, sem tocar na
 | 2 | Nome por parte só quando a área tem mais de uma chave; uma chave mantém o comercial (051) | Sempre o nome do protocolo: recria o bug "Meia perna" |
 | 3 | `source_area_name` novo para rastrear a origem comercial da parte | Não guardar: o histórico perde "isto veio de Virilha Completa + ânus" |
 | 4 | Grandes lábios entra sem método (três métodos no protocolo) | Pré-escolher SHR: decidir conduta pela profissional, contra o PRD 012 |
-| 5 | HR força 1.0 no backend, não só na tela | Só readOnly: Postman grava outro valor e a tabela diverge do protocolo |
+| 5 | HR pré-preenche Energia = 1 na tela, editável, sem trava e sem forçar no backend (**decisão do André, 19/11**) | Forçar 1.0 no backend e travar o campo: proposta original, derrubada |
 | 6 | Virilha Simples e 1/2 Virilha ficam sem lábios automáticos | Incluir: o pedido cita só cavada e completa |
 
 ---
@@ -79,14 +79,14 @@ Fazer o registro técnico refletir o que de fato se aplica na sala, sem tocar na
 
 | Caminho | Tipo | Descrição |
 |---|---|---|
-| `scheduler/src/services/protocolo_laser.py` | modificar | nomes "Perianal" e "Grandes lábios"; `ENERGIA_DO_HR`; `MAPA_DE_AREAS` da virilha |
-| `scheduler/src/services/historico_de_sessao.py` | modificar | nome por parte + `source_area_name` em `aplicacoes_do_agendamento`; HR força energia em `valida_aplicacoes` |
+| `scheduler/src/services/protocolo_laser.py` | modificar | nomes "Perianal" e "Grandes lábios"; `MAPA_DE_AREAS` da virilha |
+| `scheduler/src/services/historico_de_sessao.py` | modificar | nome por parte + `source_area_name` em `aplicacoes_do_agendamento` |
 | `scheduler/src/scripts/setup_database.py` | modificar | `patient_session_applications.source_area_name VARCHAR(160)` (migration + CREATE TABLE); seed já propaga nomes e linhas novas |
 | `scheduler/src/functions/patient_record/_comum.py` | modificar | grava/serializa `source_area_name` |
-| `scheduler/tests/unit/test_mapa_de_areas.py`, `test_protocolo_laser.py`, `test_historico_de_sessao.py` | modificar | virilha com duas/três chaves; nomes; HR fixa 1.0; `source_area_name` |
+| `scheduler/tests/unit/test_mapa_de_areas.py`, `test_protocolo_laser.py`, `test_historico_de_sessao.py` | modificar | virilha com duas/três chaves; nomes; `source_area_name` |
 | `scheduler/tests/unit/test_prontuario_nao_toca_o_comercial.py` | criar | guarda: módulos do prontuário não escrevem em `appointments`/`appointment_service_areas` |
 | `frontend/src/lib/protocolo.ts` (+test) | modificar | `AREAS_PADRAO` → Grandes lábios; `ENERGIA_DO_HR` |
-| `frontend/src/pages/documentos/components/ParametrosDoMetodo.tsx` (+test) | modificar | Energia readOnly no HR |
+| `frontend/src/pages/documentos/components/AplicacoesField.tsx` (`trocaMetodo`) (+test) | modificar | HR pré-preenche Energia = 1 sempre, editável |
 | `frontend/src/pages/documentos/components/AplicacoesField.tsx` (+test) | modificar | subtítulo "de: {source_area_name}" nas partes desmembradas |
 | `frontend/src/lib/prontuario.ts` | modificar | resumo do histórico mostra a origem |
 | `frontend/src/types/index.ts` | modificar | `source_area_name` |
@@ -109,7 +109,7 @@ Fazer o registro técnico refletir o que de fato se aplica na sala, sem tocar na
 - [ ] Agendamento "Virilha Cavada" → dois blocos: "Virilha Cavada" (nome comercial, subtítulo do protocolo) e "Grandes lábios".
 - [ ] "Virilha Simples" → um bloco.
 - [ ] "+ Adicionar área" oferece "Grandes lábios"; "Interno de Virilha" não aparece mais.
-- [ ] Escolher HR → Energia mostra 1, readOnly; `POST` com `method: HR, energy_kj: 3` grava 1.0.
+- [ ] Escolher HR → Energia mostra 1 (mesmo sem pele ou sem sugestão), editável; apagar e salvar bloqueia pela regra do 051; `POST` com `energy_kj: 3` grava 3.
 - [ ] `laser_protocol_parameters` em dev e prod: `interno_virilha` → "Grandes lábios" nas três linhas; `regiao_perianal` → "Perianal".
 - [ ] Agendamento de origem inalterado (áreas, `original_price_cents`, `final_price_cents`, `discount_pct`) após salvar o registro: conferido por `GET appointments` antes e depois.
 - [ ] `pytest tests/unit`, `vitest`, `build`, `lint` verdes; roteiro em dev registrado.

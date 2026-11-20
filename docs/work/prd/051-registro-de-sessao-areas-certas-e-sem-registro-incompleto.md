@@ -1,6 +1,6 @@
 # PRD - 051 Registro de sessão: áreas com o nome certo e nenhum registro incompleto (bugs)
 
-> Gerado na fase **Research**. Use como input para a fase Spec.
+> Gerado na fase **Research**. Use como input para a fase Spec. Decisões da §4 confirmadas pelo André em 19/11/2026.
 > Par do PRD 052 (evolução do mesmo fluxo). Este é o de **correção**: sobe primeiro, em dev e depois prod.
 > Fora dos dois PRDs, por decisão do André em 19/11: alterar áreas e recalcular descontos durante o atendimento.
 
@@ -65,7 +65,7 @@ O seed do mapa (`setup_database._seed_do_mapa`) casa por nome exato e só roda n
 
 ---
 
-## 4. Decisões propostas (confirmar no spec)
+## 4. Decisões (confirmadas pelo André em 19/11/2026)
 
 | # | Decisão | Alternativa descartada |
 |---|---|---|
