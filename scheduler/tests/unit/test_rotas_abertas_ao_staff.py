@@ -46,6 +46,8 @@ ABERTAS = {
     "patient_record/update.py": "prontuario.escrever",
     "patient_record/history.py": "prontuario.ler",
     "patient_record/protocol.py": "prontuario.ler",
+    # PRD 051: as aplicacoes com que o registro nasce (so leitura).
+    "patient_record/session_applications.py": "prontuario.ler",
     # O nome e o horário da clínica, sem as credenciais.
     "clinic/get.py": "clinica.basica",
     # Caixa (PRD 026): SÓ a baixa em dinheiro, porque quem recebe a nota é a

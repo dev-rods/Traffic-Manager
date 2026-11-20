@@ -56,6 +56,18 @@ SessionRecordHistory:
         method: get
         cors: true
 
+# PRD 051: as aplicacoes com que o registro nasce, montadas pelo backend a
+# partir do agendamento. A tela chama isto ao escolher a sessao.
+SessionApplications:
+  handler: src.functions.patient_record.session_applications.handler
+  memorySize: 512
+  timeout: 30
+  events:
+    - http:
+        path: clinics/{clinicId}/appointments/{appointmentId}/session-applications
+        method: get
+        cors: true
+
 LaserProtocol:
   handler: src.functions.patient_record.protocol.handler
   memorySize: 512

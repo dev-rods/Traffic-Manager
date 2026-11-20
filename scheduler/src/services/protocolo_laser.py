@@ -281,6 +281,31 @@ def _indice():
 _POR_CHAVE = _indice()
 
 
+# Rótulos dos PDFs, usados nas mensagens de validação (a tela espelha em
+# lib/protocolo.ts ROTULO_DO_CAMPO).
+ROTULO_DO_CAMPO = {
+    "fluence_j": "Fluência (J)",
+    "energy_kj": "Energia (kJ)",
+    "stacks": "Stacks",
+    "passes": "Passadas",
+}
+
+
+def nome_da_area(protocol_area_key: Optional[str]) -> Optional[str]:
+    """O nome do protocolo para a chave: a primeira linha de PROTOCOLO com ela.
+
+    É SUBTÍTULO ("parâmetros de Meia perna"), nunca substitui o nome comercial
+    da área tratada (PRD 051): a perna inteira herda o parâmetro da metade, mas
+    o registro tem de dizer que foi a perna inteira.
+    """
+    if not protocol_area_key:
+        return None
+    for linha in PROTOCOLO:
+        if linha[2] == protocol_area_key:
+            return linha[3]
+    return None
+
+
 def campos_do_metodo(metodo: str) -> tuple:
     """Quais parâmetros este método usa.
 

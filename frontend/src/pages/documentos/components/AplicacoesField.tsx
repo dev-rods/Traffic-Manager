@@ -14,7 +14,15 @@ import {
   metodosDaArea,
   sugestao,
 } from '@/lib/protocolo'
-import { adicionaMetodo, agrupaPorArea, normaliza, removeArea, removeLinha } from '@/lib/aplicacoes'
+import {
+  adicionaMetodo,
+  agrupaPorArea,
+  chaveDaPendencia,
+  normaliza,
+  removeArea,
+  removeLinha,
+  type Pendencia,
+} from '@/lib/aplicacoes'
 import { ParametrosDoMetodo } from './ParametrosDoMetodo'
 
 interface AplicacoesFieldProps {
@@ -26,6 +34,8 @@ interface AplicacoesFieldProps {
   mapaDeAreas: Map<string, string>
   skinType: SkinType | null
   bronzeada: boolean
+  /** O que o submit apontou como faltando (PRD 051). Vazio até a primeira tentativa. */
+  pendencias?: readonly Pendencia[]
   disabled?: boolean
 }
 
@@ -58,9 +68,13 @@ export function AplicacoesField({
   mapaDeAreas,
   skinType,
   bronzeada,
+  pendencias = [],
   disabled,
 }: AplicacoesFieldProps) {
   const [novaArea, setNovaArea] = useState('')
+  const pendentes = new Set(pendencias.map(chaveDaPendencia))
+  const camposPendentes = (indice: number) =>
+    new Set(pendencias.filter((p) => p.indice === indice).map((p) => p.campo))
 
   // Contígua por área: o índice de cada linha é o mesmo na tela e no que sobe.
   const aplicacoes = normaliza(recebidas)
@@ -92,8 +106,11 @@ export function AplicacoesField({
         ...aplicacoes,
         {
           area_id: areaId,
+          // Nome comercial fica; o protocolo é subtítulo (PRD 051).
           area_name: nome,
           protocol_area_key: chave,
+          protocol_area_name:
+            parametros.find((p) => p.protocol_area_key === chave)?.protocol_area_name ?? null,
           method: metodo,
           fluence_j: nova?.fluence_j ?? null,
           energy_kj: nova?.energy_kj ?? null,
@@ -157,17 +174,26 @@ export function AplicacoesField({
             // material). Quem decide conduta é quem aplica.
             const comSugestao = metodosDaArea(parametros, bloco.protocol_area_key)
             const variasLinhas = bloco.linhas.length > 1
+            // "Perna Completa" usa o parâmetro de "Meia perna": a tela diz
+            // isso ao lado, em vez de trocar o nome da área tratada (PRD 051).
+            const protocolo = bloco.linhas[0]?.protocol_area_name ?? null
+            const subtitulo = protocolo && protocolo !== bloco.area_name ? protocolo : null
 
             return (
               <li key={bloco.chave} className="rounded-lg border border-gray-200 p-3">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="text-sm font-medium text-gray-800">{bloco.area_name}</span>
+                  <span className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-800">{bloco.area_name}</span>
+                    {subtitulo && (
+                      <span className="text-xs text-gray-400">parâmetros de {subtitulo}</span>
+                    )}
+                  </span>
                   <button
                     type="button"
                     onClick={() => onChange(removeArea(aplicacoes, bloco.chave))}
                     disabled={disabled}
                     className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
-                    aria-label={`Remover ${bloco.area_name}`}
+                    aria-label={`Remover ${bloco.area_name}${subtitulo ? ` (${subtitulo})` : ''}`}
                   >
                     Remover
                   </button>
@@ -177,18 +203,27 @@ export function AplicacoesField({
                   {bloco.linhas.map((ap, l) => {
                     const i = inicios[b] + l
                     const rotuloDaLinha = ap.method ? ROTULO_DO_METODO[ap.method] : 'método'
+                    const metodoPendente = pendentes.has(chaveDaPendencia({ indice: i, campo: 'method' }))
                     return (
                       <li key={i} className="py-2.5 first:pt-2 last:pb-1">
                         <div className="flex flex-wrap items-end gap-4">
                           <label className="flex flex-col gap-1">
-                            <span className="text-[11px] font-medium text-gray-500">Método</span>
+                            <span className={`text-[11px] font-medium ${metodoPendente ? 'text-red-500' : 'text-gray-500'}`}>
+                              Método{metodoPendente && <span className="ml-1 font-normal">· obrigatório</span>}
+                            </span>
                             <select
                               value={ap.method ?? ''}
                               disabled={disabled}
+                              aria-invalid={metodoPendente || undefined}
                               onChange={(e) =>
                                 trocaMetodo(i, (e.target.value || null) as MetodoLaser | null)
                               }
-                              className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                              className={[
+                                'rounded-lg border px-2.5 py-1.5 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2',
+                                metodoPendente
+                                  ? 'border-red-400 ring-2 ring-red-500/20 focus:ring-red-500/30 focus:border-red-500'
+                                  : 'border-gray-200 focus:ring-brand-500/20 focus:border-brand-500',
+                              ].join(' ')}
                             >
                               <option value="">Escolher…</option>
                               {TODOS_OS_METODOS.map((m) => (
@@ -212,6 +247,7 @@ export function AplicacoesField({
                           <ParametrosDoMetodo
                             aplicacao={ap}
                             onChange={(campo, valor) => altera(i, { [campo]: valor })}
+                            pendentes={camposPendentes(i)}
                             disabled={disabled}
                           />
 

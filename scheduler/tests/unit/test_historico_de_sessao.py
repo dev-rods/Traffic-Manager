@@ -11,6 +11,7 @@ from unittest import mock
 from src.services.historico_de_sessao import (
     RegistroInvalido,
     aplicacoes_do_agendamento,
+    exige_aplicacoes,
     grava_trilha,
     valida_aplicacoes,
 )
@@ -110,6 +111,22 @@ class TestONascimentoDoRegistro(unittest.TestCase):
     def test_agendamento_sem_area(self):
         self.assertEqual(aplicacoes_do_agendamento(db_com_areas([]), APPT, "BRANCA"), [])
 
+    def test_perna_completa_mantem_o_nome_comercial(self):
+        """PRD 051: a perna inteira herda o PARAMETRO da metade, não o nome.
+        Até 19/11/2026 a tela trocava e o registro dizia "Meia perna" numa
+        sessão que depilou a perna inteira."""
+        aps = aplicacoes_do_agendamento(
+            db_com_areas([area("Perna Completa", "meia_perna")]), APPT, "BRANCA")
+
+        self.assertEqual(aps[0]["area_name"], "Perna Completa")
+        self.assertEqual(aps[0]["protocol_area_name"], "Meia perna")
+        self.assertEqual(aps[0]["method"], "SHR")
+        self.assertIsNotNone(aps[0]["fluence_j"])
+
+    def test_sem_mapa_nao_ha_nome_de_protocolo(self):
+        aps = aplicacoes_do_agendamento(db_com_areas([area("Área nova")]), APPT, "BRANCA")
+        self.assertIsNone(aps[0]["protocol_area_name"])
+
 
 class TestValidacao(unittest.TestCase):
     def test_o_nome_da_area_e_obrigatorio(self):
@@ -149,14 +166,16 @@ class TestValidacao(unittest.TestCase):
     def test_valor_zero_ou_negativo_e_recusado(self):
         for valor in (0, -5):
             with self.subTest(valor=valor):
-                with self.assertRaises(RegistroInvalido):
+                with self.assertRaises(RegistroInvalido) as ctx:
                     valida_aplicacoes([{"area_name": "Axilas", "method": "SHR",
-                                        "fluence_j": valor}])
+                                        "fluence_j": valor, "energy_kj": 8}])
+                self.assertEqual(str(ctx.exception),
+                                 "Axilas: Fluência (J) precisa ser maior que zero.")
 
     def test_texto_no_lugar_de_numero_e_recusado(self):
         with self.assertRaises(RegistroInvalido):
             valida_aplicacoes([{"area_name": "Axilas", "method": "SHR",
-                                "fluence_j": "muito"}])
+                                "fluence_j": "muito", "energy_kj": 8}])
 
     def test_metodo_sem_sugestao_no_protocolo_e_aceito(self):
         """O protocolo diz qual método COMEÇAR, não qual é permitido.
@@ -174,26 +193,86 @@ class TestValidacao(unittest.TestCase):
         self.assertEqual(limpa["fluence_j"], 6)
         self.assertEqual(limpa["stacks"], 3)
 
-    def test_aplicacao_sem_metodo_e_valida(self):
-        """Área fora do protocolo: ela escreve o que fez sem método."""
-        limpa = valida_aplicacoes([{"area_name": "Área nova"}])[0]
+    # ── PRD 051: nenhum registro incompleto ─────────────────────────────
+    # Antes nada era obrigatório e a sessão inteira ia ao banco como "sem
+    # parâmetro registrado". Quem não aplicou numa área a remove.
 
-        self.assertIsNone(limpa["method"])
-        self.assertIsNone(limpa["fluence_j"])
+    def test_aplicacao_sem_metodo_e_recusada(self):
+        for ap in ({"area_name": "Costeleta"}, {"area_name": "Costeleta", "method": ""},
+                   {"area_name": "Costeleta", "method": None, "fluence_j": 6}):
+            with self.subTest(ap=ap):
+                with self.assertRaises(RegistroInvalido) as ctx:
+                    valida_aplicacoes([ap])
+                self.assertEqual(str(ctx.exception), "Costeleta: escolha o método.")
+
+    def test_shr_sem_energia_e_recusado(self):
+        """O caso do relato: Fluência preenchida, Energia vazia, e salvava."""
+        for energia in (None, ""):
+            with self.subTest(energia=energia):
+                with self.assertRaises(RegistroInvalido) as ctx:
+                    valida_aplicacoes([{"area_name": "Axilas", "method": "SHR",
+                                        "fluence_j": 8, "energy_kj": energia}])
+                self.assertEqual(str(ctx.exception), "Axilas: informe Energia (kJ).")
+
+    def test_stacking_exige_fluencia_stacks_e_passadas(self):
+        base = {"area_name": "Buço", "method": "SHR_STACKING",
+                "fluence_j": 6, "stacks": 3, "passes": 2}
+        for campo, rotulo in (("fluence_j", "Fluência (J)"), ("stacks", "Stacks"),
+                              ("passes", "Passadas")):
+            with self.subTest(campo=campo):
+                ap = {**base, campo: None}
+                with self.assertRaises(RegistroInvalido) as ctx:
+                    valida_aplicacoes([ap])
+                self.assertEqual(str(ctx.exception), f"Buço: informe {rotulo}.")
+
+    def test_hr_exige_fluencia_e_energia(self):
+        with self.assertRaises(RegistroInvalido):
+            valida_aplicacoes([{"area_name": "Buço", "method": "HR", "fluence_j": 17}])
+        limpa = valida_aplicacoes([{"area_name": "Buço", "method": "HR",
+                                    "fluence_j": 17, "energy_kj": 1}])[0]
+        self.assertEqual(limpa["energy_kj"], 1.0)
+
+    def test_completa_passa_e_descarta_o_que_o_metodo_nao_usa(self):
+        limpa = valida_aplicacoes([{"area_name": "Área nova", "method": "SHR",
+                                    "fluence_j": 7, "energy_kj": 8, "stacks": 3}])[0]
+        self.assertEqual((limpa["fluence_j"], limpa["energy_kj"]), (7.0, 8.0))
+        self.assertIsNone(limpa["stacks"])
 
     def test_o_nome_e_cortado_no_tamanho_da_coluna(self):
-        limpa = valida_aplicacoes([{"area_name": "x" * 300}])[0]
+        limpa = valida_aplicacoes([{"area_name": "x" * 300, "method": "SHR",
+                                    "fluence_j": 7, "energy_kj": 8}])[0]
         self.assertEqual(len(limpa["area_name"]), 160)
 
     def test_a_ordem_e_preservada(self):
+        shr = {"method": "SHR", "fluence_j": 7, "energy_kj": 8}
         limpas = valida_aplicacoes([
-            {"area_name": "Axilas"}, {"area_name": "Buço"}, {"area_name": "Nuca"},
+            {"area_name": "Axilas", **shr}, {"area_name": "Buço", **shr}, {"area_name": "Nuca", **shr},
         ])
         self.assertEqual([l["display_order"] for l in limpas], [0, 1, 2])
 
-    def test_lista_vazia(self):
+    def test_lista_vazia_valida_mas_nao_se_grava(self):
         self.assertEqual(valida_aplicacoes([]), [])
         self.assertEqual(valida_aplicacoes(None), [])
+        for vazio in ([], None):
+            with self.assertRaises(RegistroInvalido) as ctx:
+                exige_aplicacoes(vazio)
+            self.assertEqual(str(ctx.exception), "Informe ao menos uma área aplicada.")
+
+    def test_exige_aplicacoes_devolve_a_lista_cheia(self):
+        lista = [{"area_name": "Axilas"}]
+        self.assertIs(exige_aplicacoes(lista), lista)
+
+    def test_o_fallback_pelo_agendamento_nao_volta_ao_create(self):
+        """A montagem é do GET session-applications; o POST só grava o que a
+        profissional conferiu. Com a validação nova, o fallback antigo daria
+        400 em toda área de dois métodos."""
+        import os
+        caminho = os.path.join(os.path.dirname(__file__), "..", "..", "src",
+                               "functions", "patient_record", "create.py")
+        with open(caminho, encoding="utf-8") as f:
+            fonte = f.read()
+        self.assertNotIn("aplicacoes_do_agendamento(", fonte)
+        self.assertIn("exige_aplicacoes(", fonte)
 
 
 class TestVariosMetodosNaMesmaArea(unittest.TestCase):
@@ -221,8 +300,8 @@ class TestVariosMetodosNaMesmaArea(unittest.TestCase):
     def test_mesmo_metodo_duas_vezes_e_aceito(self):
         # Duas passadas de SHR com fluências diferentes: conduta é de quem aplica.
         limpas = valida_aplicacoes([
-            {"area_name": "Axilas", "method": "SHR", "fluence_j": 8},
-            {"area_name": "Axilas", "method": "SHR", "fluence_j": 6},
+            {"area_name": "Axilas", "method": "SHR", "fluence_j": 8, "energy_kj": 8},
+            {"area_name": "Axilas", "method": "SHR", "fluence_j": 6, "energy_kj": 8},
         ])
         self.assertEqual([l["fluence_j"] for l in limpas], [8.0, 6.0])
 

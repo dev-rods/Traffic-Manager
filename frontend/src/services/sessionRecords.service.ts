@@ -1,5 +1,6 @@
 import { api } from './api'
 import type {
+  AplicacoesDoAgendamento,
   ListaDeRegistros,
   ProtocoloLaser,
   RegistroDeSessao,
@@ -42,6 +43,15 @@ export const sessionRecordsService = {
     return api
       .get<TrilhaDeEdicoes>(`/clinics/${clinicId}/session-records/${recordId}/history`)
       .then((r) => r.data)
+  },
+
+  /** As aplicações com que o registro nasce, montadas pelo backend (PRD 051). */
+  aplicacoesDoAgendamento(clinicId: string, appointmentId: string) {
+    return api
+      .get<AplicacoesDoAgendamento>(
+        `/clinics/${clinicId}/appointments/${appointmentId}/session-applications`,
+      )
+      .then((r) => r.data.applications)
   },
 
   protocol(clinicId: string) {

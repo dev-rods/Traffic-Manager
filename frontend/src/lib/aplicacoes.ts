@@ -1,5 +1,52 @@
 import type { AplicacaoDeSessao, MetodoLaser, ParametroDoProtocolo, SkinType } from '@/types'
-import { metodosDaArea, sugestao } from '@/lib/protocolo'
+import { CAMPOS_POR_METODO, ROTULO_DO_CAMPO, metodosDaArea, sugestao } from '@/lib/protocolo'
+
+/**
+ * O que falta para o registro poder ser salvo (PRD 051).
+ *
+ * Espelho de `valida_aplicacoes` no backend: mesma ordem, mesmas mensagens.
+ * A tela confere antes de mandar para destacar campo a campo; o backend
+ * confere de novo porque tela não é a única cliente. Os índices são da lista
+ * NORMALIZADA (`normaliza`), que é a que a tela indexa.
+ */
+export interface Pendencia {
+  /** Índice na lista normalizada; -1 quando o registro inteiro está vazio. */
+  indice: number
+  area_name: string
+  campo: 'method' | string
+  mensagem: string
+}
+
+export const chaveDaPendencia = (p: Pick<Pendencia, 'indice' | 'campo'>) => `${p.indice}|${p.campo}`
+
+export function pendenciasDoRegistro(aplicacoes: readonly AplicacaoDeSessao[]): Pendencia[] {
+  if (aplicacoes.length === 0) {
+    return [{ indice: -1, area_name: '', campo: 'method', mensagem: 'Informe ao menos uma área aplicada.' }]
+  }
+  const pendencias: Pendencia[] = []
+  aplicacoes.forEach((a, indice) => {
+    if (!a.method) {
+      pendencias.push({ indice, area_name: a.area_name, campo: 'method', mensagem: `${a.area_name}: escolha o método.` })
+      return
+    }
+    for (const campo of CAMPOS_POR_METODO[a.method] ?? []) {
+      const valor = a[campo as keyof AplicacaoDeSessao] as number | null | undefined
+      const rotulo = ROTULO_DO_CAMPO[campo] ?? campo
+      if (valor === null || valor === undefined) {
+        pendencias.push({ indice, area_name: a.area_name, campo, mensagem: `${a.area_name}: informe ${rotulo}.` })
+      } else if (valor <= 0) {
+        pendencias.push({ indice, area_name: a.area_name, campo, mensagem: `${a.area_name}: ${rotulo} precisa ser maior que zero.` })
+      }
+    }
+  })
+  return pendencias
+}
+
+/** Texto do erro geral: a própria mensagem quando é uma, um resumo quando são várias. */
+export function resumoDasPendencias(pendencias: readonly Pendencia[]): string {
+  if (pendencias.length === 1) return pendencias[0].mensagem
+  return `Faltam ${pendencias.length} campos. Preencha os destacados ou remova a área que não foi aplicada.`
+}
 
 /**
  * Uma área da sessão e os métodos aplicados nela (PRD 030).
