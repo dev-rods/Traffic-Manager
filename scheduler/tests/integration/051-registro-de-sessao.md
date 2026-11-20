@@ -75,4 +75,4 @@ antigo do navegador as perdia. Com a montagem no backend (caso 1) as três
 entram. Áreas ativas sem mapa em prod: Essência "Testa"; Nobre "Mãos" e
 "Pés" (sem linha no protocolo; entram sem sugestão, como desenhado).
 
-**Prod:** pendente (deploy com o André; sem migration).
+**Prod, 19/11/2026:** `serverless deploy --stage prod` → `UPDATE_COMPLETE`, layer 158 (sem migration). Smoke de leitura: `GET session-applications` da sessão real de 19/11 da Essência devolveu 200 com 8 aplicações para 7 áreas comerciais, nomes comerciais preservados, subtítulos do protocolo, Costeleta presente sem método (dois métodos) e a composta em duas linhas; a paciente não tem tipo de pele marcado, por isso sem sugestão. Smoke de escrita é o primeiro registro real pela profissional.

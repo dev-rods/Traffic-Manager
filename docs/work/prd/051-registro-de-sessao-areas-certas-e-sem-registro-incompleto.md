@@ -132,5 +132,5 @@ O seed do mapa (`setup_database._seed_do_mapa`) casa por nome exato e só roda n
 - [ ] Pendente
 - [x] Spec gerada: `spec/051-registro-de-sessao-areas-certas-e-sem-registro-incompleto.md` (19/11/2026)
 - [x] Implementado em dev: 19/11/2026 (PR #218, layer 200; roteiro curl verde; Costeleta investigada em prod: mapa ok, perda era do caminho antigo da tela)
-- [ ] Implementado em prod: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em prod: 19/11/2026 (deploy layer 158; painel pela Vercel no merge do #218; smoke de leitura do endpoint novo com a sessão real de 19/11: 8 aplicações, Costeleta incluída)
+- [x] Registrado em `TASKS_LOG.md`
