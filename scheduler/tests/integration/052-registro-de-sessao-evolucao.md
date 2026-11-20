@@ -31,4 +31,23 @@ C=clinicadepilacaopremium-3fbce9; S=<service_id>; D=2026-11-27
 
 ## Resultado
 
-Preencher ao rodar.
+**Dev, 20/11/2026** (layer 201; `setup_database.py` em dev: coluna criada,
+seed do protocolo renomeou, seed do mapa inseriu 4 ligações):
+
+- 1 → "Grandes lábios" em HR, SHR e Stacking (2 peles cada), "Perianal" ×2.
+- 2 → `Virilha Cavada` = `virilha_cavada > interno_virilha`; `Virilha Completa`
+  = `virilha_completa > interno_virilha`; `Virilha Simples` = uma chave. A
+  composta de dev é "Virilha Comp. + ânus" (abreviada, sem mapa), então o caso
+  de três partes só é conferível em prod, onde o nome é o completo.
+- 3/4 → agendamento com Virilha Cavada + Perna Completa: `Perna Completa`
+  (sem origem, SHR), `Virilha cavada` (origem "Virilha Cavada", SHR),
+  `Grandes lábios` (origem "Virilha Cavada", sem método). Paciente de teste sem
+  pele: sem sugestão.
+- 5 → Virilha Simples: uma aplicação, sem origem.
+- 6 → POST com `sourceAreaName` → 201; a lista devolve `source_area_name`.
+- 7 → `original_price_cents`, `final_price_cents`, `discount_pct` e
+  `discount_reason` iguais antes e depois do registro.
+- Fixtures canceladas e registro apagado. Smoke do painel (caso 8) pendente:
+  sobe pela Vercel no merge.
+
+**Prod:** pendente (migration + seeds + deploy com o André).
