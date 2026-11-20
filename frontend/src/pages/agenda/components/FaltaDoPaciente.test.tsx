@@ -131,6 +131,19 @@ describe('a ação de marcar falta', () => {
   })
 })
 
+describe('falta remarcada (PRD 054)', () => {
+  it('NO_SHOW com vínculo mostra para onde foi, e ainda é falta', () => {
+    montaPopover({ status: 'NO_SHOW', rescheduled_to_id: 'a2', rescheduled_to_date: '2026-12-03' })
+    expect(screen.getByText('Falta · remarcado para 03/12')).toBeInTheDocument()
+  })
+
+  it('o novo diz de onde veio e mostra o motivo de um desfecho ajustado', () => {
+    montaPopover({ rescheduled_from_id: 'a0', rescheduled_from_date: '2026-11-18', outcome_reason: 'avisou doença' })
+    expect(screen.getByText('Remarcado de 18/11')).toBeInTheDocument()
+    expect(screen.getByText('avisou doença')).toBeInTheDocument()
+  })
+})
+
 describe('a ação de desmarcar falta', () => {
   it('aparece quando o agendamento está em falta', () => {
     montaPopover({ status: 'NO_SHOW' })

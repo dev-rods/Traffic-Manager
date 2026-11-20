@@ -11,6 +11,11 @@ interface ResumoDaAlteracaoProps {
   onConfirmar: () => void
   salvando?: boolean
   erro?: string | null
+  /** "Confirmar remarcação" quando a data muda (PRD 054). */
+  rotuloDoConfirmar?: string
+  /** Bloco extra entre os avisos e os botões: o desfecho do dia antigo. */
+  children?: React.ReactNode
+  desabilitado?: boolean
 }
 
 /**
@@ -21,6 +26,9 @@ interface ResumoDaAlteracaoProps {
  * o erro mais caro é editar o agendamento de outra pessoa.
  */
 export function ResumoDaAlteracao({
+  rotuloDoConfirmar,
+  children,
+  desabilitado = false,
   paciente,
   quando,
   linhas,
@@ -62,6 +70,8 @@ export function ResumoDaAlteracao({
         </ul>
       )}
 
+      {children}
+
       {erro && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
           {erro}
@@ -72,8 +82,8 @@ export function ResumoDaAlteracao({
         <Button variant="ghost" onClick={onVoltar} disabled={salvando}>
           Voltar
         </Button>
-        <Button onClick={onConfirmar} loading={salvando}>
-          Confirmar alteração
+        <Button onClick={onConfirmar} loading={salvando} disabled={desabilitado}>
+          {rotuloDoConfirmar ?? 'Confirmar alteração'}
         </Button>
       </div>
     </div>

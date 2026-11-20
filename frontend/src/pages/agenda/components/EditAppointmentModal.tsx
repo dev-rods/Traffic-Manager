@@ -24,7 +24,9 @@ import {
   textoDoDesconto,
   type AlteracaoPretendida,
 } from '@/lib/alteracaoDeAgendamento'
-import type { Appointment, UpdateAppointmentPayload } from '@/types'
+import type { Appointment, AvailabilityRule, UpdateAppointmentPayload } from '@/types'
+import { desfechoDe, type Desfecho } from '@/lib/desfecho'
+import { DesfechoField } from './DesfechoField'
 import {
   descontoDoAgendamento,
   payloadDoDesconto,
@@ -36,9 +38,11 @@ import {
 interface EditAppointmentModalProps {
   appointment: Appointment | null
   onClose: () => void
+  /** Regras de horário, para antecipar o desfecho da remarcação (PRD 054). */
+  regras?: AvailabilityRule[]
 }
 
-export function EditAppointmentModal({ appointment, onClose }: EditAppointmentModalProps) {
+export function EditAppointmentModal({ appointment, onClose, regras }: EditAppointmentModalProps) {
   const updateAppointment = useUpdateAppointment()
   const { data: services } = useServices()
 
@@ -62,6 +66,10 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
   // Segundo passo DENTRO do mesmo modal (PRD 043): dois overlays empilhados
   // escondem o formulário que a pessoa precisa poder revisar.
   const [confirmando, setConfirmando] = useState(false)
+  // Mudar a data é remarcar (PRD 054): o dia antigo recebe um desfecho pela
+  // antecedência, que a recepção pode trocar com motivo (decisão 2).
+  const [desfechoEscolhido, setDesfechoEscolhido] = useState<Desfecho | null>(null)
+  const [motivoDoDesfecho, setMotivoDoDesfecho] = useState('')
 
   // Desconto, nas duas formas (PRD 050). O gravado é a referência do "mudou".
   const descontoGravado: DescontoEscolhido = appointment
@@ -235,6 +243,10 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
       : {}),
   }
   const pedeConfirmacao = temEfeitoForaDaTela(alteracao)
+  const desfechoAutomatico: Desfecho | null = dateChanged ? desfechoDe(regras, a) : null
+  const desfechoFinal = desfechoEscolhido ?? desfechoAutomatico
+  const desfechoDiverge = Boolean(desfechoAutomatico && desfechoFinal && desfechoFinal !== desfechoAutomatico)
+  const motivoFalta = desfechoDiverge && !motivoDoDesfecho.trim()
 
   const toggleArea = (areaId: string) => {
     setSelectedAreaIds((prev) =>
@@ -315,6 +327,10 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
       }
 
       if (discountChanged) Object.assign(payload, payloadDoDesconto(desconto))
+      if (dateChanged && desfechoDiverge && desfechoFinal) {
+        payload.outcome = desfechoFinal
+        payload.outcomeReason = motivoDoDesfecho.trim()
+      }
 
       await updateAppointment.mutateAsync({
         appointmentId: a.id,
@@ -339,12 +355,24 @@ export function EditAppointmentModal({ appointment, onClose }: EditAppointmentMo
           paciente={displayName}
           quando={`${a.appointment_date} às ${a.start_time.slice(0, 5)}`}
           linhas={linhasDaAlteracao(alteracao)}
-          avisos={avisosDaAlteracao(a, alteracao)}
+          avisos={avisosDaAlteracao(a, alteracao, desfechoAutomatico ? { desfecho: desfechoAutomatico } : null)}
           onVoltar={() => setConfirmando(false)}
           onConfirmar={() => void executa()}
           salvando={updateAppointment.isPending}
           erro={error}
-        />
+          rotuloDoConfirmar={dateChanged ? 'Confirmar remarcação' : undefined}
+          desabilitado={motivoFalta}
+        >
+          {desfechoAutomatico && desfechoFinal && (
+            <DesfechoField
+              automatico={desfechoAutomatico}
+              valor={desfechoFinal}
+              onChange={setDesfechoEscolhido}
+              motivo={motivoDoDesfecho}
+              onMotivo={setMotivoDoDesfecho}
+            />
+          )}
+        </ResumoDaAlteracao>
       </Modal>
     )
   }

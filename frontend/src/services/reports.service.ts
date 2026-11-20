@@ -8,6 +8,10 @@ export interface ReportSummary {
   cancelled_appointments: number
   /** Reagendados saem de `cancelled_appointments` (PRD 035). */
   rescheduled_appointments: number
+  /** Faltas (PRD 054): fora de dinheiro e de `total_appointments`. */
+  no_show_appointments: number
+  /** Realizadas ÷ (realizadas + faltas), em %; null sem base. Só no relatório por período. */
+  attendance_rate?: number | null
   new_patients: number
   gross_revenue_cents: number
   total_discount_cents: number

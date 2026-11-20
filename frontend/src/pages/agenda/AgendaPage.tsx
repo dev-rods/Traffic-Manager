@@ -346,6 +346,7 @@ export function AgendaPage() {
           key={editing.id}
           appointment={editing}
           onClose={() => setEditing(null)}
+          regras={rulesData?.data ?? []}
         />
       )}
 
@@ -354,6 +355,7 @@ export function AgendaPage() {
         appointment={cancelling}
         onClose={() => setCancelling(null)}
         onReschedule={(a) => { setCancelling(null); setEditing(a) }}
+        regras={rulesData?.data ?? []}
       />
 
       {/* Create appointment modal — key forces remount to reset form */}

@@ -41,9 +41,13 @@ export const appointmentsService = {
       .then((r) => r.data)
   },
 
-  cancel(appointmentId: string) {
+  /**
+   * Encerra o agendamento. O backend classifica em cancelamento ou falta pela
+   * antecedência (PRD 054); `outcome` + `outcomeReason` sobrepõem, só pelo painel.
+   */
+  cancel(appointmentId: string, extra?: { outcome?: 'CANCELLED' | 'NO_SHOW'; outcomeReason?: string }) {
     return api
-      .put(`/appointments/${appointmentId}`, { status: 'CANCELLED' })
+      .put(`/appointments/${appointmentId}`, { status: 'CANCELLED', ...(extra ?? {}) })
       .then((r) => r.data)
   },
 

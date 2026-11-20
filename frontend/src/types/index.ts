@@ -272,6 +272,11 @@ export interface Appointment {
    *  o substituiu. Reagendado = CANCELLED + rescheduled_to_id; não é cancelamento. */
   rescheduled_to_id: string | null
   rescheduled_to_date: string | null   // YYYY-MM-DD
+  /** PRD 054: gravado no registro NOVO, aponta para o que ele substituiu. */
+  rescheduled_from_id?: string | null
+  rescheduled_from_date?: string | null
+  /** Motivo de a recepção ter trocado o desfecho automático (PRD 054); null quando foi o automático. */
+  outcome_reason?: string | null
   /** O pagamento vivo do agendamento (pendente, aguardando dinheiro ou pago). */
   payment_id: string | null
   payment_method: PaymentMethod | null
@@ -416,6 +421,13 @@ export interface UpdateAppointmentPayload {
    * (PRD 053). Exclusivo com discountPct/discountCents.
    */
   discountPolicy?: boolean
+  /**
+   * Desfecho do registro encerrado ao cancelar ou remarcar (PRD 054). Omitido,
+   * o backend classifica pela antecedência; informado e diferente do
+   * automático, exige `outcomeReason`.
+   */
+  outcome?: 'CANCELLED' | 'NO_SHOW'
+  outcomeReason?: string
   /**
    * Fixa a duracao DESTE agendamento. `null` volta ao calculado; omitir nao mexe.
    * A distincao importa: e `null` que solta o override.

@@ -310,6 +310,6 @@ Deploy: backend primeiro. Migration pequena (`rescheduled_from_id`).
 
 - [ ] Pendente
 - [x] Spec gerada: `spec/054-regras-de-cancelamento-falta-e-remarcacao.md` (20/11/2026)
-- [ ] Implementado em dev: (data)
+- [x] Implementado em dev: 20/11/2026 (PR #231; migration e deploy dev; roteiro API casos 1-8 verdes; painel e site pelo André)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`

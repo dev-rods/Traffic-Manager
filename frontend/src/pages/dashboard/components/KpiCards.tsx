@@ -37,6 +37,12 @@ function buildKpis(s: ReportSummary): KpiItem[] {
       color: 'text-red-500',
     },
     {
+      // Falta fica fora da receita e dos agendamentos (PRD 054); aparece aqui.
+      label: 'Faltas',
+      value: String(s.no_show_appointments ?? 0),
+      color: 'text-red-500',
+    },
+    {
       label: 'Receita do dia',
       value: formatCurrency(s.net_revenue_cents),
       detail: s.total_discount_cents > 0
@@ -51,7 +57,7 @@ export function KpiCards({ summary }: KpiCardsProps) {
   const kpis = buildKpis(summary)
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
       {kpis.map((kpi) => (
         <Card key={kpi.label}>
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{kpi.label}</p>

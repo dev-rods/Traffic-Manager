@@ -106,7 +106,9 @@ export function AppointmentPopover({
   const faltou = a.status === 'NO_SHOW'
   // Reagendado nao e cancelado (PRD 035): a pessoa continua marcada, noutro
   // registro. Cor neutra, nao vermelha.
-  const remarcado = isCancelled && !!a.rescheduled_to_id
+  // Remarcado com menos de 24 h fica em NO_SHOW apontando para o novo (PRD 054):
+  // e falta, mas a tela mostra para onde foi.
+  const remarcado = (isCancelled || faltou) && !!a.rescheduled_to_id
 
 
   // Position the popover near the anchor (desktop). O `top` sobe até sobrar
@@ -214,15 +216,28 @@ export function AppointmentPopover({
             <span className="text-gray-400">Status</span>
             <span className={
               remarcado ? 'font-medium text-gray-600'
-                : isCancelled ? 'font-medium text-red-500'
+                : isCancelled || faltou ? 'font-medium text-red-500'
                 : 'font-medium text-emerald-600'
             }>
               {remarcado && a.rescheduled_to_date
-                ? `Remarcado para ${diaMes(a.rescheduled_to_date)}`
-                : remarcado ? 'Remarcado'
+                ? `${faltou ? 'Falta · remarcado' : 'Remarcado'} para ${diaMes(a.rescheduled_to_date)}`
+                : remarcado ? (faltou ? 'Falta · remarcado' : 'Remarcado')
+                : faltou ? 'Falta'
                 : isCancelled ? 'Cancelado' : 'Confirmado'}
             </span>
           </div>
+          {a.rescheduled_from_date && (
+            <div className="flex justify-between">
+              <span className="text-gray-400">Origem</span>
+              <span className="font-medium text-gray-600">Remarcado de {diaMes(a.rescheduled_from_date)}</span>
+            </div>
+          )}
+          {a.outcome_reason && (
+            <div className="flex justify-between gap-3">
+              <span className="text-gray-400">Desfecho ajustado</span>
+              <span className="font-medium text-gray-600 text-right">{a.outcome_reason}</span>
+            </div>
+          )}
           {/* Presenca (PRD 027): "pendente" so faz sentido depois de o
               lembrete sair - antes nao houve pergunta, e pendente sem pergunta
               e ruido. Mas a equipe confirma por telefone a qualquer hora, e a

@@ -94,7 +94,7 @@ function Faturamento() {
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <KpiCard
           label="Agendamentos"
           value={String(s.total_appointments)}
@@ -112,6 +112,13 @@ function Faturamento() {
           value={formatCurrency(s.total_discount_cents)}
           valueColor="text-amber-500"
           subtext={`${discountPctOfRevenue}% da receita bruta`}
+          subtextColor="text-gray-400"
+        />
+        <KpiCard
+          label="Faltas"
+          value={String(s.no_show_appointments ?? 0)}
+          valueColor="text-red-500"
+          subtext={s.attendance_rate == null ? 'sem sessões realizadas' : `${s.attendance_rate}% de presença`}
           subtextColor="text-gray-400"
         />
         <KpiCard
