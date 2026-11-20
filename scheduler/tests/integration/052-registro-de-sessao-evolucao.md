@@ -65,4 +65,5 @@ protocolo renomeado, mapa com as ligações novas):
   método), `Perianal` (Stacking), os três com origem "Virilha Completa + ânus".
   Paciente sem pele cadastrada: sem fluência sugerida, como esperado.
 - 6/7 não repetidos em prod (sem fixture de escrita em dados reais); cobertos
-  em dev e por teste unitário. Caso 8 (painel) é do André após a Vercel.
+  em dev e por teste unitário. Caso 8 (painel) conferido pelo André em prod em 20/11:
+  ok.
