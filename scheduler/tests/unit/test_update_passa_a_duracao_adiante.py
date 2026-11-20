@@ -141,7 +141,9 @@ class TestConflitoFicaParaAEtapaCerta(unittest.TestCase):
 
         _, kwargs = servico.update_appointment_services.call_args
         self.assertFalse(kwargs.get("verificar_conflito"))
-        servico.reschedule_appointment.assert_called_once()
+        # Outra data e remarcacao (PRD 054): o novo nasce com as areas ja trocadas.
+        servico.remarca.assert_called_once()
+        servico.reschedule_appointment.assert_not_called()
 
     def test_sem_remarcacao_confere_na_hora(self):
         servico, _ = chama({

@@ -9,6 +9,7 @@ from src.services.desconto_personalizado import DescontoInvalido, RAZAO as RAZAO
 from src.services.desconto_personalizado import pct_equivalente
 from src.services.primeira_visita import e_primeira_visita, passa_a_marca_adiante
 from src.services.reagendamento import vincula_antecessor
+from src.services.desfecho import DESFECHOS, DesfechoInvalido, desfecho_do_agendamento
 from src.services.politica_de_desconto import decide, preco_de_tabela
 from src.services.duration_rules import (
     calcula_duracao, duracao_da_sessao, duracao_do_carrinho, get_duration_rules)
@@ -39,6 +40,11 @@ class ConflictError(Exception):
 
 class NotFoundError(Exception):
     pass
+
+
+class MudancaDeData(ValueError):
+    """`reschedule_appointment` e para a MESMA data (PRD 054). Outra data e
+    remarcacao: `remarca`, que encerra o antigo e cria o novo."""
 
 
 class OptimisticLockError(Exception):
@@ -442,6 +448,13 @@ class AppointmentService:
         appointment = appointments[0]
         current_version = appointment.get("version", 1)
         clinic_id = appointment["clinic_id"]
+
+        # Mesma data, outro horario: edicao. Outra data e remarcacao (PRD 054):
+        # o dia antigo guarda a sessao que nao aconteceu, com o desfecho da
+        # antecedencia. Ate 20/11/2026 este metodo movia o registro inteiro e a
+        # historia do dia antigo sumia.
+        if str(new_date) != str(appointment["appointment_date"]):
+            raise MudancaDeData("Mudar a data e remarcar: use remarca()")
 
         # 2. Get duration: prefer total_duration_minutes, then appointment_service_areas, then appointment_services, then service default
         duration_minutes = appointment.get("total_duration_minutes")
@@ -914,19 +927,46 @@ class AppointmentService:
         )
         return result[0] if result else appointment
 
-    def cancel_appointment(self, appointment_id: str) -> Dict[str, Any]:
+    def cancel_appointment(self, appointment_id: str, desfecho: Optional[str] = None,
+                           motivo: Optional[str] = None, autor: Optional[str] = None) -> Dict[str, Any]:
+        """Encerra o agendamento com o desfecho da antecedencia (PRD 054):
+        CANCELLED com 24 h ou mais antes da abertura da agenda do dia, NO_SHOW
+        com menos. `desfecho` explicito e a sobreposicao do painel (decisao 2)
+        e exige `motivo` quando diverge do automatico; bot e site nao mandam.
+        A linha devolvida traz `outcome`."""
+        atuais = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
+            (appointment_id,),
+        )
+        if not atuais:
+            raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou já cancelado")
+        atual = atuais[0]
+
+        automatico = desfecho_do_agendamento(self.db, atual)
+        if desfecho is not None and desfecho not in DESFECHOS:
+            raise DesfechoInvalido(f"Desfecho desconhecido: {desfecho!r}")
+        sobreposto = desfecho is not None and desfecho != automatico
+        if sobreposto and not (motivo or "").strip():
+            raise DesfechoInvalido("Para registrar um desfecho diferente do automatico, informe o motivo")
+        final = desfecho or automatico
+
         result = self.db.execute_write_returning(
             """
             UPDATE scheduler.appointments
-            SET status = 'CANCELLED', updated_at = NOW(), version = version + 1
+            SET status = %s, outcome_overridden_by = %s, outcome_reason = %s,
+                updated_at = NOW(), version = version + 1
             WHERE id = %s::uuid AND status = 'CONFIRMED'
             RETURNING *
             """,
-            (appointment_id,),
+            (final, (autor or "painel")[:100] if sobreposto else None,
+             (motivo or "").strip()[:200] or None if sobreposto else None,
+             appointment_id),
         )
-
         if not result:
             raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou já cancelado")
+        result["outcome"] = final
+        if sobreposto:
+            logger.info(f"[Desfecho] {appointment_id}: {automatico} -> {final} por {autor!r}: {motivo!r}")
 
         # A estreia passa para a proxima sessao confirmada, se houver.
         passa_a_marca_adiante(self.db, appointment_id)
@@ -937,8 +977,114 @@ class AppointmentService:
             except Exception as e:
                 logger.error(f"[AppointmentService] Erro ao cancelar lembrete: {e}")
 
-        logger.info(f"[AppointmentService] Agendamento cancelado: id={appointment_id}")
+        logger.info(f"[AppointmentService] Agendamento encerrado: id={appointment_id} desfecho={final}")
         return result
+
+    def remarca(self, appointment_id: str, nova_data: str, nova_hora: str,
+                tolerancia_minutos: int = 0, desfecho: Optional[str] = None,
+                motivo: Optional[str] = None, autor: Optional[str] = None) -> Dict[str, Any]:
+        """Outra data (PRD 054): o antigo recebe o desfecho da antecedencia (ou
+        a sobreposicao do painel) e aponta para o novo; o novo nasce igual ao
+        antigo - areas, desconto gravado, duracao fixada, observacao, estreia -
+        e leva pagamento vivo, link dos documentos e conversao. Mesma data
+        delega a `reschedule_appointment`. Devolve {"antigo", "novo"}.
+
+        Confere o conflito do horario novo ANTES de encerrar o antigo: um
+        conflito nao pode deixar a paciente sem sessao nenhuma.
+        """
+        atuais = self.db.execute_query(
+            "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
+            (appointment_id,),
+        )
+        if not atuais:
+            raise NotFoundError(f"Agendamento {appointment_id} não encontrado ou não confirmado")
+        antigo = atuais[0]
+        if str(nova_data) == str(antigo["appointment_date"]):
+            return {"antigo": None,
+                    "novo": self.reschedule_appointment(appointment_id, nova_data, nova_hora,
+                                                        tolerancia_minutos=tolerancia_minutos)}
+
+        clinic_id = antigo["clinic_id"]
+        pares = [
+            {"service_id": str(p["service_id"]), "area_id": str(p["area_id"])}
+            for p in self.db.execute_query(
+                "SELECT service_id, area_id FROM scheduler.appointment_service_areas "
+                "WHERE appointment_id = %s::uuid ORDER BY created_at",
+                (appointment_id,),
+            )
+        ]
+        pacientes = self.db.execute_query(
+            "SELECT phone FROM scheduler.patients WHERE id = %s::uuid", (str(antigo["patient_id"]),))
+        if not pacientes:
+            raise NotFoundError(f"Paciente do agendamento {appointment_id} não encontrado")
+        phone = pacientes[0]["phone"]
+
+        # 1. O horario novo cabe? Com a duracao que o antigo ocupa.
+        duracao = int(antigo.get("total_duration_minutes") or 0) or duracao_do_carrinho(
+            self.db, clinic_id, [str(antigo["service_id"])], pares)
+        h, m = (int(x) for x in str(nova_hora).split(":")[:2])
+        fim = f"{(h * 60 + m + duracao) // 60:02d}:{(h * 60 + m + duracao) % 60:02d}"
+        conflitos = self._conflitos(clinic_id, nova_data, nova_hora, fim,
+                                    excluir_id=appointment_id, tolerancia_minutos=tolerancia_minutos)
+        if conflitos:
+            raise ConflictError(self._mensagem_de_conflito(
+                f"Conflito de horário no novo slot: {nova_data} {nova_hora}-{fim}",
+                tolerancia_minutos, nova_data, nova_hora, fim))
+
+        # 2. Encerra o antigo com o desfecho. Cancela o lembrete e passa a estreia.
+        encerrado = self.cancel_appointment(appointment_id, desfecho=desfecho, motivo=motivo, autor=autor)
+
+        # 3. O novo, igual ao antigo. `vincula_antecessor` dentro do create acha
+        #    o antigo (recem-encerrado, dentro da janela), grava rescheduled_to_id
+        #    e move a conversao em vez de registrar outra.
+        novo = self.create_appointment(
+            clinic_id=clinic_id, phone=phone, service_id=str(antigo["service_id"]),
+            date=str(nova_data), time=str(nova_hora)[:5],
+            professional_id=str(antigo["professional_id"]) if antigo.get("professional_id") else None,
+            service_area_pairs=pares or None,
+            full_name=antigo.get("full_name"), notes=antigo.get("notes"),
+            discount_pct=antigo.get("discount_pct") or 0,
+            discount_reason=antigo.get("discount_reason"),
+            discount_cents=antigo.get("discount_cents"),
+            manual_duration_minutes=antigo.get("manual_duration_minutes"),
+            is_first_visit=bool(antigo.get("is_first_visit")),
+        )
+        novo_id = str(novo["id"])
+
+        # 4. Vinculo nos dois sentidos, mesmo que a janela do vincula_antecessor
+        #    nao tenha pego (relogio, concorrencia).
+        self.db.execute_write(
+            "UPDATE scheduler.appointments SET rescheduled_from_id = %s::uuid, updated_at = NOW() "
+            "WHERE id = %s::uuid",
+            (appointment_id, novo_id),
+        )
+        self.db.execute_write(
+            "UPDATE scheduler.appointments SET rescheduled_to_id = %s::uuid, updated_at = NOW() "
+            "WHERE id = %s::uuid AND rescheduled_to_id IS NULL",
+            (novo_id, appointment_id),
+        )
+
+        # 5. O que e por agendamento acompanha a paciente: pagamento vivo (um
+        #    pago no antigo apareceria como estorno pendente) e o link dos
+        #    documentos ja enviado.
+        self.db.execute_write(
+            "UPDATE scheduler.appointment_payments SET appointment_id = %s::uuid "
+            "WHERE appointment_id = %s::uuid AND status IN ('PENDING', 'AWAITING_CASH', 'PAID')",
+            (novo_id, appointment_id),
+        )
+        if antigo.get("consent_link_sent_at"):
+            self.db.execute_write(
+                "UPDATE scheduler.appointments SET consent_link_sent_at = %s WHERE id = %s::uuid",
+                (antigo["consent_link_sent_at"], novo_id),
+            )
+
+        logger.info(
+            f"[Remarcacao] {appointment_id} -> {novo_id}: {antigo['appointment_date']} "
+            f"{str(antigo['start_time'])[:5]} => {nova_data} {nova_hora} (desfecho={encerrado['outcome']})"
+        )
+        novo["rescheduled_from_id"] = appointment_id
+        encerrado["rescheduled_to_id"] = novo_id
+        return {"antigo": encerrado, "novo": novo}
 
     def marca_no_show(self, appointment_id: str) -> Dict[str, Any]:
         """A pessoa nao compareceu. Marca a falta, sem liberar o horario.
@@ -965,6 +1111,13 @@ class AppointmentService:
         contexto que o codigo nao tem: a razao da cliente, a chance de
         reocupar. Encodar uma politica ("menos de 24h e falta") seria inventar
         regra que ninguem pediu.
+
+        ## Revisto em 20/11/2026 (PRD 054)
+
+        A regra foi pedida: CANCELAR com menos de 24 h antes da abertura da
+        agenda do dia vira NO_SHOW, em `cancel_appointment` (ver desfecho.py).
+        Este metodo segue sendo o "nao veio" descoberto depois, marcado a mao
+        pela recepcao, e por isso continua sem guard de data.
 
         O que a distingue de CANCELLED, entao, nao e o momento: e a contagem.
         As duas liberam o horario (as queries de conflito e de horarios livres

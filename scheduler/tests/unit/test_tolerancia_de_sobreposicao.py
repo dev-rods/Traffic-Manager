@@ -157,7 +157,8 @@ class TestHandlerDoPainel(unittest.TestCase):
         servico, _ = _chama({"serviceId": "s1", "serviceAreaPairs": [{"serviceId": "s1", "areaId": "a1"}],
                              "date": "2026-11-26", "time": "09:00"})
         self.assertEqual(servico.update_appointment_services.call_args.kwargs["tolerancia_minutos"], 15)
-        self.assertEqual(servico.reschedule_appointment.call_args.kwargs["tolerancia_minutos"], 15)
+        # Outra data e remarcacao (PRD 054); a tolerancia vai junto.
+        self.assertEqual(servico.remarca.call_args.kwargs["tolerancia_minutos"], 15)
 
         servico, _ = _chama({"manualDurationMinutes": 20})
         self.assertEqual(servico.set_manual_duration.call_args.kwargs["tolerancia_minutos"], 15)

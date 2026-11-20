@@ -108,7 +108,7 @@ class TestRemarcarMantemOOverride(unittest.TestCase):
         """O caso exato: 75 minutos, teto 50. Antes virava 50."""
         db = DbFalso({"manual_duration_minutes": 75, "total_duration_minutes": 75})
 
-        servico(db).reschedule_appointment(APPT, "2026-09-29", "09:00")
+        servico(db).reschedule_appointment(APPT, "2026-09-23", "09:00")
 
         _, params = db.update_em("appointment_date")
         self.assertIn(75, params, "a duracao manual foi perdida ao remarcar")
@@ -117,7 +117,7 @@ class TestRemarcarMantemOOverride(unittest.TestCase):
     def test_o_fim_da_sessao_reflete_a_duracao_manual(self):
         db = DbFalso({"manual_duration_minutes": 75, "total_duration_minutes": 75})
 
-        servico(db).reschedule_appointment(APPT, "2026-09-29", "09:00")
+        servico(db).reschedule_appointment(APPT, "2026-09-23", "09:00")
 
         _, params = db.update_em("appointment_date")
         self.assertIn("10:15", params, "09:00 + 75min = 10:15")
@@ -127,7 +127,7 @@ class TestRemarcarMantemOOverride(unittest.TestCase):
         o end_time e deixava total_duration_minutes com o valor velho."""
         db = DbFalso({"manual_duration_minutes": 75, "total_duration_minutes": 75})
 
-        servico(db).reschedule_appointment(APPT, "2026-09-29", "09:00")
+        servico(db).reschedule_appointment(APPT, "2026-09-23", "09:00")
 
         sql, params = db.update_em("appointment_date")
         self.assertIn("total_duration_minutes", sql)
@@ -141,7 +141,7 @@ class TestRemarcarSemOverrideNaoMuda(unittest.TestCase):
         db = DbFalso({"manual_duration_minutes": None,
                       "total_duration_minutes": 200})
 
-        servico(db).reschedule_appointment(APPT, "2026-09-29", "09:00")
+        servico(db).reschedule_appointment(APPT, "2026-09-23", "09:00")
 
         _, params = db.update_em("appointment_date")
         self.assertIn(50, params, "sem override, o teto de 50 tem de valer")
@@ -151,7 +151,7 @@ class TestRemarcarSemOverrideNaoMuda(unittest.TestCase):
         db = DbFalso({"manual_duration_minutes": None,
                       "total_duration_minutes": 200})
 
-        servico(db).reschedule_appointment(APPT, "2026-09-29", "09:00")
+        servico(db).reschedule_appointment(APPT, "2026-09-23", "09:00")
 
         sql, _ = db.update_em("appointment_date")
         self.assertIn("total_duration_minutes", sql)
@@ -259,7 +259,7 @@ class TestARegraDaClinicaNaoEToacada(unittest.TestCase):
 
     def test_remarcar_com_override_nao_escreve_duration_rules(self):
         db = DbFalso({"manual_duration_minutes": 75})
-        servico(db).reschedule_appointment(APPT, "2026-09-29", "09:00")
+        servico(db).reschedule_appointment(APPT, "2026-09-23", "09:00")
         self.assertFalse(db.gravou_regra_da_clinica())
 
     def test_trocar_areas_nao_escreve_duration_rules(self):

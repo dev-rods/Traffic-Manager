@@ -1298,17 +1298,30 @@ class ToolExecutor:
         moveu = (data_final, hora_final) != (data_atual, hora_atual)
 
         try:
-            if pares:
-                self.appointment_service.update_appointment_services(
-                    appointment_id,
-                    pares[0]["service_id"],
-                    # O servico fala o dialeto do painel (camelCase); as tools
-                    # do bot, snake_case. O mapa fica aqui, num lugar so.
-                    [{"serviceId": p["service_id"], "areaId": p["area_id"]} for p in pares],
-                    verificar_conflito=not moveu,
-                )
-            if moveu:
-                self.appointment_service.reschedule_appointment(appointment_id, data_final, hora_final)
+            # PRD 054: outra data e remarcacao (antigo encerrado + novo). As
+            # areas novas entram no NOVO, depois. Mesma data: areas e horario
+            # no mesmo registro, como antes.
+            if data_final != data_atual:
+                resultado = self.appointment_service.remarca(appointment_id, data_final, hora_final)
+                appointment_id = str(resultado["novo"]["id"])
+                if pares:
+                    self.appointment_service.update_appointment_services(
+                        appointment_id, pares[0]["service_id"],
+                        [{"serviceId": p["service_id"], "areaId": p["area_id"]} for p in pares],
+                        verificar_conflito=True,
+                    )
+            else:
+                if pares:
+                    self.appointment_service.update_appointment_services(
+                        appointment_id,
+                        pares[0]["service_id"],
+                        # O servico fala o dialeto do painel (camelCase); as tools
+                        # do bot, snake_case. O mapa fica aqui, num lugar so.
+                        [{"serviceId": p["service_id"], "areaId": p["area_id"]} for p in pares],
+                        verificar_conflito=not moveu,
+                    )
+                if moveu:
+                    self.appointment_service.reschedule_appointment(appointment_id, data_final, hora_final)
         except ConflictError:
             logger.info(f"[Alteracao] {phone}: sessão {appointment_id} não cabe em "
                         f"{data_final} {hora_final} com as áreas novas")

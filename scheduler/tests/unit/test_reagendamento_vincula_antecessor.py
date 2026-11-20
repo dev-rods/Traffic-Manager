@@ -31,7 +31,9 @@ class TestVinculaAntecessor(unittest.TestCase):
 
         sql, params = db.execute_write_returning.call_args[0]
         self.assertIn("rescheduled_to_id IS NULL", sql)
-        self.assertIn("status = 'CANCELLED'", sql)
+        # PRD 054: remarcar com menos de 24 h deixa o antigo em NO_SHOW, e ele
+        # tambem precisa apontar para o novo.
+        self.assertIn("status IN ('CANCELLED', 'NO_SHOW')", sql)
         self.assertIn("ORDER BY c.updated_at DESC LIMIT 1", sql)
         self.assertEqual(params["novo"], "ap-novo")
         self.assertEqual(params["patient"], "p1")
@@ -65,11 +67,15 @@ class TestVinculaAntecessor(unittest.TestCase):
         db.execute_write_returning.assert_not_called()
 
     def test_fragmentos_sao_complementares(self):
-        """Um CANCELLED é reagendado OU cancelado de verdade, nunca os dois."""
+        """Um CANCELLED é reagendado OU cancelado de verdade, nunca os dois.
+        Falta é falta, com ou sem vínculo (PRD 054)."""
         self.assertIn("rescheduled_to_id IS NOT NULL", reagendamento.E_REAGENDADO.format(a="a"))
         self.assertIn("rescheduled_to_id IS NULL", reagendamento.E_CANCELADO_DE_VERDADE.format(a="a"))
         self.assertIn("a.status = 'CANCELLED'", reagendamento.E_REAGENDADO.format(a="a"))
         self.assertIn("a.status = 'CANCELLED'", reagendamento.E_CANCELADO_DE_VERDADE.format(a="a"))
+        self.assertEqual(reagendamento.E_FALTA.format(a="a"), "(a.status = 'NO_SHOW')")
+        self.assertEqual(reagendamento.ativos(), "status NOT IN ('CANCELLED', 'NO_SHOW')")
+        self.assertEqual(reagendamento.ativos("ap"), "ap.status NOT IN ('CANCELLED', 'NO_SHOW')")
 
 
 class DbRoteado:

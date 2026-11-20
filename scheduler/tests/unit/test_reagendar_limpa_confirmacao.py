@@ -18,7 +18,8 @@ from src.services.appointment_service import AppointmentService
 class TestRemarcarLimpaAConfirmacao(unittest.TestCase):
     def _remarca(self, agendamento=None):
         db = DbFalso(agendamento or {})
-        AppointmentService(db).reschedule_appointment(APPT, "2026-09-29", "09:00")
+        # Mesma data, outro horario: outra data e remarcacao com registro novo (PRD 054).
+        AppointmentService(db).reschedule_appointment(APPT, "2026-09-23", "09:00")
         return db
 
     def test_o_update_zera_confirmado_em_e_por(self):
@@ -44,7 +45,7 @@ class TestRemarcarLimpaAConfirmacao(unittest.TestCase):
                             "total_duration_minutes": 75})
 
         sql, params = db.update_em("appointment_date")
-        self.assertIn("2026-09-29", params)
+        self.assertIn("2026-09-23", params)
         self.assertIn("09:00", params)
         self.assertIn(75, params, "a duração manual foi perdida ao remarcar")
         self.assertIn("version = version + 1", sql)

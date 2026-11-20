@@ -14,11 +14,13 @@ from decimal import Decimal
 
 from src.services.desconto_personalizado import aplica as aplica_desconto
 from src.services.politica_de_desconto import RAZAO_NENHUM
+from src.services.desfecho import DesfechoInvalido
 from src.services.desconto_personalizado import (
     DescontoInvalido, normaliza_centavos, normaliza_entrada as normaliza_pct, pct_equivalente,
 )
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import (
+    MudancaDeData,
     SEM_MUDANCA,
     AppointmentService,
     ConflictError,
@@ -55,6 +57,11 @@ def _serialize_row(row):
         else:
             result[key] = value
     return result
+
+
+def _autor(identidade):
+    """Quem sobrepos o desfecho (PRD 054): nome do funcionario, ou o papel."""
+    return (getattr(identidade, "nome", None) or getattr(identidade, "papel", None) or "painel")
 
 
 def handler(event, context):
@@ -175,12 +182,18 @@ def handler(event, context):
         # conversao do lead.
         service = AppointmentService.completo(db)
 
-        # Cancel is exclusive — cannot combine with other operations
+        # Cancel is exclusive — cannot combine with other operations.
+        # PRD 054: o desfecho (CANCELLED ou NO_SHOW) e da antecedencia; o
+        # painel pode sobrepor com `outcome` + `outcomeReason`.
         if new_status == "CANCELLED":
-            result = service.cancel_appointment(appointment_id)
+            result = service.cancel_appointment(
+                appointment_id, desfecho=body.get("outcome"),
+                motivo=body.get("outcomeReason"), autor=_autor(identidade))
             return http_response(200, para_o_staff(identidade, {
                 "status": "SUCCESS",
-                "message": "Agendamento cancelado com sucesso",
+                "message": ("Falta registrada: menos de 24 h para a agenda do dia"
+                            if result.get("outcome") == "NO_SHOW" else "Agendamento cancelado com sucesso"),
+                "outcome": result.get("outcome"),
                 "appointment": _serialize_row(result),
             }))
 
@@ -288,23 +301,36 @@ def handler(event, context):
             )
 
         # 3. Reschedule date/time (recalculates end_time with current duration)
+        anterior = None
         if new_date or new_time:
-            if not new_date or not new_time:
-                existing = db.execute_query(
-                    "SELECT appointment_date, start_time FROM scheduler.appointments WHERE id = %s::uuid",
-                    (appointment_id,),
-                )
-                if not existing:
-                    return http_response(404, {"status": "ERROR", "message": "Agendamento nao encontrado"})
-                if not new_date:
-                    new_date = str(existing[0]["appointment_date"])
-                if not new_time:
-                    new_time = str(existing[0]["start_time"])[:5]
+            existing = db.execute_query(
+                "SELECT appointment_date, start_time FROM scheduler.appointments WHERE id = %s::uuid",
+                (appointment_id,),
+            )
+            if not existing:
+                return http_response(404, {"status": "ERROR", "message": "Agendamento nao encontrado"})
+            if not new_date:
+                new_date = str(existing[0]["appointment_date"])
+            if not new_time:
+                new_time = str(existing[0]["start_time"])[:5]
 
-            service.reschedule_appointment(appointment_id, new_date, new_time,
-                                           tolerancia_minutos=TOLERANCIA_DO_PAINEL_MIN)
+            if str(new_date) != str(existing[0]["appointment_date"]):
+                # Outra data e remarcacao (PRD 054): o antigo fica com o desfecho
+                # e aponta para o novo; a resposta leva os dois.
+                resultado = service.remarca(
+                    appointment_id, new_date, new_time,
+                    tolerancia_minutos=TOLERANCIA_DO_PAINEL_MIN,
+                    desfecho=body.get("outcome"), motivo=body.get("outcomeReason"),
+                    autor=_autor(identidade))
+                anterior = resultado["antigo"]
+                appointment_id = str(resultado["novo"]["id"])
+                messages.append("remarcado (" + ("falta" if anterior.get("outcome") == "NO_SHOW"
+                                                  else "cancelamento") + " no dia anterior)")
+            else:
+                service.reschedule_appointment(appointment_id, new_date, new_time,
+                                               tolerancia_minutos=TOLERANCIA_DO_PAINEL_MIN)
+                messages.append("horário")
             changed = True
-            messages.append("data/horário")
 
         # 4. Update simple fields (notes, status, discount)
         updates = []
@@ -382,13 +408,19 @@ def handler(event, context):
         if not final:
             return http_response(404, {"status": "ERROR", "message": "Agendamento não encontrado"})
 
-        return http_response(200, para_o_staff(identidade, {
+        corpo = {
             "status": "SUCCESS",
             "message": f"Agendamento atualizado ({', '.join(messages)})",
             "appointment": _serialize_row(final[0]),
-        }))
+        }
+        # Remarcacao (PRD 054): o painel recebe tambem o registro encerrado e o
+        # desfecho, para mostrar "falta" ou "cancelamento" no dia antigo.
+        if anterior is not None:
+            corpo["previous"] = _serialize_row(anterior)
+            corpo["outcome"] = anterior.get("outcome")
+        return http_response(200, para_o_staff(identidade, corpo))
 
-    except (DuracaoInvalida, DescontoInvalido) as e:
+    except (DuracaoInvalida, DescontoInvalido, DesfechoInvalido, MudancaDeData) as e:
         # Dedo errado no formulario e 400, nao 500.
         return http_response(400, {"status": "ERROR", "message": str(e)})
 

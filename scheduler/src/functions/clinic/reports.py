@@ -5,7 +5,7 @@ from src.services import relogio
 
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
-from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_REAGENDADO
+from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_FALTA, E_REAGENDADO, ativos
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -86,18 +86,24 @@ def handler(event, context):
         # Reagendado nao e cancelado (PRD 035). O registro novo ja esta em
         # total_appointments; o antigo nao conta em lugar nenhum alem de
         # rescheduled_appointments.
+        # Falta e cancelamento ficam FORA de dinheiro e de "agendamentos"
+        # (PRD 054): ate 20/11/2026 o filtro era `!= 'CANCELLED'` e a falta
+        # entrava na receita.
+        ATIVO = ativos()
         summary_row = db.execute_query(f"""
             SELECT
-                COUNT(*) FILTER (WHERE status != 'CANCELLED') as total_appointments,
+                COUNT(*) FILTER (WHERE {ATIVO}) as total_appointments,
                 COUNT(*) FILTER (WHERE status = 'CONFIRMED') as confirmed_appointments,
                 COUNT(*) FILTER (WHERE {E_CANCELADO_DE_VERDADE.format(a='appointments')}) as cancelled_appointments,
                 COUNT(*) FILTER (WHERE {E_REAGENDADO.format(a='appointments')}) as rescheduled_appointments,
-                COALESCE(SUM(original_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as gross_revenue_cents,
-                COALESCE(SUM(final_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as net_revenue_cents,
-                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents
+                COUNT(*) FILTER (WHERE {E_FALTA.format(a='appointments')}) as no_show_appointments,
+                COUNT(*) FILTER (WHERE {ATIVO} AND appointment_date < %s) as realized_appointments,
+                COALESCE(SUM(original_price_cents) FILTER (WHERE {ATIVO}), 0) as gross_revenue_cents,
+                COALESCE(SUM(final_price_cents) FILTER (WHERE {ATIVO}), 0) as net_revenue_cents,
+                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE {ATIVO} AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents
             FROM scheduler.appointments
             WHERE clinic_id = %s AND appointment_date BETWEEN %s AND %s
-        """, (clinic_id, start, end))
+        """, (today, clinic_id, start, end))
 
         s = summary_row[0] if summary_row else {}
         total = s.get("total_appointments", 0) or 0
@@ -106,6 +112,8 @@ def handler(event, context):
         rescheduled = s.get("rescheduled_appointments", 0) or 0
         gross = s.get("gross_revenue_cents", 0) or 0
         discounts = s.get("total_discount_cents", 0) or 0
+        no_show = s.get("no_show_appointments", 0) or 0
+        realized = s.get("realized_appointments", 0) or 0
 
         # New patients in period (excluding soft-deleted)
         new_patients_row = db.execute_query("""
@@ -117,11 +125,11 @@ def handler(event, context):
         new_patients = (new_patients_row[0]["count"] or 0) if new_patients_row else 0
 
         # ── Previous period (for comparison) ──────────────────────
-        prev_row = db.execute_query("""
+        prev_row = db.execute_query(f"""
             SELECT
-                COUNT(*) FILTER (WHERE status != 'CANCELLED') as total_appointments,
-                COALESCE(SUM(original_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as gross_revenue_cents,
-                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents
+                COUNT(*) FILTER (WHERE {ATIVO}) as total_appointments,
+                COALESCE(SUM(original_price_cents) FILTER (WHERE {ATIVO}), 0) as gross_revenue_cents,
+                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE {ATIVO} AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents
             FROM scheduler.appointments
             WHERE clinic_id = %s AND appointment_date BETWEEN %s AND %s
         """, (clinic_id, prev_start, prev_end))
@@ -148,6 +156,9 @@ def handler(event, context):
             "confirmed_appointments": confirmed,
             "cancelled_appointments": cancelled,
             "rescheduled_appointments": rescheduled,
+            # PRD 054: falta a parte, e presenca = realizadas / (realizadas + faltas).
+            "no_show_appointments": no_show,
+            "attendance_rate": round(100 * realized / (realized + no_show), 1) if (realized + no_show) > 0 else None,
             "new_patients": new_patients,
             "gross_revenue_cents": gross,
             "total_discount_cents": discounts,
@@ -160,7 +171,7 @@ def handler(event, context):
         }
 
         # ── Top services ──────────────────────────────────────────
-        service_rows = db.execute_query("""
+        service_rows = db.execute_query(f"""
             SELECT
                 asa.service_name,
                 COUNT(DISTINCT asa.appointment_id) as count,
@@ -169,7 +180,7 @@ def handler(event, context):
             JOIN scheduler.appointments a ON a.id = asa.appointment_id
             WHERE a.clinic_id = %s
               AND a.appointment_date BETWEEN %s AND %s
-              AND a.status != 'CANCELLED'
+              AND {ativos('a')}
             GROUP BY asa.service_name
             ORDER BY count DESC
             LIMIT 5
@@ -185,7 +196,7 @@ def handler(event, context):
         ]
 
         # ── Discount breakdown ────────────────────────────────────
-        discount_rows = db.execute_query("""
+        discount_rows = db.execute_query(f"""
             SELECT
                 discount_reason as reason,
                 COUNT(*) as count,
@@ -195,7 +206,7 @@ def handler(event, context):
               AND appointment_date BETWEEN %s AND %s
               AND (discount_pct > 0 OR discount_cents > 0)
               AND discount_reason IS NOT NULL
-              AND status != 'CANCELLED'
+              AND {ATIVO}
             GROUP BY discount_reason
         """, (clinic_id, start, end))
 

@@ -259,8 +259,10 @@ class TestIntegracaoComOAgendamento(unittest.TestCase):
         from src.services.appointment_service import AppointmentService
 
         db = mock.MagicMock()
+        db.execute_query.return_value = [{"id": "ap1", "clinic_id": CLINIC}]
         db.execute_write_returning.return_value = {"id": "ap1"}
-        with mock.patch("src.services.appointment_service.passa_a_marca_adiante") as passa:
+        with mock.patch("src.services.appointment_service.passa_a_marca_adiante") as passa, \
+             mock.patch("src.services.appointment_service.desfecho_do_agendamento", return_value="CANCELLED"):
             AppointmentService(db).cancel_appointment("ap1")
 
         passa.assert_called_once_with(db, "ap1")
