@@ -40,6 +40,23 @@ A clínica precisa de `discount_rules` ativa (primeira sessão e faixa 2/3).
 
 ## Resultado
 
-**Dev:** pendente.
+**Dev, 20/11/2026** (layer 202; regras de dev: estreia 0%, faixa 2 = 10%,
+faixa 3 = 15%):
+
+- 1 → 1 área, T1: pct 0, razão `null`, `isFirst: true` (estreia é 0% em dev).
+- 2 → 3 áreas, T1: `tier_2` 10%, 31500 → 28350.
+- 3 → não conferido pela API: `PUT patients/{id}` com `custom_discount_pct`
+  devolveu 403 com a chave de dev (campo restrito). Coberto pelo teste
+  unitário `test_o_combinado_da_paciente_segue_vencendo` e por `decide`, que
+  não mudou. 3b (sem telefone): só a faixa, `isFirst: false`.
+- 4 → `POST appointments` sem desconto, 3 áreas: gravado `tier_2` 10%,
+  final 28350 = cotação.
+- 5 → `discountPct: 0, discountReason: "none"`: gravado `none`, final =
+  original. 5b (`none` + pct 10) → 400.
+- 6 → `PUT` com 5 áreas + `discountPolicy: true`: `tier_3` 15%, 58000 → 49300,
+  `discount_cents` null, mensagem "serviço/áreas, desconto pela política".
+  6b (`discountPolicy` + `discountPct`) → 400.
+- 10 → lista do dia coerente; fixtures canceladas.
+- 7, 8, 9 (painel): pelo André após a Vercel subir.
 
 **Prod:** pendente.
