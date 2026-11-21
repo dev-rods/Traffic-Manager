@@ -74,7 +74,8 @@ leitura:
 - `GET dashboard?date=`: `no_show_appointments` presente nas quatro clínicas.
 - `GET clinics/{c}/appointments`: cada item traz `rescheduled_from_id`,
   `rescheduled_from_date`, `outcome_reason` (além dos `rescheduled_to_*`).
-- Nenhuma escrita em prod. Casos 9 (site, OTP) e 10 (painel) ficam com o
-  André.
+- Nenhuma escrita em prod pelo roteiro.
+- Caso 10 (painel): smoke feito pelo André em 21/11/2026, ok. Caso 9 (site,
+  OTP) fica a critério dele.
 - Janela do merge: o painel subiu pela Vercel alguns minutos antes do backend;
   nenhum cancelamento foi feito nesse intervalo (conferido pelo relatório).
