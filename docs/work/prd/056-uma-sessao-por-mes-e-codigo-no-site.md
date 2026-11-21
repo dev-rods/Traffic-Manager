@@ -277,5 +277,5 @@ número).
 
 - [x] Spec gerada: `docs/work/spec/056-uma-sessao-por-mes-e-codigo-no-site.md` (PR #240)
 - [x] Implementado em dev: 21/11/2026 (PR #241; backend dev layer 205, migração aplicada; smoke 13/13 pelo roteiro)
-- [ ] Implementado em prod: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em prod: 21/11/2026 (PR #241 mergeado; migração aplicada; scheduler prod layer 163; smoke pelo roteiro)
+- [x] Registrado em `TASKS_LOG.md`
