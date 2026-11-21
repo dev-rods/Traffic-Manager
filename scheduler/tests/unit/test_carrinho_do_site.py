@@ -394,7 +394,6 @@ class _Criacao(_Handler):
     def setUp(self):
         super().setUp()
         self.service = mock.MagicMock()
-        self.service.get_active_appointments_by_phone.return_value = []
         self.service.create_appointment.return_value = {
             "id": "ap1", "full_name": "Maria Silva", "appointment_date": "2026-10-22", "start_time": "15:00:00",
             "total_duration_minutes": 25, "original_price_cents": 26000,
@@ -412,6 +411,8 @@ class _Criacao(_Handler):
             mock.patch(f"{self.modulo}.TemplateService", return_value=self.template),
             mock.patch(f"{self.modulo}.orientacoes_da_clinica", return_value="Não tome sol 48h antes."),
             mock.patch(f"{self.modulo}.AvailabilityEngine", return_value=motor_falso()),
+            # PRD 056: criar exige o token do codigo; o duble aceita "t".
+            mock.patch(f"{self.modulo}.verify_token", side_effect=lambda c, p, t: t == "t"),
         ):
             p.start()
             self.addCleanup(p.stop)
@@ -420,7 +421,7 @@ class _Criacao(_Handler):
         from src.functions.public_booking.create_appointment import handler
         body = {
             "phone": "(11) 99999-0000", "fullName": "  Maria Silva ", "serviceIds": [SVC],
-            "date": "2026-10-22", "time": "15:00",
+            "date": "2026-10-22", "time": "15:00", "token": "t",
             "serviceAreaPairs": [{"serviceId": SVC, "areaId": VIRILHA}, {"serviceId": SVC, "areaId": PERIANAL},
                                  {"serviceId": SVC, "areaId": AXILAS}],
         }
@@ -500,42 +501,56 @@ class TestCreate(_Criacao):
         self.assertEqual(self.renderizado()["full_name"], "Maria Silva")
 
 
-class TestAvisoDeAgendamentoRepetido(_Criacao):
-    """Número com agendamento futuro: o site pergunta antes de criar outro.
-    Pede confirmação, não bloqueia."""
+class TestCodigoAntesDeCriar(_Criacao):
+    """Criar exige o token do código do WhatsApp (PRD 056), como cancelar."""
 
-    def setUp(self):
-        super().setUp()
-        self.service.get_active_appointments_by_phone.return_value = [
-            {"id": "x1", "appointment_date": "2026-10-25", "start_time": "10:00:00", "full_name": "Ana"},
-            {"id": "x2", "appointment_date": "2026-10-28", "start_time": "11:00:00", "full_name": "Ana"},
-        ]
+    def test_sem_token_401_e_nada_e_criado(self):
+        r = self.chama(token=None)
+        self.assertEqual(r["statusCode"], 401)
+        self.service.create_appointment.assert_not_called()
+        self.provider.send_text.assert_not_called()
 
-    def test_sem_confirmacao_responde_409_com_a_contagem(self):
+    def test_token_invalido_401(self):
+        self.assertEqual(self.chama(token="vencido")["statusCode"], 401)
+        self.service.create_appointment.assert_not_called()
+
+    def test_token_valido_cria_sem_substituir(self):
+        r = self.chama()
+        self.assertEqual(r["statusCode"], 201)
+        kw = self.service.create_appointment.call_args.kwargs
+        self.assertIs(kw["substituir_mesmo_mes"], False)
+        self.assertEqual(kw["autor"], "site")
+
+
+class TestUmaSessaoPorMes(_Criacao):
+    """Número verificado com sessão no mesmo mês: 409 com a existente; o
+    pedido repetido com `substituir: true` cria e a resposta diz remarcado."""
+
+    EXISTENTE = {"id": "x1", "appointment_date": "2026-10-25", "start_time": "10:00:00",
+                 "areas_display": "Axilas", "patient_name": "Ana"}
+
+    def test_409_mostra_a_sessao_existente(self):
+        from src.services.appointment_service import SessaoNoMesmoMes
+        self.service.create_appointment.side_effect = SessaoNoMesmoMes(self.EXISTENTE)
         r = self.chama()
         self.assertEqual(r["statusCode"], 409)
         corpo = json.loads(r["body"])
-        self.assertEqual((corpo["code"], corpo["existingCount"]), ("HAS_FUTURE_APPOINTMENT", 2))
-        self.service.create_appointment.assert_not_called()
+        self.assertEqual(corpo["code"], "SAME_MONTH_APPOINTMENT")
+        self.assertEqual(corpo["existing"], {"id": "x1", "date": "2026-10-25", "time": "10:00", "areas": "Axilas"})
+        self.assertNotIn("Ana", r["body"], "o nome nao e do site")
         self.provider.send_text.assert_not_called()
-        self.assertEqual(self.service.get_active_appointments_by_phone.call_args[0], (CLINIC, FONE))
 
-    def test_resposta_nao_entrega_a_agenda_de_ninguem(self):
-        """Criar não exige código: quem digita o número de outra pessoa não
-        pode descobrir quando, nem quem, ela agendou."""
-        corpo = self.chama()["body"]
-        for vazamento in ("2026-10-25", "10:00", "Ana", "x1"):
-            self.assertNotIn(vazamento, corpo)
-
-    def test_confirmado_cria(self):
-        r = self.chama(confirmDuplicate=True)
+    def test_substituir_true_passa_ao_servico_e_responde_remarcado(self):
+        r = self.chama(substituir=True)
         self.assertEqual(r["statusCode"], 201)
-        self.service.create_appointment.assert_called_once()
+        self.assertIs(self.service.create_appointment.call_args.kwargs["substituir_mesmo_mes"], True)
+        self.assertIn("remarcado", json.loads(r["body"])["message"])
 
-    def test_so_true_conta_como_confirmacao(self):
+    def test_so_true_substitui(self):
         for valor in ("true", 1, "sim"):
             with self.subTest(valor=valor):
-                self.assertEqual(self.chama(confirmDuplicate=valor)["statusCode"], 409)
+                self.chama(substituir=valor)
+                self.assertIs(self.service.create_appointment.call_args.kwargs["substituir_mesmo_mes"], False)
 
 
 class TestFaixasDeDesconto(unittest.TestCase):

@@ -22,7 +22,9 @@ CK="$BASE/public/clinics/$C/checkin"
 Com número fictício o código não chega; gere o token com o
 `BOOKING_VERIFICATION_SECRET` do stage, no formato de
 `booking_verification._issue_token`. Crie antes um agendamento para o número
-(`POST /appointments` com `confirmDuplicate: true`) e cancele no fim.
+(`POST /appointments` pelo painel; se a paciente já tiver sessão no mês, use
+`substituir: true` ou, como ADMIN, `manterAsDuas` com motivo, PRD 056) e
+cancele no fim.
 
 Rota nova no API Gateway: depois do `serverless deploy`, rode
 `aws apigateway create-deployment` no stage (ver a memória do projeto), senão

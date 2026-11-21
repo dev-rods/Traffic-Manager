@@ -20,7 +20,8 @@ import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useAuth } from '@/hooks/useAuth'
 import { formatPhone } from '@/utils/formatPhone'
-import type { PatientWithStats } from '@/types'
+import { ConflitoDoMes } from './ConflitoDoMes'
+import type { CreateAppointmentPayload, PatientWithStats, SessaoExistente } from '@/types'
 import {
   POLITICA_DA_CLINICA,
   formataPct,
@@ -38,7 +39,7 @@ interface CreateAppointmentModalProps {
 }
 
 export function CreateAppointmentModal({ open, initialDate, initialTime, onClose }: CreateAppointmentModalProps) {
-  const { clinicId } = useAuth()
+  const { clinicId, ehAdmin } = useAuth()
   const createAppointment = useCreateAppointment()
   const { data: services } = useServices()
 
@@ -59,6 +60,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   // em "Personalizado N%" ao ser escolhida (ver handleSelectPatient).
   const [desconto, setDesconto] = useState<DescontoEscolhido>(POLITICA_DA_CLINICA)
   const [error, setError] = useState<string | null>(null)
+  // Uma sessão por mês (PRD 056): o 409 vira este aviso, no lugar dos botões.
+  const [conflito, setConflito] = useState<SessaoExistente | null>(null)
   const [preSelecionadoPelaPaciente, setPreSelecionadoPelaPaciente] = useState(false)
   const [prevServiceId, setPrevServiceId] = useState('')
 
@@ -271,6 +274,15 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
     }
 
     setError(null)
+    await enviar({})
+  }
+
+  /** O pedido, com o que o aviso do mesmo mês acrescentar (PRD 056). */
+  const enviar = async (
+    extra: Pick<CreateAppointmentPayload, 'substituir' | 'manterAsDuas' | 'motivoDasDuas'>,
+  ) => {
+    const phone = selectedPatient?.phone
+    if (!clinicId || !phone || !serviceId) return
     try {
       const serviceAreaPairs = selectedAreaIds.length > 0
         ? selectedAreaIds.map((areaId) => ({ serviceId, areaId }))
@@ -291,11 +303,19 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
         // "Política da clínica" é omitir: o backend decide (PRD 053). Os demais
         // modos opinam, inclusive "Sem desconto" (pct 0 com razão `none`).
         ...(desconto.modo === 'policy' ? {} : descontoParaCriacao(desconto)),
+        ...extra,
       })
       handleClose()
     } catch (err: unknown) {
+      setConflito(null)
       if (err && typeof err === 'object' && 'response' in err) {
-        const response = (err as { response: { data?: { message?: string } } }).response
+        const response = (err as {
+          response: { status?: number; data?: { message?: string; code?: string; existing?: SessaoExistente } }
+        }).response
+        if (response.status === 409 && response.data?.code === 'SAME_MONTH_APPOINTMENT' && response.data.existing) {
+          setConflito(response.data.existing)
+          return
+        }
         setError(response.data?.message ?? 'Erro ao criar agendamento')
       } else {
         setError('Erro ao criar agendamento')
@@ -311,6 +331,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   }
 
   const handleClose = () => {
+    setConflito(null)
     onClose()
   }
 
@@ -572,12 +593,26 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           </div>
         )}
 
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="ghost" onClick={handleClose}>Cancelar</Button>
-          <Button type="submit" loading={createAppointment.isPending}>
-            Criar agendamento
-          </Button>
-        </div>
+        {conflito ? (
+          <ConflitoDoMes
+            existing={conflito}
+            novaData={date}
+            novaHora={time}
+            modo="criar"
+            ehAdmin={Boolean(ehAdmin)}
+            loading={createAppointment.isPending}
+            onConfirmar={() => void enviar({ substituir: true })}
+            onManterAsDuas={(motivo) => void enviar({ manterAsDuas: true, motivoDasDuas: motivo })}
+            onVoltar={() => setConflito(null)}
+          />
+        ) : (
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="ghost" onClick={handleClose}>Cancelar</Button>
+            <Button type="submit" loading={createAppointment.isPending}>
+              Criar agendamento
+            </Button>
+          </div>
+        )}
       </form>
     </Modal>
   )

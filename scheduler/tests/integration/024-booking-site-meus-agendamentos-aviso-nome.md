@@ -1,4 +1,8 @@
-# Testes de integração — 024 Booking-site: "Meus agendamentos", faixas de desconto, aviso de repetido e nome
+> Casos 2.2-2.5 e 4.4 (agendamento repetido / "Manter os dois") foram
+> substituídos pelo PRD 056: criar exige `token` e o mesmo mês responde
+> `SAME_MONTH_APPOINTMENT`. Ver `056-uma-sessao-por-mes.md`.
+
+# 024 Booking-site: "Meus agendamentos", faixas de desconto, aviso de repetido e nome
 
 PRD: `docs/work/prd/024-booking-site-meus-agendamentos-aviso-nome.md` ·
 Spec: `docs/work/spec/024-booking-site-meus-agendamentos-aviso-nome.md`

@@ -18,7 +18,8 @@ import { DiscountTiersNote } from '@/components/DiscountTiersNote'
 import { ClinicWelcome } from '@/components/ClinicWelcome'
 import { SectionTitle } from '@/components/ui/SectionTitle'
 import { StickyActionBar } from '@/components/StickyActionBar'
-import { DuplicateBookingDialog } from '@/components/DuplicateBookingDialog'
+import { RemarcacaoDialog } from '@/components/RemarcacaoDialog'
+import { OtpCodeForm } from '@/components/OtpCodeForm'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -27,19 +28,28 @@ import { IconCheckCircle, IconChevronLeft } from '@/components/ui/icons'
 import { ApiError } from '@/services/api'
 import { formatCurrencyBRL, formatDateLong, formatPhoneDisplay, toApiPhone } from '@/utils/format'
 import { cartHasAreas, cartPendingAreaSelection, toCartPayload } from '@/utils/cartTotals'
-import { brDateToIso, listaDeCampos, onlyDigits } from '@/utils/cadastro'
-import type { CampoDoCadastro, CreateAppointmentPayload, WizardStep } from '@/types'
+import { brDateToIso, formatCpf, listaDeCampos, onlyDigits } from '@/utils/cadastro'
+import type {
+  CampoDoCadastro,
+  CreateAppointmentPayload,
+  SessaoExistente,
+  WizardStep,
+} from '@/types'
 
 // A criação responde 409 por dois motivos: horário ocupado (sem code) e
-// número com agendamento futuro (este code, pede confirmação).
-const HAS_FUTURE_APPOINTMENT = 'HAS_FUTURE_APPOINTMENT'
+// sessão no mesmo mês (este code: o número foi verificado, a tela mostra a
+// sessão e pede confirmação da troca, PRD 056).
+const SAME_MONTH_APPOINTMENT = 'SAME_MONTH_APPOINTMENT'
 // O cadastro do paciente faltou ou está errado (PRD 032); o CPF já é de outro.
 const CADASTRO_INCOMPLETO = 'CADASTRO_INCOMPLETO'
 const CPF_EM_USO = 'CPF_EM_USO'
 
-interface PendingDuplicate {
+// O pedido montado em "Seus dados", à espera do código do WhatsApp.
+type PedidoSemToken = Omit<CreateAppointmentPayload, 'token'>
+
+interface Conflito {
   payload: CreateAppointmentPayload
-  existingCount: number
+  existing: SessaoExistente
 }
 
 function prefersReducedMotion(): boolean {
@@ -61,7 +71,12 @@ export function Booking() {
   // Telefone usado na cotação: com ele entram primeira sessão e desconto
   // personalizado, antes de o cliente confirmar.
   const [quotePhone, setQuotePhone] = useState<string | undefined>(undefined)
-  const [pendingDuplicate, setPendingDuplicate] = useState<PendingDuplicate | null>(null)
+  // Código sempre antes de confirmar (PRD 056). O token vale 15 min para o
+  // mesmo celular: voltar e confirmar de novo não pede outro código.
+  const [pendingPayload, setPendingPayload] = useState<PedidoSemToken | null>(null)
+  const [verified, setVerified] = useState<{ phone: string; token: string } | null>(null)
+  const [conflito, setConflito] = useState<Conflito | null>(null)
+  const [remarcado, setRemarcado] = useState(false)
   const slotsRef = useRef<HTMLDivElement>(null)
 
   const serviceAreas = bootstrap.data?.serviceAreas ?? []
@@ -198,6 +213,8 @@ export function Booking() {
       else goToCartOrHome()
     } else if (step === 'customer') {
       setStep('schedule')
+    } else if (step === 'verify') {
+      setStep('customer')
     }
   }
 
@@ -221,7 +238,7 @@ export function Booking() {
 
     if (!cart.date || !cart.time) return
 
-    submitAppointment({
+    const payload: PedidoSemToken = {
       ...cartPayload,
       phone,
       fullName: data.fullName,
@@ -230,20 +247,56 @@ export function Booking() {
       cpf: onlyDigits(data.cpf ?? '') || undefined,
       birthDate: data.birthDate ? (brDateToIso(data.birthDate) ?? undefined) : undefined,
       email: data.email?.trim() || undefined,
-    })
+    }
+    if (verified && verified.phone === phone) {
+      submitAppointment({ ...payload, token: verified.token })
+      return
+    }
+    setPendingPayload(payload)
+    setStep('verify')
+  }
+
+  // Voltar da etapa do código (ou um erro depois dela) remonta "Seus dados"
+  // com o que a pessoa já digitou; sem isto o formulário voltava vazio.
+  const dadosDigitados: Partial<CustomerInfoFormData> = pendingPayload
+    ? {
+        fullName: pendingPayload.fullName,
+        phone: formatPhoneDisplay(pendingPayload.phone),
+        cpf: pendingPayload.cpf ? formatCpf(pendingPayload.cpf) : undefined,
+        birthDate: pendingPayload.birthDate
+          ? pendingPayload.birthDate.split('-').reverse().join('/')
+          : undefined,
+        email: pendingPayload.email,
+      }
+    : { fullName: cart.customerName }
+
+  function handleVerified(token: string) {
+    if (!pendingPayload) return
+    setVerified({ phone: pendingPayload.phone, token })
+    setStep('customer')
+    submitAppointment({ ...pendingPayload, token })
   }
 
   function submitAppointment(payload: CreateAppointmentPayload) {
     createAppointment.mutate(payload, {
       onSuccess: () => {
-        setPendingDuplicate(null)
+        setConflito(null)
         setStep('success')
       },
       onError: (err) => {
-        setPendingDuplicate(null)
-        // O número já tem agendamento futuro: pergunta antes de criar outro.
-        if (err instanceof ApiError && err.code === HAS_FUTURE_APPOINTMENT) {
-          setPendingDuplicate({ payload, existingCount: err.body?.existingCount ?? 1 })
+        setConflito(null)
+        // O número já tem sessão neste mês: avisa que ela será substituída.
+        if (err instanceof ApiError && err.code === SAME_MONTH_APPOINTMENT && err.body?.existing) {
+          setConflito({ payload, existing: err.body.existing })
+          return
+        }
+        // O token venceu (15 min): pede o código de novo, com o mesmo pedido.
+        if (err instanceof ApiError && err.status === 401) {
+          setVerified(null)
+          const { token: _vencido, ...semToken } = payload
+          void _vencido
+          setPendingPayload(semToken)
+          setStep('verify')
           return
         }
         // O servidor pediu o cadastro que a tela não mostrou (front em cache,
@@ -284,7 +337,9 @@ export function Booking() {
         </div>
         <div className="flex flex-col items-center gap-4 py-10 text-center">
           <IconCheckCircle className="h-12 w-12 text-success-500" />
-          <h2 className="font-display text-2xl font-bold text-ink-900">Agendamento confirmado!</h2>
+          <h2 className="font-display text-2xl font-bold text-ink-900">
+            {remarcado ? 'Agendamento remarcado!' : 'Agendamento confirmado!'}
+          </h2>
           {cart.date && cart.time ? (
             <p className="text-ink-600">
               {formatDateLong(cart.date)}, {cart.time}
@@ -430,7 +485,7 @@ export function Booking() {
         <div>
           <SectionTitle>Seus dados</SectionTitle>
           <CustomerInfoForm
-            defaultValues={{ fullName: cart.customerName }}
+            defaultValues={dadosDigitados}
             onSubmit={handleCustomerSubmit}
             onPhoneChange={handlePhoneChange}
             submitting={createAppointment.isPending}
@@ -443,14 +498,30 @@ export function Booking() {
               {submitError}
             </p>
           ) : null}
-          <DuplicateBookingDialog
-            existingCount={pendingDuplicate?.existingCount ?? null}
+          <RemarcacaoDialog
+            existing={conflito?.existing ?? null}
+            date={conflito?.payload.date ?? ''}
+            time={conflito?.payload.time ?? ''}
+            clinicPhone={clinic.phone}
             confirming={createAppointment.isPending}
-            onConfirm={() =>
-              pendingDuplicate &&
-              submitAppointment({ ...pendingDuplicate.payload, confirmDuplicate: true })
-            }
-            onCancel={() => setPendingDuplicate(null)}
+            onConfirm={() => {
+              if (!conflito) return
+              setRemarcado(true)
+              submitAppointment({ ...conflito.payload, substituir: true })
+            }}
+            onCancel={() => setConflito(null)}
+          />
+        </div>
+      ) : null}
+
+      {step === 'verify' && pendingPayload ? (
+        <div>
+          <SectionTitle>Confirme seu celular</SectionTitle>
+          <OtpCodeForm
+            clinicId={clinicId}
+            phone={pendingPayload.phone}
+            phoneLabel={formatPhoneDisplay(pendingPayload.phone)}
+            onVerified={handleVerified}
           />
         </div>
       ) : null}

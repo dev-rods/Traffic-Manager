@@ -1,0 +1,648 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 056 Uma sessao por mes",
+    "description": "Codigo sempre antes de criar pelo site; uma sessao por mes-calendario por paciente em site, bot e painel; substituir cancela a existente com o desfecho da 054 e cria a nova vinculada; manterAsDuas so ADMIN com motivo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "BOOKING_API_KEY",
+      "value": "YOUR_BOOKING_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "phone",
+      "value": "5511999990056",
+      "type": "string"
+    },
+    {
+      "key": "code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "areaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "date1",
+      "value": "2026-12-10",
+      "type": "string"
+    },
+    {
+      "key": "date2",
+      "value": "2026-12-17",
+      "type": "string"
+    },
+    {
+      "key": "dateOutroMes",
+      "value": "2027-01-14",
+      "type": "string"
+    },
+    {
+      "key": "time",
+      "value": "10:00",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Site - Criar sem token (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"401 sem token\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\n    \"{{serviceId}}\"\n  ],\n  \"serviceAreaPairs\": [\n    {\n      \"serviceId\": \"{{serviceId}}\",\n      \"areaId\": \"{{areaId}}\"\n    }\n  ],\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{date1}}\",\n  \"time\": \"{{time}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Site - verify/send (dev devolve devCode)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "const b = pm.response.json(); if (b.devCode) pm.collectionVariables.set(\"code\", b.devCode);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/verify/send",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "verify",
+            "send"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"{{phone}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Site - verify/confirm (token)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set(\"token\", pm.response.json().token);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/verify/confirm",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "verify",
+            "confirm"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"phone\": \"{{phone}}\",\n  \"code\": \"{{code}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Site - Criar com token (201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"201\", () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set(\"appointmentId\", pm.response.json().appointment.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\n    \"{{serviceId}}\"\n  ],\n  \"serviceAreaPairs\": [\n    {\n      \"serviceId\": \"{{serviceId}}\",\n      \"areaId\": \"{{areaId}}\"\n    }\n  ],\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{date1}}\",\n  \"time\": \"{{time}}\",\n  \"token\": \"{{token}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Site - Outra data no mesmo mes (409 SAME_MONTH_APPOINTMENT)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"409\", () => pm.response.to.have.status(409));",
+              "const b = pm.response.json();",
+              "pm.test(\"code e existing\", () => { pm.expect(b.code).to.eql(\"SAME_MONTH_APPOINTMENT\"); pm.expect(b.existing).to.have.keys(\"id\", \"date\", \"time\", \"areas\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\n    \"{{serviceId}}\"\n  ],\n  \"serviceAreaPairs\": [\n    {\n      \"serviceId\": \"{{serviceId}}\",\n      \"areaId\": \"{{areaId}}\"\n    }\n  ],\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{date2}}\",\n  \"time\": \"{{time}}\",\n  \"token\": \"{{token}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Site - Substituir (201, antiga cancelada e vinculada)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"201\", () => pm.response.to.have.status(201));",
+              "const b = pm.response.json();",
+              "pm.test(\"vinculado a antiga\", () => pm.expect(b.appointment.rescheduled_from_id).to.eql(pm.collectionVariables.get(\"appointmentId\")));",
+              "pm.collectionVariables.set(\"appointmentId\", b.appointment.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\n    \"{{serviceId}}\"\n  ],\n  \"serviceAreaPairs\": [\n    {\n      \"serviceId\": \"{{serviceId}}\",\n      \"areaId\": \"{{areaId}}\"\n    }\n  ],\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{date2}}\",\n  \"time\": \"{{time}}\",\n  \"token\": \"{{token}}\",\n  \"substituir\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Site - Mes seguinte (201, nada cancelado)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"201\", () => pm.response.to.have.status(201));",
+              "pm.test(\"sem vinculo\", () => pm.expect(pm.response.json().appointment.rescheduled_from_id).to.not.be.ok);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "appointments"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\n    \"{{serviceId}}\"\n  ],\n  \"serviceAreaPairs\": [\n    {\n      \"serviceId\": \"{{serviceId}}\",\n      \"areaId\": \"{{areaId}}\"\n    }\n  ],\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{dateOutroMes}}\",\n  \"time\": \"{{time}}\",\n  \"token\": \"{{token}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Painel - Criar no mesmo mes (409 com patientName)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"409\", () => pm.response.to.have.status(409));",
+              "pm.test(\"existing com nome\", () => pm.expect(pm.response.json().existing).to.have.property(\"patientName\"));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"serviceAreaPairs\": [\n    {\n      \"serviceId\": \"{{serviceId}}\",\n      \"areaId\": \"{{areaId}}\"\n    }\n  ],\n  \"date\": \"{{date1}}\",\n  \"time\": \"{{time}}\",\n  \"isFirstVisit\": false\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Painel - manterAsDuas sem motivo (400; STAFF seria 403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"400 sem motivo\", () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"serviceAreaPairs\": [\n    {\n      \"serviceId\": \"{{serviceId}}\",\n      \"areaId\": \"{{areaId}}\"\n    }\n  ],\n  \"date\": \"{{date1}}\",\n  \"time\": \"{{time}}\",\n  \"isFirstVisit\": false,\n  \"manterAsDuas\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Painel - manterAsDuas com motivo (201, ADMIN)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"201\", () => pm.response.to.have.status(201));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"serviceAreaPairs\": [\n    {\n      \"serviceId\": \"{{serviceId}}\",\n      \"areaId\": \"{{areaId}}\"\n    }\n  ],\n  \"date\": \"{{date1}}\",\n  \"time\": \"{{time}}\",\n  \"isFirstVisit\": false,\n  \"manterAsDuas\": true,\n  \"motivoDasDuas\": \"areas tratadas em dias separados\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Painel - Mover para mes ocupado com substituir (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments/{{appointmentId}}",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "appointments",
+            "{{appointmentId}}"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"date\": \"{{date1}}\",\n  \"time\": \"{{time}}\",\n  \"substituir\": true\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

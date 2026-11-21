@@ -96,15 +96,27 @@ export interface CartPayload {
   serviceAreaPairs: ServiceAreaPair[]
 }
 
+// A sessão que o número já tem no mês escolhido (PRD 056). Vem no 409
+// SAME_MONTH_APPOINTMENT, depois de o número ter sido verificado pelo código.
+export interface SessaoExistente {
+  id: string
+  date: string // YYYY-MM-DD
+  time: string // HH:MM
+  areas: string | null
+}
+
 // Profissional não é escolhido pelo cliente: o backend atribui.
 export interface CreateAppointmentPayload extends CartPayload {
   phone: string
   fullName: string
   date: string
   time: string
-  // O número já tem agendamento futuro e a pessoa confirmou que quer manter
-  // os dois. Sem isto, a criação responde 409 HAS_FUTURE_APPOINTMENT.
-  confirmDuplicate?: boolean
+  // O token de /verify/confirm (PRD 056): criar exige o código do WhatsApp,
+  // como cancelar e remarcar. Sem ele, 401.
+  token: string
+  // A pessoa confirmou que a sessão deste mês será cancelada e remarcada para
+  // esta. Sem isto, a criação responde 409 SAME_MONTH_APPOINTMENT.
+  substituir?: boolean
   // Cadastro de quem ainda não é paciente (PRD 032): só os que faltam, e o
   // backend exige (400 CADASTRO_INCOMPLETO) quando não vêm.
   cpf?: string // só dígitos
@@ -163,4 +175,5 @@ export interface CartItem {
   areaIds: string[]
 }
 
-export type WizardStep = 'cart' | 'areas' | 'schedule' | 'customer' | 'success'
+// `verify`: o código do WhatsApp, sempre, entre os dados e a confirmação (PRD 056).
+export type WizardStep = 'cart' | 'areas' | 'schedule' | 'customer' | 'verify' | 'success'

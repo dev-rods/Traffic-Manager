@@ -157,7 +157,7 @@ class TestRecusa(unittest.TestCase):
         self.assertEqual(r["error"], "primeiro_o_link")
         ex.appointment_service.create_appointment.assert_not_called()
 
-    def test_a_recusa_vem_antes_da_de_segunda_sessao(self):
+    def test_a_recusa_vem_antes_da_do_mesmo_mes(self):
         """Quem tem sessão futura e quer outra: primeiro o link (§7.3 A)."""
         ex = executor()
         r = ex._tool_book_appointment(dict(AREAS, date="2026-11-25", time="18:00"), CLINIC, PHONE, ctx(COM_SESSAO))

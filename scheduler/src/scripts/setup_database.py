@@ -195,6 +195,10 @@ SQL_STATEMENTS = [
         rescheduled_from_id UUID REFERENCES scheduler.appointments(id),
         outcome_overridden_by VARCHAR(100),
         outcome_reason VARCHAR(200),
+        -- PRD 056: segunda sessao no mesmo mes autorizada por ADMIN, pelo
+        -- painel, com motivo. Nulas em todo agendamento normal.
+        second_in_month_by VARCHAR(100),
+        second_in_month_reason VARCHAR(200),
         -- Termo de consentimento (PRD 036): dispensa da assinatura NESTA
         -- sessao, pela recepcao. Na proxima o iPad pede de novo.
         consent_waived_at TIMESTAMPTZ,
@@ -1301,6 +1305,9 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS rescheduled_from_id UUID REFERENCES scheduler.appointments(id)",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS outcome_overridden_by VARCHAR(100)",
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS outcome_reason VARCHAR(200)",
+    # PRD 056: segunda sessao no mesmo mes autorizada por ADMIN, com motivo.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS second_in_month_by VARCHAR(100)",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS second_in_month_reason VARCHAR(200)",
     """DO $$
     BEGIN
         IF NOT EXISTS (

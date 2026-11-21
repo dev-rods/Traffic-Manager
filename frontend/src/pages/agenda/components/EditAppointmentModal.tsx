@@ -3,6 +3,8 @@ import { Modal } from '@/components/ui/Modal'
 import { DateSelect } from '@/components/ui/DateSelect'
 import { Button } from '@/components/ui/Button'
 import { useUpdateAppointment, useCotacao } from '@/hooks/useAppointments'
+import { useAuth } from '@/hooks/useAuth'
+import { ConflitoDoMes } from './ConflitoDoMes'
 import { useServices } from '@/hooks/useServices'
 import { calculaDuracao } from '@/lib/duracao'
 import { precisaMandarDuracao } from '@/lib/duracaoNoPedido'
@@ -24,7 +26,7 @@ import {
   textoDoDesconto,
   type AlteracaoPretendida,
 } from '@/lib/alteracaoDeAgendamento'
-import type { Appointment, AvailabilityRule, UpdateAppointmentPayload } from '@/types'
+import type { Appointment, AvailabilityRule, SessaoExistente, UpdateAppointmentPayload } from '@/types'
 import { desfechoDe, type Desfecho } from '@/lib/desfecho'
 import { DesfechoField } from './DesfechoField'
 import {
@@ -44,6 +46,7 @@ interface EditAppointmentModalProps {
 
 export function EditAppointmentModal({ appointment, onClose, regras }: EditAppointmentModalProps) {
   const updateAppointment = useUpdateAppointment()
+  const { ehAdmin } = useAuth()
   const { data: services } = useServices()
 
   const initialAreaIds = appointment?.area_ids?.split(',') ?? []
@@ -66,6 +69,9 @@ export function EditAppointmentModal({ appointment, onClose, regras }: EditAppoi
   // Segundo passo DENTRO do mesmo modal (PRD 043): dois overlays empilhados
   // escondem o formulário que a pessoa precisa poder revisar.
   const [confirmando, setConfirmando] = useState(false)
+  // Uma sessão por mês (PRD 056): mover para um mês em que a paciente já tem
+  // outra sessão volta 409 com ela; este estado é o aviso.
+  const [conflito, setConflito] = useState<SessaoExistente | null>(null)
   // Mudar a data é remarcar (PRD 054): o dia antigo recebe um desfecho pela
   // antecedência, que a recepção pode trocar com motivo (decisão 2).
   const [desfechoEscolhido, setDesfechoEscolhido] = useState<Desfecho | null>(null)
@@ -303,11 +309,13 @@ export function EditAppointmentModal({ appointment, onClose, regras }: EditAppoi
     await executa()
   }
 
-  /** Grava. Chamado pelo Salvar (sem campo sensível) e pelo Confirmar. */
-  const executa = async () => {
+  /** Grava. Chamado pelo Salvar (sem campo sensível), pelo Confirmar e pelo aviso do mês. */
+  const executa = async (
+    extra: Pick<UpdateAppointmentPayload, 'substituir' | 'manterAsDuas' | 'motivoDasDuas'> = {},
+  ) => {
     setError(null)
     try {
-      const payload: UpdateAppointmentPayload = {}
+      const payload: UpdateAppointmentPayload = { ...extra }
 
       // `null` explícito é o que SOLTA o override no backend; omitir não mexe.
       if (mandaDuracao) payload.manualDurationMinutes = manualDuration
@@ -338,14 +346,49 @@ export function EditAppointmentModal({ appointment, onClose, regras }: EditAppoi
       })
       onClose()
     } catch (err: unknown) {
+      setConflito(null)
       if (err && typeof err === 'object' && 'response' in err) {
-        const response = (err as { response: { data?: { message?: string; error?: string } } }).response
+        const response = (err as {
+          response: {
+            status?: number
+            data?: { message?: string; error?: string; code?: string; existing?: SessaoExistente }
+          }
+        }).response
+        if (response.status === 409 && response.data?.code === 'SAME_MONTH_APPOINTMENT' && response.data.existing) {
+          setConflito(response.data.existing)
+          return
+        }
         const detail = response.data?.error || response.data?.message
         setError(detail ?? 'Erro ao atualizar agendamento')
       } else {
         setError('Erro ao atualizar agendamento')
       }
     }
+  }
+
+  if (conflito) {
+    return (
+      <Modal open onClose={onClose} title="Confirmar remarcação" width="lg">
+        <div className="space-y-4">
+          <ConflitoDoMes
+            existing={conflito}
+            novaData={date}
+            novaHora={time}
+            modo="mover"
+            ehAdmin={Boolean(ehAdmin)}
+            loading={updateAppointment.isPending}
+            onConfirmar={() => void executa({ substituir: true })}
+            onManterAsDuas={(motivo) => void executa({ manterAsDuas: true, motivoDasDuas: motivo })}
+            onVoltar={() => setConflito(null)}
+          />
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">
+              {error}
+            </div>
+          )}
+        </div>
+      </Modal>
+    )
   }
 
   if (confirmando) {

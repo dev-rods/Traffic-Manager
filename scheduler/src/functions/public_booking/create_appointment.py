@@ -6,7 +6,9 @@ from datetime import datetime, date, time
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
 from src.utils.phone import is_valid_phone, normalize_phone
 from src.services.db.postgres import PostgresService
-from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
+from src.services.appointment_service import (
+    AppointmentService, ConflictError, NotFoundError, SessaoNoMesmoMes)
+from src.utils.booking_verification import verify_token
 from src.services.template_service import TemplateService
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.politica_de_desconto import texto_do_preco
@@ -51,7 +53,21 @@ def _cadastro_invalido(campo, mensagem):
                                "faltam": [campo], "message": mensagem})
 
 
-HAS_FUTURE_APPOINTMENT = "HAS_FUTURE_APPOINTMENT"
+# Uma sessao por mes (PRD 056). O site mostra a existente e pede confirmacao;
+# o pedido volta com `substituir: true`.
+SAME_MONTH_APPOINTMENT = "SAME_MONTH_APPOINTMENT"
+MENSAGEM_TOKEN = "Verificação por WhatsApp expirada. Confirme o código novamente."
+
+
+def _existente(e):
+    """A sessao que o aviso mostra. Pode revelar data e hora: o numero foi
+    verificado pelo codigo antes de chegar aqui."""
+    return {
+        "id": str(e["id"]),
+        "date": str(e["appointment_date"]),
+        "time": str(e["start_time"])[:5],
+        "areas": e.get("areas_display"),
+    }
 
 
 def _final_do_telefone(phone):
@@ -126,7 +142,8 @@ def handler(event, context):
         "serviceAreaPairs": [          // opcional — quando os serviços têm áreas
             {"serviceId": "uuid", "areaId": "uuid"}
         ],
-        "confirmDuplicate": false,     // true = já avisado do agendamento futuro
+        "token": "string",             // PRD 056: o token de /verify/confirm, sempre
+        "substituir": false,           // PRD 056: true = confirmou a troca da sessão do mês
         "cpf": "000.000.000-00",       // PRD 032: obrigatórios quando o celular
         "birthDate": "YYYY-MM-DD",     //   não é de um paciente com cadastro
         "email": "a@b.com"             //   completo; só os que faltam
@@ -135,18 +152,17 @@ def handler(event, context):
     Sem os campos que faltam: 400 `code: CADASTRO_INCOMPLETO` com `faltam`.
     CPF que já é de outro paciente da clínica: 409 `code: CPF_EM_USO`.
 
-    Número que já tem agendamento futuro confirmado recebe 409 com
-    `code: HAS_FUTURE_APPOINTMENT` e a contagem, e o site pergunta se a pessoa
-    quer manter os dois. Não bloqueia: com `confirmDuplicate: true` cria. A
-    resposta não diz data, serviço nem nome, porque criar não exige código e
-    qualquer um pode digitar o número de outra pessoa. Quem quiser ver o que
-    já tem usa "Meus agendamentos", que exige.
+    Criar exige o código do WhatsApp (PRD 056): `token` de /verify/confirm,
+    como cancelar e remarcar; sem ele, 401. Até 21/11/2026 criar não exigia e
+    o 409 de agendamento repetido não podia dizer nada da sessão existente.
 
-    Sem verificação por código: o agendamento é criado direto e a confirmação
-    chega pelo próprio WhatsApp (mesmo template "BOOKED" do bot) — a posse do
-    número não precisa ser confirmada antes de agendar, só de ver/cancelar
-    (endpoints /my-appointments e /appointments/{id}/cancel continuam exigindo
-    o token de /verify/confirm).
+    Uma sessão por mês: número verificado com sessão confirmada futura no mesmo
+    mês da data pedida recebe 409 `code: SAME_MONTH_APPOINTMENT` com `existing`
+    (id, date, time, areas). O site avisa que essa sessão será substituída e
+    repete o pedido com `substituir: true`: a existente é cancelada com o
+    desfecho da antecedência (PRD 054) e a nova nasce vinculada a ela. Mês
+    diferente não interfere. A confirmação chega pelo WhatsApp (template
+    "BOOKED" do bot), como antes.
     """
     try:
         api_key, error_response = require_booking_intake_api_key(event)
@@ -175,6 +191,11 @@ def handler(event, context):
         if not is_valid_phone(str(phone)):
             return http_response(400, {"status": "ERROR", "message": "Telefone inválido"})
         phone = normalize_phone(str(phone))
+
+        # PRD 056: posse do numero antes de criar. Mesma frase do cancelar.
+        token = body.get("token")
+        if not token or not verify_token(clinic_id, phone, str(token)):
+            return http_response(401, {"status": "ERROR", "message": MENSAGEM_TOKEN})
 
         try:
             data = datetime.strptime(str(appt_date), "%Y-%m-%d").date()
@@ -260,20 +281,7 @@ def handler(event, context):
             logger.warning(f"[PublicBooking][create] {clinic_id} professionalId legado ignorado")
 
         service = AppointmentService.completo(db)
-
-        if body.get("confirmDuplicate") is not True:
-            existentes = service.get_active_appointments_by_phone(clinic_id, phone)
-            if existentes:
-                logger.info(
-                    f"[PublicBooking][create] {clinic_id} tel={_final_do_telefone(phone)} "
-                    f"já tem {len(existentes)} agendamento(s) futuro(s), pedindo confirmação"
-                )
-                return http_response(409, {
-                    "status": "ERROR",
-                    "code": HAS_FUTURE_APPOINTMENT,
-                    "existingCount": len(existentes),
-                    "message": "Este número já tem agendamento futuro nesta clínica.",
-                })
+        substituir = body.get("substituir") is True
 
         try:
             result = service.create_appointment(
@@ -293,7 +301,20 @@ def handler(event, context):
                 cpf=cpf,
                 birth_date=birth_date,
                 email=email,
+                substituir_mesmo_mes=substituir,
+                autor="site",
             )
+        except SessaoNoMesmoMes as e:
+            logger.info(
+                f"[PublicBooking][create] {clinic_id} tel={_final_do_telefone(phone)} "
+                f"já tem sessão em {e.existente['appointment_date']}, pedindo confirmação da troca"
+            )
+            return http_response(409, {
+                "status": "ERROR",
+                "code": SAME_MONTH_APPOINTMENT,
+                "existing": _existente(e.existente),
+                "message": "Você já tem uma sessão nesta clínica neste mês.",
+            })
         except ConflictError:
             # Sem este log o 409 não deixava rastro: era o "agendamento que
             # não chegou no banco" sem nada para investigar.
@@ -307,7 +328,7 @@ def handler(event, context):
 
         return http_response(201, {
             "status": "SUCCESS",
-            "message": "Agendamento criado com sucesso",
+            "message": "Agendamento remarcado com sucesso" if substituir else "Agendamento criado com sucesso",
             "appointment": _serialize_row(result),
         })
 

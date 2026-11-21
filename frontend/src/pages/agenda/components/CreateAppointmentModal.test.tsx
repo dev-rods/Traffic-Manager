@@ -11,8 +11,9 @@ let cotacao: { data?: Cotacao; isPending: boolean; isError: boolean; fetchStatus
 }
 let pacientes: PatientWithStats[] = []
 
+let ehAdmin = false
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ clinicId: 'c1', isAuthenticated: true }),
+  useAuth: () => ({ clinicId: 'c1', isAuthenticated: true, ehAdmin }),
 }))
 vi.mock('@/hooks/useAppointments', () => ({
   useCreateAppointment: () => ({ mutateAsync, isPending: false }),
@@ -79,6 +80,8 @@ const modo = (nome: string) => screen.getByRole('button', { name: nome })
 
 beforeEach(() => {
   mutateAsync.mockClear()
+  mutateAsync.mockResolvedValue({})
+  ehAdmin = false
   pacientes = [paciente()]
   cotacao = { data: undefined, isPending: false, isError: false, fetchStatus: 'idle' }
 })
@@ -140,5 +143,58 @@ describe('política da clínica no novo agendamento (PRD 053)', () => {
     expect(screen.queryByRole('note')).toBeNull()
     await userEvent.click(screen.getByRole('checkbox', { name: /Primeira vez/ }))
     expect(screen.getByRole('note')).toHaveTextContent('não considera esta a primeira sessão')
+  })
+})
+
+describe('uma sessão por mês (PRD 056)', () => {
+  const conflito = {
+    response: {
+      status: 409,
+      data: {
+        code: 'SAME_MONTH_APPOINTMENT',
+        existing: { id: 'x1', date: '2026-11-25', time: '14:00', areas: 'Axila', patientName: 'Ana Clara' },
+      },
+    },
+  }
+
+  async function criaComConflito() {
+    mutateAsync.mockRejectedValueOnce(conflito)
+    monta()
+    await escolhePaciente()
+    await marcaAxila()
+    await userEvent.click(criar())
+    return screen.findByRole('group', { name: 'Ana Clara já tem sessão em 25/11/2026 às 14:00.' })
+  }
+
+  it('o 409 vira aviso no lugar dos botões; Confirmar reenvia com substituir', async () => {
+    const aviso = await criaComConflito()
+    expect(aviso).toHaveTextContent('será cancelada e remarcada para 27/11/2026 às 09:00')
+    expect(screen.queryByRole('button', { name: 'Criar agendamento' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Manter as duas' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+    expect(mutateAsync).toHaveBeenCalledTimes(2)
+    expect(mutateAsync.mock.calls[0][0]).not.toHaveProperty('substituir')
+    expect(mutateAsync.mock.calls[1][0]).toMatchObject({ ...mutateAsync.mock.calls[0][0], substituir: true })
+  })
+
+  it('"Voltar" devolve o formulário sem gravar', async () => {
+    await criaComConflito()
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(screen.getByRole('button', { name: 'Criar agendamento' })).toBeInTheDocument()
+    expect(mutateAsync).toHaveBeenCalledTimes(1)
+  })
+
+  it('ADMIN pode manter as duas, com motivo', async () => {
+    ehAdmin = true
+    await criaComConflito()
+    await userEvent.click(screen.getByRole('button', { name: 'Manter as duas' }))
+    await userEvent.type(screen.getByLabelText('Motivo para manter as duas sessões'), 'áreas em dias separados')
+    await userEvent.click(screen.getByRole('button', { name: 'Manter as duas' }))
+    expect(mutateAsync.mock.calls[1][0]).toMatchObject({
+      manterAsDuas: true,
+      motivoDasDuas: 'áreas em dias separados',
+    })
+    expect(mutateAsync.mock.calls[1][0]).not.toHaveProperty('substituir')
   })
 })

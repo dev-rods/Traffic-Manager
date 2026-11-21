@@ -1,3 +1,8 @@
+> **Superado em parte pelo PRD 056 (21/11/2026):** o aviso "Você já tem
+> agendamento" com "Manter os dois" saiu. Criar exige o código do WhatsApp e
+> uma sessão no mesmo mês é substituída (`substituir: true`), nunca duplicada.
+> Ver `prd/056-uma-sessao-por-mes-e-codigo-no-site.md`.
+
 # PRD — 024 Booking-site: "Meus agendamentos", desconto progressivo à vista, aviso de agendamento repetido e nome de quem agenda
 
 > Gerado na fase **Research**. Use como input para a fase Spec.

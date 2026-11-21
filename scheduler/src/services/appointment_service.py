@@ -51,6 +51,19 @@ class OptimisticLockError(Exception):
     pass
 
 
+class SessaoNoMesmoMes(Exception):
+    """A paciente ja tem sessao confirmada futura no mes-calendario da data
+    pedida (PRD 056). `existente` e a mais proxima: id, appointment_date,
+    start_time, areas_display, patient_name. Quem chama monta o aviso
+    ("sua sessao de X sera cancelada e remarcada") e repete o pedido com
+    `substituir_mesmo_mes=True`; so o painel, por ADMIN e com motivo, pode
+    `permitir_duas=True`."""
+
+    def __init__(self, existente):
+        super().__init__("Ja existe sessao confirmada neste mes")
+        self.existente = existente
+
+
 class AppointmentService:
 
     def __init__(self, db: PostgresService, reminder_service=None, lead_service=None):
@@ -125,6 +138,69 @@ class AppointmentService:
                     f"{int(tolerancia_minutos)} minutos ({data} {inicio}-{fim})")
         return padrao
 
+    def sessao_no_mesmo_mes(self, clinic_id: str, phone: str, data,
+                            excluir_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """A sessao CONFIRMED futura deste numero (variantes, mesma clinica) no
+        mesmo ano-mes de `data`, a mais proxima; None se nao houver (PRD 056).
+
+        Mes-calendario de proposito, decisao do Andre: duas sessoes no mesmo
+        mes sao engano ou remarcacao mal feita; no mes seguinte e antecipar a
+        reserva. `excluir_id` e o proprio agendamento quando se esta movendo.
+        So uma lista de verdade conta: um duble que devolva outra coisa nao
+        pode virar conflito.
+        """
+        from src.utils.phone import variantes_do_numero
+        variantes = sorted(variantes_do_numero(phone or ""))
+        if not variantes or not data:
+            return None
+        sql = f"""
+            SELECT a.id, a.appointment_date, a.start_time, p.name AS patient_name,
+                   (SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at)
+                      FROM scheduler.appointment_service_areas asa
+                     WHERE asa.appointment_id = a.id) AS areas_display
+              FROM scheduler.appointments a
+              JOIN scheduler.patients p ON p.id = a.patient_id
+             WHERE a.clinic_id = %s AND p.clinic_id = %s AND p.phone = ANY(%s)
+               AND p.deleted_at IS NULL AND a.status = 'CONFIRMED'
+               AND a.appointment_date >= {HOJE_SQL}
+               AND date_trunc('month', a.appointment_date) = date_trunc('month', %s::date)
+        """
+        params: list = [clinic_id, clinic_id, variantes, str(data)]
+        if excluir_id:
+            sql += " AND a.id <> %s::uuid"
+            params.append(str(excluir_id))
+        sql += " ORDER BY a.appointment_date, a.start_time LIMIT 1"
+        linhas = self.db.execute_query(sql, tuple(params))
+        if not isinstance(linhas, list) or not linhas:
+            return None
+        return linhas[0]
+
+    def _leva_para_o_novo(self, antigo_id: str, antigo: Dict[str, Any], novo_id: str) -> None:
+        """O que e por agendamento acompanha a paciente quando um registro
+        substitui outro (PRD 054/056): vinculo nos dois sentidos, pagamento
+        vivo (um pago no antigo apareceria como estorno pendente) e o link dos
+        documentos ja enviado."""
+        self.db.execute_write(
+            "UPDATE scheduler.appointments SET rescheduled_from_id = %s::uuid, updated_at = NOW() "
+            "WHERE id = %s::uuid",
+            (antigo_id, novo_id),
+        )
+        self.db.execute_write(
+            "UPDATE scheduler.appointments SET rescheduled_to_id = %s::uuid, updated_at = NOW() "
+            "WHERE id = %s::uuid AND rescheduled_to_id IS NULL",
+            (novo_id, antigo_id),
+        )
+        self.db.execute_write(
+            "UPDATE scheduler.appointment_payments SET appointment_id = %s::uuid "
+            "WHERE appointment_id = %s::uuid AND status IN ('PENDING', 'AWAITING_CASH', 'PAID')",
+            (novo_id, antigo_id),
+        )
+        if antigo.get("consent_link_sent_at"):
+            self.db.execute_write(
+                "UPDATE scheduler.appointments SET consent_link_sent_at = %s WHERE id = %s::uuid",
+                (antigo["consent_link_sent_at"], novo_id),
+            )
+
     def create_appointment(
         self,
         clinic_id: str,
@@ -148,8 +224,20 @@ class AppointmentService:
         birth_date: Optional[str] = None,
         email: Optional[str] = None,
         discount_cents: Optional[int] = None,
+        substituir_mesmo_mes: bool = False,
+        permitir_duas: bool = False,
+        autor: Optional[str] = None,
+        motivo_das_duas: Optional[str] = None,
     ) -> Dict[str, Any]:
         """`is_first_visit=None` deixa o sistema decidir; um booleano manda.
+
+        Uma sessao por mes (PRD 056): se a paciente ja tem sessao confirmada
+        futura no mes de `date`, levanta `SessaoNoMesmoMes` com a existente.
+        `substituir_mesmo_mes=True` e a confirmacao do aviso: a existente e
+        cancelada com o desfecho da antecedencia (falta nas ultimas 24 h) e o
+        novo nasce vinculado a ela, levando pagamento vivo, link dos documentos
+        e conversao. `permitir_duas=True` mantem as duas: so o painel passa,
+        por ADMIN e com `motivo_das_duas`, gravado no novo com `autor`.
 
         `discount_cents` (PRD 050) e o desconto em reais, so pelo painel. Quando
         vem, e a fonte do preco: vence o percentual e o combinado da paciente,
@@ -163,6 +251,13 @@ class AppointmentService:
         # 1. Get or create patient
         patient = self._get_or_create_patient(clinic_id, phone, full_name, cpf, birth_date, email)
         patient_id = str(patient["id"])
+
+        # 1b. Uma sessao por mes (PRD 056). Antes de qualquer escrita de
+        # agendamento; a existente so e cancelada depois de o horario novo
+        # caber (passo 4), para um conflito nao deixar a paciente sem sessao.
+        existente = self.sessao_no_mesmo_mes(clinic_id, phone, date)
+        if existente and not (substituir_mesmo_mes or permitir_duas):
+            raise SessaoNoMesmoMes(existente)
 
         # 2. Resolve service list and duration
         all_service_ids = service_ids if service_ids else [service_id]
@@ -260,6 +355,16 @@ class AppointmentService:
 
         if conflicts:
             raise ConflictError(f"Conflito de horário: já existe agendamento para {date} {time}-{end_time}")
+
+        # 4b. A troca confirmada (PRD 056): a sessao do mes sai com o desfecho
+        # da antecedencia e, depois do INSERT, o novo recebe o que era dela.
+        substituida = None
+        if existente and substituir_mesmo_mes and not permitir_duas:
+            substituida = self.cancel_appointment(str(existente["id"]), autor=autor)
+            logger.info(
+                f"[MesmoMes] {clinic_id}: sessao {existente['id']} de {existente['appointment_date']} "
+                f"substituida por {date} {time} (desfecho={substituida['outcome']}, autor={autor!r})"
+            )
 
         # 5. Resolve professional
         prof_id_param = None
@@ -391,6 +496,18 @@ class AppointmentService:
         antecessor = vincula_antecessor(self.db, result)
         if antecessor == appointment_id:
             antecessor = None
+        if substituida is not None:
+            # O vinculo pela janela pode ter pego outro cancelamento recente;
+            # o que vale e a sessao que esta criacao substituiu.
+            antecessor = str(substituida["id"])
+            self._leva_para_o_novo(antecessor, substituida, appointment_id)
+        if existente and permitir_duas:
+            self.db.execute_write(
+                "UPDATE scheduler.appointments SET second_in_month_by = %s, second_in_month_reason = %s "
+                "WHERE id = %s::uuid",
+                ((autor or "painel")[:100], (motivo_das_duas or "").strip()[:200] or None, appointment_id),
+            )
+            logger.info(f"[MesmoMes] {clinic_id}: segunda sessao no mes autorizada por {autor!r}: {motivo_das_duas!r}")
         conversao_movida = False
         if antecessor and self.lead_service:
             try:
@@ -982,7 +1099,9 @@ class AppointmentService:
 
     def remarca(self, appointment_id: str, nova_data: str, nova_hora: str,
                 tolerancia_minutos: int = 0, desfecho: Optional[str] = None,
-                motivo: Optional[str] = None, autor: Optional[str] = None) -> Dict[str, Any]:
+                motivo: Optional[str] = None, autor: Optional[str] = None,
+                substituir_mesmo_mes: bool = False, permitir_duas: bool = False,
+                motivo_das_duas: Optional[str] = None) -> Dict[str, Any]:
         """Outra data (PRD 054): o antigo recebe o desfecho da antecedencia (ou
         a sobreposicao do painel) e aponta para o novo; o novo nasce igual ao
         antigo - areas, desconto gravado, duracao fixada, observacao, estreia -
@@ -991,6 +1110,11 @@ class AppointmentService:
 
         Confere o conflito do horario novo ANTES de encerrar o antigo: um
         conflito nao pode deixar a paciente sem sessao nenhuma.
+
+        Uma sessao por mes (PRD 056): se no mes de `nova_data` ja ha OUTRA
+        sessao confirmada desta paciente, levanta `SessaoNoMesmoMes`;
+        `substituir_mesmo_mes` cancela essa outra (desfecho da antecedencia)
+        antes de criar o novo; `permitir_duas` so pelo painel, ADMIN, motivo.
         """
         atuais = self.db.execute_query(
             "SELECT * FROM scheduler.appointments WHERE id = %s::uuid AND status = 'CONFIRMED'",
@@ -1019,6 +1143,13 @@ class AppointmentService:
             raise NotFoundError(f"Paciente do agendamento {appointment_id} não encontrado")
         phone = pacientes[0]["phone"]
 
+        # 0. Outra sessao dela no mes de destino (PRD 056). Antes de qualquer
+        # escrita; a terceira so e cancelada depois de o horario caber.
+        terceira = None if permitir_duas else self.sessao_no_mesmo_mes(
+            clinic_id, phone, nova_data, excluir_id=appointment_id)
+        if terceira and not substituir_mesmo_mes:
+            raise SessaoNoMesmoMes(terceira)
+
         # 1. O horario novo cabe? Com a duracao que o antigo ocupa.
         duracao = int(antigo.get("total_duration_minutes") or 0) or duracao_do_carrinho(
             self.db, clinic_id, [str(antigo["service_id"])], pares)
@@ -1030,6 +1161,12 @@ class AppointmentService:
             raise ConflictError(self._mensagem_de_conflito(
                 f"Conflito de horário no novo slot: {nova_data} {nova_hora}-{fim}",
                 tolerancia_minutos, nova_data, nova_hora, fim))
+
+        # 1b. A terceira sai primeiro, com o desfecho da antecedencia (PRD 056).
+        if terceira:
+            saiu = self.cancel_appointment(str(terceira["id"]), autor=autor)
+            logger.info(f"[MesmoMes] remarcacao de {appointment_id} para {nova_data}: "
+                        f"sessao {terceira['id']} do mesmo mes cancelada (desfecho={saiu['outcome']})")
 
         # 2. Encerra o antigo com o desfecho. Cancela o lembrete e passa a estreia.
         encerrado = self.cancel_appointment(appointment_id, desfecho=desfecho, motivo=motivo, autor=autor)
@@ -1048,35 +1185,16 @@ class AppointmentService:
             discount_cents=antigo.get("discount_cents"),
             manual_duration_minutes=antigo.get("manual_duration_minutes"),
             is_first_visit=bool(antigo.get("is_first_visit")),
+            # O mes ja foi conferido acima (e o antigo acabou de ser encerrado).
+            permitir_duas=True, autor=autor,
+            motivo_das_duas=motivo_das_duas if permitir_duas else None,
         )
         novo_id = str(novo["id"])
 
         # 4. Vinculo nos dois sentidos, mesmo que a janela do vincula_antecessor
-        #    nao tenha pego (relogio, concorrencia).
-        self.db.execute_write(
-            "UPDATE scheduler.appointments SET rescheduled_from_id = %s::uuid, updated_at = NOW() "
-            "WHERE id = %s::uuid",
-            (appointment_id, novo_id),
-        )
-        self.db.execute_write(
-            "UPDATE scheduler.appointments SET rescheduled_to_id = %s::uuid, updated_at = NOW() "
-            "WHERE id = %s::uuid AND rescheduled_to_id IS NULL",
-            (novo_id, appointment_id),
-        )
-
-        # 5. O que e por agendamento acompanha a paciente: pagamento vivo (um
-        #    pago no antigo apareceria como estorno pendente) e o link dos
-        #    documentos ja enviado.
-        self.db.execute_write(
-            "UPDATE scheduler.appointment_payments SET appointment_id = %s::uuid "
-            "WHERE appointment_id = %s::uuid AND status IN ('PENDING', 'AWAITING_CASH', 'PAID')",
-            (novo_id, appointment_id),
-        )
-        if antigo.get("consent_link_sent_at"):
-            self.db.execute_write(
-                "UPDATE scheduler.appointments SET consent_link_sent_at = %s WHERE id = %s::uuid",
-                (antigo["consent_link_sent_at"], novo_id),
-            )
+        #    nao tenha pego (relogio, concorrencia); pagamento vivo e link dos
+        #    documentos acompanham.
+        self._leva_para_o_novo(appointment_id, antigo, novo_id)
 
         logger.info(
             f"[Remarcacao] {appointment_id} -> {novo_id}: {antigo['appointment_date']} "

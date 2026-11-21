@@ -275,7 +275,7 @@ número).
 
 ## Status (preencher após conclusão)
 
-- [ ] Spec gerada: `docs/work/spec/056-uma-sessao-por-mes-e-codigo-no-site.md`
-- [ ] Implementado em dev: (data)
+- [x] Spec gerada: `docs/work/spec/056-uma-sessao-por-mes-e-codigo-no-site.md` (PR #240)
+- [x] Implementado em dev: 21/11/2026 (PR #241; backend dev layer 205, migração aplicada; smoke 13/13 pelo roteiro)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`
