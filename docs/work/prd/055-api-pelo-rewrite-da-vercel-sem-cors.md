@@ -210,15 +210,19 @@ reverter o `vercel.json` (deploy da Vercel, ~2 min). Nenhum dado é tocado.
 
 ---
 
-## 7. Decisões para o André
+## 7. Decisões (André, 21/11/2026)
 
-1. **Mecanismo de roteamento dev/prod:** regra por host no `vercel.json`
-   (proposta, zero código) ou Edge Middleware com env var (alternativa).
-2. **Cabeçalhos CORS do `http.py`:** remover junto (proposta, fonte única) ou
-   manter por garantia.
-3. **Prefixo:** `/api` (proposta) ou outro.
-4. **Janela do passo 3 em prod:** fora do horário das clínicas (proposta), já
-   que um esquecimento derruba o painel por ~12 min até o rollback.
+1. **Roteamento dev/prod:** regra por host no `vercel.json`. Edge Middleware
+   descartado (custo por chamada e código de infra em três fronts). Risco
+   aceito: um preview fora do padrão de host cairia em prod; o roteiro bate
+   cada host dos 4 projetos.
+2. **Cabeçalhos CORS do `http.py`:** remover junto. Sem `OPTIONS` eles já não
+   fazem nada; manter seria código que parece configurar CORS e não configura.
+3. **Prefixo:** `/api`. Nenhum dos três apps tem rota de página começando por
+   `/api`.
+4. **Janela do passo 3 em prod:** em sequência com os demais, sem esperar
+   horário. O smoke dos quatro projetos em prod no passo 2 é o que prova que
+   ninguém chama o API Gateway direto; se algo cair, rollback de ~12 min.
 
 ---
 
