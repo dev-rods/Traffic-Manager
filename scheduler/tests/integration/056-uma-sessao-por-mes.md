@@ -45,4 +45,30 @@ Migração antes do deploy: `python src/scripts/setup_database.py` com
 
 ## Resultado
 
-(preencher no deploy em dev)
+**Dev, 21/11/2026** (migração + `serverless deploy --stage dev`, layer 205;
+código do PR #241, rodado da branch antes do merge):
+
+- Clínica de dev com datas na janela: Premium (`clinicadepilacaopremium-3fbce9`),
+  datas 25/11 e 27/11, área Abdômen. Smoke por script, 13 de 13:
+- 1 → criar sem `token`: 401.
+- 2 → `verify/send` devolveu `devCode` (WhatsApp de dev fora); `verify/confirm`
+  deu o token; criar com token (e cadastro CPF/nascimento/e-mail, PRD 032) em
+  25/11: 201.
+- 3 → criar em 27/11 com o mesmo token: 409 `SAME_MONTH_APPOINTMENT`,
+  `existing` com id, `2026-11-25`, `20:50`, `Abdômen`; sem nome (site).
+- 4 → mesmo pedido com `substituir: true`: 201 "Agendamento remarcado com
+  sucesso", `rescheduled_from_id` = o de 25/11; o de 25/11 ficou `CANCELLED`
+  com `rescheduled_to_id` apontando para o novo.
+- 5 → dezembro (01/12) pelo painel com sessão em novembro: 201, sem vínculo.
+- 6 → painel (chave mestra = ADMIN) criar em 25/11: 409 com
+  `existing.patientName`. STAFF (403) coberto por unit test
+  (`test_painel_manter_as_duas.py`): não há sessão STAFF por curl.
+- 7 → `manterAsDuas` sem motivo: 400; com motivo: 201 e, no banco,
+  `second_in_month_by = ADMIN`, `second_in_month_reason` gravado.
+- 8 → mover a de dezembro para 25/11 (mês com duas sessões): 409; com
+  `substituir`: 200 "remarcado (cancelamento no dia anterior)", a mais
+  próxima do mês cancelada.
+- 9 → `test_bot_mesmo_mes.py` (10 testes) verde; pytest 2470.
+- 10 → browser: pendente do merge do PR #241 (painel e site sobem pela
+  Vercel no merge).
+- Limpeza: as sessões do número de teste foram canceladas no fim.
