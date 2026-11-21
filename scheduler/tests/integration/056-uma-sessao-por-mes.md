@@ -82,3 +82,25 @@ código do PR #241, rodado da branch antes do merge):
   erro no console além do próprio 409 esperado. Capturas no scratchpad da
   sessão (`shots/site-06-aviso.png`, `shots/painel-03-aviso.png`).
 - Limpeza: as sessões do número de teste foram canceladas no fim.
+
+**Prod, 21/11/2026** (PR #241 mergeado; painel e site pela Vercel; migração
+`setup_database.py` com `/prod/SUPABASE_DB_*` e `serverless deploy --stage
+prod`, layer 163). Clínica com datas na janela: Nobre (`nobrelaser-sjc`),
+03/12 e 04/12, área Mãos; número de teste, tudo cancelado no fim (0 sessões
+confirmadas do número no banco):
+
+- 1 → criar pelo site sem `token`: 401.
+- 2 a 4 → pelo script não dá: em prod `verify/send` manda o código pelo
+  WhatsApp de verdade (sem `devCode`). Feito pelo André no celular, na Nobre,
+  em 21/11 (noite): código recebido, aviso de remarcação, confirmado. No
+  banco: a sessão de 04/12 às 14:20 ficou `CANCELLED` com `rescheduled_to_id`
+  e a nova, 04/12 às 12:40, `CONFIRMED` com `rescheduled_from_id`.
+- 5 → janeiro pelo painel com sessão em dezembro: 201, sem vínculo.
+- 6 → painel criar em 04/12 com sessão em 03/12: 409 `SAME_MONTH_APPOINTMENT`,
+  `existing` com id, data, hora, `Mãos` e `patientName`.
+- 7 → `manterAsDuas` sem motivo: 400 "informe o motivo"; com motivo: 201 e,
+  no banco, `second_in_month_by = ADMIN`, `second_in_month_reason` gravado
+  (a listagem do painel não devolve essas colunas; conferido por SQL).
+- 8 → mover a de janeiro para dezembro: 409; com `substituir`: 200
+  "remarcado (cancelamento no dia anterior)".
+- 10 e 11 → não repetidos em prod.
