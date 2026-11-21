@@ -254,8 +254,8 @@ reverter o `vercel.json` (deploy da Vercel, ~2 min). Nenhum dado é tocado.
 
 ## Status (preencher após conclusão)
 
-- [x] Pendente
-- [ ] Spec gerada: `spec/055-api-pelo-rewrite-da-vercel-sem-cors.md`
+- [ ] Pendente
+- [x] Spec gerada: `spec/055-api-pelo-rewrite-da-vercel-sem-cors.md` (21/11/2026)
 - [ ] Implementado em dev: (data)
 - [ ] Implementado em prod: (data)
 - [ ] Registrado em `TASKS_LOG.md`
