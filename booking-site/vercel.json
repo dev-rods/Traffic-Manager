@@ -7,7 +7,7 @@
     },
     {
       "source": "/api/(.*)",
-      "has": [{ "type": "host", "value": "booking-site-dev\.vercel\.app" }],
+      "has": [{ "type": "host", "value": "booking-site-dev\\.vercel\\.app" }],
       "destination": "https://tuvr5sfhz3.execute-api.us-east-1.amazonaws.com/dev/$1"
     },
     {
