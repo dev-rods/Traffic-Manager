@@ -91,9 +91,10 @@ confirmadas do número no banco):
 
 - 1 → criar pelo site sem `token`: 401.
 - 2 a 4 → pelo script não dá: em prod `verify/send` manda o código pelo
-  WhatsApp de verdade (sem `devCode`). A regra que o site dispara é a mesma do
-  painel (casos 6 a 8); o fluxo com código real no celular fica a critério do
-  André, como o caso 9 da 054.
+  WhatsApp de verdade (sem `devCode`). Feito pelo André no celular, na Nobre,
+  em 21/11 (noite): código recebido, aviso de remarcação, confirmado. No
+  banco: a sessão de 04/12 às 14:20 ficou `CANCELLED` com `rescheduled_to_id`
+  e a nova, 04/12 às 12:40, `CONFIRMED` com `rescheduled_from_id`.
 - 5 → janeiro pelo painel com sessão em dezembro: 201, sem vínculo.
 - 6 → painel criar em 04/12 com sessão em 03/12: 409 `SAME_MONTH_APPOINTMENT`,
   `existing` com id, data, hora, `Mãos` e `patientName`.
