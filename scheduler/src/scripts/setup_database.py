@@ -190,6 +190,11 @@ SQL_STATEMENTS = [
         -- Reagendamento (PRD 035): gravado no registro ANTIGO, aponta para o
         -- que o substituiu. Reagendado = CANCELLED + rescheduled_to_id.
         rescheduled_to_id UUID REFERENCES scheduler.appointments(id),
+        -- PRD 054: o novo aponta de volta; e a sobreposicao do desfecho pelo
+        -- painel (quem e por que), nula quando foi o automatico.
+        rescheduled_from_id UUID REFERENCES scheduler.appointments(id),
+        outcome_overridden_by VARCHAR(100),
+        outcome_reason VARCHAR(200),
         -- Termo de consentimento (PRD 036): dispensa da assinatura NESTA
         -- sessao, pela recepcao. Na proxima o iPad pede de novo.
         consent_waived_at TIMESTAMPTZ,
@@ -1291,6 +1296,11 @@ SQL_STATEMENTS = [
     "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS discount_cents INTEGER",
     # PRD 052: origem comercial da parte de uma composta no registro de sessao.
     "ALTER TABLE scheduler.patient_session_applications ADD COLUMN IF NOT EXISTS source_area_name VARCHAR(160)",
+
+    # PRD 054: remarcacao com registro novo e desfecho sobreposto pelo painel.
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS rescheduled_from_id UUID REFERENCES scheduler.appointments(id)",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS outcome_overridden_by VARCHAR(100)",
+    "ALTER TABLE scheduler.appointments ADD COLUMN IF NOT EXISTS outcome_reason VARCHAR(200)",
     """DO $$
     BEGIN
         IF NOT EXISTS (

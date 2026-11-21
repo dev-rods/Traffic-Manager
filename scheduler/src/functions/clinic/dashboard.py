@@ -6,7 +6,7 @@ from src.services import relogio
 
 from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
-from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_REAGENDADO
+from src.services.reagendamento import E_CANCELADO_DE_VERDADE, E_FALTA, E_REAGENDADO, ativos
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -74,15 +74,18 @@ def handler(event, context):
         # ── Summary (today) ──────────────────────────────────────
         # Reagendado nao e cancelado (PRD 035): a pessoa continua com sessao
         # marcada, so que noutro registro. A regra vem de reagendamento.py.
+        # Falta e cancelamento fora de dinheiro e de "agendamentos" (PRD 054).
+        ATIVO = ativos()
         summary_rows = db.execute_query(f"""
             SELECT
-                COUNT(*) as total_appointments,
+                COUNT(*) FILTER (WHERE {ATIVO}) as total_appointments,
                 COUNT(*) FILTER (WHERE status = 'CONFIRMED') as confirmed_appointments,
                 COUNT(*) FILTER (WHERE {E_CANCELADO_DE_VERDADE.format(a='appointments')}) as cancelled_appointments,
                 COUNT(*) FILTER (WHERE {E_REAGENDADO.format(a='appointments')}) as rescheduled_appointments,
-                COALESCE(SUM(final_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as net_revenue_cents,
-                COALESCE(SUM(original_price_cents) FILTER (WHERE status != 'CANCELLED'), 0) as gross_revenue_cents,
-                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE status != 'CANCELLED' AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents,
+                COUNT(*) FILTER (WHERE {E_FALTA.format(a='appointments')}) as no_show_appointments,
+                COALESCE(SUM(final_price_cents) FILTER (WHERE {ATIVO}), 0) as net_revenue_cents,
+                COALESCE(SUM(original_price_cents) FILTER (WHERE {ATIVO}), 0) as gross_revenue_cents,
+                COALESCE(SUM(original_price_cents - final_price_cents) FILTER (WHERE {ATIVO} AND (discount_pct > 0 OR discount_cents > 0)), 0) as total_discount_cents,
                 COUNT(*) FILTER (WHERE status = 'PENDING') as pending_appointments
             FROM scheduler.appointments
             WHERE clinic_id = %s AND appointment_date = %s
@@ -99,6 +102,7 @@ def handler(event, context):
             "confirmed_appointments": confirmed,
             "cancelled_appointments": cancelled,
             "rescheduled_appointments": rescheduled,
+            "no_show_appointments": s.get("no_show_appointments", 0) or 0,
             "new_patients": 0,
             "gross_revenue_cents": s.get("gross_revenue_cents", 0) or 0,
             "total_discount_cents": s.get("total_discount_cents", 0) or 0,
@@ -177,12 +181,12 @@ def handler(event, context):
             })
 
         # ── Daily counts (current week) ─────────────────────────
-        daily_rows = db.execute_query("""
+        daily_rows = db.execute_query(f"""
             SELECT appointment_date, COUNT(*) as count
             FROM scheduler.appointments
             WHERE clinic_id = %s
               AND appointment_date BETWEEN %s AND %s
-              AND status != 'CANCELLED'
+              AND {ATIVO}
             GROUP BY appointment_date
             ORDER BY appointment_date
         """, (clinic_id, week_start, week_end))
@@ -197,7 +201,7 @@ def handler(event, context):
             })
 
         # ── Discount breakdown (current month) ──────────────────
-        discount_rows = db.execute_query("""
+        discount_rows = db.execute_query(f"""
             SELECT
                 discount_reason as reason,
                 COUNT(*) as count,
@@ -207,7 +211,7 @@ def handler(event, context):
               AND appointment_date BETWEEN %s AND %s
               AND (discount_pct > 0 OR discount_cents > 0)
               AND discount_reason IS NOT NULL
-              AND status != 'CANCELLED'
+              AND {ATIVO}
             GROUP BY discount_reason
         """, (clinic_id, month_start, month_end))
 
@@ -221,7 +225,7 @@ def handler(event, context):
         ]
 
         # ── Top services (current month) ─────────────────────────
-        service_rows = db.execute_query("""
+        service_rows = db.execute_query(f"""
             SELECT
                 asa.service_name,
                 COUNT(DISTINCT asa.appointment_id) as count,
@@ -230,7 +234,7 @@ def handler(event, context):
             JOIN scheduler.appointments a ON a.id = asa.appointment_id
             WHERE a.clinic_id = %s
               AND a.appointment_date BETWEEN %s AND %s
-              AND a.status != 'CANCELLED'
+              AND {ativos('a')}
             GROUP BY asa.service_name
             ORDER BY count DESC
             LIMIT 5

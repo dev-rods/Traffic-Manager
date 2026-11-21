@@ -108,6 +108,19 @@ describe('avisosDaAlteracao', () => {
   it('nada mudou, nada a avisar', () => {
     expect(avisosDaAlteracao(agendamento(), {})).toEqual([])
   })
+
+  it('mudar a data é remarcar (PRD 054): diz o desfecho do dia antigo e o que acompanha o novo', () => {
+    const avisos = avisosDaAlteracao(agendamento(), { data: { de: '2026-11-12', para: '2026-11-14' } }, { desfecho: 'NO_SHOW' })
+    expect(avisos[0]).toBe('O agendamento de 12/11 fica registrado como falta e nasce um novo na data escolhida.')
+    expect(avisos[1]).toMatch(/Pagamento, documentos e lembrete passam/)
+    const cancel = avisosDaAlteracao(agendamento(), { data: { de: '2026-11-12', para: '2026-11-20' } }, { desfecho: 'CANCELLED' })
+    expect(cancel[0]).toMatch(/como cancelamento/)
+  })
+
+  it('sem remarcação informada, mudar a data avisa como antes', () => {
+    const avisos = avisosDaAlteracao(agendamento(), { data: { de: '2026-11-12', para: '2026-11-14' } })
+    expect(avisos.some((t) => /fica registrado como/.test(t))).toBe(false)
+  })
 })
 
 describe('textoDoDesconto', () => {

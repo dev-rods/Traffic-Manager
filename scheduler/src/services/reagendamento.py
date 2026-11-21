@@ -29,6 +29,20 @@ FOLGA_DEPOIS_MIN = 10
 # Fragmentos para FILTER (...) e WHERE. `{a}` é o alias da tabela.
 E_REAGENDADO = "({a}.status = 'CANCELLED' AND {a}.rescheduled_to_id IS NOT NULL)"
 E_CANCELADO_DE_VERDADE = "({a}.status = 'CANCELLED' AND {a}.rescheduled_to_id IS NULL)"
+# Falta é falta, com ou sem vínculo (PRD 054): remarcar com menos de 24 h
+# deixa o antigo em NO_SHOW apontando para o novo, e isso conta como falta,
+# não como reagendamento.
+E_FALTA = "({a}.status = 'NO_SHOW')"
+# O que entra em dinheiro e em "agendamentos": nem cancelado, nem falta
+# (PRD 054, decisão 5). Negativo de propósito: diz o que se tira, sem exigir
+# presença confirmada. `{a}` opcional: sem alias, use ATIVOS.format(a="") e
+# o ponto some.
+ATIVOS = "{a}status NOT IN ('CANCELLED', 'NO_SHOW')"
+
+
+def ativos(alias: str = "") -> str:
+    """`ATIVOS` com ou sem alias: ativos("a") -> "a.status NOT IN (...)"."""
+    return ATIVOS.format(a=f"{alias}." if alias else "")
 
 _VINCULA = """
 UPDATE scheduler.appointments a
@@ -36,7 +50,7 @@ UPDATE scheduler.appointments a
  WHERE a.id = (
    SELECT c.id FROM scheduler.appointments c
     WHERE c.clinic_id = %(clinic)s AND c.patient_id = %(patient)s::uuid
-      AND c.status = 'CANCELLED' AND c.rescheduled_to_id IS NULL
+      AND c.status IN ('CANCELLED', 'NO_SHOW') AND c.rescheduled_to_id IS NULL
       AND c.id <> %(novo)s::uuid
       AND c.updated_at >= %(criado_em)s - make_interval(mins => %(janela)s)
       AND c.updated_at <= %(criado_em)s + make_interval(mins => %(folga)s)
@@ -48,7 +62,7 @@ _CANDIDATO = """
    SELECT c.id, c.appointment_date, c.updated_at
      FROM scheduler.appointments c
     WHERE c.clinic_id = %(clinic)s AND c.patient_id = %(patient)s::uuid
-      AND c.status = 'CANCELLED' AND c.rescheduled_to_id IS NULL
+      AND c.status IN ('CANCELLED', 'NO_SHOW') AND c.rescheduled_to_id IS NULL
       AND c.id <> %(novo)s::uuid
       AND c.updated_at >= %(criado_em)s - make_interval(mins => %(janela)s)
       AND c.updated_at <= %(criado_em)s + make_interval(mins => %(folga)s)

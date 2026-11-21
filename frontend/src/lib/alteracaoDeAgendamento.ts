@@ -1,4 +1,5 @@
 import type { Appointment } from '@/types'
+import { nomeDoDesfecho, type Desfecho } from './desfecho'
 
 /**
  * O que muda num agendamento já marcado, em palavras (PRD 043).
@@ -50,9 +51,19 @@ export function linhasDaAlteracao(a: AlteracaoPretendida): LinhaDaAlteracao[] {
 export function avisosDaAlteracao(
   appointment: Appointment,
   a: AlteracaoPretendida,
+  /** PRD 054: mudar a data é remarcar; o dia antigo recebe este desfecho. */
+  remarcacao?: { desfecho: Desfecho } | null,
 ): string[] {
   const avisos: string[] = []
   const mudouHorario = Boolean(a.data || a.horario)
+
+  if (a.data && remarcacao) {
+    const dia = a.data.de.split('-').reverse().slice(0, 2).join('/')
+    avisos.push(
+      `O agendamento de ${dia} fica registrado como ${nomeDoDesfecho(remarcacao.desfecho)} e nasce um novo na data escolhida.`,
+    )
+    avisos.push('Pagamento, documentos e lembrete passam para o novo agendamento.')
+  }
 
   if (mudouHorario) {
     avisos.push('O horário anterior fica livre para outra pessoa.')

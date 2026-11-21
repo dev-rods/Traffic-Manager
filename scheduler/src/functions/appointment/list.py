@@ -92,6 +92,10 @@ def handler(event, context):
                 -- em vez de "Cancelado" e leva ao novo.
                 a.rescheduled_to_id,
                 rt.appointment_date AS rescheduled_to_date,
+                -- PRD 054: de onde veio (remarcacao) e o desfecho sobreposto.
+                a.rescheduled_from_id,
+                rf.appointment_date AS rescheduled_from_date,
+                a.outcome_reason,
                 vivo.id AS payment_id, vivo.method AS payment_method,
                 vivo.status AS payment_status, vivo.paid_at AS payment_paid_at,
                 vivo.amount_cents AS payment_price_cents,
@@ -106,6 +110,7 @@ def handler(event, context):
             LEFT JOIN scheduler.services s ON a.service_id = s.id
             LEFT JOIN scheduler.professionals pr ON a.professional_id = pr.id
             LEFT JOIN scheduler.appointments rt ON rt.id = a.rescheduled_to_id
+            LEFT JOIN scheduler.appointments rf ON rf.id = a.rescheduled_from_id
             LEFT JOIN LATERAL (
                 SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at) as areas_display
                 FROM scheduler.appointment_service_areas asa

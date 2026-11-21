@@ -97,13 +97,18 @@ class TestSoAreas(unittest.TestCase):
 
 class TestSoDataHora(unittest.TestCase):
     def test_move_sem_tocar_nas_areas(self):
+        """Outra data e remarcacao (PRD 054): o antigo encerra, nasce o novo,
+        e a tool devolve o id NOVO - e nele que a sessao da pessoa vive."""
         ex = _sem_combos(executor())
+        ex.appointment_service.remarca.return_value = {"antigo": {"id": AID}, "novo": {"id": "ap-novo"}}
         r = ex._tool_alterar_agendamento(
             {"appointment_id": AID, "new_date": "2026-11-19", "new_time": "15:25"},
             CLINIC, PHONE, dict(CTX))
         self.assertTrue(r["success"])
         self.assertFalse(r["horario_mantido"])
-        ex.appointment_service.reschedule_appointment.assert_called_once_with(AID, "2026-11-19", "15:25")
+        self.assertEqual(r["appointment_id"], "ap-novo")
+        ex.appointment_service.remarca.assert_called_once_with(AID, "2026-11-19", "15:25")
+        ex.appointment_service.reschedule_appointment.assert_not_called()
         ex.appointment_service.update_appointment_services.assert_not_called()
 
     def test_so_a_hora_mantem_a_data(self):
@@ -122,19 +127,36 @@ class TestSoDataHora(unittest.TestCase):
 
 
 class TestOsDois(unittest.TestCase):
-    def test_areas_sem_conferir_conflito_depois_remarca(self):
-        """A ordem do painel: a data ainda e a antiga quando as areas entram."""
+    def test_areas_entram_no_novo_depois_de_remarcar(self):
+        """Outra data (PRD 054): primeiro a remarcacao, depois as areas no
+        registro NOVO, conferindo conflito na data nova."""
+        ex = _sem_combos(executor())
+        ordem = []
+        ex.appointment_service.update_appointment_services.side_effect = (
+            lambda *a, **k: ordem.append(("areas", a[0], k.get("verificar_conflito"))))
+        ex.appointment_service.remarca.side_effect = (
+            lambda *a: (ordem.append(("remarca", a[1:])) or {"antigo": {"id": AID}, "novo": {"id": "ap-novo"}}))
+        r = ex._tool_alterar_agendamento(
+            {"appointment_id": AID, "service_area_pairs": SO_AXILA,
+             "new_date": "2026-11-19", "new_time": "15:25"}, CLINIC, PHONE, dict(CTX))
+        self.assertTrue(r["success"])
+        self.assertEqual(ordem, [("remarca", ("2026-11-19", "15:25")), ("areas", "ap-novo", True)])
+
+    def test_mesma_data_areas_antes_e_horario_depois_no_mesmo_registro(self):
+        """Mesma data e edicao, como antes: areas sem conferir conflito, horario
+        em seguida."""
         ex = _sem_combos(executor())
         ordem = []
         ex.appointment_service.update_appointment_services.side_effect = (
             lambda *a, **k: ordem.append(("areas", k.get("verificar_conflito"))))
         ex.appointment_service.reschedule_appointment.side_effect = (
-            lambda *a: ordem.append(("remarca", a[1:])))
+            lambda *a: ordem.append(("horario", a[1:])))
         r = ex._tool_alterar_agendamento(
             {"appointment_id": AID, "service_area_pairs": SO_AXILA,
-             "new_date": "2026-11-19", "new_time": "15:25"}, CLINIC, PHONE, dict(CTX))
+             "new_date": "2026-11-06", "new_time": "15:25"}, CLINIC, PHONE, dict(CTX))
         self.assertTrue(r["success"])
-        self.assertEqual(ordem, [("areas", False), ("remarca", ("2026-11-19", "15:25"))])
+        self.assertEqual(ordem, [("areas", False), ("horario", ("2026-11-06", "15:25"))])
+        ex.appointment_service.remarca.assert_not_called()
 
 
 class TestContrato(unittest.TestCase):

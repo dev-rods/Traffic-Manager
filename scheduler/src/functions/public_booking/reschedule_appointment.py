@@ -3,8 +3,9 @@
 
 Até aqui "Meus agendamentos" só cancelava, e quem queria outro dia cancelava
 e marcava de novo: 81% dos cancelamentos vindos do site eram remarcações.
-Este endpoint usa o mesmo `reschedule_appointment` do painel e do bot: o
-registro é o mesmo, só muda a data. Nenhum CANCELLED nasce.
+Este endpoint usa o mesmo `remarca` do painel e do bot (PRD 054): mesma data
+move o horário no mesmo registro; outra data encerra o antigo com o desfecho
+da antecedência e cria o novo, vinculados.
 
 Mesmo contrato de segurança do cancelar: código OTP válido e o agendamento
 precisa ser deste telefone.
@@ -100,12 +101,17 @@ def handler(event, context):
             return http_response(404, {"status": "ERROR", "message": "Agendamento não encontrado para este telefone"})
 
         service = AppointmentService.completo(db)
-        result = service.reschedule_appointment(appointment_id, nova_data, nova_hora)
+        # PRD 054: outra data encerra o antigo (desfecho pela antecedencia) e
+        # cria o novo; mesma data so move o horario. A pessoa nao ouve o
+        # desfecho (decisao 6): a resposta e o agendamento que vale.
+        resultado = service.remarca(appointment_id, nova_data, nova_hora)
+        result = resultado["novo"]
 
         return http_response(200, {
             "status": "SUCCESS",
             "message": "Agendamento remarcado com sucesso",
             "appointment": _serialize_row(result),
+            "previous": _serialize_row(resultado["antigo"]) if resultado["antigo"] else None,
         })
 
     except ConflictError:
