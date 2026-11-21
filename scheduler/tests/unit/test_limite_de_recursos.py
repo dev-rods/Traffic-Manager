@@ -59,6 +59,10 @@ class TestNumeroDeFuncoes(unittest.TestCase):
     # 78 em uso + 2 da fase 3 (ExpiraAtendimentos, Tarefas) + margem.
     # Subir isto exige MEDIR de novo, e nao so somar:
     #   aws cloudformation list-stack-resources --stack-name clinic-scheduler-infra-prod
+    # 21/11/2026 (PRD 055): o cors: true saiu das rotas e os 76 OPTIONS
+    # sairam do stack; dev medido em 418 com 86 funcoes (~4 recursos por
+    # funcao nova: funcao, permission, resource, metodo). Subir este numero
+    # so depois de medir prod sem CORS.
     LIMITE_DE_FUNCOES = 86
 
     def test_cabe_no_stack(self):

@@ -45,6 +45,36 @@ Essência, Premium, Rods). É por isso que `GET /api/clinics` prova o stage.
 - 11 → painel em `localhost:5199`: `/api/clinics` 200 com 3 clínicas; `/login`
   serve o SPA; `/api/rota-inexistente` devolve o 403 JSON do gateway.
 - Build, lint e vitest dos três apps verdes (692 / 110 / 37); pytest 2436.
-- Casos 1, 2, 4 a 8 e 10: (preenchidos abaixo após o push e o deploy dev).
+- 1 → os previews da Vercel têm proteção SSO (302 para `vercel.com/sso-api`)
+  e não dão para smoke por curl. O rewrite foi provado pelo host público de
+  dev do checkin (caso 2), que usa o mesmo `vercel.json`.
+- 2 → `checkin-dev-ten.vercel.app/api/clinics`: 200 com as 3 clínicas de dev
+  (deploy manual do `checkin/` no projeto `checkin-dev`, receita da 048).
+  `booking-site-dev.vercel.app` existe fora dos 4 projetos listados e aponta
+  para dev; ganhou regra própria no `vercel.json` do site.
+- 4 → `/api/rota-inexistente` devolve o 403 JSON do gateway. 5 → SPA intacto.
+- 6 → 30 amostras, p50/p95 em ms: dashboard direto 233/464, via rewrite
+  317/490; `/clinics` direto 197/422, via rewrite 217/434. Acréscimo de 20 a
+  85 ms no p50.
+- 7 → `appointments` sem filtro: mesmo `total` (50) direto e via rewrite,
+  77 KB inteiros.
+- 8 → stack de dev **494 -> 418**, `OPTIONS` no stack 76 -> 0. Deploy dev
+  layer 204.
+- 10 → logo após o deploy, `OPTIONS /clinics` ainda respondia 200 com os
+  cabeçalhos do MOCK: o CloudFormation tira o snapshot do
+  `ApiGateway::Deployment` ANTES de apagar os métodos removidos, então o stage
+  seguia servindo os OPTIONS antigos. `aws apigateway create-deployment
+  --rest-api-id tuvr5sfhz3 --stage-name dev` renovou o snapshot e todas as
+  rotas passaram a 403 `MissingAuthenticationToken`. **Em prod, repetir esse
+  comando depois do `serverless deploy`** (ou aceitar que os OPTIONS mortos
+  respondam até o próximo deploy; não fazem mal).
+- Preview do site falhou na primeira tentativa por escape inválido
+  (`\.` em vez de `\\.`) na regra acrescentada à mão; corrigido, READY.
+- Guarda: `test_nenhuma_rota_com_cors`. `LIMITE_DE_FUNCOES` continua 86 até
+  medir prod sem CORS.
 
-**Prod:** pendente (merge + deploy, com o André).
+**Prod:** pendente, com o André: merge do PR #236 (sobe os 3 apps pela Vercel;
+`checkin-prod` é deploy manual, receita da 048), smoke dos hosts de prod
+(caso 3), `serverless deploy --stage prod`, `create-deployment` do stage prod,
+medir (esperado 418), apagar `VITE_API_BASE_URL` nos 4 projetos, subir
+`LIMITE_DE_FUNCOES` com a conta nova.
