@@ -69,6 +69,16 @@ código do PR #241, rodado da branch antes do merge):
   `substituir`: 200 "remarcado (cancelamento no dia anterior)", a mais
   próxima do mês cancelada.
 - 9 → `test_bot_mesmo_mes.py` (10 testes) verde; pytest 2470.
-- 10 → browser: pendente do merge do PR #241 (painel e site sobem pela
-  Vercel no merge).
+- 10 → browser (Playwright headless, apps locais com o proxy do Vite para a
+  API de dev, antes do merge): site percorre áreas → dia → horário → dados →
+  "Confirme seu celular" (o `devCode` vem na resposta de `verify/send`; em
+  `npm run dev` o StrictMode monta o form duas vezes e vale o último código)
+  → aviso "Sua sessão de 25/11/2026 às 16:00 será substituída por 27/11/2026
+  às 20:50. Confirmar?" com o botão "Falar no WhatsApp" (`wa.me/<número da
+  clínica>`) → "Confirmar remarcação" → "Agendamento remarcado!"; a sessão de
+  25/11 ficou cancelada com `rescheduled_to_id`. Painel (sessão ADMIN): "Novo
+  agendamento" no mesmo mês mostra o aviso inline no lugar dos botões, com
+  "Manter as duas" visível para ADMIN; "Voltar" devolve o formulário. Sem
+  erro no console além do próprio 409 esperado. Capturas no scratchpad da
+  sessão (`shots/site-06-aviso.png`, `shots/painel-03-aviso.png`).
 - Limpeza: as sessões do número de teste foram canceladas no fim.
