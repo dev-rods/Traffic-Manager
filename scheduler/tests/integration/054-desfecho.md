@@ -63,7 +63,18 @@ Script equivalente: `valida_054.py` (Python/urllib) no scratchpad da sessão.
 - Fixtures: as vivas foram canceladas; as `NO_SHOW` de teste ficaram em dev
   (telefone 5511999990541).
 
-**Prod:** pendente (migration + deploy com o André). Atenção: ao mergear, o
-painel sobe antes do backend de prod e passa a mostrar "vai contar como
-falta" enquanto o backend antigo ainda grava `CANCELLED`; fechar a janela com
-o deploy logo em seguida.
+**Prod, 21/11/2026** (PR #231 mergeado pelo André; migration das três
+colunas aplicada e conferida no `information_schema`; `serverless deploy
+--stage prod` concluído, layer 161; stack em 494/500 recursos). Smoke só de
+leitura:
+
+- `GET reports?period=current_month`: Essência `no_show_appointments: 13`,
+  `attendance_rate: 78.0`; Nobre `no_show_appointments: 2`,
+  `attendance_rate: 90.5`. Receita já sem as faltas.
+- `GET dashboard?date=`: `no_show_appointments` presente nas quatro clínicas.
+- `GET clinics/{c}/appointments`: cada item traz `rescheduled_from_id`,
+  `rescheduled_from_date`, `outcome_reason` (além dos `rescheduled_to_*`).
+- Nenhuma escrita em prod. Casos 9 (site, OTP) e 10 (painel) ficam com o
+  André.
+- Janela do merge: o painel subiu pela Vercel alguns minutos antes do backend;
+  nenhum cancelamento foi feito nesse intervalo (conferido pelo relatório).
