@@ -95,4 +95,5 @@ Essência, Premium, Rods). É por isso que `GET /api/clinics` prova o stage.
   só `VITE_BOOKING_API_KEY` onde cabe.
 - `LIMITE_DE_FUNCOES` 86 -> 104: 82 recursos livres a ~4 por função nova,
   com folga de ~10.
-- Smoke no browser (caso 9): pelo André.
+- 9 → smoke no browser feito pelo André em 21/11/2026: painel, site e checkin
+  em prod sem erro de rede. 055 fechado.
