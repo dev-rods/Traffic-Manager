@@ -38,7 +38,6 @@ WhatsAppWebhook:
     - http:
         path: webhook/whatsapp
         method: post
-        cors: true
 
 WhatsAppStatusWebhook:
   handler: src.functions.webhook.status_handler.handler
@@ -61,4 +60,3 @@ WhatsAppStatusWebhook:
     - http:
         path: webhook/whatsapp/status
         method: post
-        cors: true

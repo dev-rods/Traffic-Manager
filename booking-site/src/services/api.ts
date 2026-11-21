@@ -1,10 +1,12 @@
 import axios, { AxiosError } from 'axios'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL
 const BOOKING_API_KEY = import.meta.env.VITE_BOOKING_API_KEY
 
+// '/api' no próprio domínio: em produção a Vercel reescreve para o API
+// Gateway (vercel.json); em `npm run dev`, o proxy do Vite. Sem origem
+// cruzada não há CORS nem preflight (PRD 055).
 export const api = axios.create({
-  baseURL: BASE_URL,
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
     'x-api-key': BOOKING_API_KEY,

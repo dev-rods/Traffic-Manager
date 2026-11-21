@@ -6,7 +6,6 @@ GetDurationRules:
     - http:
         path: clinics/{clinicId}/duration-rules
         method: get
-        cors: true
 
 UpdateDurationRules:
   handler: src.functions.duration_rules.update.handler
@@ -16,5 +15,4 @@ UpdateDurationRules:
     - http:
         path: clinics/{clinicId}/duration-rules
         method: put
-        cors: true
 

@@ -10,8 +10,8 @@ para este arquivo.
 ## Preparação
 
 ```bash
-source booking-site/.env   # traz VITE_API_BASE_URL e VITE_BOOKING_API_KEY (valores nunca neste arquivo)
-BASE="$VITE_API_BASE_URL"; KEY="$VITE_BOOKING_API_KEY"   # use o .env de dev
+source booking-site/.env   # traz VITE_API_PROXY_TARGET e VITE_BOOKING_API_KEY (valores nunca neste arquivo)
+BASE="$VITE_API_PROXY_TARGET"; KEY="$VITE_BOOKING_API_KEY"   # use o .env de dev
 C="<clinic-id de dev>"
 SVC="<uuid de um serviço com áreas>"; A1="<uuid área>"; A2="<uuid área>"; A3="<uuid área>"
 ```

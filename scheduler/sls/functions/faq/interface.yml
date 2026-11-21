@@ -6,7 +6,6 @@ CreateFaq:
     - http:
         path: clinics/{clinicId}/faq
         method: post
-        cors: true
 
 ListFaq:
   handler: src.functions.faq.list.handler
@@ -16,7 +15,6 @@ ListFaq:
     - http:
         path: clinics/{clinicId}/faq
         method: get
-        cors: true
 
 UpdateFaq:
   handler: src.functions.faq.update.handler
@@ -26,4 +24,3 @@ UpdateFaq:
     - http:
         path: faq/{faqId}
         method: put
-        cors: true

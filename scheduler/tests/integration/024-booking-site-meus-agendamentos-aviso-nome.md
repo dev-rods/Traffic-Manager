@@ -10,8 +10,8 @@ para este arquivo.
 ## Preparação
 
 ```bash
-source booking-site/.env   # VITE_API_BASE_URL e VITE_BOOKING_API_KEY de dev
-BASE="$VITE_API_BASE_URL"; KEY="$VITE_BOOKING_API_KEY"
+source booking-site/.env   # VITE_API_PROXY_TARGET e VITE_BOOKING_API_KEY de dev
+BASE="$VITE_API_PROXY_TARGET"; KEY="$VITE_BOOKING_API_KEY"
 C="<clinic-id de dev com profissional e agenda>"   # ex.: a de mais regras em dev
 SVC="<uuid de serviço com áreas>"; A1="<uuid área>"
 FONE="(11) 90000-0024"   # fictício: a confirmação por WhatsApp não chega a ninguém

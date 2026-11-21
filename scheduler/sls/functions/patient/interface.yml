@@ -6,7 +6,6 @@ ListPatients:
     - http:
         path: clinics/{clinicId}/patients
         method: get
-        cors: true
 
 UpdatePatient:
   handler: src.functions.patient.update.handler
@@ -16,7 +15,6 @@ UpdatePatient:
     - http:
         path: clinics/{clinicId}/patients/{patientId}
         method: patch
-        cors: true
 
 CreatePatient:
   handler: src.functions.patient.create.handler
@@ -26,7 +24,6 @@ CreatePatient:
     - http:
         path: clinics/{clinicId}/patients
         method: post
-        cors: true
 
 DeletePatient:
   handler: src.functions.patient.delete.handler
@@ -36,4 +33,3 @@ DeletePatient:
     - http:
         path: clinics/{clinicId}/patients/{patientId}
         method: delete
-        cors: true

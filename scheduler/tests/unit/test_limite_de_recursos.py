@@ -59,6 +59,10 @@ class TestNumeroDeFuncoes(unittest.TestCase):
     # 78 em uso + 2 da fase 3 (ExpiraAtendimentos, Tarefas) + margem.
     # Subir isto exige MEDIR de novo, e nao so somar:
     #   aws cloudformation list-stack-resources --stack-name clinic-scheduler-infra-prod
+    # 21/11/2026 (PRD 055): o cors: true saiu das rotas e os 76 OPTIONS
+    # sairam do stack; dev medido em 418 com 86 funcoes (~4 recursos por
+    # funcao nova: funcao, permission, resource, metodo). Subir este numero
+    # so depois de medir prod sem CORS.
     LIMITE_DE_FUNCOES = 86
 
     def test_cabe_no_stack(self):
@@ -75,6 +79,26 @@ class TestNumeroDeFuncoes(unittest.TestCase):
             f"CloudFormation. Antes de somar mais uma, dividir o stack "
             f"(serverless-plugin-split-stacks) ou separar o servico.",
         )
+
+
+class TestSemCors(unittest.TestCase):
+    """Nenhuma rota declara `cors: true` (PRD 055).
+
+    Cada `cors: true` custava um metodo OPTIONS no stack: eram 76 dos 494
+    recursos de prod em 21/11/2026. O browser nao precisa mais de CORS porque
+    painel, site e checkin chegam ao API Gateway por rewrite da Vercel no
+    proprio dominio. Voltar a declarar cors numa rota recoloca o OPTIONS e
+    reabre o caminho para o limite de 500.
+    """
+
+    def test_nenhuma_rota_com_cors(self):
+        pasta = SERVERLESS.parent / "sls" / "functions"
+        com_cors = sorted(
+            str(arq.relative_to(SERVERLESS.parent))
+            for arq in pasta.glob("*/interface.yml")
+            if re.search(r"^\s*cors:", arq.read_text(encoding="utf-8"), re.M)
+        )
+        self.assertEqual(com_cors, [], "rota com cors: o browser chega por rewrite da Vercel, nao por CORS")
 
 
 if __name__ == "__main__":

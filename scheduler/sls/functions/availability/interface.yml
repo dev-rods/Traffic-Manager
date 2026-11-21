@@ -6,7 +6,6 @@ CreateAvailabilityRule:
     - http:
         path: clinics/{clinicId}/availability-rules
         method: post
-        cors: true
 
 ListAvailabilityRules:
   handler: src.functions.availability.rules.list_handler
@@ -16,7 +15,6 @@ ListAvailabilityRules:
     - http:
         path: clinics/{clinicId}/availability-rules
         method: get
-        cors: true
 
 DeleteAvailabilityRule:
   handler: src.functions.availability.rules.delete_handler
@@ -26,7 +24,6 @@ DeleteAvailabilityRule:
     - http:
         path: clinics/{clinicId}/availability-rules/{ruleId}
         method: delete
-        cors: true
 
 UpdateAvailabilityRule:
   handler: src.functions.availability.rules.update_handler
@@ -36,7 +33,6 @@ UpdateAvailabilityRule:
     - http:
         path: clinics/{clinicId}/availability-rules/{ruleId}
         method: patch
-        cors: true
 
 CreateAvailabilityException:
   handler: src.functions.availability.exceptions.create_handler
@@ -46,7 +42,6 @@ CreateAvailabilityException:
     - http:
         path: clinics/{clinicId}/availability-exceptions
         method: post
-        cors: true
 
 ListAvailabilityExceptions:
   handler: src.functions.availability.exceptions.list_handler
@@ -56,7 +51,6 @@ ListAvailabilityExceptions:
     - http:
         path: clinics/{clinicId}/availability-exceptions
         method: get
-        cors: true
 
 DeleteAvailabilityException:
   handler: src.functions.availability.exceptions.delete_handler
@@ -66,7 +60,6 @@ DeleteAvailabilityException:
     - http:
         path: clinics/{clinicId}/availability-exceptions/{exceptionId}
         method: delete
-        cors: true
 
 GetAvailableSlots:
   handler: src.functions.availability.slots.handler
@@ -76,4 +69,3 @@ GetAvailableSlots:
     - http:
         path: clinics/{clinicId}/available-slots
         method: get
-        cors: true

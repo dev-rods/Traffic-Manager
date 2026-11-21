@@ -246,7 +246,7 @@ npm run test:ci       # Single run (CI)
 - Token: `localStorage` key `tm_token`, clinic: `tm_clinic_id`
 - Interceptor Axios: injeta `x-api-key` header em toda request
 - 401 → logout automático + redirect `/login`
-- Base URL: `VITE_API_BASE_URL` (env var)
+- Base URL: `/api` no próprio domínio. Em produção o `vercel.json` reescreve para o API Gateway do stage (previews da Vercel vão para dev, produção para prod, pelo host); em `npm run dev` o proxy do Vite faz o mesmo (`VITE_API_PROXY_TARGET`, padrão dev). A API não tem CORS (PRD 055)
 
 ---
 

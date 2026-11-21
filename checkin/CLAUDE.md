@@ -96,6 +96,8 @@ Para o `checkin-prod`, o mesmo comando com `/prod/VERCEL_API_TOKEN` e o
 (`curl` no `index-*.js` procurando um texto da tela nova).
 
 URL: https://checkin-dev-ten.vercel.app/{clinicId}. Env vars do projeto:
-`VITE_API_BASE_URL` (dev) e `VITE_BOOKING_API_KEY` (a mesma chave pública do
-booking-site de dev). O que falta para ligar o pagamento em prod está no
-PRD 026 (§7).
+`VITE_BOOKING_API_KEY` (a mesma chave pública do
+booking-site de dev). A API é `/api` no próprio domínio: o `vercel.json`
+reescreve para dev quando o host é `checkin-dev-ten.vercel.app` ou preview, e
+para prod nos demais (PRD 055). O que falta para ligar o pagamento em prod está
+no PRD 026 (§7).

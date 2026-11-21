@@ -42,23 +42,18 @@ AttendantControl:
     - http:
         path: attendant/activate
         method: post
-        cors: true
     - http:
         path: attendant/deactivate
         method: post
-        cors: true
     - http:
         path: attendant/mute
         method: post
-        cors: true
     - http:
         path: attendant/unmute
         method: post
-        cors: true
     - http:
         path: attendant/status
         method: get
-        cors: true
 
 AttendantPanel:
   handler: src.functions.attendant.panel.handler
@@ -68,7 +63,6 @@ AttendantPanel:
     - http:
         path: attendant/panel
         method: get
-        cors: true
 
 ConversationManager:
   handler: src.functions.attendant.conversations.handler
@@ -94,7 +88,6 @@ ConversationManager:
     - http:
         path: clinics/{clinicId}/conversations
         method: get
-        cors: true
 
 ConversationMessages:
   handler: src.functions.attendant.messages.handler
@@ -118,7 +111,6 @@ ConversationMessages:
     - http:
         path: clinics/{clinicId}/conversations/{phone}/messages
         method: get
-        cors: true
 
 ActiveConversations:
   handler: src.functions.attendant.list_active.handler
@@ -141,5 +133,4 @@ ActiveConversations:
     - http:
         path: clinics/{clinicId}/conversations/active
         method: get
-        cors: true
 

@@ -37,53 +37,41 @@ PublicBooking:
     - http:
         path: public/clinics/{clinicId}/bootstrap
         method: get
-        cors: true
     - http:
         path: public/clinics/{clinicId}/available-slots
         method: get
-        cors: true
     - http:
         path: public/clinics/{clinicId}/availability
         method: get
-        cors: true
     - http:
         path: public/clinics/{clinicId}/verify/send
         method: post
-        cors: true
     - http:
         path: public/clinics/{clinicId}/verify/confirm
         method: post
-        cors: true
     - http:
         path: public/clinics/{clinicId}/quote
         method: post
-        cors: true
     - http:
         path: public/clinics/{clinicId}/appointments
         method: post
-        cors: true
     - http:
         path: public/clinics/{clinicId}/my-appointments
         method: get
-        cors: true
     - http:
         path: public/clinics/{clinicId}/appointments/{appointmentId}/cancel
         method: post
-        cors: true
     - http:
         path: public/clinics/{clinicId}/appointments/{appointmentId}/reschedule
         method: post
-        cors: true
     - http:
         path: public/resolve-domain
         method: get
-        cors: true
     # Check-in do iPad (PRD 026). Coringa: a stack está perto do limite de
     # 500 recursos do CloudFormation, e uma rota por sub-rota gastaria ~4 cada.
     - http:
         path: public/clinics/{clinicId}/checkin/{proxy+}
         method: any
-        cors: true
     # Chamado pelo Asaas, servidor a servidor: sem CORS.
     - http:
         path: public/asaas/webhook

@@ -6,7 +6,6 @@ CreateServiceArea:
     - http:
         path: services/{serviceId}/areas
         method: post
-        cors: true
 
 ListServiceAreas:
   handler: src.functions.service_area.list.handler
@@ -16,7 +15,6 @@ ListServiceAreas:
     - http:
         path: services/{serviceId}/areas
         method: get
-        cors: true
 
 UpdateServiceArea:
   handler: src.functions.service_area.update.handler
@@ -26,7 +24,6 @@ UpdateServiceArea:
     - http:
         path: services/{serviceId}/areas/{areaId}
         method: put
-        cors: true
 
 DeleteServiceArea:
   handler: src.functions.service_area.delete.handler
@@ -36,4 +33,3 @@ DeleteServiceArea:
     - http:
         path: services/{serviceId}/areas/{areaId}
         method: delete
-        cors: true

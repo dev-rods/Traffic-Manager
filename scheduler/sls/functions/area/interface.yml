@@ -6,7 +6,6 @@ CreateArea:
     - http:
         path: clinics/{clinicId}/areas
         method: post
-        cors: true
 
 ListAreas:
   handler: src.functions.area.list.handler
@@ -16,7 +15,6 @@ ListAreas:
     - http:
         path: clinics/{clinicId}/areas
         method: get
-        cors: true
 
 GetArea:
   handler: src.functions.area.get.handler
@@ -26,7 +24,6 @@ GetArea:
     - http:
         path: areas/{areaId}
         method: get
-        cors: true
 
 UpdateArea:
   handler: src.functions.area.update.handler
@@ -36,7 +33,6 @@ UpdateArea:
     - http:
         path: areas/{areaId}
         method: put
-        cors: true
 
 DeleteArea:
   handler: src.functions.area.delete.handler
@@ -46,4 +42,3 @@ DeleteArea:
     - http:
         path: areas/{areaId}
         method: delete
-        cors: true

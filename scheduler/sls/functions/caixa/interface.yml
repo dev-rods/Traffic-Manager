@@ -10,4 +10,3 @@ Caixa:
     - http:
         path: clinics/{clinicId}/caixa/{proxy+}
         method: any
-        cors: true

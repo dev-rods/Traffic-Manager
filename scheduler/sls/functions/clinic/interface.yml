@@ -6,7 +6,6 @@ CreateClinic:
     - http:
         path: clinics
         method: post
-        cors: true
 
 ListClinics:
   handler: src.functions.clinic.list.handler
@@ -16,7 +15,6 @@ ListClinics:
     - http:
         path: clinics
         method: get
-        cors: true
 
 GetClinic:
   handler: src.functions.clinic.get.handler
@@ -26,7 +24,6 @@ GetClinic:
     - http:
         path: clinics/{clinicId}
         method: get
-        cors: true
 
 GetClinicDashboard:
   handler: src.functions.clinic.dashboard.handler
@@ -36,7 +33,6 @@ GetClinicDashboard:
     - http:
         path: clinics/{clinicId}/dashboard
         method: get
-        cors: true
 
 GetAgendaSummary:
   handler: src.functions.clinic.agenda_summary.handler
@@ -46,7 +42,6 @@ GetAgendaSummary:
     - http:
         path: clinics/{clinicId}/agenda-summary
         method: get
-        cors: true
 
 GetClinicReports:
   handler: src.functions.clinic.reports.handler
@@ -56,7 +51,6 @@ GetClinicReports:
     - http:
         path: clinics/{clinicId}/reports
         method: get
-        cors: true
 
 UpdateClinic:
   handler: src.functions.clinic.update.handler
@@ -66,7 +60,6 @@ UpdateClinic:
     - http:
         path: clinics/{clinicId}
         method: put
-        cors: true
 
 UploadAssetUrl:
   handler: src.functions.clinic.upload_url.handler
@@ -89,7 +82,6 @@ UploadAssetUrl:
     - http:
         path: clinics/{clinicId}/assets/upload-url
         method: post
-        cors: true
 
 BotMetrics:
   handler: src.functions.clinic.bot_metrics.handler
@@ -113,4 +105,3 @@ BotMetrics:
     - http:
         path: clinics/{clinicId}/bot-metrics
         method: get
-        cors: true
