@@ -37,6 +37,7 @@ from src.services.politica_de_desconto import decide as decide_desconto
 from src.services.duration_rules import calcula_duracao
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.autoatendimento import link_ja_foi
+from src.services.appointment_service import SessaoNoMesmoMes
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,22 @@ def _anota_combos(resultado, trocas):
             + "; ".join(f"{' + '.join(t['de'])} -> {t['para']}" for t in trocas)
         )
     return resultado
+
+
+def _mesmo_mes(data_a, data_b) -> bool:
+    """Mesmo ano-mes em datas ISO (PRD 056). Ilegivel nao e igual."""
+    a, b = str(data_a or ""), str(data_b or "")
+    return len(a) >= 7 and len(b) >= 7 and a[:7] == b[:7]
+
+
+def _sessao_do_existente(existente):
+    """A linha do servico (`SessaoNoMesmoMes.existente`) no dialeto das tools."""
+    return {
+        "appointment_id": str(existente.get("id")),
+        "date": str(existente.get("appointment_date")),
+        "time": str(existente.get("start_time"))[:5],
+        "areas": existente.get("areas_display"),
+    }
 
 
 def _normaliza_hora(valor) -> Optional[str]:
@@ -370,14 +387,6 @@ TOOL_DEFINITIONS = [
                     "final_price_cents": {
                         "type": "integer",
                         "description": "Final price in cents after discount",
-                    },
-                    "segunda_sessao": {
-                        "type": "boolean",
-                        "description": (
-                            "true ONLY after the person explicitly confirmed she wants a "
-                            "SECOND session in addition to the one she already has. For "
-                            "changes to the existing session use alterar_agendamento."
-                        ),
                     },
                 },
                 "required": ["service_area_pairs", "date", "time"],
@@ -1114,7 +1123,7 @@ class ToolExecutor:
         recusa = self._recusa_sem_o_link("book_appointment", phone, ctx)
         if recusa:
             return recusa
-        recusa = self._recusa_segunda_sessao(args, phone, ctx)
+        recusa = self._recusa_mesmo_mes(args, phone, ctx)
         if recusa:
             return recusa
         recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
@@ -1176,20 +1185,26 @@ class ToolExecutor:
         original_price_cents = args.get("original_price_cents")
         final_price_cents = args.get("final_price_cents")
 
-        result = self.appointment_service.create_appointment(
-            clinic_id=clinic_id,
-            phone=phone,
-            service_id=primary_service_id,
-            date=date,
-            time=time_str,
-            service_area_pairs=service_area_pairs,
-            total_duration_minutes=total_duration,
-            full_name=full_name,
-            discount_pct=discount_pct,
-            discount_reason=discount_reason,
-            original_price_cents=original_price_cents,
-            final_price_cents=final_price_cents,
-        )
+        try:
+            result = self.appointment_service.create_appointment(
+                clinic_id=clinic_id,
+                phone=phone,
+                service_id=primary_service_id,
+                date=date,
+                time=time_str,
+                service_area_pairs=service_area_pairs,
+                total_duration_minutes=total_duration,
+                full_name=full_name,
+                discount_pct=discount_pct,
+                discount_reason=discount_reason,
+                original_price_cents=original_price_cents,
+                final_price_cents=final_price_cents,
+            )
+        except SessaoNoMesmoMes as e:
+            # A guarda do servico (PRD 056). O ctx traz so a sessao futura
+            # MAIS PROXIMA; a do mesmo mes pode ser outra (legado).
+            logger.info(f"[MesmoMes] {phone}: book_appointment recusado pelo servico, sessão {e.existente['id']}")
+            return self._recado_do_mesmo_mes(_sessao_do_existente(e.existente))
 
         # Dados de cadastro: gravados no paciente, não no agendamento. São
         # opcionais na tool para o agendamento não falhar se a pessoa se recusar
@@ -1209,6 +1224,9 @@ class ToolExecutor:
             email=args.get("email"),
         )
 
+        # Sessao futura em OUTRO mes continua marcada (PRD 056): o modelo diz
+        # isso a ela, em vez de deixar pensar que trocou.
+        anterior = self._sessao_futura(ctx)
         return {
             "success": True,
             "appointment_id": str(result.get("id", "")),
@@ -1216,6 +1234,8 @@ class ToolExecutor:
             "time": time_str,
             "full_name": full_name,
             "total_duration_minutes": total_duration,
+            **({"sessao_anterior_mantida": {"date": anterior.get("data"), "time": anterior.get("hora")}}
+               if anterior else {}),
             # Sem isto, dizer "agendamento confirmado" logo depois de criar o
             # agendamento era acusado de afirmação sem respaldo - o fato tinha
             # acabado de acontecer, mas a tool não o devolvia.
@@ -1226,34 +1246,39 @@ class ToolExecutor:
             "status": result.get("status"),
         }
 
-    def _recusa_segunda_sessao(self, args, phone, ctx):
-        """book_appointment para quem JA TEM sessao futura: so com a pessoa
-        tendo dito que quer duas.
+    def _recusa_mesmo_mes(self, args, phone, ctx):
+        """book_appointment para quem JA TEM sessao futura NO MESMO MES da data
+        pedida: recusa sempre (PRD 056). Nao ha saida: nem a pessoa pedindo
+        duas com todas as letras. So um ADMIN, pelo painel, mantem duas.
 
         Em 09/11/2026 (Essencia) o caminho "alterar as areas" terminava em
-        book_appointment: linha nova, a antiga de pe, duas sessoes na agenda
-        para a mesma pessoa. A tool explica e o modelo refaz, como em
-        full_name_obrigatorio. `segunda_sessao=true` e o registro, no rastro
-        da tool, de que a duplicidade foi pedida (PRD 045).
+        book_appointment: linha nova, a antiga de pe (PRD 045). Ate 21/11 a
+        tool aceitava `segunda_sessao=true`; saiu. Sessao em OUTRO mes nao
+        barra: antecipar a reserva do mes seguinte e legitimo, e o sucesso
+        devolve `sessao_anterior_mantida` para o modelo avisar.
         """
         futuro = self._sessao_futura(ctx)
-        if not futuro or args.get("segunda_sessao") is True:
+        if not futuro or not _mesmo_mes(futuro.get("data"), args.get("date")):
             return None
-        logger.info(f"[Alteracao] {phone}: book_appointment recusado, sessão futura {futuro['id']}")
+        logger.info(f"[MesmoMes] {phone}: book_appointment recusado, sessão {futuro['id']} no mesmo mês")
+        return self._recado_do_mesmo_mes({
+            "appointment_id": futuro["id"],
+            "date": futuro.get("data"),
+            "time": futuro.get("hora"),
+            "areas": futuro.get("areas"),
+        })
+
+    @staticmethod
+    def _recado_do_mesmo_mes(sessao):
         return {
             "error": "ja_tem_sessao_marcada",
-            "sessao": {
-                "appointment_id": futuro["id"],
-                "date": futuro.get("data"),
-                "time": futuro.get("hora"),
-                "areas": futuro.get("areas"),
-            },
+            "sessao": sessao,
             "o_que_fazer": (
-                "Esta pessoa já tem sessão marcada (acima). Se ela quer MUDAR essa "
-                "sessão - áreas, dia ou hora -, chame alterar_agendamento. Só se ela "
-                "disser, com todas as letras, que quer OUTRA sessão além dessa, chame "
-                "book_appointment de novo com segunda_sessao=true e diga a ela que a "
-                "primeira continua marcada."
+                f"Esta pessoa já tem sessão em {_format_pt_br_date_label(sessao['date'])} às "
+                f"{sessao['time']} e não pode ter duas no mesmo mês. Diga a ela que essa sessão "
+                "será cancelada e remarcada para a data pedida, confirme com ela e chame "
+                f"alterar_agendamento com appointment_id={sessao['appointment_id']}, new_date e "
+                "new_time (e as áreas, se mudaram). Nunca book_appointment para isso."
             ),
         }
 
@@ -1322,6 +1347,19 @@ class ToolExecutor:
                     )
                 if moveu:
                     self.appointment_service.reschedule_appointment(appointment_id, data_final, hora_final)
+        except SessaoNoMesmoMes as e:
+            sessao = _sessao_do_existente(e.existente)
+            logger.info(f"[MesmoMes] {phone}: alterar {appointment_id} para {data_final} barrado por {sessao['appointment_id']}")
+            return {
+                "error": "ja_tem_sessao_nesse_mes",
+                "sessao": sessao,
+                "o_que_fazer": (
+                    f"Ela já tem outra sessão em {_format_pt_br_date_label(sessao['date'])} às "
+                    f"{sessao['time']}, no mês pedido, e não pode ter duas no mesmo mês. Ofereça "
+                    "remarcar aquela sessão (alterar_agendamento com o appointment_id dela) ou uma "
+                    "data em outro mês. A sessão atual continua como estava."
+                ),
+            }
         except ConflictError:
             logger.info(f"[Alteracao] {phone}: sessão {appointment_id} não cabe em "
                         f"{data_final} {hora_final} com as áreas novas")

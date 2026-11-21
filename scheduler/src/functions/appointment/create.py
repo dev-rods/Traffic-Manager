@@ -14,7 +14,9 @@ from src.utils.phone import is_valid_br_phone
 from src.services import carrinho
 from src.services.carrinho import CarrinhoInvalido
 from src.services.db.postgres import PostgresService
-from src.services.appointment_service import AppointmentService, ConflictError, NotFoundError
+from src.services.appointment_service import (
+    AppointmentService, ConflictError, NotFoundError, SessaoNoMesmoMes)
+from src.services.mesmo_mes import SAME_MONTH_APPOINTMENT, autor_do_painel, excecao_das_duas, resposta_409
 from src.services.duracao_manual import DuracaoInvalida
 from src.services.desconto_personalizado import DescontoInvalido, normaliza_centavos
 from src.services.politica_de_desconto import RAZAO_NENHUM
@@ -95,9 +97,18 @@ def handler(event, context):
             {"serviceId": "uuid", "areaId": "uuid"}
         ],
         "professionalId": "uuid",        // optional
-        "manualDurationMinutes": 75      // optional, fixa a duracao DESTE
+        "manualDurationMinutes": 75,     // optional, fixa a duracao DESTE
                                          // agendamento; vazio = calculada
+        "substituir": true,              // PRD 056: confirmou que a sessao do
+                                         // mesmo mes sera cancelada e remarcada
+        "manterAsDuas": true,            // PRD 056: so ADMIN, com motivoDasDuas
+        "motivoDasDuas": "..."
     }
+
+    Uma sessao por mes (PRD 056): paciente com sessao confirmada futura no mes
+    da data responde 409 `code: SAME_MONTH_APPOINTMENT` com `existing`; o
+    painel avisa e repete com `substituir`. `manterAsDuas` e a unica excecao,
+    por ADMIN e com motivo (403 para STAFF, 400 sem motivo).
     """
     try:
         identidade, error_response = require_acesso(event, "agenda.escrever")
@@ -164,6 +175,10 @@ def handler(event, context):
             return http_response(400, {
                 "status": "ERROR", "message": "discountReason 'none' nao combina com desconto"})
 
+        duas, erro_das_duas = excecao_das_duas(identidade, body)
+        if erro_das_duas:
+            return erro_das_duas
+
         db = PostgresService()
 
         # `.completo(db)` e nao o construtor: sem o lead_service, a conversao
@@ -206,6 +221,10 @@ def handler(event, context):
             # regra da clinica, e o bot nao chega aqui: nenhuma tool do agente
             # expoe este campo. Ver duracao_manual.
             manual_duration_minutes=body.get("manualDurationMinutes"),
+            substituir_mesmo_mes=body.get("substituir") is True,
+            permitir_duas=duas,
+            autor=autor_do_painel(identidade),
+            motivo_das_duas=body.get("motivoDasDuas"),
         )
 
         appointment = _serialize_row(result)
@@ -219,6 +238,9 @@ def handler(event, context):
     except (DuracaoInvalida, DescontoInvalido) as e:
         # Dedo errado no formulario e 400, nao 500.
         return http_response(400, {"status": "ERROR", "message": str(e)})
+
+    except SessaoNoMesmoMes as e:
+        return resposta_409(e.existente)
 
     except ConflictError as e:
         return http_response(409, {"status": "ERROR", "message": str(e)})

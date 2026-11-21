@@ -118,6 +118,20 @@ async function fillCustomer() {
   await userEvent.type(screen.getByLabelText(/celular/i), '11987654321')
 }
 
+// Código sempre antes de confirmar (PRD 056): "Confirmar agendamento" leva à
+// etapa do código; digitar o código cria com o token.
+async function confirmWithCode() {
+  await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+  await screen.findByText('Confirme seu celular')
+  await userEvent.type(screen.getByLabelText('Código de verificação'), '123456')
+  await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+}
+
+function mockOtp() {
+  vi.mocked(bookingService.sendOtp).mockReset().mockResolvedValue({ status: 'SUCCESS' })
+  vi.mocked(bookingService.confirmOtp).mockReset().mockResolvedValue('tok-1')
+}
+
 describe('Booking - serviço único', () => {
   beforeEach(() => {
     vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap())
@@ -186,6 +200,7 @@ describe('Booking - profissional', () => {
     vi.mocked(bookingService.createAppointment).mockResolvedValue({
       final_price_cents: 15000,
     } as Appointment)
+    mockOtp()
   })
 
   it('com vários profissionais não pede pra escolher - o backend atribui', async () => {
@@ -195,7 +210,7 @@ describe('Booking - profissional', () => {
 
     await chooseSlotAndContinue()
     await fillCustomer()
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    await confirmWithCode()
 
     await waitFor(() => expect(bookingService.createAppointment).toHaveBeenCalled())
     const payload = vi.mocked(bookingService.createAppointment).mock.calls[0][1]
@@ -207,6 +222,7 @@ describe('Booking - profissional', () => {
       fullName: 'Maria Silva',
       date: TODAY,
       time: '23:59',
+      token: 'tok-1',
     })
     expect(await screen.findByText('Agendamento confirmado!')).toBeInTheDocument()
     expect(screen.getByText(/\(11\) 98765-4321/)).toBeInTheDocument()
@@ -220,6 +236,7 @@ describe('Booking - preço e desconto', () => {
     vi.mocked(bookingService.quote).mockImplementation(async (_c, _cart, phone) =>
       phone ? PHONE_DISCOUNT : NO_DISCOUNT
     )
+    mockOtp()
   })
 
   it('o desconto do celular aparece ao digitá-lo, antes de confirmar, sem dizer o motivo', async () => {
@@ -247,7 +264,7 @@ describe('Booking - preço e desconto', () => {
     await screen.findByText('Escolha o dia')
     await chooseSlotAndContinue()
     await fillCustomer()
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    await confirmWithCode()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Esse horário acabou de ser ocupado')
     expect(screen.getByText('Escolha o dia')).toBeInTheDocument()
@@ -267,6 +284,7 @@ describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
     vi.mocked(bookingService.createAppointment).mockResolvedValue({
       final_price_cents: 15000,
     } as Appointment)
+    mockOtp()
   })
 
   it('número novo: os campos aparecem depois do celular e vão no payload normalizados', async () => {
@@ -284,7 +302,7 @@ describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
     await userEvent.type(await screen.findByLabelText(/cpf/i), '52998224725')
     await userEvent.type(screen.getByLabelText(/nascimento/i), '31101990')
     await userEvent.type(screen.getByLabelText(/e-mail/i), 'Maria@X.com')
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    await confirmWithCode()
 
     await waitFor(() => expect(bookingService.createAppointment).toHaveBeenCalled())
     const calls = vi.mocked(bookingService.createAppointment).mock.calls
@@ -302,7 +320,7 @@ describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
     await chooseSlotAndContinue()
     await fillCustomer()
     expect(screen.queryByLabelText(/cpf/i)).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    await confirmWithCode()
 
     await waitFor(() => expect(bookingService.createAppointment).toHaveBeenCalled())
     const calls = vi.mocked(bookingService.createAppointment).mock.calls
@@ -324,7 +342,7 @@ describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
     await screen.findByText('Escolha o dia')
     await chooseSlotAndContinue()
     await fillCustomer()
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    await confirmWithCode()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Precisamos completar seu cadastro: CPF e e-mail.')
   })
@@ -340,7 +358,7 @@ describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
     await screen.findByText('Escolha o dia')
     await chooseSlotAndContinue()
     await fillCustomer()
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    await confirmWithCode()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Este CPF já está cadastrado com outro celular')
     // Não é "horário ocupado": continua na tela de dados.
@@ -348,10 +366,77 @@ describe('Booking - cadastro de quem ainda não é paciente (PRD 032)', () => {
   })
 })
 
-describe('Booking - agendamento futuro no mesmo número', () => {
-  const duplicate = new ApiError('Este número já tem agendamento futuro nesta clínica.', 409, {
-    code: 'HAS_FUTURE_APPOINTMENT',
-    existingCount: 1,
+describe('Booking - código antes de confirmar (PRD 056)', () => {
+  beforeEach(() => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap())
+    vi.mocked(bookingService.availability).mockResolvedValue(availability())
+    vi.mocked(bookingService.quote).mockResolvedValue(NO_DISCOUNT)
+    vi.mocked(bookingService.createAppointment)
+      .mockReset()
+      .mockResolvedValue({ final_price_cents: 15000 } as Appointment)
+    mockOtp()
+  })
+
+  it('"Confirmar agendamento" pede o código; só depois cria, com o token', async () => {
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+
+    expect(await screen.findByText('Confirme seu celular')).toBeInTheDocument()
+    expect(screen.getByText('(11) 98765-4321')).toBeInTheDocument()
+    expect(bookingService.createAppointment).not.toHaveBeenCalled()
+    expect(bookingService.sendOtp).toHaveBeenCalledWith('c1', '5511987654321')
+
+    await userEvent.type(screen.getByLabelText('Código de verificação'), '123456')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(await screen.findByText('Agendamento confirmado!')).toBeInTheDocument()
+    expect(bookingService.confirmOtp).toHaveBeenCalledWith('c1', '5511987654321', '123456')
+    expect(vi.mocked(bookingService.createAppointment).mock.calls[0][1]).toMatchObject({
+      phone: '5511987654321',
+      token: 'tok-1',
+    })
+    expect(vi.mocked(bookingService.createAppointment).mock.calls[0][1]).not.toHaveProperty('substituir')
+  })
+
+  it('"Voltar" na etapa do código devolve "Seus dados" sem criar nada', async () => {
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    await screen.findByText('Confirme seu celular')
+
+    await userEvent.click(screen.getByRole('button', { name: /voltar/i }))
+    expect(screen.getByText('Seus dados')).toBeInTheDocument()
+    expect(bookingService.createAppointment).not.toHaveBeenCalled()
+  })
+
+  it('token vencido (401) volta para o código e refaz o pedido', async () => {
+    vi.mocked(bookingService.createAppointment)
+      .mockReset()
+      .mockRejectedValueOnce(new ApiError('Verificação por WhatsApp expirada.', 401, {}))
+      .mockResolvedValue({ final_price_cents: 15000 } as Appointment)
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await confirmWithCode()
+
+    expect(await screen.findByText('Confirme seu celular')).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Código de verificação'), '654321')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+    expect(await screen.findByText('Agendamento confirmado!')).toBeInTheDocument()
+    expect(bookingService.createAppointment).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('Booking - sessão no mesmo mês (PRD 056)', () => {
+  const conflito = new ApiError('Você já tem uma sessão nesta clínica neste mês.', 409, {
+    code: 'SAME_MONTH_APPOINTMENT',
+    existing: { id: 'x1', date: '2026-11-25', time: '14:00', areas: 'Axilas' },
   })
 
   beforeEach(() => {
@@ -360,8 +445,9 @@ describe('Booking - agendamento futuro no mesmo número', () => {
     vi.mocked(bookingService.quote).mockResolvedValue(NO_DISCOUNT)
     vi.mocked(bookingService.createAppointment)
       .mockReset()
-      .mockRejectedValueOnce(duplicate)
+      .mockRejectedValueOnce(conflito)
       .mockResolvedValue({ final_price_cents: 15000 } as Appointment)
+    mockOtp()
   })
 
   async function submit() {
@@ -369,31 +455,39 @@ describe('Booking - agendamento futuro no mesmo número', () => {
     await screen.findByText('Escolha o dia')
     await chooseSlotAndContinue()
     await fillCustomer()
-    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
-    return screen.findByRole('dialog', { name: 'Você já tem agendamento' })
+    await confirmWithCode()
+    return screen.findByRole('dialog', { name: 'Você já tem uma sessão este mês' })
   }
 
-  it('avisa e, confirmando, cria com confirmDuplicate', async () => {
+  it('avisa qual sessão será substituída e, confirmando, reenvia com substituir', async () => {
     const dialog = await submit()
-    expect(dialog).toHaveTextContent('Este número já tem um agendamento futuro')
+    expect(dialog).toHaveTextContent('Sua sessão de 25/11/2026 às 14:00 será substituída por')
+    expect(within(dialog).getByRole('link', { name: 'Falar no WhatsApp' })).toHaveAttribute(
+      'href',
+      'https://wa.me/5511999990000'
+    )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Manter os dois' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar remarcação' }))
 
-    expect(await screen.findByText('Agendamento confirmado!')).toBeInTheDocument()
+    expect(await screen.findByText('Agendamento remarcado!')).toBeInTheDocument()
     const calls = vi.mocked(bookingService.createAppointment).mock.calls
     expect(calls).toHaveLength(2)
-    expect(calls[0][1]).not.toHaveProperty('confirmDuplicate')
-    expect(calls[1][1]).toEqual({ ...calls[0][1], confirmDuplicate: true })
+    expect(calls[0][1]).not.toHaveProperty('substituir')
+    expect(calls[1][1]).toEqual({ ...calls[0][1], substituir: true })
   })
 
-  it('"Voltar" fecha o aviso sem criar nada e mantém os dados', async () => {
+  it('"Voltar" fecha o aviso sem criar nada; confirmar de novo não pede outro código', async () => {
     const dialog = await submit()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Voltar' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText('Seus dados')).toBeInTheDocument()
     expect(bookingService.createAppointment).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar agendamento' }))
+    expect(await screen.findByText('Agendamento confirmado!')).toBeInTheDocument()
+    expect(bookingService.sendOtp).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -17,7 +17,8 @@ export const api = axios.create({
 interface ApiErrorBody {
   message?: string
   code?: string
-  existingCount?: number
+  /** 409 SAME_MONTH_APPOINTMENT: a sessão que o número já tem no mês (PRD 056). */
+  existing?: { id: string; date: string; time: string; areas: string | null }
   /** 400 CADASTRO_INCOMPLETO: os campos do cadastro que faltaram (PRD 032). */
   faltam?: string[]
 }

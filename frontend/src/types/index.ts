@@ -401,6 +401,23 @@ export interface CreateAppointmentPayload {
   isFirstVisit: boolean
   /** Fixa a duracao DESTE agendamento. Omitir = calculada pelas areas. */
   manualDurationMinutes?: number | null
+  /**
+   * Uma sessão por mês (PRD 056). `substituir`: a pessoa confirmou que a sessão
+   * do mesmo mês será cancelada e remarcada. `manterAsDuas` + `motivoDasDuas`:
+   * só ADMIN; o backend recusa STAFF (403) e ADMIN sem motivo (400).
+   */
+  substituir?: boolean
+  manterAsDuas?: boolean
+  motivoDasDuas?: string
+}
+
+/** A sessão que a paciente já tem no mês pedido (409 SAME_MONTH_APPOINTMENT, PRD 056). */
+export interface SessaoExistente {
+  id: string
+  date: string // YYYY-MM-DD
+  time: string // HH:MM
+  areas: string | null
+  patientName: string | null
 }
 
 export interface UpdateAppointmentPayload {
@@ -433,6 +450,14 @@ export interface UpdateAppointmentPayload {
    * A distincao importa: e `null` que solta o override.
    */
   manualDurationMinutes?: number | null
+  /**
+   * Uma sessão por mês (PRD 056). `substituir`: a pessoa confirmou que a sessão
+   * do mesmo mês será cancelada e remarcada. `manterAsDuas` + `motivoDasDuas`:
+   * só ADMIN; o backend recusa STAFF (403) e ADMIN sem motivo (400).
+   */
+  substituir?: boolean
+  manterAsDuas?: boolean
+  motivoDasDuas?: string
 }
 
 // ── Availability Rule ────────────────────────────────────────

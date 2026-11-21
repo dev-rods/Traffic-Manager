@@ -305,3 +305,30 @@ describe('política da clínica na edição (PRD 053)', () => {
     })
   })
 })
+
+describe('uma sessão por mês ao mover (PRD 056)', () => {
+  it('o 409 do mês vira aviso; Confirmar reenvia com substituir', async () => {
+    mutateAsync.mockRejectedValueOnce({
+      response: {
+        status: 409,
+        data: {
+          code: 'SAME_MONTH_APPOINTMENT',
+          existing: { id: 'x1', date: '2026-11-25', time: '14:00', areas: 'Axila', patientName: 'Ana Clara' },
+        },
+      },
+    })
+    monta()
+    await mudaHorario('10:00')
+    await userEvent.click(salvar())
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar alteração' }))
+
+    const aviso = await screen.findByRole('group', { name: 'Ana Clara já tem sessão em 25/11/2026 às 14:00.' })
+    expect(aviso).toHaveTextContent('essa sessão será cancelada e esta será remarcada para')
+    expect(screen.queryByRole('button', { name: 'Manter as duas' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+    expect(mutateAsync).toHaveBeenCalledTimes(2)
+    expect(mutateAsync.mock.calls[1][0].payload).toMatchObject({ time: '10:00', substituir: true })
+    expect(mutateAsync.mock.calls[0][0].payload).not.toHaveProperty('substituir')
+  })
+})

@@ -88,8 +88,10 @@ PACIENTE_COM_HORARIO = Skill(
         "   - trocar, tirar ou incluir área, mudar dia ou hora - é ALTERAÇÃO da sessão\n"
         "   que existe: siga o passo 2b. SESSÃO JÁ MARCADA e use alterar_agendamento.\n"
         "   Nunca book_appointment para isso.\n"
-        "3. Marcar uma SEGUNDA sessão só depois de ela confirmar que quer duas; aí\n"
-        "   pergunte e confirme as áreas como sempre.\n"
+        "3. Ela não pode ter duas sessões no MESMO MÊS. Pedido de outra data no mesmo\n"
+        "   mês é remarcação: avise que a sessão marcada será cancelada e remarcada,\n"
+        "   confirme e use alterar_agendamento. Em outro mês pode marcar outra: pergunte e\n"
+        "   confirme as áreas como sempre, e diga que a anterior continua marcada.\n"
         "4. Não repita o valor sem ela perguntar.\n"
     ),
 )

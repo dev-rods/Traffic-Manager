@@ -26,7 +26,9 @@ from src.services.appointment_service import (
     ConflictError,
     NotFoundError,
     OptimisticLockError,
+    SessaoNoMesmoMes,
 )
+from src.services.mesmo_mes import excecao_das_duas, resposta_409
 from src.services.duracao_manual import DuracaoInvalida
 
 # PRD 049: só a edição MANUAL pelo painel tolera encaixe. Bot
@@ -81,9 +83,13 @@ def handler(event, context):
                                          // nao mexe.
         "discountPct": 10 | "discountCents": 2000, "discountReason": "custom",
         "discountReason": "none"         // com pct 0: "Sem desconto" de proposito (PRD 053)
-        "discountPolicy": true           // re-decide pela politica da clinica, depois
+        "discountPolicy": true,          // re-decide pela politica da clinica, depois
                                          // de trocar as areas (PRD 053). Exclusivo com
                                          // discountPct/discountCents.
+        "substituir": true,              // PRD 056: ao mover para um mes em que a paciente
+                                         // ja tem sessao, confirmou que aquela sera cancelada
+        "manterAsDuas": true,            // PRD 056: so ADMIN, com motivoDasDuas
+        "motivoDasDuas": "..."
     }
 
     Supports combined operations in a single request (e.g. reschedule + change service + update notes).
@@ -177,6 +183,10 @@ def handler(event, context):
                 "message": "Presenca confirmada" if body["confirmado"] else "Confirmacao desfeita",
                 "appointment": _serialize_row(result),
             }))
+
+        duas, erro_das_duas = excecao_das_duas(identidade, body)
+        if erro_das_duas:
+            return erro_das_duas
 
         # Ver a nota em appointment/create.py: o construtor cru perde a
         # conversao do lead.
@@ -321,7 +331,9 @@ def handler(event, context):
                     appointment_id, new_date, new_time,
                     tolerancia_minutos=TOLERANCIA_DO_PAINEL_MIN,
                     desfecho=body.get("outcome"), motivo=body.get("outcomeReason"),
-                    autor=_autor(identidade))
+                    autor=_autor(identidade),
+                    substituir_mesmo_mes=body.get("substituir") is True,
+                    permitir_duas=duas, motivo_das_duas=body.get("motivoDasDuas"))
                 anterior = resultado["antigo"]
                 appointment_id = str(resultado["novo"]["id"])
                 messages.append("remarcado (" + ("falta" if anterior.get("outcome") == "NO_SHOW"
@@ -426,6 +438,9 @@ def handler(event, context):
 
     except NotFoundError as e:
         return http_response(404, {"status": "ERROR", "message": str(e)})
+
+    except SessaoNoMesmoMes as e:
+        return resposta_409(e.existente)
 
     except ConflictError as e:
         return http_response(409, {"status": "ERROR", "message": str(e)})

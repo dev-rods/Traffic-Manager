@@ -6,12 +6,15 @@ import { useConfirmOtp, useSendOtp } from '@/hooks/useBooking'
 
 interface OtpCodeFormProps {
   clinicId: string
+  /** O celular como a API recebe (ou como foi digitado; `useSendOtp` manda o que vier). */
   phone: string
+  /** Como mostrar o celular; sem isto, mostra `phone` como está. */
+  phoneLabel?: string
   onVerified: (token: string) => void
 }
 
 /** Formulário de código de verificação — envia automaticamente ao montar e permite reenvio. */
-export function OtpCodeForm({ clinicId, phone, onVerified }: OtpCodeFormProps) {
+export function OtpCodeForm({ clinicId, phone, phoneLabel, onVerified }: OtpCodeFormProps) {
   const [code, setCode] = useState('')
   const sendOtp = useSendOtp(clinicId)
   const confirmOtp = useConfirmOtp(clinicId)
@@ -34,7 +37,7 @@ export function OtpCodeForm({ clinicId, phone, onVerified }: OtpCodeFormProps) {
     <div>
       <p className="mb-4 text-sm text-ink-600">
         Enviamos um código de confirmação por WhatsApp para{' '}
-        <span className="font-medium text-ink-900">{phone}</span>.
+        <span className="font-medium text-ink-900">{phoneLabel ?? phone}</span>.
       </p>
       <form onSubmit={handleConfirm} className="flex flex-col gap-4">
         <Input

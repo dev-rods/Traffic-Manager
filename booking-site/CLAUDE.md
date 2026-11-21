@@ -11,11 +11,12 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
 - **Sem autenticação de usuário.** A `x-api-key` (`VITE_BOOKING_API_KEY`) é fixa
   no client e restrita aos endpoints públicos — não é segredo, é só um filtro
   básico contra bots (mesmo padrão do `LEADS_INTAKE_API_KEY` da landing page).
-- **Criar agendamento não exige verificação de posse do número** — igual ao
-  bot de WhatsApp, que também não pede confirmação (lá o número já é a
-  própria identidade da conversa). Ao finalizar, o agendamento é criado
-  direto e a confirmação chega pelo WhatsApp do cliente (template `BOOKED`,
-  o mesmo que o bot usa — ver `_send_confirmation_whatsapp` em
+- **Criar agendamento exige o código do WhatsApp** (PRD 056): depois de
+  "Seus dados" vem a etapa "Confirme seu celular" (`OtpCodeForm`, o mesmo de
+  "Meus agendamentos") e a criação vai com `token`; sem ele a API responde
+  401. O token vale 15 min para o mesmo celular (voltar e confirmar de novo
+  não pede outro código). A confirmação chega pelo WhatsApp (template
+  `BOOKED`, o mesmo do bot - ver `_send_confirmation_whatsapp` em
   `scheduler/src/functions/public_booking/create_appointment.py`).
 - **Quem ainda não é paciente completa o cadastro** (PRD 032): a cotação com
   o celular devolve `quote.cadastro.faltam`, o `CustomerInfoForm` mostra só
@@ -39,10 +40,13 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
   de WhatsApp: `/availability` (duração → horários) e `/quote` (total,
   desconto, valor final). Calcular no navegador já fez o site cobrar diferente
   do WhatsApp e oferecer horário que a criação recusava (PRD 023).
-- **Agendamento repetido pede confirmação, não bloqueia.** A criação devolve
-  409 `HAS_FUTURE_APPOINTMENT` (só a contagem) e o site reenvia com
-  `confirmDuplicate: true` se a pessoa quiser manter os dois. O 409 sem `code`
-  continua sendo horário ocupado.
+- **Uma sessão por mês** (PRD 056). Número verificado com sessão confirmada
+  futura no mesmo mês recebe 409 `SAME_MONTH_APPOINTMENT` com a sessão
+  (`existing`); o `RemarcacaoDialog` avisa "Sua sessão de X será substituída
+  por Y. Confirmar?", com o WhatsApp da clínica (`wa.me`), e reenvia com
+  `substituir: true`. A regra mora no backend (`AppointmentService`); nunca
+  "manter os dois". Mês diferente não interfere. O 409 sem `code` continua
+  sendo horário ocupado.
 - **Agenda = as próximas N datas com horário** (N = "Datas futuras" da
   clínica), no fuso da clínica — a regra mora no backend
   (`scheduler/src/services/janela_do_site.py`); o front só exibe `days`.
