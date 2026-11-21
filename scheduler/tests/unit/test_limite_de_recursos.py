@@ -60,10 +60,12 @@ class TestNumeroDeFuncoes(unittest.TestCase):
     # Subir isto exige MEDIR de novo, e nao so somar:
     #   aws cloudformation list-stack-resources --stack-name clinic-scheduler-infra-prod
     # 21/11/2026 (PRD 055): o cors: true saiu das rotas e os 76 OPTIONS
-    # sairam do stack; dev medido em 418 com 86 funcoes (~4 recursos por
-    # funcao nova: funcao, permission, resource, metodo). Subir este numero
-    # so depois de medir prod sem CORS.
-    LIMITE_DE_FUNCOES = 86
+    # sairam do stack. Prod e dev MEDIDOS em 418 de 500 com 86 funcoes.
+    # Funcao nova com um endpoint custa ~4 (funcao, permission, resource,
+    # metodo): 82 livres / 4 = 20, menos folga de ~2 funcoes. Subir isto exige
+    # medir de novo:
+    #   aws cloudformation list-stack-resources --stack-name clinic-scheduler-infra-prod
+    LIMITE_DE_FUNCOES = 104
 
     def test_cabe_no_stack(self):
         pasta = SERVERLESS.parent / "sls" / "functions"

@@ -73,8 +73,26 @@ Essência, Premium, Rods). É por isso que `GET /api/clinics` prova o stage.
 - Guarda: `test_nenhuma_rota_com_cors`. `LIMITE_DE_FUNCOES` continua 86 até
   medir prod sem CORS.
 
-**Prod:** pendente, com o André: merge do PR #236 (sobe os 3 apps pela Vercel;
-`checkin-prod` é deploy manual, receita da 048), smoke dos hosts de prod
-(caso 3), `serverless deploy --stage prod`, `create-deployment` do stage prod,
-medir (esperado 418), apagar `VITE_API_BASE_URL` nos 4 projetos, subir
-`LIMITE_DE_FUNCOES` com a conta nova.
+**Prod, 21/11/2026** (autorizado pelo André):
+
+- Merge do PR #236: painel e site subiram pela Vercel (commit `c300062`
+  READY nos dois); `checkin-prod` por deploy manual (token do SSM), READY.
+- 3 → com o backend de prod ainda com `OPTIONS`, `GET /api/clinics` devolveu
+  as 4 clínicas em `traffic-manager-eight`, `booking-site-neon`,
+  `agendar.nobrelaser.com.br`, `agendar.draclaradourado.com.br`,
+  `checkin-prod` e `documentos.draclaradourado.com.br`.
+  `documentos.nobrelaser.com.br` não resolve (CNAME nunca criado pela Nobre,
+  pendência da 048; nada a ver com este PRD). Bundle do painel sem
+  `execute-api`.
+- `serverless deploy --stage prod`: layer 162. `create-deployment` do stage
+  (`brxhkt`). Stack **494 -> 418**, `OPTIONS` no stack 0.
+- Depois do deploy: os mesmos hosts seguem devolvendo as 4 clínicas; relatório
+  da Essência via rewrite igual ao direto (115 agendamentos, 13 faltas); GET
+  direto sem nenhum `Access-Control-*`; `OPTIONS` direto passou a 403 após a
+  propagação (as primeiras respostas alternaram 200/403 pelos edges do
+  CloudFront).
+- `VITE_API_BASE_URL` apagada nos 4 projetos da Vercel (6 variáveis); sobrou
+  só `VITE_BOOKING_API_KEY` onde cabe.
+- `LIMITE_DE_FUNCOES` 86 -> 104: 82 recursos livres a ~4 por função nova,
+  com folga de ~10.
+- Smoke no browser (caso 9): pelo André.

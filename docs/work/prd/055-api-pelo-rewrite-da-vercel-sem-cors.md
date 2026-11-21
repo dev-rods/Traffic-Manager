@@ -257,5 +257,5 @@ reverter o `vercel.json` (deploy da Vercel, ~2 min). Nenhum dado é tocado.
 - [ ] Pendente
 - [x] Spec gerada: `spec/055-api-pelo-rewrite-da-vercel-sem-cors.md` (21/11/2026)
 - [x] Implementado em dev: 21/11/2026 (PR #236; dev 494 -> 418, OPTIONS 0; roteiro `tests/integration/055-api-pelo-rewrite.md`)
-- [ ] Implementado em prod: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em prod: 21/11/2026 (prod 494 -> 418, OPTIONS 0, layer 162; `VITE_API_BASE_URL` apagada na Vercel)
+- [x] Registrado em `TASKS_LOG.md`
