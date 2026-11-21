@@ -174,7 +174,7 @@ número).
 
 ---
 
-## 4. Decisões (confirmadas pelo André em 21/11/2026)
+## 4. Decisões (confirmadas pelo André em 21/11/2026, 1-5 e 6-9 em duas rodadas)
 
 1. **Código do WhatsApp sempre, antes de confirmar o agendamento pelo site.**
    A regra do mês só roda depois do código. Custo: uma mensagem de WhatsApp a
@@ -191,13 +191,18 @@ número).
    bot não quebra nem com a pessoa pedindo com todas as letras; o parâmetro
    `segunda_sessao` sai.
 
-### Pendências (propostas, aguardando confirmação)
-
-- Mais de uma sessão futura no mesmo mês (legado): trocar a mais próxima.
-  *Proposta: a mais próxima.*
-- Link `wa.me` com o número do bot da clínica no diálogo do site.
-  *Proposta: sim.*
-- Texto exato do diálogo e do sucesso ("Agendamento remarcado").
+6. **Legado com duas ou mais sessões futuras no mesmo mês**: a troca cancela e
+   remarca só a **mais próxima**; as demais ficam. *Decidido: a mais próxima.*
+7. **Link `wa.me`** com o número do bot da clínica no aviso do site; sem
+   número, o botão some. *Decidido: sim.*
+8. **Textos.** Aviso no site, tom curto: "Sua sessão de {data} às {hora} será
+   substituída por {nova data} às {nova hora}. Confirmar?" com "Qualquer
+   dúvida, fale com a clínica" e o botão do WhatsApp. Sucesso: "Agendamento
+   remarcado!". Painel: "{nome} já tem sessão em {data} às {hora}. Ao
+   confirmar, essa sessão será cancelada e remarcada para {nova data} às
+   {nova hora}." *Decidido: site na versão curta; o resto como proposto.*
+9. **Falta nas últimas 24 h em silêncio**, como na 054: a tela não diz que a
+   sessão antiga vira falta. *Decidido: silêncio.*
 
 ---
 
