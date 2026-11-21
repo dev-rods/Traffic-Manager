@@ -63,4 +63,7 @@ npm run test      # Vitest
 ## Deploy
 
 Projeto Vercel próprio, independente do `frontend/`, apontado para o domínio
-público do dono. Env vars: `VITE_API_BASE_URL`, `VITE_BOOKING_API_KEY`.
+público do dono. Env var: `VITE_BOOKING_API_KEY`. A API é chamada em `/api`
+no próprio domínio: o `vercel.json` reescreve para o API Gateway (previews ->
+dev, produção e domínios das clínicas -> prod, pelo host); em `npm run dev` o
+proxy do Vite faz o mesmo (`VITE_API_PROXY_TARGET`). Sem CORS (PRD 055).

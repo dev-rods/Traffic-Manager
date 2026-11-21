@@ -1,3 +1,19 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "has": [{ "type": "host", "value": "(.*-git-.*|.*-rodrigocardosodevrods-2504s-projects)\\.vercel\\.app" }],
+      "destination": "https://tuvr5sfhz3.execute-api.us-east-1.amazonaws.com/dev/$1"
+    },
+    {
+      "source": "/api/(.*)",
+      "has": [{ "type": "host", "value": "booking-site-dev\.vercel\.app" }],
+      "destination": "https://tuvr5sfhz3.execute-api.us-east-1.amazonaws.com/dev/$1"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "https://ycomrg2zy7.execute-api.us-east-1.amazonaws.com/prod/$1"
+    },
+    { "source": "/((?!api/).*)", "destination": "/" }
+  ]
 }

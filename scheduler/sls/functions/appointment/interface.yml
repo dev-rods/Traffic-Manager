@@ -19,7 +19,6 @@ CreateAppointment:
     - http:
         path: appointments
         method: post
-        cors: true
 
 ListAppointments:
   handler: src.functions.appointment.list.handler
@@ -29,7 +28,6 @@ ListAppointments:
     - http:
         path: clinics/{clinicId}/appointments
         method: get
-        cors: true
 
 LembretesDoDia:
   handler: src.functions.appointment.lembretes_do_dia.handler
@@ -60,7 +58,6 @@ LembretesDoDia:
     - http:
         path: clinics/{clinicId}/agenda/{dia}/lembretes
         method: post
-        cors: true
 
 UpdateAppointment:
   handler: src.functions.appointment.update.handler
@@ -84,4 +81,3 @@ UpdateAppointment:
     - http:
         path: appointments/{appointmentId}
         method: put
-        cors: true

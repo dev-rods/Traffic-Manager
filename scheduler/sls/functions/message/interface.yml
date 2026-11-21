@@ -20,4 +20,3 @@ DeliveryStatus:
     - http:
         path: messages/delivery-status
         method: post
-        cors: true

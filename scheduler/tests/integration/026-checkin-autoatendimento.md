@@ -11,8 +11,8 @@ sem chave, o provedor **simulado**.
 ## Preparação
 
 ```bash
-source booking-site/.env   # VITE_API_BASE_URL e VITE_BOOKING_API_KEY de dev
-BASE="$VITE_API_BASE_URL"; KEY="$VITE_BOOKING_API_KEY"
+source booking-site/.env   # VITE_API_PROXY_TARGET e VITE_BOOKING_API_KEY de dev
+BASE="$VITE_API_PROXY_TARGET"; KEY="$VITE_BOOKING_API_KEY"
 C="<clinic-id de dev com profissional e agenda>"
 PHONE="5511900000026"      # fictício: o WhatsApp não chega a ninguém
 TOKEN="<token de verify/confirm>"

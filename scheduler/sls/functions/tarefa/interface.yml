@@ -22,8 +22,6 @@ Tarefas:
     - http:
         path: clinics/{clinicId}/tarefas
         method: get
-        cors: true
     - http:
         path: clinics/{clinicId}/tarefas/{tarefaId}/close
         method: post
-        cors: true

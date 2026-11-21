@@ -6,7 +6,6 @@ CreateDiscountRules:
     - http:
         path: clinics/{clinicId}/discount-rules
         method: post
-        cors: true
 
 GetDiscountRules:
   handler: src.functions.discount_rules.get.handler
@@ -16,7 +15,6 @@ GetDiscountRules:
     - http:
         path: clinics/{clinicId}/discount-rules
         method: get
-        cors: true
 
 UpdateDiscountRules:
   handler: src.functions.discount_rules.update.handler
@@ -26,4 +24,3 @@ UpdateDiscountRules:
     - http:
         path: clinics/{clinicId}/discount-rules
         method: put
-        cors: true

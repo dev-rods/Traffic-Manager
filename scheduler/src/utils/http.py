@@ -80,12 +80,11 @@ def extract_path_param(event: Dict[str, Any], param_name: str) -> Optional[str]:
 
 
 def http_response(status_code: int, body: Any, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
-    default_headers = {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'
-    }
+    # Sem Access-Control-*: desde o PRD 055 nenhum browser fala com o API
+    # Gateway de outra origem - painel, site e checkin chegam por rewrite da
+    # Vercel no proprio dominio (e pelo proxy do Vite em dev local). Um
+    # cliente novo de outra origem passa pelo mesmo rewrite, nao ganha CORS.
+    default_headers = {'Content-Type': 'application/json'}
 
     if headers:
         default_headers.update(headers)

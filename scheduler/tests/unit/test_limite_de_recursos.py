@@ -77,5 +77,25 @@ class TestNumeroDeFuncoes(unittest.TestCase):
         )
 
 
+class TestSemCors(unittest.TestCase):
+    """Nenhuma rota declara `cors: true` (PRD 055).
+
+    Cada `cors: true` custava um metodo OPTIONS no stack: eram 76 dos 494
+    recursos de prod em 21/11/2026. O browser nao precisa mais de CORS porque
+    painel, site e checkin chegam ao API Gateway por rewrite da Vercel no
+    proprio dominio. Voltar a declarar cors numa rota recoloca o OPTIONS e
+    reabre o caminho para o limite de 500.
+    """
+
+    def test_nenhuma_rota_com_cors(self):
+        pasta = SERVERLESS.parent / "sls" / "functions"
+        com_cors = sorted(
+            str(arq.relative_to(SERVERLESS.parent))
+            for arq in pasta.glob("*/interface.yml")
+            if re.search(r"^\s*cors:", arq.read_text(encoding="utf-8"), re.M)
+        )
+        self.assertEqual(com_cors, [], "rota com cors: o browser chega por rewrite da Vercel, nao por CORS")
+
+
 if __name__ == "__main__":
     unittest.main()

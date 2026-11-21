@@ -15,7 +15,6 @@ ListClinicUsers:
     - http:
         path: clinics/{clinicId}/users
         method: get
-        cors: true
 
 UpdateClinicUser:
   handler: src.functions.clinic_user.update.handler
@@ -25,4 +24,3 @@ UpdateClinicUser:
     - http:
         path: clinics/{clinicId}/users/{userId}
         method: patch
-        cors: true

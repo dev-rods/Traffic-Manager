@@ -14,7 +14,6 @@ CreateSessionRecord:
     - http:
         path: clinics/{clinicId}/patients/{patientId}/session-records
         method: post
-        cors: true
 
 ListSessionRecords:
   handler: src.functions.patient_record.list.handler
@@ -24,7 +23,6 @@ ListSessionRecords:
     - http:
         path: clinics/{clinicId}/patients/{patientId}/session-records
         method: get
-        cors: true
 
 UpdateSessionRecord:
   handler: src.functions.patient_record.update.handler
@@ -34,7 +32,6 @@ UpdateSessionRecord:
     - http:
         path: clinics/{clinicId}/session-records/{recordId}
         method: put
-        cors: true
 
 DeleteSessionRecord:
   handler: src.functions.patient_record.delete.handler
@@ -44,7 +41,6 @@ DeleteSessionRecord:
     - http:
         path: clinics/{clinicId}/session-records/{recordId}
         method: delete
-        cors: true
 
 SessionRecordHistory:
   handler: src.functions.patient_record.history.handler
@@ -54,7 +50,6 @@ SessionRecordHistory:
     - http:
         path: clinics/{clinicId}/session-records/{recordId}/history
         method: get
-        cors: true
 
 # PRD 051: as aplicacoes com que o registro nasce, montadas pelo backend a
 # partir do agendamento. A tela chama isto ao escolher a sessao.
@@ -66,7 +61,6 @@ SessionApplications:
     - http:
         path: clinics/{clinicId}/appointments/{appointmentId}/session-applications
         method: get
-        cors: true
 
 LaserProtocol:
   handler: src.functions.patient_record.protocol.handler
@@ -76,4 +70,3 @@ LaserProtocol:
     - http:
         path: clinics/{clinicId}/laser-protocol
         method: get
-        cors: true

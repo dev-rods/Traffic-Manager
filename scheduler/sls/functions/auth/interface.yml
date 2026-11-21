@@ -6,4 +6,3 @@ AuthLogin:
     - http:
         path: auth/login
         method: post
-        cors: true

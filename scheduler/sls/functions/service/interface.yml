@@ -6,7 +6,6 @@ CreateService:
     - http:
         path: clinics/{clinicId}/services
         method: post
-        cors: true
 
 ListServices:
   handler: src.functions.service.list.handler
@@ -16,7 +15,6 @@ ListServices:
     - http:
         path: clinics/{clinicId}/services
         method: get
-        cors: true
 
 UpdateService:
   handler: src.functions.service.update.handler
@@ -26,4 +24,3 @@ UpdateService:
     - http:
         path: services/{serviceId}
         method: put
-        cors: true

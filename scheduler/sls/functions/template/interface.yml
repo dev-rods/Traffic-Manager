@@ -6,7 +6,6 @@ CreateTemplate:
     - http:
         path: clinics/{clinicId}/templates
         method: post
-        cors: true
 
 ListTemplates:
   handler: src.functions.template.list.handler
@@ -16,7 +15,6 @@ ListTemplates:
     - http:
         path: clinics/{clinicId}/templates
         method: get
-        cors: true
 
 UpdateTemplate:
   handler: src.functions.template.update.handler
@@ -26,4 +24,3 @@ UpdateTemplate:
     - http:
         path: templates/{templateId}
         method: put
-        cors: true

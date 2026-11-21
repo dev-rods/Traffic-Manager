@@ -32,7 +32,6 @@ SendMessage:
     - http:
         path: send
         method: post
-        cors: true
 
 GetMessageQueue:
   handler: src.functions.send.queue.handler
@@ -42,8 +41,6 @@ GetMessageQueue:
     - http:
         path: clinics/{clinicId}/queue
         method: get
-        cors: true
     - http:
         path: clinics/{clinicId}/queue/count
         method: get
-        cors: true

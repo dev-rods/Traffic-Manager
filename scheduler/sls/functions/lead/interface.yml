@@ -20,7 +20,6 @@ CreateLead:
     - http:
         path: leads
         method: post
-        cors: true
 
 ListLeads:
   handler: src.functions.lead.list.handler
@@ -47,7 +46,6 @@ ListLeads:
     - http:
         path: clinics/{clinicId}/leads
         method: get
-        cors: true
 
 UpdateLead:
   handler: src.functions.lead.update.handler
@@ -57,7 +55,6 @@ UpdateLead:
     - http:
         path: leads/{leadId}
         method: put
-        cors: true
 
 IniciarConversaPeloBot:
   handler: src.functions.lead.iniciar_bot.handler
@@ -87,7 +84,6 @@ IniciarConversaPeloBot:
     - http:
         path: leads/{leadId}/iniciar-pelo-bot
         method: post
-        cors: true
 
 MarcarContatoIniciado:
   handler: src.functions.lead.marcar_contatado.handler
@@ -97,4 +93,3 @@ MarcarContatoIniciado:
     - http:
         path: leads/{leadId}/marcar-contatado
         method: post
-        cors: true

@@ -264,7 +264,8 @@ usa, sem precisar de um segundo provedor).
 | Produção | `https://booking-site-neon.vercel.app` (+ domínios próprios por clínica) | `booking-site` |
 | Dev | `https://booking-site-dev.vercel.app` | `booking-site` (mesmo projeto, env de Preview) |
 
-Env vars: `VITE_API_BASE_URL`, `VITE_BOOKING_API_KEY` (não é segredo — é só
+A API é alcançada em `/api` no próprio domínio, por rewrite da Vercel (PRD
+055). Env var: `VITE_BOOKING_API_KEY` (não é segredo — é só
 um filtro básico contra bots, mesmo padrão do `LEADS_INTAKE_API_KEY` da
 landing page).
 
