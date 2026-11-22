@@ -87,6 +87,14 @@ nem aparecem.
 | TTL do MessageEvents | Mantém 60 dias. Lead antigo sem transcrição entra como HISTORICO. |
 | Tela | Página **nova** `/crm`. A `/leads` continua como está. |
 
+#### Revisão de 22/11/2026 (três furos achados ao revisar a classificação em dev)
+
+| Furo | Correção |
+|---|---|
+| AGUARDANDO_NOS era pegajoso: "ok, obrigada" ficava como "a bola está com a clínica" para sempre, porque o desfecho só rodava para SUMIU. Na Premium de dev eram 22 de 61. | AGUARDANDO_NOS parado há mais de N dias também vai ao modelo (6.2). |
+| CANCELOU e FALTOU engoliam a volta do lead: mensagem nova depois do horário aparecia sem urgência. | Mensagem do lead posterior ao horário do agendamento devolve a decisão às regras de conversa (5.2). |
+| Ramo morto: o desfecho aceitava INICIADA_SEM_RESPOSTA mas exigia fala do lead. Efeito: cadastro de 40 dias sem resposta pesava como o de ontem. | INICIADA_SEM_RESPOSTA parado há mais de N dias vira SUMIU (5.1); o gate deixa de citar INICIADA. |
+
 ---
 
 ## 3. Escopo
@@ -166,13 +174,17 @@ do classificador no futuro.
 Fila (ordem de exibição na tela):
 
 1. `AGUARDANDO_NOS` - última mensagem é do lead
-2. `SUMIU` - última mensagem é nossa há mais de N dias e o lead já havia falado
-3. `INICIADA_SEM_RESPOSTA` - só mensagens nossas
+2. `SUMIU` - a conversa parou há mais de N dias: última mensagem nossa depois de
+   o lead ter falado, ou só mensagens nossas (revisão de 22/11; antes
+   INICIADA_SEM_RESPOSTA não envelhecia)
+3. `INICIADA_SEM_RESPOSTA` - só mensagens nossas, há N dias ou menos
 4. `SEM_CONVERSA` - nenhuma mensagem de nenhum lado
 5. `EM_ANDAMENTO` - última mensagem é nossa há menos de N dias
 6. `NAO_AGENDOU` - decidido pelo modelo ou pela atendente
 7. `CANCELOU` - o agendamento mais recente foi cancelado (e não era remarcação)
-8. `FALTOU` - o agendamento mais recente é `NO_SHOW`
+   e o lead não escreveu depois do horário dele
+8. `FALTOU` - o agendamento mais recente é `NO_SHOW` e o lead não escreveu
+   depois do horário dele
 9. `AGENDOU` - o agendamento mais recente é `CONFIRMED` (futuro ou sessão feita)
 
 Fora da vista padrão: `NAO_E_LEAD`, e `stage_source = HISTORICO`.
@@ -195,6 +207,13 @@ EM_ANDAMENTO
 
 - Fatos da agenda (FALTOU, CANCELOU, AGENDOU) vencem **inclusive** MANUAL e
   NAO_E_LEAD. Exceção única e proposital: agendar é fato, não julgamento.
+- **Fato que não fecha a porta (revisão de 22/11):** CANCELOU e FALTOU ficam
+  para trás quando a última mensagem é do lead e é **posterior à data e hora
+  do agendamento**. Quem cancelou e perguntou "consigo remarcar?" é
+  AGUARDANDO_NOS, não um cancelamento parado. AGENDOU não tem essa saída. O
+  marco é o horário do agendamento porque a tabela não guarda quando foi
+  cancelado; mensagem entre o cancelamento e a data ainda aparece como
+  CANCELOU.
 - **Qual fato (revisão 21/11, PRD 054):** agendamentos com `rescheduled_to_id`
   são remarcações e ficam de fora. Entre os que sobram, o de data e hora mais
   recentes decide: `CONFIRMED` → AGENDOU, `NO_SHOW` → FALTOU, `CANCELLED` →
@@ -239,9 +258,12 @@ EM_ANDAMENTO
 
 ### 6.2 Desfecho
 
-- Quem: lead em `SUMIU` ou `INICIADA_SEM_RESPOSTA` há mais de N dias, com ao
+- Quem: lead em `SUMIU` ou `AGUARDANDO_NOS` parado há mais de N dias, com ao
   menos 1 mensagem INBOUND, `desfecho_tentado_em IS NULL` ou anterior à última
-  mensagem do lead, transcrição disponível.
+  mensagem do lead, transcrição disponível. (Revisão de 22/11: antes era
+  `INICIADA_SEM_RESPOSTA`, que por definição não tem fala do lead e nunca
+  disparava; e AGUARDANDO_NOS ficava preso em "ok, obrigada" para sempre. O
+  prompt passa a citar o encerramento com agradecimento como razão.)
 - Saída JSON: `{"classe": "NAO_AGENDOU" | "AINDA_ABERTO", "motivo": "<= 8 palavras"}`.
 - Efeito: `NAO_AGENDOU` grava estágio com fonte MODELO. `AINDA_ABERTO` só
   grava `desfecho_tentado_em` e o evento de tentativa.
@@ -430,6 +452,6 @@ EM_ANDAMENTO
 - [x] Discovery concluído em 24/10/2026
 - [x] Revisado sobre a main em 21/11/2026 (seção 2.4)
 - [x] Spec gerada: `docs/work/spec/057-crm-de-leads.md` (revisada em 21/11)
-- [x] Implementado em dev: 21/11/2026 (PR #243; migração aplicada, scheduler dev layer 207; smoke 16/16 pelo roteiro + browser 13/13)
+- [x] Implementado em dev: 21/11/2026 (PR #243; migração aplicada, scheduler dev layer 207; smoke 16/16 pelo roteiro + browser 13/13); revisão da classificação em 22/11 (layer 209; Premium AGUARDANDO_NOS 22 → 11, NAO_AGENDOU 3 → 14)
 - [ ] Implementado em prod: (migração + deploy + dryRun por clínica com a distribuição para o André antes do real)
 - [x] Registrado em `TASKS_LOG.md`

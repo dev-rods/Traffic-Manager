@@ -86,16 +86,20 @@ class TestTriagem(unittest.TestCase):
 
 
 class TestDesfecho(unittest.TestCase):
-    def test_so_para_sumiu_ou_iniciada_parados(self):
+    def test_so_para_sumiu_ou_aguardando_nos_parados(self):
         lead = {"desfecho_tentado_em": None}
         self.assertTrue(c.precisa_de_desfecho(lead, e.Decisao(e.SUMIU, e.REGRA), conversa(), AGORA, 7))
+        self.assertTrue(c.precisa_de_desfecho(lead, e.Decisao(e.AGUARDANDO_NOS, e.REGRA), conversa(), AGORA, 7))
         self.assertFalse(c.precisa_de_desfecho(lead, e.Decisao(e.EM_ANDAMENTO, e.REGRA), conversa(), AGORA, 7))
+        self.assertFalse(c.precisa_de_desfecho(lead, e.Decisao(e.INICIADA_SEM_RESPOSTA, e.REGRA), conversa(), AGORA, 7))
         self.assertFalse(c.precisa_de_desfecho(lead, e.Decisao(e.AGENDOU, e.REGRA), conversa(), AGORA, 7))
 
     def test_exige_que_o_lead_tenha_falado(self):
         lead = {"desfecho_tentado_em": None}
         so_nos = [Mensagem("NOS", AGORA - timedelta(days=10), "Oi")]
-        self.assertFalse(c.precisa_de_desfecho(lead, e.Decisao(e.INICIADA_SEM_RESPOSTA, e.REGRA), so_nos, AGORA, 7))
+        # So nos falamos ha 10 dias: e SUMIU pela regra, mas sem fala do lead
+        # nao ha o que o modelo ler.
+        self.assertFalse(c.precisa_de_desfecho(lead, e.Decisao(e.SUMIU, e.REGRA), so_nos, AGORA, 7))
 
     def test_parado_ha_menos_que_n_dias_espera(self):
         lead = {"desfecho_tentado_em": None}

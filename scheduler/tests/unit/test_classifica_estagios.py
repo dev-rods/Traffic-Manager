@@ -106,6 +106,19 @@ class TestProcessaClinica(unittest.TestCase):
         ags[1]["appointment_date"] = date(2026, 9, 1)
         self.assertEqual(roda(BancoFalso([lead()], agendamentos=ags), dry_run=True)["por_estagio"], {e.FALTOU: 1})
 
+    def test_cancelou_e_escreveu_depois_do_horario_e_aguardando_nos(self):
+        ags = [{"phone": "5511999990000", "status": "CANCELLED", "appointment_date": date(2026, 11, 15), "start_time": "10:00"}]
+        msgs = [Mensagem("NOS", AGORA - timedelta(days=10), "Confirmado dia 15"),
+                Mensagem("LEAD", AGORA - timedelta(days=1), "Consigo remarcar pra semana que vem?")]
+        r = roda(BancoFalso([lead()], agendamentos=ags), dry_run=True, mensagens=msgs)
+        self.assertEqual(r["por_estagio"], {e.AGUARDANDO_NOS: 1})
+
+    def test_horario_do_agendamento_vai_para_utc_pelo_fuso_da_clinica(self):
+        ag = {"status": "CANCELLED", "appointment_date": date(2026, 11, 15), "start_time": "10:00"}
+        self.assertEqual(job._quando(ag, CLINIC), datetime(2026, 11, 15, 13, 0, tzinfo=timezone.utc))
+        self.assertEqual(job._quando(dict(ag, appointment_date="2026-11-15", start_time="10:00:00"), CLINIC),
+                         datetime(2026, 11, 15, 13, 0, tzinfo=timezone.utc))
+
     def test_variante_do_telefone_casa_no_espelho(self):
         db = BancoFalso([lead(phone="5547997053940")],
                         chats=[{"phone": "554797053940", "name": "x", "last_message_at": AGORA - timedelta(days=2), "unread_count": 1}])

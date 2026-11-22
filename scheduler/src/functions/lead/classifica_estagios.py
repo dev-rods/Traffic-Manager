@@ -11,7 +11,7 @@ import logging
 import os
 import uuid
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Dict, List, Optional
 
 from src.services import estagio_do_lead as estagio
@@ -22,6 +22,7 @@ from src.services.classificador_de_lead import (
     precisa_de_desfecho,
     precisa_de_triagem,
 )
+from src.services.business_hours import fuso
 from src.services.db.postgres import PostgresService
 from src.services.status_da_conversa import conversas_da_clinica
 from src.services.transcricao import resumo, ultimas_mensagens
@@ -68,15 +69,30 @@ def _agendamentos_por_variante(db, clinic_id: str) -> Dict[str, List[Dict]]:
     return por_tel
 
 
-def _ultimo_status(agendamentos: List[Dict]) -> Optional[str]:
-    if not agendamentos:
+def _quando(agendamento: Dict, clinic: Dict) -> Optional[datetime]:
+    """Data e hora do agendamento, no fuso da clinica, em UTC."""
+    dia, hora = agendamento.get("appointment_date"), agendamento.get("start_time")
+    if dia is None or hora is None:
         return None
+    if isinstance(dia, str):
+        dia = date.fromisoformat(dia)
+    if isinstance(hora, str):
+        h, m = (int(p) for p in hora.split(":")[:2])
+        hora = time(h, m)
+    return fuso(clinic).localize(datetime.combine(dia, hora)).astimezone(timezone.utc)
+
+
+def _ultimo_agendamento(agendamentos: List[Dict], clinic: Dict):
+    """(status, quando) do agendamento mais recente, ou (None, None)."""
+    if not agendamentos:
+        return None, None
     mais_recente = max(agendamentos, key=lambda a: (str(a.get("appointment_date") or ""), str(a.get("start_time") or "")))
-    return mais_recente.get("status")
+    return mais_recente.get("status"), _quando(mais_recente, clinic)
 
 
-def _sinais(lead: Dict, mensagens, chat: Optional[Dict], agendamentos: List[Dict]) -> estagio.Sinais:
+def _sinais(lead: Dict, mensagens, chat: Optional[Dict], agendamentos: List[Dict], clinic: Dict) -> estagio.Sinais:
     r = resumo(mensagens)
+    status, quando = _ultimo_agendamento(agendamentos, clinic)
     return estagio.Sinais(
         stage=lead.get("stage"), stage_source=lead.get("stage_source"), stage_updated_at=lead.get("stage_updated_at"),
         first_contact_at=lead.get("first_contact_at"),
@@ -84,7 +100,8 @@ def _sinais(lead: Dict, mensagens, chat: Optional[Dict], agendamentos: List[Dict
         tem_transcricao=bool(mensagens),
         chat_espelho_em=(chat or {}).get("last_message_at"),
         chat_espelho_nao_lidas=int((chat or {}).get("unread_count") or 0),
-        ultimo_agendamento=_ultimo_status(agendamentos),
+        ultimo_agendamento=status,
+        ultimo_agendamento_em=quando,
     )
 
 
@@ -141,7 +158,7 @@ def processa_clinica(db, tabela_eventos, clinic: Dict, classificador, agora: dat
         mensagens = ultimas_mensagens(tabela_eventos, clinic_id, telefone)
         chat = next((chats.get(v) for v in variantes if chats.get(v)), None)
         ags = [a for v in variantes for a in agenda.get(v, [])]
-        decisao = estagio.decide(_sinais(lead, mensagens, chat, ags), agora, dias)
+        decisao = estagio.decide(_sinais(lead, mensagens, chat, ags, clinic), agora, dias)
         try:
             decisao, d = _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, agora, dias, dry_run)
             descartes += d
@@ -157,6 +174,11 @@ def processa_clinica(db, tabela_eventos, clinic: Dict, classificador, agora: dat
         if dry_run:
             if decisao.stage != lead.get("stage"):
                 mudaram += 1
+                # O dryRun existe para alguem conferir ANTES de gravar: uma linha
+                # por mudanca, sem telefone nem nome.
+                logger.info("[ClassificaLeads] dryRun {}: lead {} {} -> {} ({}{})".format(
+                    clinic_id, lead.get("id"), lead.get("stage") or "-", decisao.stage, decisao.source,
+                    ": " + decisao.reason if decisao.reason else ""))
         elif repo.grava_estagio(db, lead, decisao, ultima_em=ultima_em, ultima_de=r["ultima_de"]):
             mudaram += 1
     return {"leads": len(leads), "mudaram": mudaram, "por_estagio": dict(por_estagio),

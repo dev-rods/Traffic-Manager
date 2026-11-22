@@ -25,6 +25,13 @@ class TestEstagiosDeConversa(unittest.TestCase):
     def test_sem_nada_e_sem_conversa(self):
         self.assertEqual(e.decide(sinais(), AGORA), e.Decisao(e.SEM_CONVERSA, e.REGRA))
 
+    def test_so_nos_falamos_ha_mais_de_n_dias_e_sumiu(self):
+        s = sinais(tem_transcricao=True, ultima_mensagem_de=e.NOS, ultima_mensagem_em=D(8), lead_ja_falou=False)
+        self.assertEqual(e.decide(s, AGORA).stage, e.SUMIU)
+
+    def test_first_contact_antigo_sem_evento_e_sumiu(self):
+        self.assertEqual(e.decide(sinais(first_contact_at=D(8)), AGORA).stage, e.SUMIU)
+
     def test_so_nos_falamos(self):
         s = sinais(ultima_mensagem_de="NOS", ultima_mensagem_em=D(1), tem_transcricao=True)
         self.assertEqual(e.decide(s, AGORA).stage, e.INICIADA_SEM_RESPOSTA)
@@ -82,6 +89,31 @@ class TestFatosDaAgenda(unittest.TestCase):
         # Se tivesse remarcado, o NO_SHOW teria rescheduled_to_id e ficaria de
         # fora; o mais recente seria o CONFIRMED novo.
         self.assertEqual(e.decide(sinais(ultimo_agendamento="NO_SHOW"), AGORA).stage, e.FALTOU)
+
+    def test_cancelou_e_escreveu_depois_do_horario_volta_para_a_conversa(self):
+        s = sinais(ultimo_agendamento="CANCELLED", ultimo_agendamento_em=D(5), tem_transcricao=True,
+                   ultima_mensagem_de=e.LEAD, ultima_mensagem_em=D(1), lead_ja_falou=True)
+        self.assertEqual(e.decide(s, AGORA), e.Decisao(e.AGUARDANDO_NOS, e.REGRA))
+
+    def test_faltou_e_escreveu_depois_do_horario_volta_para_a_conversa(self):
+        s = sinais(ultimo_agendamento="NO_SHOW", ultimo_agendamento_em=D(5), tem_transcricao=True,
+                   ultima_mensagem_de=e.LEAD, ultima_mensagem_em=D(1), lead_ja_falou=True)
+        self.assertEqual(e.decide(s, AGORA).stage, e.AGUARDANDO_NOS)
+
+    def test_cancelou_e_escreveu_antes_do_horario_segue_cancelou(self):
+        s = sinais(ultimo_agendamento="CANCELLED", ultimo_agendamento_em=D(1), tem_transcricao=True,
+                   ultima_mensagem_de=e.LEAD, ultima_mensagem_em=D(3), lead_ja_falou=True)
+        self.assertEqual(e.decide(s, AGORA).stage, e.CANCELOU)
+
+    def test_cancelou_e_nos_falamos_depois_segue_cancelou(self):
+        s = sinais(ultimo_agendamento="CANCELLED", ultimo_agendamento_em=D(5), tem_transcricao=True,
+                   ultima_mensagem_de=e.NOS, ultima_mensagem_em=D(1), lead_ja_falou=True)
+        self.assertEqual(e.decide(s, AGORA).stage, e.CANCELOU)
+
+    def test_agendou_nao_cai_por_mensagem_do_lead(self):
+        s = sinais(ultimo_agendamento="CONFIRMED", ultimo_agendamento_em=D(5), tem_transcricao=True,
+                   ultima_mensagem_de=e.LEAD, ultima_mensagem_em=D(1), lead_ja_falou=True)
+        self.assertEqual(e.decide(s, AGORA).stage, e.AGENDOU)
 
     def test_sem_agendamento_segue_para_a_conversa(self):
         self.assertEqual(e.decide(sinais(ultimo_agendamento=None), AGORA).stage, e.SEM_CONVERSA)

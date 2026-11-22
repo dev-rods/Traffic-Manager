@@ -10,6 +10,11 @@ fato da agenda > NAO_E_LEAD > MANUAL > veredito do modelo > regras de conversa.
 Um fato (agendou) vence inclusive uma correcao manual, porque agendar nao e
 julgamento. E a unica excecao a "MANUAL trava tudo".
 
+Fato que nao fecha a porta: CANCELOU e FALTOU ficam para tras quando o lead
+escreve DEPOIS do horario daquele agendamento. Quem cancelou e perguntou
+"consigo remarcar?" e AGUARDANDO_NOS, nao um cancelamento parado. AGENDOU nao
+tem essa saida: com sessao marcada, a conversa nao e problema do CRM.
+
 Qual fato (PRD 054): o agendamento mais recente que NAO e remarcacao decide.
 Remarcacao e CANCELLED com `rescheduled_to_id`, e fica de fora antes de olhar.
 Quem faltou e remarcou e AGENDOU; quem remarcou tres vezes nao vira CANCELOU.
@@ -72,6 +77,8 @@ class Sinais:
     # status do agendamento mais recente SEM rescheduled_to_id (PRD 054):
     # CONFIRMED | CANCELLED | NO_SHOW | None
     ultimo_agendamento: Optional[str]
+    # data e hora desse agendamento, em UTC. E o marco para "o lead falou depois".
+    ultimo_agendamento_em: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -91,14 +98,27 @@ def _mensagem_nova_depois_do_veredito(s: Sinais) -> bool:
             and s.stage_updated_at is not None and s.ultima_mensagem_em > s.stage_updated_at)
 
 
+def _lead_falou_depois(s: Sinais, marco: Optional[datetime]) -> bool:
+    return (s.ultima_mensagem_de == LEAD and s.ultima_mensagem_em is not None
+            and marco is not None and s.ultima_mensagem_em > marco)
+
+
 def _pela_agenda(s: Sinais) -> Optional[Decisao]:
     stage = _PELO_STATUS.get(s.ultimo_agendamento or "")
-    return Decisao(stage, REGRA) if stage else None
+    if not stage:
+        return None
+    if stage in (CANCELOU, FALTOU) and _lead_falou_depois(s, s.ultimo_agendamento_em):
+        # Cancelou ou faltou e voltou a escrever: a conversa manda de novo.
+        return None
+    return Decisao(stage, REGRA)
 
 
 def _pela_conversa(s: Sinais, agora: datetime, dias_parado: int) -> Decisao:
     if s.tem_transcricao and s.ultima_mensagem_de:
         if not s.lead_ja_falou:
+            # So nos falamos. Depois de N dias nao e mais "iniciada": sumiu.
+            if _parado_ha(dias_parado, s.ultima_mensagem_em, agora):
+                return Decisao(SUMIU, REGRA)
             return Decisao(INICIADA_SEM_RESPOSTA, REGRA)
         if s.ultima_mensagem_de == LEAD:
             return Decisao(AGUARDANDO_NOS, REGRA)
@@ -116,6 +136,8 @@ def _pela_conversa(s: Sinais, agora: datetime, dias_parado: int) -> Decisao:
         return Decisao(EM_ANDAMENTO, fonte)
 
     if s.first_contact_at is not None:
+        if _parado_ha(dias_parado, s.first_contact_at, agora):
+            return Decisao(SUMIU, REGRA)
         return Decisao(INICIADA_SEM_RESPOSTA, REGRA)
     return Decisao(SEM_CONVERSA, REGRA)
 

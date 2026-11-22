@@ -15,13 +15,13 @@ export interface EstagioInfo {
 
 export const ESTAGIOS: Record<LeadStage, EstagioInfo> = {
   AGUARDANDO_NOS: { label: 'Aguardando nós', descricao: 'A última mensagem é do lead.', variant: 'danger' },
-  SUMIU: { label: 'Sumiu', descricao: 'Respondeu, nós respondemos, e parou.', variant: 'warning' },
-  INICIADA_SEM_RESPOSTA: { label: 'Sem resposta', descricao: 'Só nós falamos.', variant: 'warning' },
+  SUMIU: { label: 'Sumiu', descricao: 'A conversa parou há mais de N dias.', variant: 'warning' },
+  INICIADA_SEM_RESPOSTA: { label: 'Sem resposta', descricao: 'Só nós falamos, há poucos dias.', variant: 'warning' },
   SEM_CONVERSA: { label: 'Sem conversa', descricao: 'Ninguém falou ainda.', variant: 'neutral' },
   EM_ANDAMENTO: { label: 'Em andamento', descricao: 'Conversa viva, sem decisão.', variant: 'info' },
   NAO_AGENDOU: { label: 'Não agendou', descricao: 'Decidiu não agendar.', variant: 'neutral' },
-  CANCELOU: { label: 'Cancelou', descricao: 'O último agendamento foi cancelado.', variant: 'warning' },
-  FALTOU: { label: 'Faltou', descricao: 'Agendou e não compareceu.', variant: 'danger' },
+  CANCELOU: { label: 'Cancelou', descricao: 'O último agendamento foi cancelado e não voltou a escrever.', variant: 'warning' },
+  FALTOU: { label: 'Faltou', descricao: 'Não compareceu e não voltou a escrever.', variant: 'danger' },
   AGENDOU: { label: 'Agendou', descricao: 'Tem agendamento confirmado ou sessão feita.', variant: 'success' },
   NAO_E_LEAD: { label: 'Não é lead', descricao: 'Fornecedor, pessoal, spam.', variant: 'neutral' },
 }

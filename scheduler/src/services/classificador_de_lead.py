@@ -5,8 +5,9 @@ Triagem: "isto e um lead?" - so para quem chegou pelo WhatsApp, cedo (3
 mensagens do contato). Fornecedor, cobranca e conversa pessoal saem do funil.
 
 Desfecho: "por que nao agendou?" - so para quem parou ha N dias e chegou a
-falar. Devolve NAO_AGENDOU com motivo curto, ou AINDA_ABERTO quando nao ha
-decisao na conversa.
+falar: SUMIU (a ultima e nossa) e AGUARDANDO_NOS parado (a ultima e dele, e
+muitas vezes e um "ok, obrigada" que encerra). Devolve NAO_AGENDOU com motivo
+curto, ou AINDA_ABERTO quando nao ha decisao na conversa.
 
 O modelo so SUGERE. A atendente corrige no painel e a correcao trava (MANUAL).
 Resposta que nao e JSON ou classe fora do enum e descartada e conta no teto;
@@ -41,10 +42,11 @@ _SYSTEM_TRIAGEM = (
 )
 _SYSTEM_DESFECHO = (
     "Voce le conversas de WhatsApp de uma clinica de depilacao a laser chamada {nome}. "
-    "A pessoa parou de responder e nao agendou. Decida: NAO_AGENDOU quando a conversa mostra "
+    "A conversa parou ha dias e a pessoa nao agendou. Decida: NAO_AGENDOU quando a conversa mostra "
     "uma razao ou uma recusa (achou caro, mora longe, so pesquisando, vai pensar, fora do "
-    "horario, contraindicacao, fechou em outro lugar), ou AINDA_ABERTO quando nao ha decisao "
-    "visivel (a clinica nao respondeu, a pessoa so sumiu). "
+    "horario, contraindicacao, fechou em outro lugar, ou encerrou com um agradecimento sem "
+    "pedir horario), ou AINDA_ABERTO quando nao ha decisao visivel (a pessoa fez uma pergunta "
+    "que a clinica nao respondeu, ou so sumiu no meio). "
     'Responda SOMENTE um JSON: {{"classe": "NAO_AGENDOU" | "AINDA_ABERTO", "motivo": "<ate 8 palavras>"}}.'
 )
 
@@ -87,7 +89,7 @@ def precisa_de_triagem(lead: dict, mensagens: List[Mensagem]) -> bool:
 
 def precisa_de_desfecho(lead: dict, decisao: estagio.Decisao, mensagens: List[Mensagem],
                         agora: datetime, dias_parado: int) -> bool:
-    if decisao.stage not in (estagio.SUMIU, estagio.INICIADA_SEM_RESPOSTA):
+    if decisao.stage not in (estagio.SUMIU, estagio.AGUARDANDO_NOS):
         return False
     if not any(m.de == LEAD for m in mensagens):
         return False

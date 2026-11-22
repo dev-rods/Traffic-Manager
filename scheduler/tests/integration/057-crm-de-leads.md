@@ -47,6 +47,9 @@ rodadas anteriores pelo prefixo `smoke057-`).
 | 8 | `POST send` com `campanha` para contato em `contatos_silenciados` | 409 `motivo: silenciado`; sem `campanha` passa |
 | 9 | `POST send` com `campanha` para um lead da fila (clínica com bot ligado e z-api) | 200 `SENT` |
 | 10 | Browser `/crm` (ADMIN e STAFF) | chips com contagem e filtro; motivo e ícone da fonte; correção inline salva e some do filtro; AGENDOU sem botão; seleção + "Disparar mensagem" só para ADMIN; modal lista os leads; sem erro no console |
+| 12 | lead com `CANCELLED` e mensagem dele depois do horário (dryRun) | `AGUARDANDO_NOS`/`REGRA`, não CANCELOU; mensagem antes do horário mantém CANCELOU |
+| 13 | lead só com mensagens nossas há mais de N dias | `SUMIU`/`REGRA`, sem chamada ao modelo |
+| 14 | lead em AGUARDANDO_NOS parado há mais de N dias com "ok, obrigada" no fim | modelo roda; `NAO_AGENDOU`/`MODELO` com motivo ou `desfecho_tentado_em` preenchido |
 | 11 | Backfill em prod | dryRun por clínica, distribuição para o André, depois real (não feito nesta entrega) |
 
 ## Resultado
@@ -87,3 +90,14 @@ dev` layers 206 e 207; PR #243):
   a correção manual da Paula fica como está (não afeta nada).
 - Prod: não feito. Precisa de migração, deploy e dryRun por clínica com a
   distribuição para o André antes do real (caso 11).
+
+**Dev, 22/11/2026** (revisão da classificação; `serverless deploy --stage dev`
+layers 208 e 209): casos 12 a 14 cobertos por teste unitário e conferidos pelo
+dryRun na Premium. Antes: AGUARDANDO_NOS 22, NAO_AGENDOU 3. Depois:
+AGUARDANDO_NOS 11, NAO_AGENDOU 14, 22 chamadas ao modelo, 0 descartes; os
+outros estágios iguais (SUMIU 18, CANCELOU 7, AGENDOU 6, NAO_E_LEAD 3,
+SEM_CONVERSA 2). Os 11 que mudaram eram "ok, obrigada", "não obrigado", fechou
+em outro lugar, achou caro, mora longe, contraindicação e um que negou o
+cadastro: nenhum deles era pergunta sem resposta. O dryRun passou a logar uma
+linha por mudança (`lead <id> <antes> -> <depois> (<fonte>: <motivo>)`), sem
+telefone, para a conferência em prod ser por log. Rods e Essência: `mudaram 0`.
