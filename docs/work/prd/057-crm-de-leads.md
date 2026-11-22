@@ -430,6 +430,6 @@ EM_ANDAMENTO
 - [x] Discovery concluído em 24/10/2026
 - [x] Revisado sobre a main em 21/11/2026 (seção 2.4)
 - [x] Spec gerada: `docs/work/spec/057-crm-de-leads.md` (revisada em 21/11)
-- [ ] Implementado em dev:
-- [ ] Implementado em prod:
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em dev: 21/11/2026 (PR #243; migração aplicada, scheduler dev layer 207; smoke 16/16 pelo roteiro + browser 13/13)
+- [ ] Implementado em prod: (migração + deploy + dryRun por clínica com a distribuição para o André antes do real)
+- [x] Registrado em `TASKS_LOG.md`
