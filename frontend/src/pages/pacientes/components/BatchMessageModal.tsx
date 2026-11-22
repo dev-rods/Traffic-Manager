@@ -118,7 +118,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
         {/* Patient list */}
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1.5">
-            Pacientes ({activePatients.length})
+            Contatos ({activePatients.length})
           </label>
           <div className="rounded-lg border border-gray-200 max-h-40 overflow-y-auto divide-y divide-gray-50">
             {activePatients.map((p) => {
@@ -229,7 +229,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
             </p>
             {unconfirmedCount > 0 && (
               <p className="text-sm text-amber-600">
-                {unconfirmedCount} sem confirmação — o WhatsApp aceitou mas não confirmou entrega. Verifique com esses pacientes por outro canal.
+                {unconfirmedCount} sem confirmação - o WhatsApp aceitou mas não confirmou entrega. Verifique com esses contatos por outro canal.
               </p>
             )}
             {failedCount > 0 && (
@@ -249,7 +249,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
               loading={isSending}
               disabled={activePatients.length === 0 || !messageTemplate.trim()}
             >
-              Enviar para {activePatients.length} paciente{activePatients.length !== 1 ? 's' : ''}
+              Enviar para {activePatients.length} contato{activePatients.length !== 1 ? 's' : ''}
             </Button>
           )}
         </div>

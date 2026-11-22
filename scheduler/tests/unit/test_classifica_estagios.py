@@ -111,6 +111,14 @@ class TestProcessaClinica(unittest.TestCase):
                         chats=[{"phone": "554797053940", "name": "x", "last_message_at": AGORA - timedelta(days=2), "unread_count": 1}])
         self.assertEqual(roda(db, dry_run=True)["por_estagio"], {e.AGUARDANDO_NOS: 1})
 
+    def test_so_espelho_grava_a_data_do_espelho_sem_direcao(self):
+        quando = AGORA - timedelta(days=20)
+        db = BancoFalso([lead()], chats=[{"phone": "5511999990000", "name": "x", "last_message_at": quando, "unread_count": 0}])
+        r = roda(db)
+        self.assertEqual(r["por_estagio"], {e.SUMIU: 1})
+        upd = [p for s, p in db.escritas if "UPDATE scheduler.leads SET stage" in s][0]
+        self.assertEqual((upd[3], upd[4]), (quando, None))
+
     def test_triagem_nao_e_lead_grava_com_fonte_modelo(self):
         ms = [Mensagem("LEAD", AGORA - timedelta(days=1, hours=h), "venda de insumos") for h in (3, 2, 1)]
 

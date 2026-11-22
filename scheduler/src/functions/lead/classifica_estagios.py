@@ -150,10 +150,14 @@ def processa_clinica(db, tabela_eventos, clinic: Dict, classificador, agora: dat
             classificador = _SemModelo()
         por_estagio[decisao.stage] += 1
         r = resumo(mensagens)
+        # Sem transcricao, a data do espelho do z-api e a unica que existe: sem
+        # ela a fila mostrava "Sumiu" com "parado ha -", que nao ajuda a ordenar.
+        # A direcao fica em branco, porque o espelho nao sabe quem falou.
+        ultima_em = r["ultima_em"] or (chat or {}).get("last_message_at")
         if dry_run:
             if decisao.stage != lead.get("stage"):
                 mudaram += 1
-        elif repo.grava_estagio(db, lead, decisao, ultima_em=r["ultima_em"], ultima_de=r["ultima_de"]):
+        elif repo.grava_estagio(db, lead, decisao, ultima_em=ultima_em, ultima_de=r["ultima_de"]):
             mudaram += 1
     return {"leads": len(leads), "mudaram": mudaram, "por_estagio": dict(por_estagio),
             "chamadas_modelo": getattr(classificador, "chamadas", 0), "descartes": descartes}

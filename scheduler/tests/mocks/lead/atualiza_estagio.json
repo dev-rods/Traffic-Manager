@@ -1,0 +1,17 @@
+{
+  "httpMethod": "PATCH",
+  "path": "/clinics/laser-beauty-sp-abc123/leads/11111111-1111-1111-1111-111111111111/stage",
+  "pathParameters": {
+    "clinicId": "laser-beauty-sp-abc123",
+    "leadId": "11111111-1111-1111-1111-111111111111"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "x-api-key": "test-api-key"
+  },
+  "body": "{\"stage\": \"NAO_AGENDOU\", \"reason\": \"achou caro, vai pensar\"}",
+  "requestContext": {
+    "stage": "dev",
+    "requestId": "test-request-id"
+  }
+}

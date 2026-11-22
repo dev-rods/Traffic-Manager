@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useLeads } from '@/hooks/useLeads'
 import { useClinic } from '@/hooks/useClinic'
@@ -179,32 +179,43 @@ export function CrmPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {leads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-gray-50/50">
-                  <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      aria-label={`Selecionar ${lead.name ?? lead.phone}`}
-                      checked={selecao.selectedIds.has(lead.id)}
-                      onChange={() => selecao.toggle(lead)}
-                      className="h-4 w-4 cursor-pointer accent-brand-600"
-                    />
-                  </td>
-                  <td className="px-3 py-3">
-                    <p className="font-medium text-gray-800">{lead.name || 'Sem nome'}</p>
-                    <p className="text-gray-500">{formatPhone(lead.phone)}</p>
-                  </td>
-                  <td className="px-3 py-3">
-                    <Badge variant="neutral">{rotuloDaOrigem(lead.source)}</Badge>
-                  </td>
-                  <td className="px-3 py-3 relative">
-                    <EstagioBadge lead={lead} onCorrigir={() => setEditando(lead.id)} />
-                    {editando === lead.id && <PopoverDeEstagio lead={lead} onFechar={() => setEditando(null)} />}
-                  </td>
-                  <td className="px-3 py-3 text-gray-600 whitespace-nowrap">{ultimaMensagem(lead)}</td>
-                  <td className="px-3 py-3 text-gray-700 whitespace-nowrap tabular-nums">
-                    {lead.dias_parado == null ? '-' : `${lead.dias_parado} d`}
-                  </td>
-                </tr>
+                <Fragment key={lead.id}>
+                  <tr className="hover:bg-gray-50/50">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={`Selecionar ${lead.name ?? lead.phone}`}
+                        checked={selecao.selectedIds.has(lead.id)}
+                        onChange={() => selecao.toggle(lead)}
+                        className="h-4 w-4 cursor-pointer accent-brand-600"
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="font-medium text-gray-800">{lead.name || 'Sem nome'}</p>
+                      <p className="text-gray-500">{formatPhone(lead.phone)}</p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <Badge variant="neutral">{rotuloDaOrigem(lead.source)}</Badge>
+                    </td>
+                    <td className="px-3 py-3">
+                      <EstagioBadge
+                        lead={lead}
+                        onCorrigir={() => setEditando(editando === lead.id ? null : lead.id)}
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-gray-600 whitespace-nowrap">{ultimaMensagem(lead)}</td>
+                    <td className="px-3 py-3 text-gray-700 whitespace-nowrap tabular-nums">
+                      {lead.dias_parado == null ? '-' : `${lead.dias_parado} d`}
+                    </td>
+                  </tr>
+                  {editando === lead.id && (
+                    <tr>
+                      <td colSpan={6} className="px-4 pb-3">
+                        <PopoverDeEstagio lead={lead} onFechar={() => setEditando(null)} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
