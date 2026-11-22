@@ -1,0 +1,522 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 057 CRM de leads",
+    "description": "Fila de leads por estagio (PRD 057): GET /leads com stage/source/orderBy e totals.por_estagio; PATCH do estagio (MANUAL, recusa fato da agenda); POST /send com campanha recusa contato silenciado (PRD 039). A ClassificaLeads nao tem rota HTTP: invocar a Lambda com {\"clinicId\": \"...\", \"dryRun\": true}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "API_KEY",
+      "value": "YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "leadId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "phone",
+      "value": "5511999990058",
+      "type": "string"
+    },
+    {
+      "key": "phoneSilenciado",
+      "value": "5511999990057",
+      "type": "string"
+    },
+    {
+      "key": "date1",
+      "value": "2026-12-10",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Fila - listar por estagio (chips)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "const b = pm.response.json();",
+              "pm.test(\"totals.por_estagio existe\", () => pm.expect(b.totals).to.have.property(\"por_estagio\"));",
+              "pm.test(\"todo lead da pagina esta no estagio pedido\", () => b.leads.forEach(l => pm.expect([\"SUMIU\",\"AGUARDANDO_NOS\"]).to.include(l.stage)));",
+              "pm.test(\"dias_parado vem na linha\", () => b.leads.forEach(l => pm.expect(l).to.have.property(\"dias_parado\")));",
+              "if (b.leads.length) pm.collectionVariables.set(\"leadId\", b.leads[0].id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/leads?stage=SUMIU,AGUARDANDO_NOS&orderBy=dias_parado&limit=25&offset=0",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "leads"
+          ],
+          "query": [
+            {
+              "key": "stage",
+              "value": "SUMIU,AGUARDANDO_NOS"
+            },
+            {
+              "key": "orderBy",
+              "value": "dias_parado"
+            },
+            {
+              "key": "limit",
+              "value": "25"
+            },
+            {
+              "key": "offset",
+              "value": "0"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Fila - filtrar por origem",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"so whatsapp\", () => pm.response.json().leads.forEach(l => pm.expect(l.source).to.eql(\"whatsapp\")));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/leads?source=whatsapp&limit=25",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "leads"
+          ],
+          "query": [
+            {
+              "key": "source",
+              "value": "whatsapp"
+            },
+            {
+              "key": "limit",
+              "value": "25"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Fila - estagio desconhecido e ignorado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 (filtro invalido nao derruba)\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/leads?stage=INVENTADO",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "leads"
+          ],
+          "query": [
+            {
+              "key": "stage",
+              "value": "INVENTADO"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Corrigir estagio (MANUAL)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "const l = pm.response.json().lead;",
+              "pm.test(\"MANUAL com motivo\", () => { pm.expect(l.stage_source).to.eql(\"MANUAL\"); pm.expect(l.stage).to.eql(\"NAO_AGENDOU\"); pm.expect(l.stage_reason).to.eql(\"achou caro, vai pensar\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/leads/{{leadId}}/stage",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "leads",
+            "{{leadId}}",
+            "stage"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"stage\": \"NAO_AGENDOU\",\n  \"reason\": \"achou caro, vai pensar\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Corrigir estagio - fato da agenda recusado",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"400\", () => pm.response.to.have.status(400));",
+              "pm.test(\"explica que vem da agenda\", () => pm.expect(pm.response.json().message).to.include(\"agenda\"));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/leads/{{leadId}}/stage",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "leads",
+            "{{leadId}}",
+            "stage"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"stage\": \"AGENDOU\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Corrigir estagio - desconhecido",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"400\", () => pm.response.to.have.status(400));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/leads/{{leadId}}/stage",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "leads",
+            "{{leadId}}",
+            "stage"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"stage\": \"TALVEZ\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Corrigir estagio - lead de outra clinica (404)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"404\", () => pm.response.to.have.status(404));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/clinics/{{clinicId}}/leads/00000000-0000-0000-0000-000000000000/stage",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "clinics",
+            "{{clinicId}}",
+            "leads",
+            "00000000-0000-0000-0000-000000000000",
+            "stage"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"stage\": \"SUMIU\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Disparo - contato silenciado recusado (PRD 039)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"409 silenciado\", () => { pm.response.to.have.status(409); pm.expect(pm.response.json().motivo).to.eql(\"silenciado\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/send",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "send"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phoneSilenciado}}\",\n  \"type\": \"text\",\n  \"content\": \"Oi! Abrimos novas datas, quer remarcar?\",\n  \"campanha\": {\n    \"datas\": [\n      \"{{date1}}\"\n    ]\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Disparo - lead da fila (campanha)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"SENT\", () => pm.expect(pm.response.json().messageStatus).to.eql(\"SENT\"));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{API_KEY}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/send",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "send"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"type\": \"text\",\n  \"content\": \"Oi! Abrimos novas datas, quer remarcar?\",\n  \"metadata\": {\n    \"patient_id\": \"{{leadId}}\",\n    \"template\": \"livre\"\n  },\n  \"campanha\": {\n    \"datas\": [\n      \"{{date1}}\"\n    ]\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

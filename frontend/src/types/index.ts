@@ -703,6 +703,13 @@ export interface BotMetrics {
 }
 
 // ── Lead ─────────────────────────────────────────────────────
+/** Estagio da fila do CRM (PRD 057). Espelha ESTAGIOS do backend. */
+export type LeadStage =
+  | 'SEM_CONVERSA' | 'INICIADA_SEM_RESPOSTA' | 'EM_ANDAMENTO' | 'AGUARDANDO_NOS' | 'SUMIU'
+  | 'NAO_AGENDOU' | 'CANCELOU' | 'FALTOU' | 'AGENDOU' | 'NAO_E_LEAD'
+/** Quem decidiu o estagio: a regra, o modelo, a equipe, ou so o espelho antigo. */
+export type StageSource = 'REGRA' | 'MODELO' | 'MANUAL' | 'HISTORICO'
+
 export interface Lead {
   id: string
   clinic_id: string
@@ -769,6 +776,21 @@ export interface Lead {
    * correta, nao um estado a mais.
    */
   conversion_status: 'ENVIADO' | 'AGUARDANDO' | 'RETRATADO' | null
+  /** Contato silenciado (PRD 039). Presente so quando true. */
+  bot_silenciado?: boolean
+  /**
+   * Retrato noturno do job ClassificaLeads (PRD 057). null = ainda nao
+   * processado. Nao e o conversation_status (quem conduz agora): e em que pe
+   * a conversa esta.
+   */
+  stage: LeadStage | null
+  stage_reason: string | null
+  stage_source: StageSource | null
+  stage_updated_at: string | null
+  ultima_mensagem_em: string | null
+  ultima_mensagem_de: 'LEAD' | 'NOS' | null
+  /** Dias desde a ultima mensagem, calculado no servidor na listagem. */
+  dias_parado: number | null
   created_at: string
   updated_at: string
 }

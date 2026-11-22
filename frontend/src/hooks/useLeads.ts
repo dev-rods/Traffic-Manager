@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { leadsService, type LeadListParams } from '@/services/leads.service'
+import type { LeadStage } from '@/types'
 import { useAuth } from './useAuth'
 
 export const leadKeys = {
@@ -41,4 +42,15 @@ export function useAcoesDoLead() {
   })
 
   return { iniciarPeloBot, alternarContatoManual }
+}
+
+/** Correcao manual do estagio na fila do CRM (PRD 057). Invalida e espera a verdade. */
+export function useCorrigeEstagio() {
+  const { clinicId } = useAuth()
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ leadId, stage, reason }: { leadId: string; stage: LeadStage; reason?: string }) =>
+      leadsService.patchStage(clinicId!, leadId, { stage, reason }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: leadKeys.all }),
+  })
 }

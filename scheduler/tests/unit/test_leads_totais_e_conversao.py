@@ -166,7 +166,7 @@ class TestHandlerDegradaSemDerrubar(unittest.TestCase):
         mock.patch.object(lead_list, "PostgresService").start()
         self.servico = mock.patch.object(lead_list, "LeadService").start().return_value
         self.servico.list_leads.return_value = []
-        mock.patch.object(lead_list, "require_api_key",
+        mock.patch.object(lead_list, "require_acesso",
                           return_value=("chave-de-teste", None)).start()
         mock.patch.object(lead_list, "enriquece", side_effect=lambda l, *a, **k: l).start()
         self.addCleanup(mock.patch.stopall)

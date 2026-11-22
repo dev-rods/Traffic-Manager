@@ -61,6 +61,10 @@ PERMISSOES_DO_STAFF = frozenset({
     "prontuario.ler",
     "prontuario.escrever",
     "clinica.basica",
+    # PRD 057: a fila de leads e trabalho semanal da recepcao. Disparar
+    # mensagem (POST /send) continua ADMIN.
+    "crm.ler",
+    "crm.escrever",
 })
 
 

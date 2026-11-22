@@ -4,7 +4,8 @@ import type { SendMessagePayload, SendMessageResponse, DeliveryState } from '@/s
 import { useAuth } from './useAuth'
 
 export interface BatchMessageResult {
-  patientId: string
+  /** Id do destinatario (paciente ou lead, PRD 057). */
+  id: string
   status: 'sent' | 'queued' | 'failed' | 'pending'
   error?: string
   providerMessageId?: string
@@ -20,6 +21,7 @@ const MOTIVOS: Record<string, string> = {
   janela_de_silencio: 'fora do horário de atendimento',
   atendimento_humano: 'conversa em atendimento humano',
   cooldown: 'conversa recém-atendida por pessoa',
+  silenciado: 'contato silenciado',
 }
 
 /** O que dizer de um envio que falhou: o motivo do backend quando houver. */
@@ -105,7 +107,7 @@ export function useSendBatchMessages() {
 
     setIsSending(true)
     setProgress({ sent: 0, total: payloads.length })
-    setResults(payloads.map((p) => ({ patientId: p.patient_id, status: 'pending' as const })))
+    setResults(payloads.map((p) => ({ id: p.patient_id, status: 'pending' as const })))
 
     const sentForPolling: Array<{ providerMessageId: string; sentAtIso: string }> = []
 
@@ -118,7 +120,7 @@ export function useSendBatchMessages() {
         const providerMessageId = res.providerMessageId ?? ''
         setResults((prev) =>
           prev.map((r) =>
-            r.patientId === payload.patient_id
+            r.id === payload.patient_id
               ? {
                   ...r,
                   status: wasSent ? 'sent' : 'failed',
@@ -136,7 +138,7 @@ export function useSendBatchMessages() {
         const message = descreveFalha(err)
         setResults((prev) =>
           prev.map((r) =>
-            r.patientId === payload.patient_id ? { ...r, status: 'failed', error: message } : r,
+            r.id === payload.patient_id ? { ...r, status: 'failed', error: message } : r,
           ),
         )
       }

@@ -2,12 +2,14 @@
 Lambda handler to list leads for a clinic.
 
 GET /clinics/{clinicId}/leads?startDate=&endDate=&booked=true&excludeSource=whatsapp&limit=50&offset=0
+    &stage=SUMIU,AGUARDANDO_NOS&source=whatsapp&orderBy=dias_parado   (PRD 057)
 """
 import logging
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timezone
 from decimal import Decimal
 
-from src.utils.http import http_response, require_api_key, extract_path_param, extract_query_param
+from src.utils.acesso import require_acesso
+from src.utils.http import http_response, extract_path_param, extract_query_param
 from src.services.db.postgres import PostgresService
 from src.services.lead_service import LeadService
 from src.services import silencio
@@ -64,7 +66,9 @@ def _data_ou_nada(valor):
 
 def handler(event, context):
     try:
-        api_key, error_response = require_api_key(event)
+        # PRD 057: a recepcao (STAFF) trabalha a fila do CRM; a chave mestra
+        # continua entrando como ADMIN.
+        identidade, error_response = require_acesso(event, "crm.ler")
         if error_response:
             return error_response
 
@@ -87,6 +91,10 @@ def handler(event, context):
         exclude_sources = [
             s.strip() for s in (exclude_param or "").split(",") if s.strip()
         ]
+        # PRD 057: filtros da fila do CRM.
+        stages = [s.strip() for s in (extract_query_param(event, "stage") or "").split(",") if s.strip()]
+        sources = [s.strip() for s in (extract_query_param(event, "source") or "").split(",") if s.strip()]
+        ordenar_por = extract_query_param(event, "orderBy") or "created_at"
 
         db = PostgresService()
         clinicas = db.execute_query(
@@ -102,7 +110,16 @@ def handler(event, context):
             exclude_sources=exclude_sources,
             limit=limit,
             offset=offset,
+            stages=stages,
+            sources=sources,
+            ordenar_por=ordenar_por,
         )
+        # dias_parado e derivado do retrato noturno (ultima_mensagem_em), nao
+        # recalculado por lead: a listagem nao consulta o DynamoDB por linha.
+        agora = datetime.now(timezone.utc)
+        for l in leads:
+            em = l.get("ultima_mensagem_em")
+            l["dias_parado"] = (agora - em).days if isinstance(em, datetime) and em.tzinfo else None
 
         # Status da conversa vem das fontes, nao de coluna copiada no lead.
         # Foi exatamente um campo denormalizado que mostrou "sem contato" para
@@ -135,12 +152,24 @@ def handler(event, context):
                 start_date=start_date,
                 end_date=end_date,
                 exclude_sources=exclude_sources,
+                sources=sources,
+                stages=stages,
             )
             totais = {
                 "total": int(contagem["total"]),
                 "convertidos": int(contagem["convertidos"]),
                 "nao_convertidos": int(contagem["nao_convertidos"]),
             }
+            # PRD 057: por estagio ignora o filtro de estagio (e o numero dos
+            # chips). Em try proprio: perder os chips nao pode zerar os totais.
+            try:
+                totais["por_estagio"] = {
+                    str(k): int(v) for k, v in lead_service.contar_por_estagio(
+                        clinic_id, start_date=start_date, end_date=end_date,
+                        sources=sources, exclude_sources=exclude_sources).items()}
+            except Exception as e:
+                logger.error(f"Falha ao contar leads por estagio: {e}")
+                totais["por_estagio"] = {}
             resumo = lead_service.resumo_de_conversoes(clinic_id)
             conversoes = {
                 "aguardando": int(resumo["aguardando"]),

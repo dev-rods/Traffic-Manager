@@ -23,7 +23,7 @@ DATAS = ["2026-10-07", "2026-10-14", "2026-10-21"]
 MEIO_DIA = 1791471600  # 2026-10-08 15:00 UTC
 
 
-def dispara(corpo, envio_ok=True, gravacao_ok=True, use_agent=True):
+def dispara(corpo, envio_ok=True, gravacao_ok=True, use_agent=True, silenciado=False):
     """Roda o handler de verdade. Devolve (resposta, chamadas_de_abertura)."""
     from src.functions.send import handler as modulo
 
@@ -46,6 +46,7 @@ def dispara(corpo, envio_ok=True, gravacao_ok=True, use_agent=True):
          mock.patch.object(modulo, "MessageTracker"), \
          mock.patch.object(modulo, "_tabela_de_sessoes"), \
          mock.patch.object(modulo, "_agora", return_value=MEIO_DIA), \
+         mock.patch.object(modulo.silencio, "esta_silenciado", return_value=silenciado), \
          mock.patch.object(modulo, "abre_campanha",
                            return_value=gravacao_ok) as abertura:
         resposta = modulo.handler(evento, None)
@@ -143,3 +144,18 @@ class TestValidacao(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSilenciado(unittest.TestCase):
+    """PRD 039 vale no disparo do painel tambem (fechado no PRD 057): contato
+    silenciado nao recebe campanha, e a mensagem manual continua passando."""
+
+    def test_campanha_para_silenciado_e_409(self):
+        resposta, abertura = dispara(dict(BASE, campanha={"datas": DATAS}), silenciado=True)
+        self.assertEqual(resposta["statusCode"], 409)
+        self.assertEqual(json.loads(resposta["body"])["motivo"], "silenciado")
+        abertura.assert_not_called()
+
+    def test_mensagem_manual_para_silenciado_passa(self):
+        resposta, _ = dispara(BASE, silenciado=True)
+        self.assertEqual(resposta["statusCode"], 200)

@@ -5,6 +5,7 @@ import unicodedata
 from typing import Any, Dict, List, Optional
 
 from src.services.db.postgres import PostgresService
+from src.services.estagio_do_lead import ESTAGIOS
 from src.utils.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
@@ -166,6 +167,8 @@ class LeadService:
         end_date: Optional[str] = None,
         booked: Optional[bool] = None,
         exclude_sources: Optional[List[str]] = None,
+        stages: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
     ):
         """Monta o WHERE da listagem de leads. Devolve (where, params).
 
@@ -191,6 +194,17 @@ class LeadService:
             # COALESCE: source NULL não casa com NOT IN e o lead sumiria calado.
             conditions.append(f"COALESCE(source, '') NOT IN ({marcadores})")
             params.extend(exclude_sources)
+        if sources:
+            marcadores = ", ".join(["%s"] * len(sources))
+            conditions.append(f"COALESCE(source, '') IN ({marcadores})")
+            params.extend(sources)
+        # PRD 057: estagio desconhecido e ignorado em vez de virar um filtro que
+        # nao casa com nada (a tela mostraria "vazio" por causa de um typo).
+        validos = [s for s in (stages or []) if s in ESTAGIOS]
+        if validos:
+            marcadores = ", ".join(["%s"] * len(validos))
+            conditions.append(f"stage IN ({marcadores})")
+            params.extend(validos)
 
         return " AND ".join(conditions), params
 
@@ -200,6 +214,8 @@ class LeadService:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         exclude_sources: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
+        stages: Optional[List[str]] = None,
     ) -> Dict[str, int]:
         """Totais do conjunto INTEIRO, não da página.
 
@@ -212,7 +228,7 @@ class LeadService:
         quem está com a aba "Convertidos" aberta continua vendo o total real.
         """
         where, params = self._filtros(
-            clinic_id, start_date, end_date, None, exclude_sources)
+            clinic_id, start_date, end_date, None, exclude_sources, stages, sources)
         linha = self.db.execute_query(
             f"""
             SELECT COUNT(*) AS total,
@@ -229,6 +245,28 @@ class LeadService:
             "nao_convertidos": total - convertidos,
         }
 
+    def contar_por_estagio(
+        self,
+        clinic_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        sources: Optional[List[str]] = None,
+        exclude_sources: Optional[List[str]] = None,
+    ) -> Dict[str, int]:
+        """Contagem por estagio do conjunto filtrado por origem e periodo (PRD 057).
+
+        Sem o filtro de estagio de proposito: e o numero de cada chip, e os
+        chips precisam mostrar o todo enquanto um deles esta selecionado.
+        Lead ainda nao processado pelo job sai como SEM_ESTAGIO.
+        """
+        where, params = self._filtros(
+            clinic_id, start_date, end_date, None, exclude_sources, None, sources)
+        linhas = self.db.execute_query(
+            f"SELECT stage, COUNT(*) AS n FROM scheduler.leads WHERE {where} GROUP BY stage",
+            tuple(params),
+        )
+        return {(l["stage"] or "SEM_ESTAGIO"): int(l["n"]) for l in linhas}
+
     def list_leads(
         self,
         clinic_id: str,
@@ -238,6 +276,9 @@ class LeadService:
         exclude_sources: Optional[List[str]] = None,
         limit: int = 50,
         offset: int = 0,
+        stages: Optional[List[str]] = None,
+        sources: Optional[List[str]] = None,
+        ordenar_por: str = "created_at",
     ):
         """List leads for a clinic with optional filters.
 
@@ -251,12 +292,18 @@ class LeadService:
         que a clínica passasse do limite da página.
         """
         where, params = self._filtros(
-            clinic_id, start_date, end_date, booked, exclude_sources)
+            clinic_id, start_date, end_date, booked, exclude_sources, stages, sources)
         params.extend([limit, offset])
 
-        # id tiebreaker keeps OFFSET pages from overlapping/skipping when created_at ties
+        # PRD 057: a fila do CRM ordena por "parado ha mais tempo" (ultima
+        # mensagem mais antiga primeiro); quem nunca falou vai para o fim.
+        if ordenar_por == "dias_parado":
+            ordem = "ORDER BY ultima_mensagem_em ASC NULLS LAST, created_at DESC, id DESC"
+        else:
+            # id tiebreaker keeps OFFSET pages from overlapping/skipping when created_at ties
+            ordem = "ORDER BY created_at DESC, id DESC"
         return self.db.execute_query(
-            f"SELECT * FROM scheduler.leads WHERE {where} ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s",
+            f"SELECT * FROM scheduler.leads WHERE {where} {ordem} LIMIT %s OFFSET %s",
             tuple(params),
         )
 

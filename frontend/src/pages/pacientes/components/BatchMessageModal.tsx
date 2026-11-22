@@ -5,7 +5,6 @@ import { useSendBatchMessages, type BatchMessageResult } from '@/hooks/useMessag
 import { formatPhone } from '@/utils/formatPhone'
 import { mensagemDoDisparo } from '@/utils/buildDefaultMessage'
 import { CampanhaDoBot } from './CampanhaDoBot'
-import type { PatientWithStats } from '@/types'
 import type { SendMessagePayload } from '@/services/messages.service'
 
 function getStatusLabel(result: BatchMessageResult | undefined): { text: string; className: string } | null {
@@ -23,9 +22,16 @@ function getStatusLabel(result: BatchMessageResult | undefined): { text: string;
   return { text: 'Enviado', className: 'text-emerald-600' }
 }
 
+/** O minimo que o disparo precisa. Pacientes e leads (PRD 057) servem. */
+export interface Destinatario {
+  id: string
+  name: string | null
+  phone: string
+}
+
 interface BatchMessageModalProps {
   open: boolean
-  patients: PatientWithStats[]
+  patients: Destinatario[]
   availableDates: string[]
   clinicTemplate?: string | null
   onClose: () => void
@@ -112,11 +118,11 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
         {/* Patient list */}
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1.5">
-            Pacientes ({activePatients.length})
+            Contatos ({activePatients.length})
           </label>
           <div className="rounded-lg border border-gray-200 max-h-40 overflow-y-auto divide-y divide-gray-50">
             {activePatients.map((p) => {
-              const result = results.find((r) => r.patientId === p.id)
+              const result = results.find((r) => r.id === p.id)
               const label = getStatusLabel(result)
               return (
                 <div key={p.id} className="flex items-center justify-between px-3 py-2">
@@ -223,7 +229,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
             </p>
             {unconfirmedCount > 0 && (
               <p className="text-sm text-amber-600">
-                {unconfirmedCount} sem confirmação — o WhatsApp aceitou mas não confirmou entrega. Verifique com esses pacientes por outro canal.
+                {unconfirmedCount} sem confirmação - o WhatsApp aceitou mas não confirmou entrega. Verifique com esses contatos por outro canal.
               </p>
             )}
             {failedCount > 0 && (
@@ -243,7 +249,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
               loading={isSending}
               disabled={activePatients.length === 0 || !messageTemplate.trim()}
             >
-              Enviar para {activePatients.length} paciente{activePatients.length !== 1 ? 's' : ''}
+              Enviar para {activePatients.length} contato{activePatients.length !== 1 ? 's' : ''}
             </Button>
           )}
         </div>

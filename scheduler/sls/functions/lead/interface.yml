@@ -93,3 +93,43 @@ MarcarContatoIniciado:
     - http:
         path: leads/{leadId}/marcar-contatado
         method: post
+
+# PRD 057: correcao manual do estagio pela recepcao. Sem chamada a AWS alem
+# do banco: role compartilhada.
+AtualizaEstagioDoLead:
+  handler: src.functions.lead.atualiza_estagio.handler
+  memorySize: 512
+  timeout: 30
+  events:
+    - http:
+        path: clinics/{clinicId}/leads/{leadId}/stage
+        method: patch
+
+# PRD 057: recalcula o estagio de todos os leads. 7h BRT (10h UTC), uma hora
+# depois do SyncWhatsAppChats, para o espelho do z-api estar do dia. Diario
+# porque a fila e semanal; mais que isso so gastaria chamadas de modelo sem
+# ninguem olhar. `{"dryRun": true}` calcula e devolve sem escrever.
+ClassificaLeads:
+  handler: src.functions.lead.classifica_estagios.handler
+  memorySize: 1024
+  timeout: 600
+  environment:
+    CRM_MAX_CHAMADAS_MODELO: "200"
+  iamRoleStatementsName: ${self:service}-${self:custom.stage}-ClassificaLeads-lambdaRole
+  iamRoleStatements:
+    # Transcricao de cada lead: uma Query por variante do telefone.
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: "arn:aws:logs:*:*:*"
+  events:
+    - schedule:
+        rate: cron(0 10 * * ? *)
+        enabled: true
