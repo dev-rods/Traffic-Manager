@@ -112,6 +112,7 @@ class TestSendComCampanha(unittest.TestCase):
              mock.patch.object(modulo, "_tabela_de_sessoes"), \
              mock.patch.object(modulo, "_sessao", return_value=dict(sessao)), \
              mock.patch.object(modulo, "_agora", return_value=agora), \
+             mock.patch.object(modulo.silencio, "esta_silenciado", return_value=False), \
              mock.patch.object(modulo, "grava_atendimento", self.gravou), \
              mock.patch.object(modulo, "abre_campanha", return_value=True):
             resposta = modulo.handler(evento, None)

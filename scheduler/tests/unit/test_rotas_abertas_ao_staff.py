@@ -42,6 +42,9 @@ ABERTAS = {
     "patient/update.py": "pacientes.escrever",
     # Prontuário: registrar a sessão.
     "patient_record/list.py": "prontuario.ler",
+    # PRD 057: a recepcao trabalha a fila do CRM (ver e corrigir estagio).
+    "lead/list.py": "crm.ler",
+    "lead/atualiza_estagio.py": "crm.escrever",
     "patient_record/create.py": "prontuario.escrever",
     "patient_record/update.py": "prontuario.escrever",
     "patient_record/history.py": "prontuario.ler",
@@ -70,7 +73,6 @@ FECHADAS = [
     "clinic/list.py",           # todas as clínicas
     "attendant/handler.py",     # conversas de WhatsApp
     "send/send.py",
-    "lead/list.py",
     "faq/list.py",
     "template/list.py",
     "discount_rules/get.py",    # regra de preço

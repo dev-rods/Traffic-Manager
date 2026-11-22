@@ -75,6 +75,8 @@ SQL_STATEMENTS = [
         -- Quem o "Novo registro de sessao" propoe como profissional.
         default_professional_id UUID,
         cidade VARCHAR(120),
+        -- PRD 057: dias sem resposta ate o lead contar como "sumiu".
+        crm_dias_parado INTEGER NOT NULL DEFAULT 7,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
     )
@@ -567,6 +569,16 @@ SQL_STATEMENTS = [
         first_contact_status VARCHAR(20),
         first_contact_at TIMESTAMPTZ,
         conversation_started_at TIMESTAMPTZ,
+        -- PRD 057: retrato noturno do estagio (ClassificaLeads). Nao e o
+        -- conversation_status da listagem, que diz quem conduz a conversa agora.
+        stage VARCHAR(32),
+        stage_reason VARCHAR(120),
+        stage_source VARCHAR(16),
+        stage_updated_at TIMESTAMPTZ,
+        triagem_feita_em TIMESTAMPTZ,
+        desfecho_tentado_em TIMESTAMPTZ,
+        ultima_mensagem_em TIMESTAMPTZ,
+        ultima_mensagem_de VARCHAR(4),
         metadata JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -1427,6 +1439,53 @@ SQL_STATEMENTS = [
     """CREATE INDEX IF NOT EXISTS idx_contatos_silenciados_clinica
        ON scheduler.contatos_silenciados (clinic_id)
        WHERE reativado_em IS NULL""",
+
+    # -- PRD 057: CRM de leads ---------------------------------------------
+    #
+    # O estagio e um RETRATO noturno gravado no lead, recalculado pela Lambda
+    # ClassificaLeads. Nao confundir com `conversation_status`, que a listagem
+    # calcula na hora e diz QUEM conduz a conversa agora; o estagio diz EM QUE
+    # PE a conversa esta. `ultima_mensagem_*` sao parte do mesmo retrato.
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS stage VARCHAR(32)",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS stage_reason VARCHAR(120)",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS stage_source VARCHAR(16)",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS stage_updated_at TIMESTAMPTZ",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS triagem_feita_em TIMESTAMPTZ",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS desfecho_tentado_em TIMESTAMPTZ",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS ultima_mensagem_em TIMESTAMPTZ",
+    "ALTER TABLE scheduler.leads ADD COLUMN IF NOT EXISTS ultima_mensagem_de VARCHAR(4)",
+    """DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_leads_stage') THEN
+            ALTER TABLE scheduler.leads ADD CONSTRAINT chk_leads_stage CHECK (stage IS NULL OR stage IN (
+                'SEM_CONVERSA','INICIADA_SEM_RESPOSTA','EM_ANDAMENTO','AGUARDANDO_NOS','SUMIU',
+                'NAO_AGENDOU','CANCELOU','FALTOU','AGENDOU','NAO_E_LEAD'));
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_leads_stage_source') THEN
+            ALTER TABLE scheduler.leads ADD CONSTRAINT chk_leads_stage_source CHECK (
+                stage_source IS NULL OR stage_source IN ('REGRA','MODELO','MANUAL','HISTORICO'));
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_leads_ultima_mensagem_de') THEN
+            ALTER TABLE scheduler.leads ADD CONSTRAINT chk_leads_ultima_mensagem_de CHECK (
+                ultima_mensagem_de IS NULL OR ultima_mensagem_de IN ('LEAD','NOS'));
+        END IF;
+    END $$""",
+    "CREATE INDEX IF NOT EXISTS idx_leads_clinic_stage ON scheduler.leads(clinic_id, stage)",
+    "ALTER TABLE scheduler.clinics ADD COLUMN IF NOT EXISTS crm_dias_parado INTEGER NOT NULL DEFAULT 7",
+    # Append-only. Nenhum endpoint le daqui nesta entrega: existe para que o
+    # funil e a taxa de erro do classificador tenham historico desde o dia 1.
+    """CREATE TABLE IF NOT EXISTS scheduler.lead_stage_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        clinic_id VARCHAR(100) NOT NULL REFERENCES scheduler.clinics(clinic_id),
+        lead_id UUID NOT NULL REFERENCES scheduler.leads(id),
+        de VARCHAR(32),
+        para VARCHAR(32) NOT NULL,
+        fonte VARCHAR(16) NOT NULL,
+        motivo VARCHAR(120),
+        usuario_id UUID,
+        criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_lead_stage_events_lead ON scheduler.lead_stage_events(lead_id, criado_em)",
 ]
 
 

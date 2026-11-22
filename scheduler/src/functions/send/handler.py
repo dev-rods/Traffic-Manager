@@ -10,7 +10,7 @@ from src.utils.http import parse_body, http_response, require_api_key
 from src.services.db.postgres import PostgresService
 from src.services.message_tracker import MessageTracker
 from src.providers.whatsapp_provider import get_provider
-from src.services import atendimento
+from src.services import atendimento, silencio
 from src.services.campanha import DURACAO_PADRAO_DIAS, abre
 from src.services.porta_do_disparo import MOTIVOS_QUE_O_DISPARO_DESTRAVA, motivo_para_nao_iniciar
 from src.services.session_store import abre_campanha, grava_atendimento
@@ -149,6 +149,17 @@ def handler(event, context):
         # atendente mandando mensagem a mao - nada barra.
         destrava = None
         if campanha_pedida is not None:
+            # PRD 039 (depois do PRD 057 passou a valer aqui tambem): contato
+            # silenciado nao recebe disparo, nem o que destrava humano/cooldown.
+            # Antes so o lembrete e a fila de saida conferiam; a campanha do
+            # painel passava direto.
+            if silencio.esta_silenciado(clinic_id, phone, db):
+                logger.info(f"[Send] Campanha para {phone} recusada: silenciado")
+                return http_response(409, {
+                    "status": "ERROR",
+                    "message": "o contato esta silenciado (silenciado)",
+                    "motivo": "silenciado",
+                })
             sessao = _sessao(clinic_id, phone)
             agora = _agora()
             motivo = _motivo_para_nao_iniciar(clinic, sessao, agora)
