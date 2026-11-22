@@ -106,13 +106,19 @@ def _sinais(lead: Dict, mensagens, chat: Optional[Dict], agendamentos: List[Dict
 
 
 class _SemModelo:
-    """Depois do teto, as regras continuam e o modelo cala."""
-    chamadas = 0
+    """Depois do teto, as regras continuam e o modelo cala. Guarda quantas
+    chamadas o classificador de verdade fez e conta o que ficou para amanha."""
+
+    def __init__(self, chamadas: int = 0):
+        self.chamadas = chamadas
+        self.adiados = 0
 
     def triagem(self, *_):
+        self.adiados += 1
         return None
 
     def desfecho(self, *_):
+        self.adiados += 1
         return None
 
 
@@ -124,7 +130,7 @@ def _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, ago
     if precisa_de_triagem(lead, mensagens):
         v = classificador.triagem(mensagens, clinic)
         if v is None:
-            descartes += 1
+            descartes += 0 if isinstance(classificador, _SemModelo) else 1
         else:
             if not dry_run:
                 repo.marca_triagem(db, str(lead["id"]))
@@ -133,7 +139,7 @@ def _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, ago
     if decisao.stage != estagio.NAO_E_LEAD and precisa_de_desfecho(lead, decisao, mensagens, agora, dias):
         v = classificador.desfecho(mensagens, clinic)
         if v is None:
-            descartes += 1
+            descartes += 0 if isinstance(classificador, _SemModelo) else 1
         else:
             if not dry_run:
                 repo.marca_desfecho_tentado(db, str(lead["id"]))
@@ -164,7 +170,7 @@ def processa_clinica(db, tabela_eventos, clinic: Dict, classificador, agora: dat
             descartes += d
         except TetoAtingido as t:
             logger.warning("[ClassificaLeads] {}: teto do modelo atingido ({}); o resto fica para amanha".format(clinic_id, t))
-            classificador = _SemModelo()
+            classificador = _SemModelo(getattr(classificador, "chamadas", 0))
         por_estagio[decisao.stage] += 1
         r = resumo(mensagens)
         # Sem transcricao, a data do espelho do z-api e a unica que existe: sem
@@ -182,7 +188,9 @@ def processa_clinica(db, tabela_eventos, clinic: Dict, classificador, agora: dat
         elif repo.grava_estagio(db, lead, decisao, ultima_em=ultima_em, ultima_de=r["ultima_de"]):
             mudaram += 1
     return {"leads": len(leads), "mudaram": mudaram, "por_estagio": dict(por_estagio),
-            "chamadas_modelo": getattr(classificador, "chamadas", 0), "descartes": descartes}
+            "chamadas_modelo": getattr(classificador, "chamadas", 0), "descartes": descartes,
+            # Perguntas que o teto deixou para a proxima noite (nao sao descartes).
+            "adiados": getattr(classificador, "adiados", 0)}
 
 
 def handler(event, context):
@@ -193,7 +201,9 @@ def handler(event, context):
     logger.info("[traceId: {}] ClassificaLeads inicio{}".format(trace_id, " (dryRun)" if dry_run else ""))
     db = PostgresService()
     tabela = _tabela_de_eventos()
-    max_chamadas = int(os.environ.get("CRM_MAX_CHAMADAS_MODELO", "200"))
+    # O teto e por invocacao. O payload pode subir para um backfill (a primeira
+    # rodada de uma clinica com centenas de leads); o cron usa o da env.
+    max_chamadas = int(event.get("maxChamadasModelo") or os.environ.get("CRM_MAX_CHAMADAS_MODELO", "200"))
     saida = {"traceId": trace_id, "dryRun": dry_run, "clinics": 0, "por_clinica": {}}
     for clinic in _clinicas(db, event.get("clinicId")):
         cid = clinic["clinic_id"]

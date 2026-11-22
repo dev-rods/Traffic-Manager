@@ -287,8 +287,11 @@ EM_ANDAMENTO
 - `src/functions/lead/classifica_estagios.py`, interface em
   `sls/functions/lead/interface.yml`, `schedule: cron(0 10 * * ? *)` (7h BRT,
   1h depois do sync de conversas). Timeout 300s, 1024 MB.
-- Payload opcional: `{"clinicId": "...", "dryRun": true}`. `dryRun` calcula e
-  devolve a distribuição por estágio sem escrever nada.
+- Payload opcional: `{"clinicId": "...", "dryRun": true, "maxChamadasModelo": 900}`.
+  `dryRun` calcula e devolve a distribuição por estágio sem escrever nada.
+  `maxChamadasModelo` sobe o teto só naquela invocação (backfill da primeira
+  rodada; o cron usa o da env). O retorno separa `descartes` (resposta
+  inválida do modelo) de `adiados` (o teto deixou para a próxima noite).
 - Por clínica ativa: carrega leads; lê a última mensagem de cada um no
   MessageEvents (uma query por lead, `Limit` pequeno, em paralelo moderado);
   carrega agendamentos por telefone/paciente; aplica regras; roda triagem e
@@ -453,5 +456,5 @@ EM_ANDAMENTO
 - [x] Revisado sobre a main em 21/11/2026 (seção 2.4)
 - [x] Spec gerada: `docs/work/spec/057-crm-de-leads.md` (revisada em 21/11)
 - [x] Implementado em dev: 21/11/2026 (PR #243; migração aplicada, scheduler dev layer 207; smoke 16/16 pelo roteiro + browser 13/13); revisão da classificação em 22/11 (layer 209; Premium AGUARDANDO_NOS 22 → 11, NAO_AGENDOU 3 → 14)
-- [ ] Implementado em prod: (migração + deploy + dryRun por clínica com a distribuição para o André antes do real)
+- [x] Implementado em prod: 22/11/2026 (migração, scheduler prod layers 164 e 165, dryRun por clínica conferido pelo log, rodada real: 1.041 leads classificados, 540 chamadas ao modelo, 0 descartes; retenção de 90 d nos dois log groups)
 - [x] Registrado em `TASKS_LOG.md`
