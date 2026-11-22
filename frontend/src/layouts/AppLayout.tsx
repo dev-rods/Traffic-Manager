@@ -46,6 +46,7 @@ const ICON_MAP: Record<string, () => React.ReactNode> = {
   '/site-agendamento': () => <IconGlobe />,
   '/bot': () => <IconBot />,
   '/leads': () => <IconTarget />,
+  '/crm': () => <IconUsers />,
   '/faq': () => <IconHelp />,
   '/usuarios': () => <IconShield />,
   '/configuracoes': () => <IconSettings />,
@@ -107,6 +108,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/bot', label: 'Bot' },
       { to: '/leads', label: 'Leads' },
+      { to: '/crm', label: 'CRM' },
       { to: '/faq', label: 'FAQ' },
     ],
   },

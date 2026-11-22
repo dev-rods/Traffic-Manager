@@ -1,11 +1,11 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { usePatients } from '@/hooks/usePatients'
 import { useClinic } from '@/hooks/useClinic'
+import { proximasDatas } from '@/utils/proximasDatas'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
 import { useActiveConversations, usePauseBot, useResumeBot } from '@/hooks/useBot'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useSelection } from '@/hooks/useSelection'
-import { todayStr } from '@/utils/dateHelpers'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SkeletonTable } from '@/components/ui/Skeleton'
@@ -80,15 +80,10 @@ export function PacientesPage() {
   // Fetch available dates for WhatsApp message, limited by max_future_dates
   const { data: clinic } = useClinic()
   const { data: rulesData } = useAvailabilityRules()
-  const availableDates = useMemo(() => {
-    const today = todayStr()
-    const maxDates = clinic?.max_future_dates ?? 5
-    return (rulesData?.data ?? [])
-      .filter((r) => r.rule_date !== null && r.rule_date! >= today)
-      .map((r) => r.rule_date as string)
-      .sort()
-      .slice(0, maxDates)
-  }, [rulesData, clinic])
+  const availableDates = useMemo(
+    () => proximasDatas(rulesData?.data, clinic?.max_future_dates),
+    [rulesData, clinic],
+  )
 
   const { data, isLoading, isError, error, refetch } = usePatients({
     search: debouncedSearch || undefined,

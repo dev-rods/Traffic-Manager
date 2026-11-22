@@ -20,6 +20,7 @@ import { ServicosAreasPage } from '@/pages/servicos-areas/ServicosAreasPage'
 import { SiteAgendamentoPage } from '@/pages/site-agendamento/SiteAgendamentoPage'
 import { BotPage } from '@/pages/bot/BotPage'
 import { LeadsPage } from '@/pages/leads/LeadsPage'
+import { CrmPage } from '@/pages/crm/CrmPage'
 import { UsuariosPage } from '@/pages/usuarios/UsuariosPage'
 import { RotaPermitida } from '@/components/RotaPermitida'
 import { InicioPorPapel } from '@/components/InicioPorPapel'
@@ -68,6 +69,7 @@ export const router = createBrowserRouter([
           { path: 'site-agendamento', element: <SiteAgendamentoPage /> },
           { path: 'bot', element: <BotPage /> },
           { path: 'leads', element: <LeadsPage /> },
+          { path: 'crm', element: <CrmPage /> },
           { path: 'faq', element: <FaqPage /> },
           { path: 'usuarios', element: <UsuariosPage /> },
           { path: 'configuracoes', element: <ConfiguracoesPage /> },

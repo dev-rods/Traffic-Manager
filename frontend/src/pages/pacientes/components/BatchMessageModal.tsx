@@ -5,7 +5,6 @@ import { useSendBatchMessages, type BatchMessageResult } from '@/hooks/useMessag
 import { formatPhone } from '@/utils/formatPhone'
 import { mensagemDoDisparo } from '@/utils/buildDefaultMessage'
 import { CampanhaDoBot } from './CampanhaDoBot'
-import type { PatientWithStats } from '@/types'
 import type { SendMessagePayload } from '@/services/messages.service'
 
 function getStatusLabel(result: BatchMessageResult | undefined): { text: string; className: string } | null {
@@ -23,9 +22,16 @@ function getStatusLabel(result: BatchMessageResult | undefined): { text: string;
   return { text: 'Enviado', className: 'text-emerald-600' }
 }
 
+/** O minimo que o disparo precisa. Pacientes e leads (PRD 057) servem. */
+export interface Destinatario {
+  id: string
+  name: string | null
+  phone: string
+}
+
 interface BatchMessageModalProps {
   open: boolean
-  patients: PatientWithStats[]
+  patients: Destinatario[]
   availableDates: string[]
   clinicTemplate?: string | null
   onClose: () => void
@@ -116,7 +122,7 @@ export function BatchMessageModal({ open, patients, availableDates, clinicTempla
           </label>
           <div className="rounded-lg border border-gray-200 max-h-40 overflow-y-auto divide-y divide-gray-50">
             {activePatients.map((p) => {
-              const result = results.find((r) => r.patientId === p.id)
+              const result = results.find((r) => r.id === p.id)
               const label = getStatusLabel(result)
               return (
                 <div key={p.id} className="flex items-center justify-between px-3 py-2">

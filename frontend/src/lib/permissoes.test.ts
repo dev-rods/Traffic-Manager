@@ -38,6 +38,11 @@ describe('podeVer', () => {
     expect(podeVer(RECEPCAO, '/pacientes')).toBe(true)
   })
 
+  it('o funcionário alcança a fila do CRM (PRD 057)', () => {
+    expect(podeVer(RECEPCAO, '/crm')).toBe(true)
+    expect(podeVer(SEM_LISTA, '/crm')).toBe(true)
+  })
+
   it('o prontuário entra junto com pacientes', () => {
     // É rota filha: /pacientes/:id/documentos. Sem o casamento por prefixo, a
     // funcionária abriria a lista e não conseguiria registrar a sessão.

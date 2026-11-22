@@ -1,11 +1,13 @@
 import { api } from './api'
-import type { Lead } from '@/types'
+import type { Lead, LeadStage } from '@/types'
 
 /** Totais do conjunto inteiro, contados no banco - não da página carregada. */
 export interface LeadTotals {
   total: number
   convertidos: number
   nao_convertidos: number
+  /** Contagem por estagio do conjunto filtrado por origem e periodo (nao por estagio). PRD 057. */
+  por_estagio?: Record<string, number>
 }
 
 /**
@@ -56,6 +58,11 @@ export interface LeadListParams {
   booked?: boolean
   /** Origens a excluir, separadas por virgula. Ex: 'whatsapp'. */
   excludeSource?: string
+  /** Estagios separados por virgula (PRD 057). */
+  stage?: string
+  /** Origens separadas por virgula (PRD 057). */
+  source?: string
+  orderBy?: 'created_at' | 'dias_parado'
   limit?: number
   offset?: number
 }
@@ -86,6 +93,13 @@ export const leadsService = {
   update(leadId: string, payload: Partial<Pick<Lead, 'name' | 'booked'>>) {
     return api
       .put<{ status: string; lead: Lead }>(`/leads/${leadId}`, payload)
+      .then((r) => r.data)
+  },
+
+  /** Correcao manual do estagio (PRD 057). Grava MANUAL e trava a regra noturna. */
+  patchStage(clinicId: string, leadId: string, payload: { stage: LeadStage; reason?: string }) {
+    return api
+      .patch<{ status: string; lead: Lead }>(`/clinics/${clinicId}/leads/${leadId}/stage`, payload)
       .then((r) => r.data)
   },
 }

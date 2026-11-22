@@ -18,6 +18,8 @@ export const ROTAS_DO_STAFF = [
   '/agenda',
   // Cobre também /pacientes/:id/documentos, que é o prontuário.
   '/pacientes',
+  // Fila semanal da recepção (PRD 057); o backend abriu crm.ler e crm.escrever.
+  '/crm',
 ] as const
 
 /** Para onde o STAFF vai quando entra, ou quando tenta uma rota fechada. */
