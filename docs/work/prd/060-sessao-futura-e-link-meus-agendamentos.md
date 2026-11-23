@@ -285,8 +285,13 @@ Em código, a fonte única da regra é `AppointmentService.sessao_no_mesmo_mes`
   pelo painel, sem nenhum envio de WhatsApp; pytest, vitest do site e do painel,
   lint e build limpos). Roteiro:
   `scheduler/tests/integration/060-sessao-futura-e-link-meus-agendamentos.md`.
-- [ ] Implementado em prod (scheduler por deploy manual; site e painel pela
-  Vercel no merge)
+- [x] Implementado em prod (scheduler): 23/11/2026, layer 169, Lambdas
+  atualizadas 19:16 UTC. A primeira tentativa foi interrompida pelo sistema por
+  falta de memória na máquina, ainda no empacotamento, sem tocar o stack; a
+  segunda passou com 3,6 GB livres. Sem smoke em prod (o site exige código por
+  WhatsApp e o painel criaria dado real): conferir a primeira pergunta real por
+  `[OutroMes]` no CloudWatch.
+- [ ] Site e painel em prod: pela Vercel, no merge do PR #249.
 - [x] Registrado em `TASKS_LOG.md`
 - Guarda do bot: `mais_uma=true` só vale depois de a tool ter devolvido a
   pergunta na mesma conversa (`pergunta_mais_uma` gravado na sessão). O modelo

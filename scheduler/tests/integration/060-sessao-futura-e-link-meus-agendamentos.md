@@ -55,3 +55,9 @@ próprio smoke no fim. Casos 7 a 12 cobertos por pytest (2.645, suíte inteira) 
 (site 126, painel 728); lint e build dos dois fronts limpos.
 
 Nenhuma mensagem de WhatsApp foi disparada neste smoke.
+
+**Prod, 23/11/2026** (scheduler layer 169, Lambdas atualizadas 19:16 UTC).
+Sem smoke em prod de propósito: o caminho do site exige código por WhatsApp e
+o do painel criaria agendamento real. Caso 13 fica para a primeira pergunta
+real: procurar `[OutroMes]` no CloudWatch do PublicBooking, CreateAppointment
+e WhatsAppWebhook. Site e painel sobem pela Vercel no merge do PR #249.
