@@ -10,6 +10,7 @@ os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "t")
 os.environ.setdefault("MESSAGE_EVENTS_TABLE", "t")
 
 from src.functions.lead import classifica_estagios as job
+from src.services import atendimento
 from src.services import estagio_do_lead as e
 from src.services.classificador_de_lead import TetoAtingido, Veredito
 from src.services.transcricao import Mensagem
@@ -59,9 +60,23 @@ class ClassificadorFalso:
         return None
 
 
-def roda(db, classificador=None, dry_run=False, mensagens=()):
-    with mock.patch.object(job, "ultimas_mensagens", return_value=list(mensagens)):
-        return job.processa_clinica(db, None, CLINIC, classificador or ClassificadorFalso(), AGORA, dry_run=dry_run)
+def roda(db, classificador=None, dry_run=False, mensagens=(), sessoes=None):
+    with mock.patch.object(job, "ultimas_mensagens", return_value=list(mensagens)), \
+            mock.patch.object(job, "sessoes_por_telefone", return_value=dict(sessoes or {})) as spt:
+        r = job.processa_clinica(db, None, None, CLINIC, classificador or ClassificadorFalso(), AGORA, dry_run=dry_run)
+        r["_telefones_pedidos"] = spt.call_args[0][2] if spt.call_args else []
+        return r
+
+
+def entregue_pelo_bot(ha_dias, pendente=True):
+    """Sessao como o webhook grava depois de um handoff: bloco atendimento com
+    pausado_por HANDOFF, entregue_em e tarefa aberta (HUMAN_PENDING)."""
+    agora = int((AGORA - timedelta(days=ha_dias)).timestamp())
+    s = atendimento.entrega_a_humano({}, por=atendimento.POR_HANDOFF, motivo="x", agora=agora,
+                                     pending_intent="agendar" if pendente else None)
+    if pendente:
+        s = atendimento.vincula_tarefa(s, "t1")
+    return s
 
 
 class TestProcessaClinica(unittest.TestCase):
@@ -211,10 +226,61 @@ class TestProcessaClinica(unittest.TestCase):
 
     def test_max_chamadas_vem_do_payload(self):
         with mock.patch.object(job, "PostgresService"), mock.patch.object(job, "_tabela_de_eventos"), \
-                mock.patch.object(job, "_clinicas", return_value=[CLINIC]), \
+                mock.patch.object(job, "_tabela_de_sessoes"), mock.patch.object(job, "_clinicas", return_value=[CLINIC]), \
                 mock.patch.object(job, "Classificador") as Cl, mock.patch.object(job, "processa_clinica", return_value={}):
             job.handler({"clinicId": "c1", "dryRun": True, "maxChamadasModelo": 900}, None)
             self.assertEqual(Cl.call_args.kwargs["max_chamadas"], 900)
+
+    def test_entrega_do_bot_pendente_e_aguardando_nos_e_nao_pergunta_o_desfecho(self):
+        # Nobre em prod: lead pediu data, bot nao tinha, entregou em 09/11, ninguem assumiu,
+        # e o modelo concluiu NAO_AGENDOU. Agora e AGUARDANDO_NOS e o modelo nao e chamado.
+        ms = [Mensagem("LEAD", AGORA - timedelta(days=13, hours=1), "tem horario esse mes?"),
+              Mensagem("NOS", AGORA - timedelta(days=13), "Vou confirmar com uma especialista e ja te retorno", "BOT")]
+
+        class Cl(ClassificadorFalso):
+            def desfecho(self, *_):
+                raise AssertionError("nao devia perguntar")
+
+        db = BancoFalso([lead(stage=e.NAO_AGENDOU, stage_source=e.MODELO, stage_reason="sem horario no mes",
+                              stage_updated_at=AGORA - timedelta(days=1))])
+        r = roda(db, Cl(), mensagens=ms, sessoes={"5511999990000": entregue_pelo_bot(13)})
+        self.assertEqual(r["por_estagio"], {e.AGUARDANDO_NOS: 1})
+        upd = [p for s, p in db.escritas if "UPDATE scheduler.leads SET stage" in s][0]
+        self.assertEqual((upd[0], upd[2]), (e.AGUARDANDO_NOS, e.REGRA))
+        self.assertIn("ninguem assumiu", upd[1])
+        # a data do motivo e no fuso da clinica (AGORA e 10h UTC, 7h BRT: mesmo dia)
+        self.assertIn("{:%d/%m}".format(AGORA - timedelta(days=13)), upd[1])
+
+    def test_pessoa_respondeu_depois_da_entrega_segue_a_regra_e_o_desfecho(self):
+        ms = [Mensagem("LEAD", AGORA - timedelta(days=13, hours=1), "tem horario?"),
+              Mensagem("NOS", AGORA - timedelta(days=13), "Vou confirmar com uma especialista", "BOT"),
+              Mensagem("NOS", AGORA - timedelta(days=12), "Oi! Tenho quinta 14h", "HUMANO")]
+
+        class Cl(ClassificadorFalso):
+            def desfecho(self, *_):
+                self.chamadas += 1
+                return Veredito("AINDA_ABERTO", "sem decisao")
+
+        db = BancoFalso([lead()])
+        r = roda(db, Cl(), mensagens=ms, sessoes={"5511999990000": entregue_pelo_bot(13)})
+        self.assertEqual((r["por_estagio"], r["chamadas_modelo"]), ({e.SUMIU: 1}, 1))
+
+    def test_sessao_na_variante_do_telefone_casa(self):
+        ms = [Mensagem("LEAD", AGORA - timedelta(days=3, hours=1), "oi"),
+              Mensagem("NOS", AGORA - timedelta(days=3), "Vou confirmar com uma especialista", "BOT")]
+        db = BancoFalso([lead(phone="5547997053940")])
+        r = roda(db, mensagens=ms, sessoes={"554797053940": entregue_pelo_bot(3)})
+        self.assertEqual(r["por_estagio"], {e.AGUARDANDO_NOS: 1})
+        self.assertIn("554797053940", r["_telefones_pedidos"])
+        self.assertIn("5547997053940", r["_telefones_pedidos"])
+
+    def test_entrega_vencida_sem_tarefa_nao_e_sinal(self):
+        # INSTABILIDADE sem pendencia: 24h + cooldown e o bloco volta ao bot.
+        ms = [Mensagem("LEAD", AGORA - timedelta(days=3, hours=1), "oi"),
+              Mensagem("NOS", AGORA - timedelta(days=3), "Instabilidade, ja te retorno", "BOT")]
+        db = BancoFalso([lead()])
+        r = roda(db, mensagens=ms, sessoes={"5511999990000": entregue_pelo_bot(3, pendente=False)})
+        self.assertEqual(r["por_estagio"], {e.EM_ANDAMENTO: 1})
 
     def test_manual_nao_vai_ao_modelo(self):
         ms = [Mensagem("LEAD", AGORA - timedelta(days=12), "oi"), Mensagem("NOS", AGORA - timedelta(days=11), "ola")]
@@ -241,7 +307,7 @@ class TestHandler(unittest.TestCase):
         with mock.patch.object(job, "_clinicas", return_value=clinicas), \
              mock.patch.object(job, "processa_clinica", side_effect=processa), \
              mock.patch.object(job, "PostgresService"), mock.patch.object(job, "_tabela_de_eventos"), \
-             mock.patch.object(job, "Classificador"):
+             mock.patch.object(job, "_tabela_de_sessoes"), mock.patch.object(job, "Classificador"):
             r = job.handler({"dryRun": True}, None)
         self.assertEqual(r["clinics"], 2)
         self.assertIn("erro", r["por_clinica"]["c1"])
