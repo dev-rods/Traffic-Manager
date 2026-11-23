@@ -123,7 +123,7 @@ Use para rastrear o que foi implementado, refatorado ou removido.
 
 (Adicione novas linhas acima desta.)
 
-- **fix** Retomada sabe a data e `get_time_slots` recusa data passada (2026-11-23) - Caso real da Essência em 23/11: a recepção retomou o bot pelo painel com "dia 08 ou 09?" em aberto; o bloco CALENDÁRIO não entrava em gatilho sintético, o modelo consultou 2025-12-08/09, recebeu `[]` e disse que não havia horário. Agora o calendário (só a linha de HOJE) entra também em `__RETOMAR_CONVERSA__`/`__INICIAR_CONVERSA__`, e `get_time_slots` devolve erro com a data de hoje para data passada. Testes: `tests/unit/test_retomada_sabe_a_data.py`. Sem PRD (correção pontual).
+- **fix** Retomada sabe a data e `get_time_slots` recusa data passada (2026-11-23) - Caso real da Essência em 23/11: a recepção retomou o bot pelo painel com "dia 08 ou 09?" em aberto; o bloco CALENDÁRIO não entrava em gatilho sintético, o modelo consultou 2025-12-08/09, recebeu `[]` e disse que não havia horário. Agora o calendário (só a linha de HOJE) entra também em `__RETOMAR_CONVERSA__`/`__INICIAR_CONVERSA__`, e `get_time_slots` devolve erro com a data de hoje para data passada. Testes: `tests/unit/test_retomada_sabe_a_data.py`. No teste em dev apareceu o segundo bug: `get_conversation_messages` sem `desde` lia os últimos N itens da chave, e `STATUS#` ordena depois de `MSG#`; em 658 conversas de prod (477 ativas em nov) a retomada só via status e concluía "nada pendente". A leitura agora fica em `MSG#` sempre. Sem PRD (correção pontual). Em dev (layer 215) e prod (layer 170) em 23/11.
 
 ---
 
