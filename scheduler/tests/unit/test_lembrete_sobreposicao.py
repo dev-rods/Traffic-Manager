@@ -56,35 +56,35 @@ class TestVivo(unittest.TestCase):
 
 
 class TestFerramentas(unittest.TestCase):
-    def test_com_site_remove_saida_e_libera_confirmacao(self):
+    def test_vivo_libera_confirmacao(self):
         s = sessao(L.abre(APPT, CLINIC_COM_SITE, AGORA))
-        self.assertEqual(L.ferramentas_a_remover(s, CLINIC_COM_SITE, AGORA), L.FERRAMENTAS_DE_SAIDA)
         self.assertEqual(L.ferramentas_a_liberar(s, AGORA), {L.FERRAMENTA_DE_CONFIRMACAO})
 
-    def test_sem_site_nao_remove_nada(self):
-        s = sessao(L.abre(APPT, CLINIC_SEM_SITE, AGORA))
-        self.assertEqual(L.ferramentas_a_remover(s, CLINIC_SEM_SITE, AGORA), frozenset())
-        self.assertEqual(L.ferramentas_a_liberar(s, AGORA), {L.FERRAMENTA_DE_CONFIRMACAO})
-
-    def test_morto_nao_mexe_em_nada(self):
+    def test_morto_nao_libera_nada(self):
         l = L.abre(APPT, CLINIC_COM_SITE, AGORA)
-        depois = l["expira_em"] + 1
-        self.assertEqual(L.ferramentas_a_remover(sessao(l), CLINIC_COM_SITE, depois), frozenset())
-        self.assertEqual(L.ferramentas_a_liberar(sessao(l), depois), frozenset())
+        self.assertEqual(L.ferramentas_a_liberar(sessao(l), l["expira_em"] + 1), frozenset())
+
+    def test_nao_remove_mais_ferramenta_nenhuma(self):
+        # PRD 059: cancelar voltou a conversa. A remocao de cancel_appointment
+        # com site (PRD 027) saiu do modulo inteiro.
+        self.assertFalse(hasattr(L, "ferramentas_a_remover"))
+        self.assertFalse(hasattr(L, "FERRAMENTAS_DE_SAIDA"))
 
 
 class TestBloco(unittest.TestCase):
-    def test_com_site_tem_link_e_proibe_executar(self):
+    def test_com_site_cancela_aqui_e_remarca_pelo_link(self):
         b = L.bloco_de_prompt(sessao(L.abre(APPT, CLINIC_COM_SITE, AGORA)), CLINIC_COM_SITE, AGORA)
         self.assertIn("https://agendar.x.com.br/", b)
-        self.assertIn("NÃO execute", b)
+        self.assertIn("cancele AGORA com cancel_appointment", b)
+        self.assertIn("REMARCAR (outra data), NÃO execute", b)
         self.assertIn("confirm_attendance", b)
         self.assertIn("06/11", b)
         self.assertIn("Axilas, Virilha Completa", b)
 
-    def test_sem_site_diz_que_resolve_por_aqui(self):
+    def test_sem_site_cancela_e_remarca_por_aqui(self):
         b = L.bloco_de_prompt(sessao(L.abre(APPT, CLINIC_SEM_SITE, AGORA)), CLINIC_SEM_SITE, AGORA)
         self.assertNotIn("http", b)
+        self.assertIn("cancele AGORA com cancel_appointment", b)
         self.assertIn("por aqui mesmo", b)
 
     def test_morto_e_vazio(self):

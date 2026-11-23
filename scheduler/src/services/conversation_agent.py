@@ -49,6 +49,7 @@ from src.services.menor_de_idade import TEXTO as AVISO_DE_MENOR
 from src.services.menor_de_idade import afirmacao_sem_respaldo as afirmacao_de_menor_sem_respaldo
 from src.services.menor_de_idade import precisa_avisar as precisa_avisar_menor
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
+from src.services.cancelamento_pela_conversa import mensagem as confirmacao_de_cancelamento
 from src.services.preco_minimo import preco_minimo_por_area
 from src.services.pergunta_de_data import (
     oferece_ver_as_datas,
@@ -64,20 +65,16 @@ from src.services.template_service import TemplateService
 LIMITE_DE_BOTOES = 3
 
 
-def _nome_da_tool(definicao):
-    return definicao.get("name") or (definicao.get("function") or {}).get("name")
-
-
 def _ferramentas_para(session, clinic, skill, definicoes):
     """As tools que o modelo enxerga neste turno.
 
     A skill poda pelo estado comercial. A sobreposicao de lembrete (PRD 027)
-    vem por cima: com site de autoatendimento, cancelar e remarcar SAEM (a
-    pessoa recebe o link); e `confirm_attendance` ENTRA, so enquanto o
-    lembrete esta vivo. Pura, para o teste nao precisar do agente inteiro.
+    vem por cima: `confirm_attendance` ENTRA, so enquanto o lembrete esta vivo.
+    Ate 23/11/2026 ela tambem REMOVIA `cancel_appointment` com site; o PRD 059
+    devolveu o cancelamento a conversa. Pura, para o teste nao precisar do
+    agente inteiro.
     """
-    remover = lembrete.ferramentas_a_remover(session, clinic)
-    tools = skill.filtra([d for d in definicoes if _nome_da_tool(d) not in remover])
+    tools = skill.filtra(list(definicoes))
     if lembrete.FERRAMENTA_DE_CONFIRMACAO in lembrete.ferramentas_a_liberar(session):
         tools.append(lembrete.definicao_da_tool())
     return tools
@@ -1234,6 +1231,13 @@ class ConversationAgent:
         elif faq_entregues:
             final_text = policy_do_faq.fala_sem_o_item(final_text, faq_entregues, phone)
 
+        # Cancelou: a resposta e o texto da clinica, palavra por palavra, com o
+        # convite a remarcar (PRD 059). Substitui a fala do modelo em vez de
+        # anexar: duas confirmacoes do mesmo cancelamento soam a eco.
+        if efeito_cometido == "cancel_appointment":
+            final_text = confirmacao_de_cancelamento(self.template_service, clinic_id, link)
+            pending_buttons = None
+            logger.info(f"[CancelamentoPelaConversa] {phone}: confirmacao padrao no lugar da fala do modelo")
         outgoing = self._build_outgoing(final_text, pending_buttons, faq_entregues)
         # O que ficou na tela com números é o que um dígito da pessoa aponta
         # na próxima mensagem. Qualquer outra fala do bot apaga a lista.

@@ -285,7 +285,10 @@ Dev, com conversas fictícias na Essência de dev, reproduzindo a medição:
   "conversa humana" em C é tudo que `pode_responder` recusa (silenciado,
   clínica pausada, com pessoa), com o lembrete devolvendo ao bot só as
   conversas com atendente/cooldown.
-- [ ] Em aberto: a parte C entra junto ou em PR separado.
-- [ ] Spec
-- [ ] Implementado em dev
-- [ ] Implementado em prod
+- [x] 23/11: A e B primeiro, em PR próprio; a parte C fica para depois, em PR
+  separado.
+- [x] Spec (A e B): 23/11/2026, `spec/059-cancelamento-pela-conversa.md`
+- [x] Implementado em dev (A e B): 23/11/2026 (layer 211; smoke 8/8 na Premium
+  de dev; pytest 2618)
+- [ ] Implementado em prod (A e B):
+- [ ] Parte C: PRD/spec próprios

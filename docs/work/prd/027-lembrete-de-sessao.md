@@ -221,6 +221,11 @@ session["lembrete"] = {"appointment_id", "dia", "hora", "areas", "expira_em"}
 
 - `expira_em` = fim do dia da sessão, no fuso da clínica.
 - `esta_vivo(session, agora) -> bool`.
+- **Revisto pelo PRD 059 (23/11/2026):** `ferramentas_a_remover` saiu.
+  `cancel_appointment` fica disponível na janela do lembrete e o bloco manda
+  cancelar direto quando o pedido é inequívoco; só REMARCAR vai pelo link. Em
+  60 dias de prod nenhuma resposta ao lembrete tinha terminado cancelada pelo
+  bot. O texto abaixo descreve o desenho original.
 - `ferramentas_a_remover(session, clinic, agora) -> frozenset`: devolve
   `{"reschedule_appointment", "cancel_appointment"}` quando a sobreposição está
   viva **e** `link_de_autoatendimento(clinic)` não é `None`; senão vazio. O
