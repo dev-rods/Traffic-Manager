@@ -101,3 +101,38 @@ em outro lugar, achou caro, mora longe, contraindicação e um que negou o
 cadastro: nenhum deles era pergunta sem resposta. O dryRun passou a logar uma
 linha por mudança (`lead <id> <antes> -> <depois> (<fonte>: <motivo>)`), sem
 telefone, para a conferência em prod ser por log. Rods e Essência: `mudaram 0`.
+
+**Prod, 22/11/2026** (autorizado pelo André; migração idempotente 220/220;
+`serverless deploy --stage prod` layer 164, depois 165 com a correção do
+relatório; PR #243 mergeado antes, correção no PR seguinte):
+
+- Caso 11. dryRun por clínica, com o log de uma linha por mudança lido antes
+  do real. Achado no caminho: na Essência o teto de 200 chamadas estourou e os
+  245 leads que ficaram para a próxima noite saíram como `descartes`, com
+  `chamadas_modelo` zerado. Corrigido: `adiados` separado de `descartes`, a
+  contagem de chamadas sobrevive ao teto, e o payload aceita
+  `maxChamadasModelo` para o backfill. Repetido com 900: 431 chamadas, 0
+  adiados.
+- Rodada real (mesma distribuição do dryRun):
+
+  | Clínica | Leads | Distribuição | Modelo |
+  |---|---|---|---|
+  | Essência | 746 | AGENDOU 234, SUMIU 213, EM_ANDAMENTO 64, NAO_AGENDOU 60, NAO_E_LEAD 44, CANCELOU 36, AGUARDANDO_NOS 35, FALTOU 34, INICIADA_SEM_RESPOSTA 16, SEM_CONVERSA 10 | 431 |
+  | Nobre | 230 | SUMIU 136, AGENDOU 34, EM_ANDAMENTO 21, SEM_CONVERSA 9, CANCELOU 8, NAO_E_LEAD 8, NAO_AGENDOU 8, AGUARDANDO_NOS 4, FALTOU 2 | 98 |
+  | Premium | 63 | SEM_CONVERSA 45, CANCELOU 10, AGENDOU 3, AGUARDANDO_NOS 2, SUMIU 2, NAO_E_LEAD 1 | 8 |
+  | Rods | 2 | SEM_CONVERSA 2 | 0 |
+
+- Conferido no banco: 1.041 leads, nenhum sem `stage` (REGRA 898, MODELO 121,
+  HISTORICO 22); 1.281 linhas em `lead_stage_events`. dryRun seguinte na Nobre:
+  `mudaram 0`, `chamadas_modelo 0`.
+- Vereditos lidos no log: NAO_E_LEAD são fornecedores, cobrança de aluguel,
+  conversa interna da equipe, spam; NAO_AGENDOU são recusa, "só pesquisando",
+  horário indisponível. Dois leads da Nobre vindos do site eram candidatos a
+  emprego e saíram como NAO_AGENDOU, não NAO_E_LEAD, porque a triagem só roda
+  para origem WhatsApp. Correção manual na tela resolve; se repetir, abrir a
+  triagem para o site.
+- Retenção de 90 dias nos log groups `ClassificaLeads` e `AtualizaEstagioDoLead`
+  (este criado por um PATCH inválido, 400, sem escrita).
+- Premium em prod tem 45 de 63 em SEM_CONVERSA: leads antigos, sem evento nos
+  60 dias e sem espelho do z-api (a Premium de prod não tem instância). É o
+  esperado.

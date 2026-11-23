@@ -198,10 +198,23 @@ class TestProcessaClinica(unittest.TestCase):
             def desfecho(self, *_):
                 raise TetoAtingido("2")
 
-        db = BancoFalso([lead(), lead(id="22222222-2222-2222-2222-222222222222")])
-        r = roda(db, Cl(), mensagens=ms)
-        self.assertEqual(r["por_estagio"], {e.SUMIU: 2})
-        self.assertEqual(r["leads"], 2)
+        db = BancoFalso([lead(), lead(id="22222222-2222-2222-2222-222222222222"),
+                         lead(id="33333333-3333-3333-3333-333333333333")])
+        cl = Cl()
+        cl.chamadas = 2
+        r = roda(db, cl, mensagens=ms)
+        self.assertEqual(r["por_estagio"], {e.SUMIU: 3})
+        self.assertEqual(r["leads"], 3)
+        # O primeiro estourou o teto; os outros dois ficaram para amanha, e isso
+        # nao e descarte nem zera a contagem de chamadas feitas.
+        self.assertEqual((r["chamadas_modelo"], r["descartes"], r["adiados"]), (2, 0, 2))
+
+    def test_max_chamadas_vem_do_payload(self):
+        with mock.patch.object(job, "PostgresService"), mock.patch.object(job, "_tabela_de_eventos"), \
+                mock.patch.object(job, "_clinicas", return_value=[CLINIC]), \
+                mock.patch.object(job, "Classificador") as Cl, mock.patch.object(job, "processa_clinica", return_value={}):
+            job.handler({"clinicId": "c1", "dryRun": True, "maxChamadasModelo": 900}, None)
+            self.assertEqual(Cl.call_args.kwargs["max_chamadas"], 900)
 
     def test_manual_nao_vai_ao_modelo(self):
         ms = [Mensagem("LEAD", AGORA - timedelta(days=12), "oi"), Mensagem("NOS", AGORA - timedelta(days=11), "ola")]
