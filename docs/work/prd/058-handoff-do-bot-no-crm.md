@@ -217,8 +217,8 @@ casos de prod:
 - [ ] Resposta humana depois da entrega devolve a regra normal; resposta do
   sistema não.
 - [x] pytest, vitest, lint e build verdes; dryRun em dev com os seis casos.
-- [ ] Em prod, o lead da Nobre sai de NAO_AGENDOU para AGUARDANDO_NOS na
-  primeira rodada (conferir no dryRun antes).
+- [x] Em prod, o lead da Nobre sai de NAO_AGENDOU para AGUARDANDO_NOS na
+  primeira rodada (conferido no dryRun de 23/11 antes da rodada real).
 
 ---
 
@@ -233,4 +233,4 @@ casos de prod:
 - [x] PRD: 22/11/2026
 - [x] Spec: `docs/work/spec/058-handoff-do-bot-no-crm.md` (22/11/2026)
 - [x] Implementado em dev: 22/11/2026 (layer 210; smoke 9/9 com os seis casos de prod reproduzidos; pytest 2611, vitest, lint e build verdes)
-- [ ] Implementado em prod:
+- [x] Implementado em prod: 23/11/2026 (layer 166). DryRun antes da rodada real: das 25 mudanças previstas, 4 linhas vieram do 058 em 2 telefones (cada um com duas linhas de lead): o lead da Nobre de 09/11 (NAO_AGENDOU -> AGUARDANDO_NOS, o caso que motivou o PRD) e um lead da Essência que cancelou em 22/11, voltou a falar em 23/11, o bot entregou e ninguém assumiu (CANCELOU -> AGUARDANDO_NOS, regra 5.1). Nenhuma das 11 entregas com resposta humana mudou. Rodada real: 28 mudanças, 11 chamadas ao modelo, 0 erros; segundo dryRun sem mudança do 058.
