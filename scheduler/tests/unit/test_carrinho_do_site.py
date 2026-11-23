@@ -553,6 +553,58 @@ class TestUmaSessaoPorMes(_Criacao):
                 self.assertIs(self.service.create_appointment.call_args.kwargs["substituir_mesmo_mes"], False)
 
 
+class TestSessaoFuturaEmOutroMes(_Criacao):
+    """PRD 060: sessão futura em OUTRO mês não bloqueia, pergunta. O 409 tem
+    code próprio, a existente e uma mensagem que serve ao front em cache; o
+    pedido repetido com `remarcarExistente` remarca, com `maisUma` cria."""
+
+    EXISTENTE = {"id": "x2", "appointment_date": "2026-12-10", "start_time": "09:00:00",
+                 "areas_display": "Virilha", "patient_name": "Ana"}
+
+    def test_409_proprio_com_a_existente_e_mensagem_para_o_front_antigo(self):
+        from src.services.appointment_service import OutraSessaoFutura
+        self.service.create_appointment.side_effect = OutraSessaoFutura(self.EXISTENTE)
+        r = self.chama()
+        self.assertEqual(r["statusCode"], 409)
+        corpo = json.loads(r["body"])
+        self.assertEqual(corpo["code"], "OTHER_MONTH_APPOINTMENT")
+        self.assertEqual(corpo["existing"], {"id": "x2", "date": "2026-12-10", "time": "09:00", "areas": "Virilha"})
+        self.assertIn("10/12", corpo["message"])
+        self.assertIn("Meus agendamentos", corpo["message"])
+        self.assertNotIn("Ana", r["body"], "o nome nao e do site")
+        self.provider.send_text.assert_not_called()
+
+    def test_remarcar_existente_passa_ao_servico_e_responde_remarcado(self):
+        r = self.chama(remarcarExistente=True)
+        self.assertEqual(r["statusCode"], 201)
+        kw = self.service.create_appointment.call_args.kwargs
+        self.assertIs(kw["remarcar_a_existente"], True)
+        self.assertIs(kw["mais_uma"], False)
+        self.assertIn("remarcado", json.loads(r["body"])["message"])
+
+    def test_mais_uma_passa_ao_servico_e_responde_criado(self):
+        r = self.chama(maisUma=True)
+        self.assertEqual(r["statusCode"], 201)
+        kw = self.service.create_appointment.call_args.kwargs
+        self.assertIs(kw["mais_uma"], True)
+        self.assertIs(kw["remarcar_a_existente"], False)
+        self.assertIn("criado", json.loads(r["body"])["message"])
+
+    def test_sem_as_flags_o_servico_recebe_false(self):
+        self.chama()
+        kw = self.service.create_appointment.call_args.kwargs
+        self.assertIs(kw["remarcar_a_existente"], False)
+        self.assertIs(kw["mais_uma"], False)
+
+    def test_so_true_literal_vale(self):
+        for valor in ("true", 1, "sim"):
+            with self.subTest(valor=valor):
+                self.chama(remarcarExistente=valor, maisUma=valor)
+                kw = self.service.create_appointment.call_args.kwargs
+                self.assertIs(kw["remarcar_a_existente"], False)
+                self.assertIs(kw["mais_uma"], False)
+
+
 class TestFaixasDeDesconto(unittest.TestCase):
     """As faixas que o site anuncia na escolha das áreas são as que `decide`
     cobra, não o que está gravado em `tier_2_max_areas`."""

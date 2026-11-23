@@ -13,9 +13,17 @@ interface ConflitoDoMesProps {
   modo: 'criar' | 'mover'
   /** Só ADMIN vê "Manter as duas" (PRD 056, decisão 5). */
   ehAdmin: boolean
+  /**
+   * `mesmo_mes` (padrão): a existente SERÁ substituída, Confirmar/Voltar (PRD 056).
+   * `outro_mes`: pergunta "remarcar essa sessão ou marcar mais uma?" (PRD 060);
+   * "Manter as duas" não aparece, "Marcar mais uma" não pede ADMIN nem motivo.
+   */
+  variante?: 'mesmo_mes' | 'outro_mes'
   loading?: boolean
   onConfirmar: () => void
   onManterAsDuas: (motivo: string) => void
+  /** Só na variante `outro_mes`. */
+  onMaisUma?: () => void
   onVoltar: () => void
 }
 
@@ -31,9 +39,11 @@ export function ConflitoDoMes({
   novaHora,
   modo,
   ehAdmin,
+  variante = 'mesmo_mes',
   loading = false,
   onConfirmar,
   onManterAsDuas,
+  onMaisUma,
   onVoltar,
 }: ConflitoDoMesProps) {
   const [mantendo, setMantendo] = useState(false)
@@ -48,8 +58,10 @@ export function ConflitoDoMes({
   const quando = `${formatCalendarDate(existing.date)} às ${existing.time}`
   const para = `${formatCalendarDate(novaData)} às ${novaHora}`
   const pergunta = `${nome} já tem sessão em ${quando}.`
-  const consequencia =
-    modo === 'criar'
+  const outroMes = variante === 'outro_mes'
+  const consequencia = outroMes
+    ? `Remarcar essa sessão para ${para}, ou marcar mais uma?`
+    : modo === 'criar'
       ? `Ao confirmar, essa sessão será cancelada e remarcada para ${para}.`
       : `Ao confirmar, essa sessão será cancelada e esta será remarcada para ${para}.`
 
@@ -96,7 +108,7 @@ export function ConflitoDoMes({
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {ehAdmin && (
+          {ehAdmin && !outroMes && (
             <button
               type="button"
               onClick={() => setMantendo(true)}
@@ -109,8 +121,13 @@ export function ConflitoDoMes({
           <Button type="button" size="sm" variant="secondary" onClick={onVoltar} disabled={loading}>
             Voltar
           </Button>
+          {outroMes && (
+            <Button type="button" size="sm" variant="secondary" onClick={onMaisUma} disabled={loading}>
+              Marcar mais uma
+            </Button>
+          )}
           <Button ref={botao} type="button" size="sm" onClick={onConfirmar} loading={loading}>
-            Confirmar
+            {outroMes ? 'Remarcar essa sessão' : 'Confirmar'}
           </Button>
         </div>
       )}

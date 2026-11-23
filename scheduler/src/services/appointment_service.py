@@ -64,6 +64,23 @@ class SessaoNoMesmoMes(Exception):
         self.existente = existente
 
 
+class OutraSessaoFutura(Exception):
+    """A paciente ja tem sessao confirmada futura em OUTRO mes (PRD 060).
+    Nao e bloqueio: e a pergunta "remarcar essa sessao ou marcar mais uma?".
+    `existente` tem a mesma carga de `SessaoNoMesmoMes` (a mais proxima).
+    Quem chama repete o pedido com `remarcar_a_existente=True` (vira a troca
+    da 056: a existente sai pelo desfecho da antecedencia e a nova nasce
+    vinculada) ou `mais_uma=True` (cria a segunda, como antes do 060).
+
+    Em 23/11/2026 duas pacientes da Essencia que queriam remarcar criaram a
+    sessao nova em dezembro pelo site: novembro ficou de pe, o lembrete saiu
+    e a recepcao cancelou a mao. Mes diferente passava em silencio."""
+
+    def __init__(self, existente):
+        super().__init__("Ja existe sessao confirmada em outro mes")
+        self.existente = existente
+
+
 class AppointmentService:
 
     def __init__(self, db: PostgresService, reminder_service=None, lead_service=None):
@@ -149,10 +166,21 @@ class AppointmentService:
         So uma lista de verdade conta: um duble que devolva outra coisa nao
         pode virar conflito.
         """
+        return self._sessao_confirmada_futura(clinic_id, phone, data, mesmo_mes=True, excluir_id=excluir_id)
+
+    def sessao_futura_em_outro_mes(self, clinic_id: str, phone: str, data) -> Optional[Dict[str, Any]]:
+        """A sessao CONFIRMED futura deste numero em OUTRO ano-mes que o de
+        `data`, a mais proxima; None se nao houver (PRD 060). Nao bloqueia
+        nada: e o que faz criar perguntar "remarcar ou mais uma?"."""
+        return self._sessao_confirmada_futura(clinic_id, phone, data, mesmo_mes=False)
+
+    def _sessao_confirmada_futura(self, clinic_id: str, phone: str, data, mesmo_mes: bool,
+                                  excluir_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         from src.utils.phone import variantes_do_numero
         variantes = sorted(variantes_do_numero(phone or ""))
         if not variantes or not data:
             return None
+        operador = "=" if mesmo_mes else "<>"
         sql = f"""
             SELECT a.id, a.appointment_date, a.start_time, p.name AS patient_name,
                    (SELECT string_agg(asa.area_name, ', ' ORDER BY asa.created_at)
@@ -163,7 +191,7 @@ class AppointmentService:
              WHERE a.clinic_id = %s AND p.clinic_id = %s AND p.phone = ANY(%s)
                AND p.deleted_at IS NULL AND a.status = 'CONFIRMED'
                AND a.appointment_date >= {HOJE_SQL}
-               AND date_trunc('month', a.appointment_date) = date_trunc('month', %s::date)
+               AND date_trunc('month', a.appointment_date) {operador} date_trunc('month', %s::date)
         """
         params: list = [clinic_id, clinic_id, variantes, str(data)]
         if excluir_id:
@@ -228,6 +256,8 @@ class AppointmentService:
         permitir_duas: bool = False,
         autor: Optional[str] = None,
         motivo_das_duas: Optional[str] = None,
+        remarcar_a_existente: bool = False,
+        mais_uma: bool = False,
     ) -> Dict[str, Any]:
         """`is_first_visit=None` deixa o sistema decidir; um booleano manda.
 
@@ -238,6 +268,12 @@ class AppointmentService:
         novo nasce vinculado a ela, levando pagamento vivo, link dos documentos
         e conversao. `permitir_duas=True` mantem as duas: so o painel passa,
         por ADMIN e com `motivo_das_duas`, gravado no novo com `autor`.
+
+        Sessao futura em OUTRO mes (PRD 060): nao bloqueia, pergunta. Sem
+        `remarcar_a_existente` nem `mais_uma`, levanta `OutraSessaoFutura`
+        com a existente. `remarcar_a_existente=True` e a mesma troca do
+        `substituir_mesmo_mes`, so que da sessao de outro mes; `mais_uma=True`
+        cria a segunda e nao grava nada: antecipar a reserva e legitimo.
 
         `discount_cents` (PRD 050) e o desconto em reais, so pelo painel. Quando
         vem, e a fonte do preco: vence o percentual e o combinado da paciente,
@@ -258,6 +294,14 @@ class AppointmentService:
         existente = self.sessao_no_mesmo_mes(clinic_id, phone, date)
         if existente and not (substituir_mesmo_mes or permitir_duas):
             raise SessaoNoMesmoMes(existente)
+
+        # 1c. Sessao futura em OUTRO mes (PRD 060): pergunta, nao bloqueio.
+        # So quando o mes esta livre; com `permitir_duas` o ADMIN ja decidiu.
+        outra = None
+        if not existente and not permitir_duas:
+            outra = self.sessao_futura_em_outro_mes(clinic_id, phone, date)
+            if outra and not (remarcar_a_existente or mais_uma):
+                raise OutraSessaoFutura(outra)
 
         # 2. Resolve service list and duration
         all_service_ids = service_ids if service_ids else [service_id]
@@ -365,6 +409,15 @@ class AppointmentService:
                 f"[MesmoMes] {clinic_id}: sessao {existente['id']} de {existente['appointment_date']} "
                 f"substituida por {date} {time} (desfecho={substituida['outcome']}, autor={autor!r})"
             )
+        elif outra and remarcar_a_existente:
+            # A troca da 056, so que da sessao de outro mes (PRD 060).
+            substituida = self.cancel_appointment(str(outra["id"]), autor=autor)
+            logger.info(
+                f"[OutroMes] {clinic_id}: sessao {outra['id']} de {outra['appointment_date']} "
+                f"remarcada para {date} {time} (desfecho={substituida['outcome']}, autor={autor!r})"
+            )
+        elif outra and mais_uma:
+            logger.info(f"[OutroMes] {clinic_id}: mais uma sessao alem da de {outra['appointment_date']} (autor={autor!r})")
 
         # 5. Resolve professional
         prof_id_param = None

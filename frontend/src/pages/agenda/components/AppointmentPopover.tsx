@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { formatCurrency } from '@/utils/formatCurrency'
 import { rotuloDaRazao, temDesconto, textoCurtoDoDesconto } from '@/lib/desconto'
 import { Confirmacao } from '@/components/ui/Confirmacao'
+import { useToast } from '@/components/ui/toastContext'
 import { useEhDesktop } from '@/hooks/useMediaQuery'
 import type { Appointment } from '@/types'
 import { PagamentoDoAgendamento } from './PagamentoDoAgendamento'
@@ -23,6 +24,11 @@ interface AppointmentPopoverProps {
   onDesconfirmar?: (appointment: Appointment) => void
   /** "Ver novo" de um agendamento remarcado (PRD 035): leva a agenda ao dia novo. */
   onNavigateToDate?: (isoDate: string) => void
+  /** O link que abre "Meus agendamentos" no site da clinica (PRD 060). E o que
+   *  a recepcao manda quando a paciente pede para remarcar pelo WhatsApp: a
+   *  raiz do site abre o fluxo de MARCAR e ja criou sessao duplicada. Sem
+   *  dominio proprio nao ha link e o botao nao aparece. */
+  linkDeRemarcacao?: string | null
 }
 
 /** "2026-10-22" -> "22/10". */
@@ -63,10 +69,21 @@ function estadoDoLembrete(a: Appointment): string {
  */
 export function AppointmentPopover({
   appointment, anchorRect, onClose, onEdit, onCancel, onMarcarFalta, onDesmarcarFalta, onNavigateToDate,
-  onConfirmar, onDesconfirmar,
+  onConfirmar, onDesconfirmar, linkDeRemarcacao = null,
 }: AppointmentPopoverProps) {
   const ref = useRef<HTMLDivElement>(null)
   const ehDesktop = useEhDesktop()
+  const { showToast } = useToast()
+
+  async function copiarLinkDeRemarcacao() {
+    if (!linkDeRemarcacao) return
+    try {
+      await navigator.clipboard.writeText(linkDeRemarcacao)
+      showToast({ message: 'Link de remarcação copiado' })
+    } catch {
+      showToast({ message: 'Não deu para copiar. Abra o site e copie o endereço.', variant: 'error' })
+    }
+  }
   // Falta e confirmado passam pela confirmação inline (PRD 053, decisão do
   // André em 20/11/2026, revertendo o PRD 027): têm "Desfazer", mas o status
   // muda na agenda de todo mundo no clique e o toast dura segundos. Os
@@ -327,6 +344,18 @@ export function AppointmentPopover({
                 >
                   Registrar sessão
                 </Link>
+              )}
+              {/* PRD 060: o que a recepcao manda quando a paciente pede para
+                  remarcar pelo WhatsApp. Abre "Meus agendamentos" direto; a
+                  raiz do site abre o fluxo de MARCAR e ja virou duplicata. */}
+              {linkDeRemarcacao && (
+                <button
+                  type="button"
+                  onClick={() => void copiarLinkDeRemarcacao()}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Copiar link de remarcação
+                </button>
               )}
               {/* Sem guard de data, por decisão do André em 04/10/2026:
                   avisar no DIA é falta, não cancelamento - o horário já não dá

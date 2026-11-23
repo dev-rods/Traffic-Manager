@@ -5,8 +5,9 @@ Gravada na sessao no ato da ENTREGA do lembrete, nunca inferida pelo modelo.
 Enquanto viva (ate o fim do dia da sessao, no fuso da clinica):
 
 - `confirm_attendance` so existe aqui: resposta positiva vira Confirmado.
-- com site de autoatendimento, REMARCAR vai pelo link (o site troca a data
-  melhor que a conversa). CANCELAR e feito aqui, direto, por
+- com site de autoatendimento, REMARCAR vai pelo link, que abre "Meus
+  agendamentos" direto (`?meus=1`, PRD 060: a raiz abria o fluxo de marcar e
+  a paciente nao achava onde mexer). CANCELAR e feito aqui, direto, por
   `cancel_appointment` (PRD 059): ate 23/11/2026 a ferramenta era removida e
   a pessoa recebia o link - em 60 dias de prod nenhuma resposta ao lembrete
   terminou cancelada pelo bot, e 2 ficaram CONFIRMED depois da data.
@@ -18,7 +19,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, FrozenSet, Optional
 
-from src.services.autoatendimento import link_de_autoatendimento
+from src.services.autoatendimento import link_de_meus_agendamentos
 from src.services.business_hours import fuso
 
 CHAVE = "lembrete"
@@ -98,7 +99,9 @@ def bloco_de_prompt(session, clinic, agora: Optional[int] = None) -> str:
         return ""
     d = _dados(session)
     dia_br = datetime.strptime(d["dia"], "%Y-%m-%d").strftime("%d/%m")
-    link = link_de_autoatendimento(clinic)
+    # O link abre "Meus agendamentos" direto (PRD 060): a raiz abria o fluxo
+    # de marcar e a paciente nao achava onde remarcar.
+    link = link_de_meus_agendamentos(clinic)
     if link:
         saida = (
             "Se ela quiser CANCELAR ou disser que não vai poder ir (\"não vou conseguir\", "

@@ -409,6 +409,12 @@ export interface CreateAppointmentPayload {
   substituir?: boolean
   manterAsDuas?: boolean
   motivoDasDuas?: string
+  /**
+   * Sessão futura em OUTRO mês (PRD 060): o 409 OTHER_MONTH_APPOINTMENT vira a
+   * pergunta "remarcar essa sessão ou marcar mais uma?". Sem ADMIN nem motivo.
+   */
+  remarcarExistente?: boolean
+  maisUma?: boolean
 }
 
 /** A sessão que a paciente já tem no mês pedido (409 SAME_MONTH_APPOINTMENT, PRD 056). */

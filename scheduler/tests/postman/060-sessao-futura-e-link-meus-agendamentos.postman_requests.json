@@ -1,0 +1,138 @@
+{
+  "info": {
+    "name": "Clinic Scheduler - 060 Sessao futura pergunta e link Meus agendamentos",
+    "description": "Sessao futura em OUTRO mes nao bloqueia, pergunta: criar (site ou painel) responde 409 OTHER_MONTH_APPOINTMENT com a existente; repetir com remarcarExistente remarca (a existente sai pelo desfecho da 054 e a nova nasce vinculada) ou com maisUma cria a segunda. Sem ADMIN nem motivo. O link ?meus=1 abre Meus agendamentos no site.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
+    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
+    { "key": "API_KEY", "value": "YOUR_API_KEY_HERE", "type": "string" },
+    { "key": "BOOKING_API_KEY", "value": "YOUR_BOOKING_API_KEY_HERE", "type": "string" },
+    { "key": "clinicId", "value": "", "type": "string" },
+    { "key": "phone", "value": "", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "serviceId", "value": "", "type": "string" },
+    { "key": "areaId", "value": "", "type": "string" },
+    { "key": "dateMesA", "value": "2026-11-28", "type": "string" },
+    { "key": "dateMesB", "value": "2026-12-10", "type": "string" },
+    { "key": "time", "value": "10:00", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Painel - criar no mes A (primeira sessao)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test(\"201\", () => pm.response.to.have.status(201));",
+        "pm.collectionVariables.set(\"appointmentA\", pm.response.json().appointment.id);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "appointments"] },
+        "body": { "mode": "raw", "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}],\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{dateMesA}}\",\n  \"time\": \"{{time}}\",\n  \"isFirstVisit\": false\n}", "options": { "raw": { "language": "json" } } }
+      }
+    },
+    {
+      "name": "Painel - criar em OUTRO mes sem flag (409 OTHER_MONTH_APPOINTMENT)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test(\"409\", () => pm.response.to.have.status(409));",
+        "pm.test(\"code OTHER_MONTH_APPOINTMENT\", () => pm.expect(pm.response.json().code).to.eql(\"OTHER_MONTH_APPOINTMENT\"));",
+        "pm.test(\"existing com id, date, time, areas, patientName\", () => pm.expect(pm.response.json().existing).to.include.keys(\"id\", \"date\", \"time\", \"areas\", \"patientName\"));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "appointments"] },
+        "body": { "mode": "raw", "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}],\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{dateMesB}}\",\n  \"time\": \"{{time}}\",\n  \"isFirstVisit\": false\n}", "options": { "raw": { "language": "json" } } }
+      }
+    },
+    {
+      "name": "Painel - maisUma (cria a segunda, a primeira continua)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test(\"201\", () => pm.response.to.have.status(201));",
+        "pm.collectionVariables.set(\"appointmentB\", pm.response.json().appointment.id);"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "appointments"] },
+        "body": { "mode": "raw", "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}],\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{dateMesB}}\",\n  \"time\": \"{{time}}\",\n  \"isFirstVisit\": false,\n  \"maisUma\": true\n}", "options": { "raw": { "language": "json" } } }
+      }
+    },
+    {
+      "name": "Painel - remarcarExistente (a de outro mes sai e a nova nasce vinculada)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test(\"201\", () => pm.response.to.have.status(201));",
+        "pm.test(\"nova aponta para a antiga\", () => pm.expect(pm.response.json().appointment.rescheduled_from_id).to.be.a(\"string\"));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/appointments", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "appointments"] },
+        "body": { "mode": "raw", "raw": "{\n  \"clinicId\": \"{{clinicId}}\",\n  \"phone\": \"{{phone}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}],\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{dateMesA}}\",\n  \"time\": \"{{time}}\",\n  \"isFirstVisit\": false,\n  \"remarcarExistente\": true\n}", "options": { "raw": { "language": "json" } } }
+      }
+    },
+    {
+      "name": "Site - criar em OUTRO mes sem flag (409 OTHER_MONTH_APPOINTMENT; exige token)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test(\"409\", () => pm.response.to.have.status(409));",
+        "pm.test(\"code OTHER_MONTH_APPOINTMENT\", () => pm.expect(pm.response.json().code).to.eql(\"OTHER_MONTH_APPOINTMENT\"));",
+        "pm.test(\"existing sem nome\", () => pm.expect(pm.response.json().existing).to.not.have.property(\"patientName\"));",
+        "pm.test(\"mensagem para o front antigo\", () => pm.expect(pm.response.json().message).to.include(\"Meus agendamentos\"));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "appointments"] },
+        "body": { "mode": "raw", "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}],\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{dateMesB}}\",\n  \"time\": \"{{time}}\",\n  \"token\": \"{{token}}\"\n}", "options": { "raw": { "language": "json" } } }
+      }
+    },
+    {
+      "name": "Site - remarcarExistente (201 'remarcado')",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test(\"201\", () => pm.response.to.have.status(201));",
+        "pm.test(\"remarcado\", () => pm.expect(pm.response.json().message).to.include(\"remarcado\"));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "appointments"] },
+        "body": { "mode": "raw", "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}],\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{dateMesB}}\",\n  \"time\": \"{{time}}\",\n  \"token\": \"{{token}}\",\n  \"remarcarExistente\": true\n}", "options": { "raw": { "language": "json" } } }
+      }
+    },
+    {
+      "name": "Site - maisUma (201 'criado')",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+        "pm.test(\"201\", () => pm.response.to.have.status(201));",
+        "pm.test(\"criado\", () => pm.expect(pm.response.json().message).to.include(\"criado\"));"
+      ] } }],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-api-key", "value": "{{BOOKING_API_KEY}}", "type": "text" },
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/appointments", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "appointments"] },
+        "body": { "mode": "raw", "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{\"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\"}],\n  \"phone\": \"{{phone}}\",\n  \"fullName\": \"Maria Teste\",\n  \"date\": \"{{dateMesB}}\",\n  \"time\": \"{{time}}\",\n  \"token\": \"{{token}}\",\n  \"maisUma\": true\n}", "options": { "raw": { "language": "json" } } }
+      }
+    }
+  ]
+}

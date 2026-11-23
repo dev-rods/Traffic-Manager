@@ -19,6 +19,7 @@ import { ClinicWelcome } from '@/components/ClinicWelcome'
 import { SectionTitle } from '@/components/ui/SectionTitle'
 import { StickyActionBar } from '@/components/StickyActionBar'
 import { RemarcacaoDialog } from '@/components/RemarcacaoDialog'
+import { SessaoFuturaDialog } from '@/components/SessaoFuturaDialog'
 import { OtpCodeForm } from '@/components/OtpCodeForm'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
@@ -40,6 +41,9 @@ import type {
 // sessão no mesmo mês (este code: o número foi verificado, a tela mostra a
 // sessão e pede confirmação da troca, PRD 056).
 const SAME_MONTH_APPOINTMENT = 'SAME_MONTH_APPOINTMENT'
+// Sessão futura em OUTRO mês (PRD 060): não é bloqueio, é a pergunta
+// "remarcar essa sessão ou marcar mais uma?".
+const OTHER_MONTH_APPOINTMENT = 'OTHER_MONTH_APPOINTMENT'
 // O cadastro do paciente faltou ou está errado (PRD 032); o CPF já é de outro.
 const CADASTRO_INCOMPLETO = 'CADASTRO_INCOMPLETO'
 const CPF_EM_USO = 'CPF_EM_USO'
@@ -50,6 +54,8 @@ type PedidoSemToken = Omit<CreateAppointmentPayload, 'token'>
 interface Conflito {
   payload: CreateAppointmentPayload
   existing: SessaoExistente
+  /** `mesmo_mes`: a existente será substituída (PRD 056). `outro_mes`: a pessoa escolhe (PRD 060). */
+  tipo: 'mesmo_mes' | 'outro_mes'
 }
 
 function prefersReducedMotion(): boolean {
@@ -287,7 +293,12 @@ export function Booking() {
         setConflito(null)
         // O número já tem sessão neste mês: avisa que ela será substituída.
         if (err instanceof ApiError && err.code === SAME_MONTH_APPOINTMENT && err.body?.existing) {
-          setConflito({ payload, existing: err.body.existing })
+          setConflito({ payload, existing: err.body.existing, tipo: 'mesmo_mes' })
+          return
+        }
+        // Sessão futura em outro mês: pergunta se é remarcação ou mais uma.
+        if (err instanceof ApiError && err.code === OTHER_MONTH_APPOINTMENT && err.body?.existing) {
+          setConflito({ payload, existing: err.body.existing, tipo: 'outro_mes' })
           return
         }
         // O token venceu (15 min): pede o código de novo, com o mesmo pedido.
@@ -499,7 +510,7 @@ export function Booking() {
             </p>
           ) : null}
           <RemarcacaoDialog
-            existing={conflito?.existing ?? null}
+            existing={conflito?.tipo === 'mesmo_mes' ? conflito.existing : null}
             date={conflito?.payload.date ?? ''}
             time={conflito?.payload.time ?? ''}
             clinicPhone={clinic.phone}
@@ -508,6 +519,23 @@ export function Booking() {
               if (!conflito) return
               setRemarcado(true)
               submitAppointment({ ...conflito.payload, substituir: true })
+            }}
+            onCancel={() => setConflito(null)}
+          />
+          <SessaoFuturaDialog
+            existing={conflito?.tipo === 'outro_mes' ? conflito.existing : null}
+            date={conflito?.payload.date ?? ''}
+            time={conflito?.payload.time ?? ''}
+            clinicPhone={clinic.phone}
+            confirming={createAppointment.isPending}
+            onRemarcar={() => {
+              if (!conflito) return
+              setRemarcado(true)
+              submitAppointment({ ...conflito.payload, remarcarExistente: true })
+            }}
+            onMaisUma={() => {
+              if (!conflito) return
+              submitAppointment({ ...conflito.payload, maisUma: true })
             }}
             onCancel={() => setConflito(null)}
           />

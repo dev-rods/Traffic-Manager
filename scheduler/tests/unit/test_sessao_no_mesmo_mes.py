@@ -16,7 +16,7 @@ os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "t")
 
 from src.services import appointment_service as mod
 from src.services.appointment_service import (
-    AppointmentService, ConflictError, SessaoNoMesmoMes,
+    AppointmentService, ConflictError, OutraSessaoFutura, SessaoNoMesmoMes,
 )
 
 CLINIC = "c"
@@ -24,11 +24,13 @@ FONE = "5511999990001"
 EXISTENTE = "11111111-1111-1111-1111-111111111111"
 NOVO = "22222222-2222-2222-2222-222222222222"
 MOVIDO = "33333333-3333-3333-3333-333333333333"
+OUTRA = "44444444-4444-4444-4444-444444444444"  # sessao futura em OUTRO mes (PRD 060)
 
 
 class Db:
-    def __init__(self, no_mes=True, conflito=False):
+    def __init__(self, no_mes=True, conflito=False, outro_mes=False):
         self.no_mes = no_mes
+        self.outro_mes = outro_mes
         self.conflito = conflito
         self.escritas = []
         self.consultas = []
@@ -45,6 +47,12 @@ class Db:
 
     def execute_query(self, sql, params=None):
         self.consultas.append((sql, params))
+        if "date_trunc('month', a.appointment_date) <>" in sql:
+            # PRD 060: a sessao futura em OUTRO mes
+            if not self.outro_mes:
+                return []
+            return [{"id": OUTRA, "appointment_date": date(2026, 12, 10), "start_time": time(9, 0),
+                     "areas_display": "Virilha", "patient_name": "Maria"}]
         if "date_trunc('month', a.appointment_date)" in sql:
             if not self.no_mes:
                 return []
@@ -204,6 +212,85 @@ class TestCriar(unittest.TestCase):
         db = Db()
         _cria(db, substituir_mesmo_mes=True, permitir_duas=True, autor="a", motivo_das_duas="m")
         self.assertFalse(db.sql_com("SET status = %s"))
+
+
+class TestOutroMes(unittest.TestCase):
+    """Sessao futura em OUTRO mes: pergunta, nao bloqueio (PRD 060)."""
+
+    def test_consulta_pelo_outro_mes(self):
+        db = Db(no_mes=False, outro_mes=True)
+        r = _servico(db).sessao_futura_em_outro_mes(CLINIC, FONE, "2026-11-28")
+        self.assertEqual(r["id"], OUTRA)
+        sql, params = db.consultas[0]
+        self.assertIn("date_trunc('month', a.appointment_date) <> date_trunc('month', %s::date)", sql)
+        self.assertIn("a.status = 'CONFIRMED'", sql)
+        self.assertIn("appointment_date >=", sql)
+        self.assertEqual(params[3], "2026-11-28")
+
+    def test_sem_flag_levanta_com_a_existente_e_nao_escreve(self):
+        db = Db(no_mes=False, outro_mes=True)
+        with self.assertRaises(OutraSessaoFutura) as cm:
+            _cria(db)
+        self.assertEqual(cm.exception.existente["id"], OUTRA)
+        self.assertEqual(cm.exception.existente["patient_name"], "Maria")
+        self.assertEqual(db.escritas, [])
+
+    def test_mesmo_mes_vence_o_outro_mes(self):
+        """Com sessao no mesmo mes, a pergunta e a da 056; o outro mes nem e consultado."""
+        db = Db(no_mes=True, outro_mes=True)
+        with self.assertRaises(SessaoNoMesmoMes):
+            _cria(db)
+        self.assertFalse([c for c in db.consultas if "<> date_trunc" in c[0]])
+
+    def test_mais_uma_cria_sem_cancelar_nem_gravar(self):
+        db = Db(no_mes=False, outro_mes=True)
+        r = _cria(db, mais_uma=True, autor="site")
+        self.assertEqual(r["id"], NOVO)
+        self.assertFalse(db.sql_com("SET status = %s"))
+        self.assertFalse(db.sql_com("second_in_month_by"))
+        self.assertFalse(db.sql_com("SET rescheduled_from_id"))
+
+    def test_remarcar_a_existente_cancela_a_de_outro_mes_e_vincula(self):
+        db = Db(no_mes=False, outro_mes=True)
+        r = _cria(db, remarcar_a_existente=True, autor="site")
+        sql, params = db.sql_com("SET status = %s")[0]
+        self.assertEqual(params[0], "CANCELLED")
+        self.assertEqual(params[-1], OUTRA)
+        self.assertEqual(r["rescheduled_from_id"], OUTRA)
+        self.assertEqual(db.sql_com("SET rescheduled_to_id = %s::uuid, updated_at = NOW()")[0][1], (NOVO, OUTRA))
+        self.assertEqual(db.sql_com("UPDATE scheduler.appointment_payments")[0][1], (NOVO, OUTRA))
+
+    def test_remarcar_nas_ultimas_24h_deixa_a_existente_em_falta(self):
+        db = Db(no_mes=False, outro_mes=True)
+        _cria(db, remarcar_a_existente=True, automatico="NO_SHOW")
+        self.assertEqual(db.sql_com("SET status = %s")[0][1][0], "NO_SHOW")
+
+    def test_conflito_de_horario_nao_cancela_a_existente(self):
+        db = Db(no_mes=False, outro_mes=True, conflito=True)
+        with self.assertRaises(ConflictError):
+            _cria(db, remarcar_a_existente=True)
+        self.assertEqual(db.escritas, [], "um conflito nao pode deixar a paciente sem sessao")
+
+    def test_permitir_duas_nao_consulta_o_outro_mes(self):
+        db = Db(no_mes=True, outro_mes=True)
+        _cria(db, permitir_duas=True, autor="Dra. Clara", motivo_das_duas="m")
+        self.assertFalse([c for c in db.consultas if "<> date_trunc" in c[0]])
+
+    def test_sem_sessao_futura_as_flags_nao_fazem_nada(self):
+        db = Db(no_mes=False, outro_mes=False)
+        r = _cria(db, remarcar_a_existente=True, mais_uma=True)
+        self.assertEqual(r["id"], NOVO)
+        self.assertFalse(db.sql_com("SET status = %s"))
+
+    def test_remarca_para_outro_mes_nao_pergunta(self):
+        """Mover a data JA e remarcacao: a 060 nao entra no `remarca`."""
+        db = Db(no_mes=False, outro_mes=True)
+        with mock.patch.object(mod, "desfecho_do_agendamento", return_value="CANCELLED"), \
+             mock.patch.object(mod, "passa_a_marca_adiante"), \
+             mock.patch.object(mod, "e_primeira_visita", return_value=False):
+            r = _servico(db).remarca(MOVIDO, "2026-11-28", "10:00")
+        self.assertEqual(r["novo"]["id"], NOVO)
+        self.assertFalse([c for c in db.consultas if "<> date_trunc" in c[0]])
 
 
 class TestRemarca(unittest.TestCase):

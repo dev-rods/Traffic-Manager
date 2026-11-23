@@ -7,8 +7,8 @@ import json
 import unittest
 from unittest import mock
 
-from src.services.appointment_service import SessaoNoMesmoMes
-from src.services.mesmo_mes import excecao_das_duas, resposta_409
+from src.services.appointment_service import OutraSessaoFutura, SessaoNoMesmoMes
+from src.services.mesmo_mes import OTHER_MONTH_APPOINTMENT, excecao_das_duas, resposta_409
 from src.utils.acesso import ADMIN, STAFF, Identidade
 
 _ADMIN = Identidade(papel=ADMIN, chave_mestra=True, nome="Dra. Clara")
@@ -102,6 +102,40 @@ class TestCriarPeloPainel(unittest.TestCase):
         kw = service.create_appointment.call_args.kwargs
         self.assertIs(kw["permitir_duas"], True)
         self.assertEqual(kw["motivo_das_duas"], "duas áreas separadas")
+
+
+    # -- Sessao futura em OUTRO mes (PRD 060) --------------------------------
+
+    def test_outro_mes_vira_409_proprio_com_a_existente(self):
+        service = mock.MagicMock()
+        service.create_appointment.side_effect = OutraSessaoFutura(dict(EXISTENTE, appointment_date="2026-12-10"))
+        r, _ = self.chama(dict(BASE), servico=service)
+        self.assertEqual(r["statusCode"], 409)
+        self.assertEqual(_corpo(r)["code"], OTHER_MONTH_APPOINTMENT)
+        self.assertEqual(_corpo(r)["existing"]["date"], "2026-12-10")
+        self.assertEqual(_corpo(r)["existing"]["patientName"], "Ana")
+        self.assertIn("outro mês", _corpo(r)["message"])
+
+    def test_remarcar_existente_e_mais_uma_chegam_ao_servico_sem_admin(self):
+        # STAFF da propria clinica: a 060 nao pede ADMIN nem motivo.
+        recepcao = Identidade(papel=STAFF, user_id="u1", clinic_id=CLINIC, nome="Recepção")
+        r, service = self.chama(dict(BASE, remarcarExistente=True), identidade=recepcao)
+        self.assertEqual(r["statusCode"], 201)
+        kw = service.create_appointment.call_args.kwargs
+        self.assertIs(kw["remarcar_a_existente"], True)
+        self.assertIs(kw["mais_uma"], False)
+        r, service = self.chama(dict(BASE, maisUma=True), identidade=recepcao)
+        self.assertEqual(r["statusCode"], 201)
+        kw = service.create_appointment.call_args.kwargs
+        self.assertIs(kw["mais_uma"], True)
+        self.assertIs(kw["remarcar_a_existente"], False)
+        self.assertIs(kw["permitir_duas"], False)
+
+    def test_as_flags_so_valem_como_true_literal(self):
+        r, service = self.chama(dict(BASE, remarcarExistente="true", maisUma=1))
+        kw = service.create_appointment.call_args.kwargs
+        self.assertIs(kw["remarcar_a_existente"], False)
+        self.assertIs(kw["mais_uma"], False)
 
 
 class TestMoverPeloPainel(unittest.TestCase):

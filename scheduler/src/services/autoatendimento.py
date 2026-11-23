@@ -39,6 +39,18 @@ def link_de_agendamento(clinic: Optional[dict]) -> Optional[str]:
     return link_de_autoatendimento(clinic)
 
 
+# O site le `?meus=1` e abre "Meus agendamentos" direto (BookingChrome).
+PARAMETRO_MEUS_AGENDAMENTOS = "meus=1"
+
+
+def link_de_meus_agendamentos(clinic: Optional[dict]) -> Optional[str]:
+    """O link que abre "Meus agendamentos" (remarcar, cancelar) sem passar
+    pelo fluxo de marcar (PRD 060). Em 23/11/2026 uma paciente recebeu a raiz
+    para cancelar e nao achou o botao do cabecalho. None sem dominio."""
+    base = link_de_autoatendimento(clinic)
+    return f"{base}?{PARAMETRO_MEUS_AGENDAMENTOS}" if base else None
+
+
 def _dominio(link: str) -> str:
     return (link or "").replace("https://", "").replace("http://", "").rstrip("/").lower()
 
