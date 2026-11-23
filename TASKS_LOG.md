@@ -129,3 +129,5 @@ Use para rastrear o que foi implementado, refatorado ou removido.
 
 - **ID:** mesmo identificador do PRD e da Spec (ex: `001`, `002-refator-auth`).
 - **PRD / Spec:** caminho do artefato em `docs/work/`.
+
+- **fix** Retomada sabe a data e `get_time_slots` recusa data passada (2026-11-23) - Caso real da Essência em 23/11: a recepção retomou o bot pelo painel com "dia 08 ou 09?" em aberto; o bloco CALENDÁRIO não entrava em gatilho sintético, o modelo consultou 2025-12-08/09, recebeu `[]` e disse que não havia horário. Agora o calendário (só a linha de HOJE) entra também em `__RETOMAR_CONVERSA__`/`__INICIAR_CONVERSA__`, e `get_time_slots` devolve erro com a data de hoje para data passada. Testes: `tests/unit/test_retomada_sabe_a_data.py`. Sem PRD (correção pontual).

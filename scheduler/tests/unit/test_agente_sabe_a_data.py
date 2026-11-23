@@ -104,15 +104,20 @@ class TestDataResolvidaNaoEBloqueada(unittest.TestCase):
         self.assertIn("2026-09-04", datas)
 
 
-class TestGatilhoNaoGanhaCalendario(unittest.TestCase):
-    def test_mensagem_sintetica_nao_produz_bloco(self):
-        """Gatilho não é fala de ninguém: não há referência a resolver."""
+class TestGatilhoGanhaSoHoje(unittest.TestCase):
+    def test_mensagem_sintetica_recebe_hoje_e_nada_mais(self):
+        """Gatilho não é fala de ninguém: não há referência a resolver. Mas a
+        data de hoje vai mesmo assim - em 23/11/2026 a retomada sem ela fez o
+        modelo consultar 2025-12-08. Ver test_retomada_sabe_a_data."""
         modelo = AnthropicFalso("Oi!")
         agente = monta_agente(anthropic=modelo)
         with com_data_fixa():
             agente.process_message(CLINIC, mensagem("__INICIAR_CONVERSA__"))
 
-        self.assertNotIn("CALENDÁRIO", str(turno_enviado(modelo)))
+        turno = str(turno_enviado(modelo))
+        self.assertIn("CALENDÁRIO", turno)
+        self.assertIn("HOJE é", turno)
+        self.assertNotIn('" =', turno)
 
 
 class TestRespostaNaoSomeAtrasDasOpcoes(unittest.TestCase):

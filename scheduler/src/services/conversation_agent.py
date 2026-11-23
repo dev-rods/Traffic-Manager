@@ -573,10 +573,14 @@ class ConversationAgent:
         # As datas entram no respaldo porque são fato apurado, igual a resultado
         # de tool: sem isso, dizer "amanhã (05/09) não temos vaga" seria data
         # sem origem e a resposta cairia no bloqueio.
-        bloco_calendario, datas_do_calendario = ("", [])
-        if not gatilho:
-            bloco_calendario, datas_do_calendario = bloco_de_contexto(user_content)
-            respaldo_das_tools.append({"calendario": datas_do_calendario})
+        #
+        # Vale TAMBEM para o gatilho sintetico (retomada, inicio): em 23/11/2026
+        # a recepcao retomou o bot, a pessoa tinha pedido "dia 08 ou 09", e o
+        # modelo, sem a data de hoje, consultou 2025-12-08 - um ano atras - e
+        # disse que nao havia horario. No gatilho so vai a linha de HOJE: o
+        # texto sintetico nao tem referencia de data para ler.
+        bloco_calendario, datas_do_calendario = bloco_de_contexto("" if gatilho else user_content)
+        respaldo_das_tools.append({"calendario": datas_do_calendario})
 
         # As datas da campanha tambem sao respaldo. Elas vem da sessao, gravadas
         # no ato do disparo, e o bloco de campanha as poe no prompt - sao fato

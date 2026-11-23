@@ -8,7 +8,7 @@ o agendamento dela era excluído. A agenda abaixo é a forma do caso real:
 um dia cheio, e ela no meio.
 """
 import unittest
-from datetime import time
+from datetime import date, time
 from unittest import mock
 
 from src.services.availability_engine import AvailabilityEngine
@@ -95,7 +95,8 @@ class TestEngineDoTurno(unittest.TestCase):
         ctx = {"paciente": {"encontrado": True,
                             "agendamento_futuro": {"id": DELA, "data": DIA, "hora": "14:50"}},
                "turnos": []}
-        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=30):
+        # O caso e de 18/11/2026; sem fixar hoje, a tool recusaria DIA como passado.
+        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=30),              mock.patch("src.services.ai_tools.hoje_brt", return_value=date(2026, 11, 18)):
             r = ex._horarios({"date": DIA, "horario_pedido": "14:50"}, CLINIC, "5511", ctx)
         self.assertTrue(r["horario_pedido_disponivel"])
         self.assertIn("14:50", r["available_slots"])

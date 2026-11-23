@@ -644,6 +644,24 @@ def _parece_uuid(valor) -> bool:
         return False
 
 
+def _data_passada(iso):
+    """O erro para `get_time_slots` quando a data ja passou; None se vale.
+
+    Data ilegivel nao e tratada aqui (o motor responde como antes)."""
+    dia = para_data(iso)
+    hoje = hoje_brt()
+    if dia is None or dia >= hoje:
+        return None
+    return {
+        "error": (
+            f"{iso} is in the past. Today is {hoje.isoformat()} "
+            f"({_format_pt_br_date_label(hoje.isoformat())}). Use the current year "
+            "and call get_time_slots again."
+        ),
+        "today": hoje.isoformat(),
+    }
+
+
 class ToolExecutor:
     """Executes AI tool calls by delegating to existing services."""
 
@@ -865,6 +883,13 @@ class ToolExecutor:
         target_date = args.get("date")
         if not target_date:
             return {"error": "date is required"}
+        # Data passada e erro, nao dia lotado. Em 23/11/2026 o modelo pediu
+        # 2025-12-08 (sem a data de hoje no turno), recebeu [] e disse a
+        # pessoa que nao havia horario em 08/12. O erro traz a data de hoje
+        # para ele corrigir o ano sozinho.
+        passada = _data_passada(target_date)
+        if passada:
+            return passada
         if not self.availability_engine:
             return {"error": "Availability engine not available"}
         total_duration = calcula_duracao(self.db, clinic_id, args.get("service_area_pairs"))
