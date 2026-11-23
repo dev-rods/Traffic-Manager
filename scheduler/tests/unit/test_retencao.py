@@ -177,7 +177,9 @@ class TestEventos(unittest.TestCase):
         self.assertEqual(limites[1], f"MSG#{retencao.iso(AGORA - 30 * DIA)}")
         self.assertEqual(limites[2], "MSG#~")
 
-    def test_sem_desde_le_tudo_como_antes(self):
+    def test_sem_desde_le_so_mensagens(self):
+        """"STATUS#" ordena depois de "MSG#": sem o corte, os ultimos N itens
+        eram so status de entrega e a retomada lia uma conversa sem texto."""
         t = self._tracker()
         capturado = {}
 
@@ -186,8 +188,12 @@ class TestEventos(unittest.TestCase):
             return {"Items": []}
         t.table.query = query
         t.get_conversation_messages("c", "55", limit=5)
-        self.assertEqual(capturado["KeyConditionExpression"].get_expression()["operator"], "=")
-
+        self.assertNotIn("FilterExpression", capturado)
+        valores = capturado["KeyConditionExpression"].get_expression()["values"]
+        limites = valores[1].get_expression()["values"]
+        self.assertEqual((limites[1], limites[2]), ("MSG#", "MSG#~"))
+        self.assertFalse(capturado["ScanIndexForward"])
+        self.assertEqual(capturado["Limit"], 5)
 
 if __name__ == "__main__":
     unittest.main()
