@@ -123,6 +123,12 @@ ClassificaLeads:
         - dynamodb:Query
       Resource:
         - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
+    # Sessoes da clinica em lote (PRD 058): a entrega do bot vive no bloco atendimento.
+    - Effect: Allow
+      Action:
+        - dynamodb:BatchGetItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-conversation-sessions"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup

@@ -94,9 +94,45 @@ class TestUltimasMensagens(unittest.TestCase):
         self.assertEqual(t.ultimas_mensagens(Quebrada(), CLINIC, "5511999990000"), [])
 
 
+class TestAutor(unittest.TestCase):
+    """O autor do OUTBOUND vem de autoria_mensagem (PRD 034): o bot guarda o id
+    do provider, a atendente chega com metadata.autor, o sistema com origem."""
+
+    def _le(self, item):
+        tabela = TabelaFalsa({"CLINIC#{}#PHONE#5511999990000".format(CLINIC): [item]})
+        return t.ultimas_mensagens(tabela, CLINIC, "5511999990000")[0]
+
+    def test_bot_tem_id_do_provider(self):
+        m = self._le(dict(msg("2026-11-01T10:00:00Z", "OUTBOUND", "Oi"), status="SENT", providerMessageId="abc"))
+        self.assertEqual((m.de, m.autor), ("NOS", "BOT"))
+
+    def test_humano_pelo_metadata(self):
+        m = self._le(dict(msg("2026-11-01T10:00:00Z", "OUTBOUND", "Oi"), status="SENT", metadata={"autor": "HUMANO"}))
+        self.assertEqual(m.autor, "HUMANO")
+
+    def test_sistema_pela_origem(self):
+        m = self._le(dict(msg("2026-11-01T10:00:00Z", "OUTBOUND", "Oi"), status="SENT", metadata={"origem": "lembrete"}))
+        self.assertEqual(m.autor, "SISTEMA")
+
+    def test_lead_nao_tem_autor(self):
+        m = self._le(dict(msg("2026-11-01T10:00:00Z", "INBOUND", "Oi"), status="RECEIVED"))
+        self.assertEqual((m.de, m.autor), ("LEAD", None))
+
+
 class TestResumo(unittest.TestCase):
     def test_vazio(self):
-        self.assertEqual(t.resumo([]), {"ultima_de": None, "ultima_em": None, "lead_ja_falou": False})
+        self.assertEqual(t.resumo([]), {"ultima_de": None, "ultima_em": None, "lead_ja_falou": False,
+                                        "ultima_fala_humana_em": None})
+
+    def test_ultima_fala_humana(self):
+        d = datetime(2026, 11, 1, tzinfo=timezone.utc)
+        ms = [t.Mensagem("LEAD", d, "Oi"),
+              t.Mensagem("NOS", d.replace(day=2), "Ja chamei uma especialista", "BOT"),
+              t.Mensagem("NOS", d.replace(day=3), "Oi, aqui e a Gi", "HUMANO"),
+              t.Mensagem("NOS", d.replace(day=4), "Lembrete da sua sessao", "SISTEMA")]
+        r = t.resumo(ms)
+        self.assertEqual((r["ultima_de"], r["ultima_fala_humana_em"]), ("NOS", d.replace(day=3)))
+        self.assertIsNone(t.resumo(ms[:2])["ultima_fala_humana_em"])
 
     def test_so_nos(self):
         ms = [t.Mensagem("NOS", datetime(2026, 11, 1, tzinfo=timezone.utc), "Oi")]

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """Recalcula o estagio de todos os leads (PRD 057). Diario, 7h BRT.
 
-Para cada lead: le a transcricao no MessageEvents, cruza com agenda e espelho
-do z-api, aplica `estagio_do_lead.decide`, e so entao pergunta ao modelo o que a
-regra nao sabe (triagem de WhatsApp novo; desfecho de quem parou). Grava so o
+Para cada lead: le a transcricao no MessageEvents, cruza com agenda, espelho
+do z-api e sessao (entrega do bot, PRD 058), aplica `estagio_do_lead.decide`, e
+so entao pergunta ao modelo o que a regra nao sabe (triagem de WhatsApp novo;
+desfecho de quem parou, nunca com entrega do bot pendente). Grava so o
 que mudou. `{"dryRun": true}` calcula e devolve a distribuicao sem escrever.
 `{"clinicId": "..."}` limita a uma clinica.
 """
@@ -14,6 +15,7 @@ from collections import Counter
 from datetime import date, datetime, time, timezone
 from typing import Dict, List, Optional
 
+from src.services import atendimento
 from src.services import estagio_do_lead as estagio
 from src.services import estagio_repo as repo
 from src.services.classificador_de_lead import (
@@ -24,7 +26,7 @@ from src.services.classificador_de_lead import (
 )
 from src.services.business_hours import fuso
 from src.services.db.postgres import PostgresService
-from src.services.status_da_conversa import conversas_da_clinica
+from src.services.status_da_conversa import conversas_da_clinica, sessoes_por_telefone
 from src.services.transcricao import resumo, ultimas_mensagens
 from src.utils.phone import variantes_do_numero
 
@@ -32,6 +34,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 _tabela = None
+_sessoes = None
 
 
 def _tabela_de_eventos():
@@ -40,6 +43,14 @@ def _tabela_de_eventos():
         import boto3
         _tabela = boto3.resource("dynamodb").Table(os.environ["MESSAGE_EVENTS_TABLE"])
     return _tabela
+
+
+def _tabela_de_sessoes():
+    global _sessoes
+    if _sessoes is None:
+        import boto3
+        _sessoes = boto3.resource("dynamodb").Table(os.environ["CONVERSATION_SESSIONS_TABLE"])
+    return _sessoes
 
 
 def _clinicas(db, clinic_id: Optional[str] = None) -> List[Dict]:
@@ -90,7 +101,19 @@ def _ultimo_agendamento(agendamentos: List[Dict], clinic: Dict):
     return mais_recente.get("status"), _quando(mais_recente, clinic)
 
 
-def _sinais(lead: Dict, mensagens, chat: Optional[Dict], agendamentos: List[Dict], clinic: Dict) -> estagio.Sinais:
+def _entregue_em(sessao: Optional[Dict], clinic: Dict, agora: datetime) -> Optional[datetime]:
+    """Quando o bot entregou a conversa, se ela ainda esta com pessoa por isso.
+    No fuso da clinica, para o motivo sair com o dia certo."""
+    if not sessao or not atendimento.aguarda_especialista(sessao, int(agora.timestamp())):
+        return None
+    epoch = atendimento.bloco(sessao).get("entregue_em")
+    if not epoch:
+        return None
+    return datetime.fromtimestamp(int(epoch), timezone.utc).astimezone(fuso(clinic))
+
+
+def _sinais(lead: Dict, mensagens, chat: Optional[Dict], agendamentos: List[Dict], clinic: Dict,
+            sessao: Optional[Dict] = None, agora: Optional[datetime] = None) -> estagio.Sinais:
     r = resumo(mensagens)
     status, quando = _ultimo_agendamento(agendamentos, clinic)
     return estagio.Sinais(
@@ -102,6 +125,8 @@ def _sinais(lead: Dict, mensagens, chat: Optional[Dict], agendamentos: List[Dict
         chat_espelho_nao_lidas=int((chat or {}).get("unread_count") or 0),
         ultimo_agendamento=status,
         ultimo_agendamento_em=quando,
+        bot_entregou_em=_entregue_em(sessao, clinic, agora or datetime.now(timezone.utc)),
+        ultima_fala_humana_em=r["ultima_fala_humana_em"],
     )
 
 
@@ -122,7 +147,7 @@ class _SemModelo:
         return None
 
 
-def _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, agora, dias, dry_run):
+def _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, agora, dias, dry_run, sinais):
     """Triagem e desfecho. Devolve (decisao, descartes)."""
     descartes = 0
     if decisao.stage in estagio.ESTAGIOS_DA_AGENDA or decisao.source == estagio.MANUAL:
@@ -136,7 +161,9 @@ def _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, ago
                 repo.marca_triagem(db, str(lead["id"]))
             if v.classe == "NAO_E_LEAD":
                 decisao = estagio.Decisao(estagio.NAO_E_LEAD, estagio.MODELO, v.motivo)
-    if decisao.stage != estagio.NAO_E_LEAD and precisa_de_desfecho(lead, decisao, mensagens, agora, dias):
+    # Com a entrega do bot pendente nao ha desfecho a julgar: a pergunta e nossa.
+    if (decisao.stage != estagio.NAO_E_LEAD and not estagio.entrega_pendente(sinais)
+            and precisa_de_desfecho(lead, decisao, mensagens, agora, dias)):
         v = classificador.desfecho(mensagens, clinic)
         if v is None:
             descartes += 0 if isinstance(classificador, _SemModelo) else 1
@@ -150,12 +177,15 @@ def _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, ago
     return decisao, descartes
 
 
-def processa_clinica(db, tabela_eventos, clinic: Dict, classificador, agora: datetime, dry_run: bool) -> Dict:
+def processa_clinica(db, tabela_eventos, tabela_sessoes, clinic: Dict, classificador, agora: datetime, dry_run: bool) -> Dict:
     clinic_id = clinic["clinic_id"]
     dias = int(clinic.get("crm_dias_parado") or 7)
     leads = db.execute_query("SELECT * FROM scheduler.leads WHERE clinic_id = %s ORDER BY created_at", (clinic_id,))
     chats = conversas_da_clinica(db, clinic_id)
     agenda = _agendamentos_por_variante(db, clinic_id)
+    # Sessoes em lote (um BatchGetItem por 100 telefones), por toda variante.
+    sessoes = sessoes_por_telefone(tabela_sessoes, clinic_id,
+                                   [v for lead in leads for v in variantes_do_numero(lead.get("phone") or "")])
     por_estagio = Counter()  # type: Counter
     mudaram, descartes = 0, 0
     for lead in leads:
@@ -164,9 +194,11 @@ def processa_clinica(db, tabela_eventos, clinic: Dict, classificador, agora: dat
         mensagens = ultimas_mensagens(tabela_eventos, clinic_id, telefone)
         chat = next((chats.get(v) for v in variantes if chats.get(v)), None)
         ags = [a for v in variantes for a in agenda.get(v, [])]
-        decisao = estagio.decide(_sinais(lead, mensagens, chat, ags, clinic), agora, dias)
+        sessao = next((sessoes.get(v) for v in variantes if sessoes.get(v)), None)
+        sinais = _sinais(lead, mensagens, chat, ags, clinic, sessao, agora)
+        decisao = estagio.decide(sinais, agora, dias)
         try:
-            decisao, d = _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, agora, dias, dry_run)
+            decisao, d = _pergunta_ao_modelo(db, lead, mensagens, decisao, clinic, classificador, agora, dias, dry_run, sinais)
             descartes += d
         except TetoAtingido as t:
             logger.warning("[ClassificaLeads] {}: teto do modelo atingido ({}); o resto fica para amanha".format(clinic_id, t))
@@ -201,6 +233,7 @@ def handler(event, context):
     logger.info("[traceId: {}] ClassificaLeads inicio{}".format(trace_id, " (dryRun)" if dry_run else ""))
     db = PostgresService()
     tabela = _tabela_de_eventos()
+    sessoes = _tabela_de_sessoes()
     # O teto e por invocacao. O payload pode subir para um backfill (a primeira
     # rodada de uma clinica com centenas de leads); o cron usa o da env.
     max_chamadas = int(event.get("maxChamadasModelo") or os.environ.get("CRM_MAX_CHAMADAS_MODELO", "200"))
@@ -209,7 +242,7 @@ def handler(event, context):
         cid = clinic["clinic_id"]
         saida["clinics"] += 1
         try:
-            resultado = processa_clinica(db, tabela, clinic, Classificador(max_chamadas=max_chamadas), agora, dry_run)
+            resultado = processa_clinica(db, tabela, sessoes, clinic, Classificador(max_chamadas=max_chamadas), agora, dry_run)
             saida["por_clinica"][cid] = resultado
             logger.info("[traceId: {}] {}: {}".format(trace_id, cid, resultado))
         except Exception as e:

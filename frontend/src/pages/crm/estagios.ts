@@ -14,7 +14,7 @@ export interface EstagioInfo {
 }
 
 export const ESTAGIOS: Record<LeadStage, EstagioInfo> = {
-  AGUARDANDO_NOS: { label: 'Aguardando nós', descricao: 'A última mensagem é do lead.', variant: 'danger' },
+  AGUARDANDO_NOS: { label: 'Aguardando nós', descricao: 'A última mensagem é do lead, ou o bot pediu ajuda e ninguém assumiu.', variant: 'danger' },
   SUMIU: { label: 'Sumiu', descricao: 'A conversa parou há mais de N dias.', variant: 'warning' },
   INICIADA_SEM_RESPOSTA: { label: 'Sem resposta', descricao: 'Só nós falamos, há poucos dias.', variant: 'warning' },
   SEM_CONVERSA: { label: 'Sem conversa', descricao: 'Ninguém falou ainda.', variant: 'neutral' },

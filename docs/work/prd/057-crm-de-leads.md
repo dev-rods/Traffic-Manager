@@ -225,6 +225,12 @@ EM_ANDAMENTO
 - NAO_AGENDOU e NAO_E_LEAD (fonte MODELO) caem se chegar **mensagem nova do
   lead** depois de `stage_updated_at`: a regra reavalia e o desfecho pode rodar
   de novo quando voltar a parar.
+- **Entrega do bot (PRD 058, 22/11):** o aviso de handoff ("vou confirmar com
+  uma especialista") é OUTBOUND, mas não é resposta. Se a sessão segue entregue
+  pelo bot e nenhuma pessoa da clínica falou depois, o lead é AGUARDANDO_NOS
+  com o motivo "bot pediu ajuda em DD/MM e ninguém assumiu"; isso conta como
+  fala do lead para CANCELOU/FALTOU, derruba NAO_AGENDOU do modelo e o job não
+  pergunta o desfecho. Detalhes em `prd/058-handoff-do-bot-no-crm.md`.
 
 ### 5.3 Fonte da conversa
 
@@ -240,7 +246,8 @@ EM_ANDAMENTO
 3. Sem nada: SEM_CONVERSA, a menos que `first_contact_at` esteja preenchido,
    caso em que é INICIADA_SEM_RESPOSTA.
 
-"Nossa" mensagem = OUTBOUND de qualquer autor (bot, atendente, disparo).
+"Nossa" mensagem = OUTBOUND de qualquer autor (bot, atendente, disparo). O
+autor (BOT, HUMANO, SISTEMA) só entra para a entrega do bot (PRD 058).
 
 ---
 

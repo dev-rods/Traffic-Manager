@@ -15,6 +15,13 @@ escreve DEPOIS do horario daquele agendamento. Quem cancelou e perguntou
 "consigo remarcar?" e AGUARDANDO_NOS, nao um cancelamento parado. AGENDOU nao
 tem essa saida: com sessao marcada, a conversa nao e problema do CRM.
 
+Entrega do bot (PRD 058): quando o bot pede ajuda ("vou confirmar com uma
+especialista") e ninguem da clinica responde, a bola esta conosco, por mais que
+a ultima mensagem seja "nossa". O sinal vem da sessao (bloco `atendimento`,
+entregue pelo bot e ainda com pessoa) cruzado com a transcricao (nenhuma fala
+HUMANA depois da entrega). Vale como fala do lead para a agenda, derruba
+NAO_AGENDOU do modelo e vence a direcao da ultima mensagem.
+
 Qual fato (PRD 054): o agendamento mais recente que NAO e remarcacao decide.
 Remarcacao e CANCELLED com `rescheduled_to_id`, e fica de fora antes de olhar.
 Quem faltou e remarcou e AGENDOU; quem remarcou tres vezes nao vira CANCELOU.
@@ -79,6 +86,10 @@ class Sinais:
     ultimo_agendamento: Optional[str]
     # data e hora desse agendamento, em UTC. E o marco para "o lead falou depois".
     ultimo_agendamento_em: Optional[datetime] = None
+    # PRD 058: quando o bot entregou a conversa (so se a sessao ainda esta com
+    # pessoa por entrega do bot), no fuso da clinica; e a ultima fala HUMANA.
+    bot_entregou_em: Optional[datetime] = None
+    ultima_fala_humana_em: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -103,17 +114,35 @@ def _lead_falou_depois(s: Sinais, marco: Optional[datetime]) -> bool:
             and marco is not None and s.ultima_mensagem_em > marco)
 
 
+def entrega_pendente(s: Sinais) -> bool:
+    """O bot pediu ajuda e nenhuma pessoa da clinica falou depois."""
+    return (s.bot_entregou_em is not None
+            and (s.ultima_fala_humana_em is None or s.ultima_fala_humana_em < s.bot_entregou_em))
+
+
+def _a_bola_esta_conosco(s: Sinais, marco: Optional[datetime]) -> bool:
+    """Depois do marco, o lead falou ou o bot pediu ajuda sem resposta?"""
+    if _lead_falou_depois(s, marco):
+        return True
+    return entrega_pendente(s) and marco is not None and s.bot_entregou_em > marco
+
+
 def _pela_agenda(s: Sinais) -> Optional[Decisao]:
     stage = _PELO_STATUS.get(s.ultimo_agendamento or "")
     if not stage:
         return None
-    if stage in (CANCELOU, FALTOU) and _lead_falou_depois(s, s.ultimo_agendamento_em):
+    if stage in (CANCELOU, FALTOU) and _a_bola_esta_conosco(s, s.ultimo_agendamento_em):
         # Cancelou ou faltou e voltou a escrever: a conversa manda de novo.
         return None
     return Decisao(stage, REGRA)
 
 
 def _pela_conversa(s: Sinais, agora: datetime, dias_parado: int) -> Decisao:
+    if entrega_pendente(s):
+        # O aviso do bot e a ultima mensagem, mas e aviso, nao resposta.
+        return Decisao(AGUARDANDO_NOS, REGRA,
+                       "bot pediu ajuda em {:%d/%m} e ninguem assumiu".format(s.bot_entregou_em))
+
     if s.tem_transcricao and s.ultima_mensagem_de:
         if not s.lead_ja_falou:
             # So nos falamos. Depois de N dias nao e mais "iniciada": sumiu.
@@ -152,8 +181,14 @@ def decide(sinais: Sinais, agora: datetime, dias_parado: int = 7) -> Decisao:
         # gravado. Motivo novo so chega por outra correcao manual.
         return Decisao(sinais.stage, MANUAL)
 
-    if sinais.stage in (NAO_E_LEAD, NAO_AGENDOU) and sinais.stage_source == MODELO:
+    if sinais.stage == NAO_E_LEAD and sinais.stage_source == MODELO:
         if not _mensagem_nova_depois_do_veredito(sinais):
+            return Decisao(sinais.stage, MODELO)
+
+    if sinais.stage == NAO_AGENDOU and sinais.stage_source == MODELO:
+        # Com a entrega do bot pendente o veredito nasceu de dado incompleto
+        # (a pergunta era nossa de responder) e cai, seja de quando for.
+        if not _mensagem_nova_depois_do_veredito(sinais) and not entrega_pendente(sinais):
             return Decisao(sinais.stage, MODELO)
 
     return _pela_conversa(sinais, agora, dias_parado)
