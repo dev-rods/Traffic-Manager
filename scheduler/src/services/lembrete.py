@@ -4,11 +4,13 @@
 Gravada na sessao no ato da ENTREGA do lembrete, nunca inferida pelo modelo.
 Enquanto viva (ate o fim do dia da sessao, no fuso da clinica):
 
-- com site de autoatendimento, `cancel_appointment`
-  NAO vai ao modelo: a pessoa recebe o link e resolve sozinha. Nao e so prompt:
-  a ferramenta nao existe para ele.
-- sem site, nada e removido: o bot cancela e remarca como sempre.
 - `confirm_attendance` so existe aqui: resposta positiva vira Confirmado.
+- com site de autoatendimento, REMARCAR vai pelo link (o site troca a data
+  melhor que a conversa). CANCELAR e feito aqui, direto, por
+  `cancel_appointment` (PRD 059): ate 23/11/2026 a ferramenta era removida e
+  a pessoa recebia o link - em 60 dias de prod nenhuma resposta ao lembrete
+  terminou cancelada pelo bot, e 2 ficaram CONFIRMED depois da data.
+- sem site, o bot cancela e remarca na conversa, como sempre.
 
 Funcoes puras, sem I/O.
 """
@@ -20,10 +22,6 @@ from src.services.autoatendimento import link_de_autoatendimento
 from src.services.business_hours import fuso
 
 CHAVE = "lembrete"
-# So cancelar sai: trocar as areas e uma frase e o site nao faz isso (PRD 045
-# §7.3). Remarcar pelo bot durante o lembrete continua fora pelo PROMPT (o
-# link), nao pela ferramenta: `alterar_agendamento` e a mesma tool das areas.
-FERRAMENTAS_DE_SAIDA = frozenset({"cancel_appointment"})
 FERRAMENTA_DE_CONFIRMACAO = "confirm_attendance"
 
 
@@ -91,12 +89,6 @@ def appointment_id(session, agora: Optional[int] = None) -> Optional[str]:
     return _dados(session)["appointment_id"] if esta_vivo(session, agora) else None
 
 
-def ferramentas_a_remover(session, clinic, agora: Optional[int] = None) -> FrozenSet[str]:
-    if not esta_vivo(session, agora) or not link_de_autoatendimento(clinic):
-        return frozenset()
-    return FERRAMENTAS_DE_SAIDA
-
-
 def ferramentas_a_liberar(session, agora: Optional[int] = None) -> FrozenSet[str]:
     return frozenset({FERRAMENTA_DE_CONFIRMACAO}) if esta_vivo(session, agora) else frozenset()
 
@@ -109,14 +101,21 @@ def bloco_de_prompt(session, clinic, agora: Optional[int] = None) -> str:
     link = link_de_autoatendimento(clinic)
     if link:
         saida = (
-            f"Se ela quiser REMARCAR ou CANCELAR, NÃO execute nada: envie o link {link} e diga "
-            "que por lá ela remarca ou cancela em um minuto, com o mesmo número de WhatsApp. "
-            "Se disser que não vai poder ir sem pedir nada, pergunte se prefere remarcar ou "
-            "cancelar e então envie o link. Se ela quiser só TROCAR, TIRAR ou INCLUIR área, "
-            "resolva por aqui com alterar_agendamento, mantendo o dia e a hora.\n"
+            "Se ela quiser CANCELAR ou disser que não vai poder ir (\"não vou conseguir\", "
+            "\"preciso desmarcar\", \"imprevisto\"), cancele AGORA com cancel_appointment, "
+            "sem perguntar nem oferecer remarcar antes: o pedido já é a decisão. "
+            "Responda em uma linha curta; a confirmação completa sai automaticamente depois. "
+            f"Se ela quiser REMARCAR (outra data), NÃO execute nada: envie o link {link} e diga "
+            "que por lá ela remarca em um minuto, com o mesmo número de WhatsApp. "
+            "Se ela quiser só TROCAR, TIRAR ou INCLUIR área, resolva por aqui com "
+            "alterar_agendamento, mantendo o dia e a hora.\n"
         )
     else:
-        saida = "Se ela quiser cancelar ou remarcar, pode resolver por aqui mesmo com as ferramentas, como sempre.\n"
+        saida = (
+            "Se ela quiser CANCELAR ou disser que não vai poder ir, cancele AGORA com "
+            "cancel_appointment, sem perguntar; responda em uma linha curta, a confirmação "
+            "completa sai automaticamente. Remarcar pode resolver por aqui mesmo, como sempre.\n"
+        )
     areas = f" ({d['areas']})" if d.get("areas") else ""
     return (
         "\n═══ LEMBRETE ENVIADO ═══\n"

@@ -35,9 +35,12 @@ def nomes(session, clinic, skill=skills.PACIENTE_COM_HORARIO):
 
 
 class TestFerramentasNoAgente(unittest.TestCase):
-    def test_com_lembrete_e_site_sai_cancelar_entra_confirmar(self):
+    def test_com_lembrete_e_site_mantem_cancelar_e_entra_confirmar(self):
+        # PRD 059: ate 23/11/2026 cancel_appointment saia com site e a pessoa
+        # recebia o link; em 60 dias de prod nenhuma resposta ao lembrete
+        # terminou cancelada pelo bot. Agora a tool fica.
         n = nomes({"lembrete": L.abre(APPT, COM_SITE, AGORA)}, COM_SITE)
-        self.assertNotIn("cancel_appointment", n)
+        self.assertIn("cancel_appointment", n)
         # PRD 045 §7.3 A: trocar as areas e uma frase e o site nao faz isso.
         self.assertIn("alterar_agendamento", n)
         self.assertIn("confirm_attendance", n)

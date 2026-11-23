@@ -93,6 +93,11 @@ PACIENTE_COM_HORARIO = Skill(
         "   confirme e use alterar_agendamento. Em outro mês pode marcar outra: pergunte e\n"
         "   confirme as áreas como sempre, e diga que a anterior continua marcada.\n"
         "4. Não repita o valor sem ela perguntar.\n"
+        "5. Pedido de CANCELAR, desmarcar, ou \"não vou poder ir\": cancele AGORA com\n"
+        "   lookup_appointments + cancel_appointment, sem pedir confirmação nem oferecer\n"
+        "   remarcar antes. Só pergunte se o pedido for ambíguo (\"acho que não vai dar\")\n"
+        "   ou se houver mais de uma sessão marcada: uma pergunta só. Depois de cancelar,\n"
+        "   responda em uma linha curta; a confirmação completa sai automaticamente.\n"
     ),
 )
 
