@@ -551,3 +551,75 @@ describe('Booking - desconto progressivo', () => {
     expect(screen.queryByText(/Desconto progressivo/)).not.toBeInTheDocument()
   })
 })
+
+describe('Booking - sessão futura em outro mês (PRD 060)', () => {
+  const pergunta = new ApiError('Você já tem uma sessão em 10/12.', 409, {
+    code: 'OTHER_MONTH_APPOINTMENT',
+    existing: { id: 'x2', date: '2026-12-10', time: '09:00', areas: 'Virilha' },
+  })
+
+  beforeEach(() => {
+    vi.mocked(bookingService.bootstrap).mockResolvedValue(bootstrap())
+    vi.mocked(bookingService.availability).mockResolvedValue(availability())
+    vi.mocked(bookingService.quote).mockResolvedValue(NO_DISCOUNT)
+    vi.mocked(bookingService.createAppointment)
+      .mockReset()
+      .mockRejectedValueOnce(pergunta)
+      .mockResolvedValue({ final_price_cents: 15000 } as Appointment)
+    mockOtp()
+  })
+
+  async function submit() {
+    renderBooking()
+    await screen.findByText('Escolha o dia')
+    await chooseSlotAndContinue()
+    await fillCustomer()
+    await confirmWithCode()
+    return screen.findByRole('dialog', { name: 'Você já tem uma sessão marcada' })
+  }
+
+  it('pergunta o que fazer, com a sessão, as áreas e o WhatsApp da clínica', async () => {
+    const dialog = await submit()
+    expect(dialog).toHaveTextContent('Você já tem uma sessão em 10/12/2026 às 09:00. O que você quer fazer?')
+    expect(dialog).toHaveTextContent('Áreas: Virilha')
+    expect(within(dialog).getByRole('link', { name: 'Falar no WhatsApp' })).toHaveAttribute(
+      'href',
+      'https://wa.me/5511999990000'
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    // Não é o diálogo do mesmo mês: nada de "será substituída"
+    expect(screen.queryByRole('dialog', { name: 'Você já tem uma sessão este mês' })).not.toBeInTheDocument()
+    expect(bookingService.createAppointment).toHaveBeenCalledTimes(1)
+  })
+
+  it('"Remarcar essa sessão" reenvia com remarcarExistente e a tela diz remarcado', async () => {
+    const dialog = await submit()
+    await userEvent.click(within(dialog).getByRole('button', { name: /^Remarcar essa sessão para/ }))
+
+    expect(await screen.findByText('Agendamento remarcado!')).toBeInTheDocument()
+    const calls = vi.mocked(bookingService.createAppointment).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls[0][1]).not.toHaveProperty('remarcarExistente')
+    expect(calls[0][1]).not.toHaveProperty('maisUma')
+    expect(calls[1][1]).toEqual({ ...calls[0][1], remarcarExistente: true })
+  })
+
+  it('"Marcar mais uma" reenvia com maisUma e a tela diz confirmado', async () => {
+    const dialog = await submit()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Marcar mais uma' }))
+
+    expect(await screen.findByText('Agendamento confirmado!')).toBeInTheDocument()
+    const calls = vi.mocked(bookingService.createAppointment).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls[1][1]).toEqual({ ...calls[0][1], maisUma: true })
+    expect(calls[1][1]).not.toHaveProperty('remarcarExistente')
+  })
+
+  it('"Voltar" fecha a pergunta sem criar nada', async () => {
+    const dialog = await submit()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Voltar' }))
+    expect(screen.queryByRole('dialog', { name: 'Você já tem uma sessão marcada' })).not.toBeInTheDocument()
+    expect(screen.getByText('Seus dados')).toBeInTheDocument()
+    expect(bookingService.createAppointment).toHaveBeenCalledTimes(1)
+  })
+})

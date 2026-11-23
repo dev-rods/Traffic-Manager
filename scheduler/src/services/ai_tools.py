@@ -37,7 +37,7 @@ from src.services.politica_de_desconto import decide as decide_desconto
 from src.services.duration_rules import calcula_duracao
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.autoatendimento import link_ja_foi
-from src.services.appointment_service import SessaoNoMesmoMes
+from src.services.appointment_service import OutraSessaoFutura, SessaoNoMesmoMes
 
 logger = logging.getLogger(__name__)
 
@@ -387,6 +387,14 @@ TOOL_DEFINITIONS = [
                     "final_price_cents": {
                         "type": "integer",
                         "description": "Final price in cents after discount",
+                    },
+                    "mais_uma": {
+                        "type": "boolean",
+                        "description": (
+                            "Only after the tool asked 'remarcar ou mais uma?' and the "
+                            "patient explicitly chose to KEEP the existing session AND book "
+                            "this one too (different month). Never pass it on your own."
+                        ),
                     },
                 },
                 "required": ["service_area_pairs", "date", "time"],
@@ -1126,6 +1134,9 @@ class ToolExecutor:
         recusa = self._recusa_mesmo_mes(args, phone, ctx)
         if recusa:
             return recusa
+        recusa = self._pergunta_outro_mes(args, phone, ctx)
+        if recusa:
+            return recusa
         recusa = self._barra_areas_nao_conversadas(args, clinic_id, ctx)
         if recusa:
             return recusa
@@ -1199,12 +1210,22 @@ class ToolExecutor:
                 discount_reason=discount_reason,
                 original_price_cents=original_price_cents,
                 final_price_cents=final_price_cents,
+                # PRD 060: so chega True depois da pergunta (ver _pergunta_outro_mes).
+                mais_uma=args.get("mais_uma") is True,
             )
         except SessaoNoMesmoMes as e:
             # A guarda do servico (PRD 056). O ctx traz so a sessao futura
             # MAIS PROXIMA; a do mesmo mes pode ser outra (legado).
             logger.info(f"[MesmoMes] {phone}: book_appointment recusado pelo servico, sessão {e.existente['id']}")
             return self._recado_do_mesmo_mes(_sessao_do_existente(e.existente))
+        except OutraSessaoFutura as e:
+            # O ctx nao trouxe a sessao futura (cadastro recem-criado, por
+            # exemplo) e o servico enxergou: a mesma pergunta.
+            logger.info(f"[OutroMes] {phone}: book_appointment devolve a pergunta pelo servico, sessão {e.existente['id']}")
+            session = (ctx or {}).get("session")
+            if isinstance(session, dict):
+                session[self.CAMPO_PERGUNTA_MAIS_UMA] = str(e.existente.get("id"))
+            return self._recado_do_outro_mes(_sessao_do_existente(e.existente))
 
         # Dados de cadastro: gravados no paciente, não no agendamento. São
         # opcionais na tool para o agendamento não falhar se a pessoa se recusar
@@ -1279,6 +1300,50 @@ class ToolExecutor:
                 "será cancelada e remarcada para a data pedida, confirme com ela e chame "
                 f"alterar_agendamento com appointment_id={sessao['appointment_id']}, new_date e "
                 "new_time (e as áreas, se mudaram). Nunca book_appointment para isso."
+            ),
+        }
+
+    # -- Sessao futura em OUTRO mes: pergunta antes de criar (PRD 060) --------
+    #
+    # Ate 23/11 a tool criava e devolvia `sessao_anterior_mantida` para o
+    # modelo avisar. Nesse dia duas pacientes que queriam remarcar criaram a
+    # sessao nova em dezembro e novembro ficou de pe. Agora a tool devolve a
+    # pergunta; `mais_uma=true` so vale depois de a pergunta ter sido feita
+    # NESTA conversa (gravado na sessao), para o modelo nao decidir por ela.
+
+    CAMPO_PERGUNTA_MAIS_UMA = "pergunta_mais_uma"
+
+    def _pergunta_outro_mes(self, args, phone, ctx):
+        futuro = self._sessao_futura(ctx)
+        if not futuro or _mesmo_mes(futuro.get("data"), args.get("date")):
+            return None
+        session = (ctx or {}).get("session")
+        ja_perguntou = isinstance(session, dict) and session.get(self.CAMPO_PERGUNTA_MAIS_UMA) == str(futuro["id"])
+        if args.get("mais_uma") is True and ja_perguntou:
+            return None
+        if isinstance(session, dict):
+            session[self.CAMPO_PERGUNTA_MAIS_UMA] = str(futuro["id"])
+        motivo = "mais_uma sem pergunta feita" if args.get("mais_uma") is True else "sessão futura em outro mês"
+        logger.info(f"[OutroMes] {phone}: book_appointment devolve a pergunta ({motivo}), sessão {futuro['id']}")
+        return self._recado_do_outro_mes({
+            "appointment_id": str(futuro["id"]),
+            "date": futuro.get("data"),
+            "time": futuro.get("hora"),
+            "areas": futuro.get("areas"),
+        })
+
+    @staticmethod
+    def _recado_do_outro_mes(sessao):
+        return {
+            "error": "ja_tem_sessao_futura",
+            "sessao": sessao,
+            "o_que_fazer": (
+                f"Esta pessoa já tem sessão em {_format_pt_br_date_label(sessao['date'])} às "
+                f"{sessao['time']}. Antes de marcar, PERGUNTE a ela se quer REMARCAR essa sessão "
+                "para a data pedida ou MARCAR MAIS UMA (ficar com as duas), e espere a resposta. "
+                f"Se remarcar: alterar_agendamento com appointment_id={sessao['appointment_id']}, "
+                "new_date e new_time. Se mais uma: chame book_appointment de novo com "
+                "mais_uma=true. Não decida por ela."
             ),
         }
 

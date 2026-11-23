@@ -45,8 +45,17 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
   (`existing`); o `RemarcacaoDialog` avisa "Sua sessão de X será substituída
   por Y. Confirmar?", com o WhatsApp da clínica (`wa.me`), e reenvia com
   `substituir: true`. A regra mora no backend (`AppointmentService`); nunca
-  "manter os dois". Mês diferente não interfere. O 409 sem `code` continua
-  sendo horário ocupado.
+  "manter os dois". O 409 sem `code` continua sendo horário ocupado.
+- **Sessão futura em outro mês pergunta** (PRD 060). Número verificado com
+  sessão confirmada futura em OUTRO mês recebe 409 `OTHER_MONTH_APPOINTMENT`
+  com `existing`; o `SessaoFuturaDialog` pergunta "remarcar essa sessão ou
+  marcar mais uma?" e reenvia com `remarcarExistente: true` (a troca acima,
+  da sessão de outro mês) ou `maisUma: true` (cria a segunda). Até 23/11/2026
+  mês diferente criava em silêncio e quem queria remarcar ficava com duas.
+- **`?meus=1` abre "Meus agendamentos" direto** (PRD 060, `BookingChrome`).
+  É o link que o bot (lembrete) e a recepção mandam para remarcar ou
+  cancelar; fechar o modal limpa o parâmetro. A raiz continua sendo o link
+  para marcar.
 - **Agenda = as próximas N datas com horário** (N = "Datas futuras" da
   clínica), no fuso da clínica — a regra mora no backend
   (`scheduler/src/services/janela_do_site.py`); o front só exibe `days`.

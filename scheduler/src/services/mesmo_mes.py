@@ -10,6 +10,11 @@ a regra e um especialista, e fica gravado quem e por que.
 from src.utils.http import http_response
 
 SAME_MONTH_APPOINTMENT = "SAME_MONTH_APPOINTMENT"
+# Sessao futura em OUTRO mes (PRD 060): a tela pergunta "remarcar essa
+# sessao ou marcar mais uma?" e repete com `remarcarExistente` ou `maisUma`.
+OTHER_MONTH_APPOINTMENT = "OTHER_MONTH_APPOINTMENT"
+MENSAGEM_MESMO_MES = "Esta paciente já tem sessão confirmada neste mês."
+MENSAGEM_OUTRO_MES = "Esta paciente já tem sessão confirmada em outro mês."
 
 
 def autor_do_painel(identidade) -> str:
@@ -35,13 +40,14 @@ def excecao_das_duas(identidade, body):
     return True, None
 
 
-def resposta_409(existente):
+def resposta_409(existente, code=SAME_MONTH_APPOINTMENT, message=MENSAGEM_MESMO_MES):
     """O conflito como a tela precisa: a sessao existente, para o aviso
-    "{nome} já tem sessão em {data} às {hora}; será cancelada e remarcada"."""
+    "{nome} já tem sessão em {data} às {hora}; será cancelada e remarcada"
+    (mesmo mes) ou "remarcar essa sessao ou marcar mais uma?" (outro mes)."""
     return http_response(409, {
         "status": "ERROR",
-        "code": SAME_MONTH_APPOINTMENT,
-        "message": "Esta paciente já tem sessão confirmada neste mês.",
+        "code": code,
+        "message": message,
         "existing": {
             "id": str(existente.get("id")),
             "date": str(existente.get("appointment_date")),

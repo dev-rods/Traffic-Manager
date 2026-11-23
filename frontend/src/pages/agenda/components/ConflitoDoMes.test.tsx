@@ -61,3 +61,41 @@ describe('ConflitoDoMes (PRD 056)', () => {
     expect(props.onVoltar).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('ConflitoDoMes - sessão futura em outro mês (PRD 060)', () => {
+  const EXISTING_DEZ = { ...EXISTING, date: '2026-12-10', time: '09:00', areas: 'Virilha' }
+
+  it('pergunta "remarcar ou mais uma?" em vez de avisar que será substituída', () => {
+    const props = monta({ existing: EXISTING_DEZ, variante: 'outro_mes', onMaisUma: vi.fn() })
+    const grupo = screen.getByRole('group', { name: 'Ana Clara já tem sessão em 10/12/2026 às 09:00.' })
+    expect(grupo).toHaveTextContent('Remarcar essa sessão para 28/11/2026 às 10:00, ou marcar mais uma?')
+    expect(grupo).not.toHaveTextContent('será cancelada')
+    expect(grupo).toHaveTextContent('Áreas: Virilha')
+    expect(screen.getByRole('button', { name: 'Remarcar essa sessão' })).toHaveFocus()
+    expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument()
+    void props
+  })
+
+  it('os três botões: Voltar, Marcar mais uma, Remarcar essa sessão', async () => {
+    const props = monta({ existing: EXISTING_DEZ, variante: 'outro_mes', onMaisUma: vi.fn() })
+    await userEvent.click(screen.getByRole('button', { name: 'Marcar mais uma' }))
+    expect(props.onMaisUma).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Remarcar essa sessão' }))
+    expect(props.onConfirmar).toHaveBeenCalledTimes(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(props.onVoltar).toHaveBeenCalledTimes(1)
+    expect(props.onManterAsDuas).not.toHaveBeenCalled()
+  })
+
+  it('"Manter as duas" não existe em outro mês, nem para ADMIN: não quebra a regra do mês', () => {
+    monta({ existing: EXISTING_DEZ, variante: 'outro_mes', ehAdmin: true, onMaisUma: vi.fn() })
+    expect(screen.queryByRole('button', { name: 'Manter as duas' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Marcar mais uma' })).toBeEnabled()
+  })
+
+  it('sem variante continua sendo o aviso do mesmo mês', () => {
+    monta()
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Marcar mais uma' })).not.toBeInTheDocument()
+  })
+})

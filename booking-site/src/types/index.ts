@@ -117,6 +117,11 @@ export interface CreateAppointmentPayload extends CartPayload {
   // A pessoa confirmou que a sessão deste mês será cancelada e remarcada para
   // esta. Sem isto, a criação responde 409 SAME_MONTH_APPOINTMENT.
   substituir?: boolean
+  // Sessão futura em OUTRO mês (PRD 060): a criação responde 409
+  // OTHER_MONTH_APPOINTMENT e a pessoa escolhe remarcar essa sessão
+  // (`remarcarExistente`) ou ficar com as duas (`maisUma`).
+  remarcarExistente?: boolean
+  maisUma?: boolean
   // Cadastro de quem ainda não é paciente (PRD 032): só os que faltam, e o
   // backend exige (400 CADASTRO_INCOMPLETO) quando não vêm.
   cpf?: string // só dígitos

@@ -135,3 +135,26 @@ describe('AppointmentPopover', () => {
     expect(screen.queryByText('Pendente')).toBeNull()
   })
 })
+
+describe('AppointmentPopover - link de remarcação (PRD 060)', () => {
+  beforeEach(() => telaDe(1280, 800))
+
+  it('sem domínio próprio o botão não aparece', () => {
+    abre(agendamento())
+    expect(screen.queryByRole('button', { name: 'Copiar link de remarcação' })).not.toBeInTheDocument()
+  })
+
+  it('com o link, copia o endereço de "Meus agendamentos" para a área de transferência', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    abre(agendamento(), { linkDeRemarcacao: 'https://agendar.x.com.br/?meus=1' })
+    await userEvent.click(screen.getByRole('button', { name: 'Copiar link de remarcação' }))
+    expect(writeText).toHaveBeenCalledWith('https://agendar.x.com.br/?meus=1')
+    vi.unstubAllGlobals()
+  })
+
+  it('agendamento cancelado não oferece o link: não há o que remarcar', () => {
+    abre({ ...agendamento(), status: 'CANCELLED' } as Appointment, { linkDeRemarcacao: 'https://agendar.x.com.br/?meus=1' })
+    expect(screen.queryByRole('button', { name: 'Copiar link de remarcação' })).not.toBeInTheDocument()
+  })
+})

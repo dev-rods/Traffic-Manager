@@ -299,6 +299,11 @@ Dev, com conversas fictícias na Essência de dev, reproduzindo a medição:
   o texto padrão com o link; ela remarcou pelo site 10 min depois, com
   vínculo de remarcação. Antes do deploy, a mesma conversa recebeu o link e a
   paciente não achou "Meus agendamentos": virou o PRD 060. Nobre: pendente.
+- PRD 060 (23/11): o link que o bloco do lembrete manda para remarcar passa a
+  ser `https://{dominio}/?meus=1` (`autoatendimento.link_de_meus_agendamentos`),
+  que abre "Meus agendamentos" direto. O link pós-cancelamento
+  (`CANCELADO_PELA_CONVERSA_LINK`) continua sendo a raiz: ali a pessoa vai
+  marcar uma sessão nova.
 - Lição do smoke de dev: os telefones "fictícios" 5511999990071..73 existem e
   receberam as mensagens do bot (z-api de dev envia de verdade). Próximos
   testes que passam pelo envio só com número combinado com o André.

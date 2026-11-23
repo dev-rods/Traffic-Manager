@@ -198,3 +198,54 @@ describe('uma sessão por mês (PRD 056)', () => {
     expect(mutateAsync.mock.calls[1][0]).not.toHaveProperty('substituir')
   })
 })
+
+describe('sessão futura em outro mês (PRD 060)', () => {
+  const pergunta = {
+    response: {
+      status: 409,
+      data: {
+        code: 'OTHER_MONTH_APPOINTMENT',
+        existing: { id: 'x2', date: '2026-12-10', time: '09:00', areas: 'Virilha', patientName: 'Ana Clara' },
+      },
+    },
+  }
+
+  async function criaComPergunta() {
+    mutateAsync.mockRejectedValueOnce(pergunta)
+    monta()
+    await escolhePaciente()
+    await marcaAxila()
+    await userEvent.click(criar())
+    return screen.findByRole('group', { name: 'Ana Clara já tem sessão em 10/12/2026 às 09:00.' })
+  }
+
+  it('o 409 vira a pergunta; "Remarcar essa sessão" reenvia com remarcarExistente', async () => {
+    const aviso = await criaComPergunta()
+    expect(aviso).toHaveTextContent('Remarcar essa sessão para 27/11/2026 às 09:00, ou marcar mais uma?')
+    expect(screen.queryByRole('button', { name: 'Criar agendamento' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Manter as duas' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remarcar essa sessão' }))
+    expect(mutateAsync).toHaveBeenCalledTimes(2)
+    expect(mutateAsync.mock.calls[0][0]).not.toHaveProperty('remarcarExistente')
+    expect(mutateAsync.mock.calls[1][0]).toMatchObject({ ...mutateAsync.mock.calls[0][0], remarcarExistente: true })
+    expect(mutateAsync.mock.calls[1][0]).not.toHaveProperty('substituir')
+    expect(mutateAsync.mock.calls[1][0]).not.toHaveProperty('maisUma')
+  })
+
+  it('"Marcar mais uma" reenvia com maisUma, sem pedir ADMIN nem motivo', async () => {
+    await criaComPergunta()
+    await userEvent.click(screen.getByRole('button', { name: 'Marcar mais uma' }))
+    expect(mutateAsync).toHaveBeenCalledTimes(2)
+    expect(mutateAsync.mock.calls[1][0]).toMatchObject({ maisUma: true })
+    expect(mutateAsync.mock.calls[1][0]).not.toHaveProperty('manterAsDuas')
+    expect(mutateAsync.mock.calls[1][0]).not.toHaveProperty('remarcarExistente')
+  })
+
+  it('"Voltar" devolve o formulário sem gravar', async () => {
+    await criaComPergunta()
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(screen.getByRole('button', { name: 'Criar agendamento' })).toBeInTheDocument()
+    expect(mutateAsync).toHaveBeenCalledTimes(1)
+  })
+})

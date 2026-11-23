@@ -15,8 +15,10 @@ from src.services import carrinho
 from src.services.carrinho import CarrinhoInvalido
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import (
-    AppointmentService, ConflictError, NotFoundError, SessaoNoMesmoMes)
-from src.services.mesmo_mes import SAME_MONTH_APPOINTMENT, autor_do_painel, excecao_das_duas, resposta_409
+    AppointmentService, ConflictError, NotFoundError, OutraSessaoFutura, SessaoNoMesmoMes)
+from src.services.mesmo_mes import (
+    MENSAGEM_OUTRO_MES, OTHER_MONTH_APPOINTMENT, SAME_MONTH_APPOINTMENT, autor_do_painel,
+    excecao_das_duas, resposta_409)
 from src.services.duracao_manual import DuracaoInvalida
 from src.services.desconto_personalizado import DescontoInvalido, normaliza_centavos
 from src.services.politica_de_desconto import RAZAO_NENHUM
@@ -102,13 +104,20 @@ def handler(event, context):
         "substituir": true,              // PRD 056: confirmou que a sessao do
                                          // mesmo mes sera cancelada e remarcada
         "manterAsDuas": true,            // PRD 056: so ADMIN, com motivoDasDuas
-        "motivoDasDuas": "..."
+        "motivoDasDuas": "...",
+        "remarcarExistente": true,       // PRD 060: remarca a sessao de OUTRO mes
+        "maisUma": true                  // PRD 060: mantem a de outro mes e cria esta
     }
 
     Uma sessao por mes (PRD 056): paciente com sessao confirmada futura no mes
     da data responde 409 `code: SAME_MONTH_APPOINTMENT` com `existing`; o
     painel avisa e repete com `substituir`. `manterAsDuas` e a unica excecao,
     por ADMIN e com motivo (403 para STAFF, 400 sem motivo).
+
+    Sessao futura em OUTRO mes (PRD 060): 409 `code: OTHER_MONTH_APPOINTMENT`
+    com `existing`; o painel pergunta "remarcar essa sessao ou marcar mais
+    uma?" e repete com `remarcarExistente` ou `maisUma`. Sem ADMIN nem motivo:
+    nao quebra a regra do mes.
     """
     try:
         identidade, error_response = require_acesso(event, "agenda.escrever")
@@ -225,6 +234,9 @@ def handler(event, context):
             permitir_duas=duas,
             autor=autor_do_painel(identidade),
             motivo_das_duas=body.get("motivoDasDuas"),
+            # PRD 060: a resposta a "remarcar essa sessao ou marcar mais uma?"
+            remarcar_a_existente=body.get("remarcarExistente") is True,
+            mais_uma=body.get("maisUma") is True,
         )
 
         appointment = _serialize_row(result)
@@ -241,6 +253,9 @@ def handler(event, context):
 
     except SessaoNoMesmoMes as e:
         return resposta_409(e.existente)
+
+    except OutraSessaoFutura as e:
+        return resposta_409(e.existente, OTHER_MONTH_APPOINTMENT, MENSAGEM_OUTRO_MES)
 
     except ConflictError as e:
         return http_response(409, {"status": "ERROR", "message": str(e)})

@@ -61,7 +61,8 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
   const [desconto, setDesconto] = useState<DescontoEscolhido>(POLITICA_DA_CLINICA)
   const [error, setError] = useState<string | null>(null)
   // Uma sessão por mês (PRD 056): o 409 vira este aviso, no lugar dos botões.
-  const [conflito, setConflito] = useState<SessaoExistente | null>(null)
+  // PRD 056 (mesmo mês: será substituída) e PRD 060 (outro mês: pergunta).
+  const [conflito, setConflito] = useState<{ existing: SessaoExistente; variante: 'mesmo_mes' | 'outro_mes' } | null>(null)
   const [preSelecionadoPelaPaciente, setPreSelecionadoPelaPaciente] = useState(false)
   const [prevServiceId, setPrevServiceId] = useState('')
 
@@ -279,7 +280,7 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
 
   /** O pedido, com o que o aviso do mesmo mês acrescentar (PRD 056). */
   const enviar = async (
-    extra: Pick<CreateAppointmentPayload, 'substituir' | 'manterAsDuas' | 'motivoDasDuas'>,
+    extra: Pick<CreateAppointmentPayload, 'substituir' | 'manterAsDuas' | 'motivoDasDuas' | 'remarcarExistente' | 'maisUma'>,
   ) => {
     const phone = selectedPatient?.phone
     if (!clinicId || !phone || !serviceId) return
@@ -313,7 +314,12 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
           response: { status?: number; data?: { message?: string; code?: string; existing?: SessaoExistente } }
         }).response
         if (response.status === 409 && response.data?.code === 'SAME_MONTH_APPOINTMENT' && response.data.existing) {
-          setConflito(response.data.existing)
+          setConflito({ existing: response.data.existing, variante: 'mesmo_mes' })
+          return
+        }
+        // Sessão futura em outro mês (PRD 060): pergunta, não bloqueio.
+        if (response.status === 409 && response.data?.code === 'OTHER_MONTH_APPOINTMENT' && response.data.existing) {
+          setConflito({ existing: response.data.existing, variante: 'outro_mes' })
           return
         }
         setError(response.data?.message ?? 'Erro ao criar agendamento')
@@ -595,13 +601,17 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
 
         {conflito ? (
           <ConflitoDoMes
-            existing={conflito}
+            existing={conflito.existing}
             novaData={date}
             novaHora={time}
             modo="criar"
+            variante={conflito.variante}
             ehAdmin={Boolean(ehAdmin)}
             loading={createAppointment.isPending}
-            onConfirmar={() => void enviar({ substituir: true })}
+            onConfirmar={() =>
+              void enviar(conflito.variante === 'outro_mes' ? { remarcarExistente: true } : { substituir: true })
+            }
+            onMaisUma={() => void enviar({ maisUma: true })}
             onManterAsDuas={(motivo) => void enviar({ manterAsDuas: true, motivoDasDuas: motivo })}
             onVoltar={() => setConflito(null)}
           />

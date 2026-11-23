@@ -7,7 +7,7 @@ from src.utils.http import http_response, require_booking_intake_api_key, extrac
 from src.utils.phone import is_valid_phone, normalize_phone
 from src.services.db.postgres import PostgresService
 from src.services.appointment_service import (
-    AppointmentService, ConflictError, NotFoundError, SessaoNoMesmoMes)
+    AppointmentService, ConflictError, NotFoundError, OutraSessaoFutura, SessaoNoMesmoMes)
 from src.utils.booking_verification import verify_token
 from src.services.template_service import TemplateService
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
@@ -56,7 +56,18 @@ def _cadastro_invalido(campo, mensagem):
 # Uma sessao por mes (PRD 056). O site mostra a existente e pede confirmacao;
 # o pedido volta com `substituir: true`.
 SAME_MONTH_APPOINTMENT = "SAME_MONTH_APPOINTMENT"
+# Sessao futura em OUTRO mes (PRD 060): o site pergunta "remarcar essa sessao
+# ou marcar mais uma?" e repete com `remarcarExistente` ou `maisUma`. A
+# mensagem serve ao front antigo em cache, que nao conhece o code.
+OTHER_MONTH_APPOINTMENT = "OTHER_MONTH_APPOINTMENT"
 MENSAGEM_TOKEN = "Verificação por WhatsApp expirada. Confirme o código novamente."
+
+
+def _mensagem_outro_mes(existente):
+    data = str(existente.get("appointment_date") or "")
+    dia = f"{data[8:10]}/{data[5:7]}" if len(data) >= 10 else data
+    return (f"Você já tem uma sessão em {dia}. Para remarcar, abra Meus agendamentos; "
+            "para marcar mais uma, recarregue a página e confirme.")
 
 
 def _existente(e):
@@ -160,9 +171,14 @@ def handler(event, context):
     mês da data pedida recebe 409 `code: SAME_MONTH_APPOINTMENT` com `existing`
     (id, date, time, areas). O site avisa que essa sessão será substituída e
     repete o pedido com `substituir: true`: a existente é cancelada com o
-    desfecho da antecedência (PRD 054) e a nova nasce vinculada a ela. Mês
-    diferente não interfere. A confirmação chega pelo WhatsApp (template
-    "BOOKED" do bot), como antes.
+    desfecho da antecedência (PRD 054) e a nova nasce vinculada a ela. A
+    confirmação chega pelo WhatsApp (template "BOOKED" do bot), como antes.
+
+    Sessão futura em OUTRO mês (PRD 060): 409 `code: OTHER_MONTH_APPOINTMENT`
+    com `existing`. O site pergunta "remarcar essa sessão ou marcar mais uma?"
+    e repete com `remarcarExistente: true` (a troca acima, da sessão de outro
+    mês) ou `maisUma: true` (cria a segunda). Até 23/11/2026 mês diferente
+    criava em silêncio.
     """
     try:
         api_key, error_response = require_booking_intake_api_key(event)
@@ -282,6 +298,8 @@ def handler(event, context):
 
         service = AppointmentService.completo(db)
         substituir = body.get("substituir") is True
+        remarcar_existente = body.get("remarcarExistente") is True
+        mais_uma = body.get("maisUma") is True
 
         try:
             result = service.create_appointment(
@@ -302,8 +320,21 @@ def handler(event, context):
                 birth_date=birth_date,
                 email=email,
                 substituir_mesmo_mes=substituir,
+                remarcar_a_existente=remarcar_existente,
+                mais_uma=mais_uma,
                 autor="site",
             )
+        except OutraSessaoFutura as e:
+            logger.info(
+                f"[PublicBooking][create] {clinic_id} tel={_final_do_telefone(phone)} "
+                f"já tem sessão em {e.existente['appointment_date']} (outro mês), perguntando remarcar ou mais uma"
+            )
+            return http_response(409, {
+                "status": "ERROR",
+                "code": OTHER_MONTH_APPOINTMENT,
+                "existing": _existente(e.existente),
+                "message": _mensagem_outro_mes(e.existente),
+            })
         except SessaoNoMesmoMes as e:
             logger.info(
                 f"[PublicBooking][create] {clinic_id} tel={_final_do_telefone(phone)} "
@@ -328,7 +359,8 @@ def handler(event, context):
 
         return http_response(201, {
             "status": "SUCCESS",
-            "message": "Agendamento remarcado com sucesso" if substituir else "Agendamento criado com sucesso",
+            "message": ("Agendamento remarcado com sucesso" if (substituir or remarcar_existente)
+                        else "Agendamento criado com sucesso"),
             "appointment": _serialize_row(result),
         })
 

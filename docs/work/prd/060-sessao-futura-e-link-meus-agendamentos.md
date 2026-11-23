@@ -175,7 +175,7 @@ Em código, a fonte única da regra é `AppointmentService.sessao_no_mesmo_mes`
 
 ---
 
-## 4. Decisões a confirmar com o André
+## 4. Decisões (confirmadas pelo André em 23/11/2026: as cinco propostas)
 
 1. **Outro mês passa a perguntar, nas três portas**, sem exigir ADMIN para
    "mais uma". *Proposto: sim. É pergunta, não bloqueio; a decisão 2 do 056
@@ -279,8 +279,17 @@ Em código, a fonte única da regra é `AppointmentService.sessao_no_mesmo_mes`
 
 ## Status (preencher após conclusão)
 
-- [ ] Decisões do §4 confirmadas
-- [ ] Spec gerada: `docs/work/spec/060-sessao-futura-e-link-meus-agendamentos.md`
-- [ ] Implementado em dev
-- [ ] Implementado em prod
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Decisões do §4 confirmadas em 23/11/2026 (as cinco propostas)
+- [x] Spec gerada: `docs/work/spec/060-sessao-futura-e-link-meus-agendamentos.md` (23/11/2026)
+- [x] Implementado em dev: 23/11/2026 (PR #249; scheduler layer 212; smoke 8/8
+  pelo painel, sem nenhum envio de WhatsApp; pytest, vitest do site e do painel,
+  lint e build limpos). Roteiro:
+  `scheduler/tests/integration/060-sessao-futura-e-link-meus-agendamentos.md`.
+- [ ] Implementado em prod (scheduler por deploy manual; site e painel pela
+  Vercel no merge)
+- [x] Registrado em `TASKS_LOG.md`
+- Guarda do bot: `mais_uma=true` só vale depois de a tool ter devolvido a
+  pergunta na mesma conversa (`pergunta_mais_uma` gravado na sessão). O modelo
+  não decide por ela.
+- O link pós-cancelamento do PRD 059 continua sendo a raiz (ali a pessoa marca
+  uma sessão nova); só o link para REMARCAR do lembrete virou `?meus=1`.

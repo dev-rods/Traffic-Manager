@@ -16,6 +16,8 @@ import { todayStr } from '@/utils/dateHelpers'
 import { janelaDaAgenda } from '@/utils/agendaPaging'
 import { semFaltas, contaFaltas } from '@/lib/faltasNaAgenda'
 import { useAvailabilityRules } from '@/hooks/useAvailabilityRules'
+import { useClinic } from '@/hooks/useClinic'
+import { linkDeMeusAgendamentos } from '@/lib/autoatendimento'
 import type { Appointment } from '@/types'
 
 const PAGE_SIZE = 7
@@ -131,6 +133,8 @@ export function AgendaPage() {
 
   // Fetch availability rules — only specific dates (rule_date)
   const { data: rulesData } = useAvailabilityRules()
+  // O link de "Meus agendamentos" do site da clinica, para o popover (PRD 060).
+  const { data: clinic } = useClinic()
 
   // O funcionário enxerga uma janela de datas. O servidor já recusa o que está
   // fora dela; filtrar aqui evita o outro problema, que é a tela oferecer
@@ -338,6 +342,7 @@ export function AgendaPage() {
         onDesmarcarFalta={desmarcarFalta}
         onConfirmar={confirmarPresenca}
         onDesconfirmar={desconfirmarPresenca}
+        linkDeRemarcacao={linkDeMeusAgendamentos(clinic?.custom_domain)}
       />
 
       {/* Edit appointment modal — key forces remount to reset form */}

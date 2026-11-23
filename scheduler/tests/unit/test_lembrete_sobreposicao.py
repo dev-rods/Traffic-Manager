@@ -74,7 +74,8 @@ class TestFerramentas(unittest.TestCase):
 class TestBloco(unittest.TestCase):
     def test_com_site_cancela_aqui_e_remarca_pelo_link(self):
         b = L.bloco_de_prompt(sessao(L.abre(APPT, CLINIC_COM_SITE, AGORA)), CLINIC_COM_SITE, AGORA)
-        self.assertIn("https://agendar.x.com.br/", b)
+        # PRD 060: o link abre "Meus agendamentos" direto, nao a raiz do site
+        self.assertIn("https://agendar.x.com.br/?meus=1", b)
         self.assertIn("cancele AGORA com cancel_appointment", b)
         self.assertIn("REMARCAR (outra data), NÃO execute", b)
         self.assertIn("confirm_attendance", b)
