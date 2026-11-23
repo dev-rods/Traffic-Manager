@@ -45,4 +45,12 @@ fictícios ficaram na Essência de dev para conferência em `/crm`
 todos com o motivo e a data da entrega no fuso da clínica), EM_ANDAMENTO 2
 (casos 2 e 6), SUMIU 1 (caso 3, única chamada ao modelo). Evento
 `NAO_AGENDOU → AGUARDANDO_NOS` gravado para o caso 1; segunda rodada
-`mudaram 0`. Prod (caso 9): pendente de autorização.
+`mudaram 0`. 
+
+**Prod, 23/11/2026** (layer 166): caso 9 ok. DryRun previu 25 mudanças, 4
+delas do 058 em 2 telefones (duas linhas de lead cada): Nobre 09/11
+`NAO_AGENDOU -> AGUARDANDO_NOS` e uma Essência `CANCELOU -> AGUARDANDO_NOS`
+(cancelou em 22/11, bot entregou em 23/11 sem resposta humana). As 11 entregas
+com resposta humana não mudaram. Rodada real: 28 mudanças, 11 chamadas ao
+modelo, 0 erros; os quatro leads conferidos no banco como AGUARDANDO_NOS/REGRA.
+Segundo dryRun: nenhuma mudança do 058.
