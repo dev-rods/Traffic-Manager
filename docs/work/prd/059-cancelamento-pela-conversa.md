@@ -108,8 +108,10 @@ Desfecho do agendamento mais próximo:
 
 **A. Cancelar pela conversa também na janela do lembrete.** Em resposta ao
 lembrete, pedido explícito de cancelar ou "não vou" leva a `cancel_appointment`
-na conversa, após uma confirmação curta ("Posso cancelar a sessão de 18/11 às
-19h?"), e não ao link. O link continua sendo o caminho para **remarcar**
+na conversa, e não ao link. Pedido **inequívoco** ("cancela", "preciso
+desmarcar", "não vou poder ir hoje") cancela direto, sem perguntar; só o
+ambíguo ("acho que não vai dar", "talvez remarque") pede uma confirmação de
+uma linha. Decisão do André em 23/11. O link continua sendo o caminho para **remarcar**
 (trocar a data), que o site faz melhor que a conversa. `confirm_attendance`
 e a troca de áreas por `alterar_agendamento` não mudam.
 
@@ -127,8 +129,11 @@ O texto vai em `message_templates` (chave `CANCELADO_PELA_CONVERSA`), por
 clínica, como os demais; o código manda o default acima. Sem domínio, o
 parágrafo do link sai e o bot oferece remarcar na conversa.
 
-**C. Pedido de saída com a conversa na mão de uma pessoa.** O bot não fala
-nem cancela por cima de um atendimento humano. Em vez disso, o webhook
+**C. Pedido de saída quando o bot não responde.** "Conversa humana" aqui é
+todo INBOUND que `atendimento.pode_responder` recusa: contato **silenciado**
+(PRD 039), **bot da clínica pausado**, ou conversa **com pessoa** (ATENDENTE e
+HANDOFF, que vencem em 24 h; CONTATO_MANUAL e CHAT_ANTERIOR, sem prazo). O bot
+não fala nem cancela por cima de nenhum desses. Em vez disso, o webhook
 detecta o pedido por lista de termos (mesmo mecanismo do `nivel_de_risco`),
 quando há agendamento `CONFIRMED` nos próximos 30 dias, e:
 - abre uma **tarefa** na conversa ("Pediu para cancelar ou remarcar a sessão
@@ -142,6 +147,14 @@ a tarefa.
 
 **D. Lembrete.** A paciente que cancela pelo site ou pela conversa deixa de
 receber o lembrete (já é assim) e o bloco de lembrete da sessão morre junto.
+Como o lembrete se relaciona com C, pelo que o processador já faz hoje:
+- conversa com atendente ou em cooldown: o lembrete sai e, após o envio
+  confirmado, a conversa **volta para o bot** (`retoma_pelo_painel` +
+  `bot_enabled`, como o disparo em lote). A resposta cai no bot com a
+  sobreposição: é a parte A que a atende;
+- contato silenciado: o lembrete sai (PRD 039 §4.1) mas o silêncio continua;
+  a resposta cai na fila humana. Só a parte C cobre esse caso;
+- bot da clínica pausado: o lembrete não sai (falha registrada).
 
 ### Fora do escopo
 
@@ -169,9 +182,10 @@ receber o lembrete (já é assim) e o bloco de lembrete da sessão morre junto.
 
 ### 5.1 Com o bot respondendo
 
-1. Pedido explícito de cancelar, desmarcar ou "não vou poder ir" + sessão
-   marcada → o bot confirma em uma linha (data e hora) e, no "sim", chama
-   `cancel_appointment`. Uma só confirmação, nunca duas.
+1. Pedido inequívoco de cancelar, desmarcar ou "não vou poder ir" + sessão
+   marcada → `cancel_appointment` direto, sem confirmação. Com mais de uma
+   sessão marcada, ou pedido ambíguo, uma pergunta só (qual, ou "cancelo a de
+   DD/MM às HH:MM?"), nunca duas.
 2. Pedido de remarcar (outra data) → link do site se houver domínio; sem
    domínio, `alterar_agendamento` como hoje.
 3. Na janela do lembrete valem as mesmas regras 1 e 2. `ferramentas_a_remover`
@@ -227,10 +241,12 @@ Dev, com conversas fictícias na Essência de dev, reproduzindo a medição:
 
 | # | Caso de prod | Esperado |
 |---|---|---|
-| 1 | Resposta ao lembrete "vou precisar cancelar hoje" | bot confirma, cancela (`NO_SHOW` por < 24 h), envia o template com link; lembrete morto |
+| 1 | Resposta ao lembrete "vou precisar cancelar hoje" | cancela direto (`NO_SHOW` por < 24 h), envia o template com link; lembrete morto |
 | 2 | Resposta ao lembrete "gostaria de remarcar" | link do site, nada cancelado |
 | 3 | Resposta ao lembrete "ok confirmado" | `confirm_attendance`, como hoje |
-| 4 | Fora do lembrete, bot ativo, "pode cancelar por favor?" com sessão em 5 dias | confirma, `CANCELLED`, template |
+| 4 | Fora do lembrete, bot ativo, "pode cancelar por favor?" com sessão em 5 dias | `CANCELLED` direto, template |
+| 4b | Bot ativo, "acho que não vai dar" | uma pergunta de confirmação; no "sim", cancela |
+| 5b | Contato silenciado responde ao lembrete "não vou" | sem mensagem do bot; tarefa `pedido_de_saida`; CRM `AGUARDANDO_NOS` |
 | 5 | Conversa com atendente, "não vou conseguir ir hoje" | sem mensagem do bot; tarefa `pedido_de_saida` na fila; CRM `AGUARDANDO_NOS` |
 | 6 | Caso 5 e a recepção cancela no painel | tarefa fechada; CRM volta à regra normal |
 | 7 | Caso 5 e a paciente cancela pelo site | tarefa fechada |
@@ -265,9 +281,11 @@ Dev, com conversas fictícias na Essência de dev, reproduzindo a medição:
 ## Status
 
 - [x] PRD: 23/11/2026 (medição em prod só leitura)
-- [ ] Decisões em aberto para o André: (a) confirmar em uma linha antes de
-  cancelar, ou cancelar direto quando o pedido for inequívoco; (b) a parte C
-  (tarefa em conversa humana) entra junto ou em PR separado.
+- [x] Decisões do André em 23/11: cancelar direto quando inequívoco;
+  "conversa humana" em C é tudo que `pode_responder` recusa (silenciado,
+  clínica pausada, com pessoa), com o lembrete devolvendo ao bot só as
+  conversas com atendente/cooldown.
+- [ ] Em aberto: a parte C entra junto ou em PR separado.
 - [ ] Spec
 - [ ] Implementado em dev
 - [ ] Implementado em prod
