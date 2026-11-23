@@ -293,6 +293,12 @@ Dev, com conversas fictícias na Essência de dev, reproduzindo a medição:
 - [x] Implementado em prod (A e B): 23/11/2026 (layer 167, WhatsAppWebhook
   atualizado 16:26 UTC). Sem smoke em prod de propósito: o envio é WhatsApp
   real. Conferir a primeira conversa real de cancelamento em cada clínica.
+- [x] Essência, primeira conversa real: 23/11 às 13:29 BRT, dois minutos
+  depois do deploy. Paciente respondeu ao lembrete "não vou poder comparecer";
+  o bot cancelou com `cancel_appointment` (CANCELLED, vaga liberada) e enviou
+  o texto padrão com o link; ela remarcou pelo site 10 min depois, com
+  vínculo de remarcação. Antes do deploy, a mesma conversa recebeu o link e a
+  paciente não achou "Meus agendamentos": virou o PRD 060. Nobre: pendente.
 - Lição do smoke de dev: os telefones "fictícios" 5511999990071..73 existem e
   receberam as mensagens do bot (z-api de dev envia de verdade). Próximos
   testes que passam pelo envio só com número combinado com o André.

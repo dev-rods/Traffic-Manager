@@ -1,6 +1,7 @@
 # PRD - 056 Uma sessão por mês: código sempre no site e troca do agendamento existente
 
 > Gerado na fase **Research** em 21/11/2026. Use como input para a fase Spec.
+> **Revisto pelo PRD 060 (23/11/2026):** mês diferente deixa de passar em silêncio; o sistema pergunta "remarcar ou marcar mais uma?" em qualquer sessão futura, e o site ganha link direto para "Meus agendamentos". A regra do mesmo mês não muda.
 
 ---
 
