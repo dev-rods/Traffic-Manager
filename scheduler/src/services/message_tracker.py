@@ -211,6 +211,13 @@ class MessageTracker:
         devolveria menos do que `limit`. O `sk` das mensagens e `MSG#<iso>#...`,
         entao o corte por prefixo e exato; os itens STATUS# ficam de fora, e
         nao fazem falta a quem quer o texto da conversa (PRD 022).
+
+        A chave fica em MSG# SEMPRE, com ou sem `desde`. "STATUS#" ordena
+        depois de "MSG#", entao a leitura descendente dos ultimos N itens
+        devolvia so status de entrega em qualquer conversa com N ou mais deles
+        (658 em prod em 23/11/2026): a retomada pelo painel lia 20 itens sem
+        texto e concluia "nada pendente", e o bot nao respondia a pergunta em
+        aberto. Visto no teste em dev com o numero do Andre.
         """
         try:
             # Descendente e depois invertido: com Limit, ascendente devolveria o
@@ -218,9 +225,8 @@ class MessageTracker:
             # agente relia disparos de campanha antigos em vez do que a pessoa
             # acabou de perguntar. O retorno segue cronológico, do mais antigo
             # para o mais recente, que é como quem lê espera.
-            condicao = Key("pk").eq(f"CLINIC#{clinic_id}#PHONE#{phone}")
-            if desde is not None:
-                condicao = condicao & Key("sk").between(f"MSG#{retencao.iso(desde)}", "MSG#~")
+            inicio = f"MSG#{retencao.iso(desde)}" if desde is not None else "MSG#"
+            condicao = Key("pk").eq(f"CLINIC#{clinic_id}#PHONE#{phone}") & Key("sk").between(inicio, "MSG#~")
             response = self.table.query(
                 KeyConditionExpression=condicao,
                 ScanIndexForward=False,

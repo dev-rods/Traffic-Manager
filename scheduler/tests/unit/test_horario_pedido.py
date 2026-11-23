@@ -12,7 +12,7 @@ A grade continua sendo grade. O que entra é a pergunta certa: "cabe às
 """
 import os
 import unittest
-from datetime import time
+from datetime import date, time
 from unittest import mock
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
@@ -119,7 +119,8 @@ class TestATool(unittest.TestCase):
     def _chama(self, ex, **args):
         base = {"date": DIA, "service_area_pairs": [{"service_id": "s1", "area_id": "a1"}]}
         base.update(args)
-        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=DURACAO):
+        # O caso e de 06/10/2026; sem fixar o dia, a tool recusaria 21/10 como passado.
+        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=DURACAO),              mock.patch("src.services.ai_tools.hoje_brt", return_value=date(2026, 10, 6)):
             return ex._tool_get_time_slots(base, CLINIC, "5511983583024",
                                            {"turnos": [{"role": "user", "content": "quero axilas"}]})
 
