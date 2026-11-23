@@ -290,5 +290,10 @@ Dev, com conversas fictícias na Essência de dev, reproduzindo a medição:
 - [x] Spec (A e B): 23/11/2026, `spec/059-cancelamento-pela-conversa.md`
 - [x] Implementado em dev (A e B): 23/11/2026 (layer 211; smoke 8/8 na Premium
   de dev; pytest 2618)
-- [ ] Implementado em prod (A e B):
+- [x] Implementado em prod (A e B): 23/11/2026 (layer 167, WhatsAppWebhook
+  atualizado 16:26 UTC). Sem smoke em prod de propósito: o envio é WhatsApp
+  real. Conferir a primeira conversa real de cancelamento em cada clínica.
+- Lição do smoke de dev: os telefones "fictícios" 5511999990071..73 existem e
+  receberam as mensagens do bot (z-api de dev envia de verdade). Próximos
+  testes que passam pelo envio só com número combinado com o André.
 - [ ] Parte C: PRD/spec próprios

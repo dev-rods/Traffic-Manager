@@ -34,4 +34,11 @@ remarcar, é só me chamar por aqui"). Caso 2: `CANCELLED` (mais de 24 h até a
 abertura da agenda do dia) e texto com o link do domínio de teste. Caso 3:
 agendamento intacto, bot mandou o link para remarcar. Caso 4 coberto por
 `test_cancelamento_pela_conversa.py`. Dados de dev apagados com `--limpa` e
-domínio da Premium de dev zerado. Prod (caso 5): pendente.
+domínio da Premium de dev zerado.
+
+**Atenção:** os telefones `5511999990071..73` existem e receberam as mensagens
+do bot (o z-api de dev envia de verdade). Não repetir este smoke com número
+inventado; só com número combinado com o André.
+
+**Prod, 23/11/2026** (layer 167): deploy feito, sem smoke por envolver WhatsApp
+real. Caso 5 fica para a primeira conversa real de cancelamento em cada clínica.
