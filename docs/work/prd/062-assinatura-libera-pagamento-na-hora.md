@@ -116,4 +116,6 @@ Exemplos: 01:59:52 → 02:00:17 (25 s), 10:25:57 → 10:26:21 (24 s),
 
 ## Status (preencher após conclusão)
 
-- Spec: `docs/work/spec/062-assinatura-libera-pagamento-na-hora.md`
+- [x] Spec gerada: `docs/work/spec/062-assinatura-libera-pagamento-na-hora.md` (24/11/2026)
+- [x] Implementado em dev: 24/11/2026 (scheduler layer 218). Roteiro e
+  resultado: `scheduler/tests/integration/062-assinatura-libera-pagamento-na-hora.md`
