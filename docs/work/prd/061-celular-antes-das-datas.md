@@ -239,7 +239,8 @@ Regras de borda:
 
 ## Status
 
-- [x] Pendente
 - [x] Spec gerada: `spec/061-celular-antes-das-datas.md`
-- [ ] Implementado em:
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 23/11/2026 (PR #252). Backend em dev (layer 216,
+      smoke de API 6/6) e em prod (layer 171, smoke 6/6) no mesmo dia; site pela Vercel após o merge.
+      Roteiro no navegador com o celular do André: `tests/integration/061-...md`.
+- [x] Registrado em `TASKS_LOG.md`
