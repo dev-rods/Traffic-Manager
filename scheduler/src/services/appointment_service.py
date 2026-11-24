@@ -1459,96 +1459,13 @@ class AppointmentService:
     def _get_or_create_patient(self, clinic_id: str, phone: str,
                                full_name: Optional[str] = None, cpf: Optional[str] = None,
                                birth_date: Optional[str] = None, email: Optional[str] = None) -> Dict[str, Any]:
-        """O paciente do agendamento, criado se ainda não existir.
+        """O paciente do agendamento, criado se ainda nao existir.
 
-        Nome, CPF, nascimento e e-mail entram juntos (os três últimos vêm do
-        site, PRD 032; bot e painel passam None). Antes o INSERT levava só
-        clínica e telefone, e todo paciente novo nascia anônimo: a agenda
-        mostrava a linha sem nome, e o painel de pacientes também.
-
-        O que já está cadastrado NÃO é sobrescrito: só o que está vazio é
-        preenchido (COALESCE). Quem está no sistema pode ter sido corrigido à
-        mão, e o que vem no agendamento é o que a pessoa digitou naquele dia -
-        não é mais confiável que a clínica.
+        O preenchimento mora em `cadastro_pelo_site.completa_paciente` desde o
+        PRD 061: o site tambem cadastra SEM agendamento (assim que a pessoa
+        confirma o codigo), e os dois caminhos gravam pelo mesmo codigo. As
+        regras (PRD 032) nao mudaram: variantes do numero, COALESCE, restaura
+        apagado, INSERT so sem ficha.
         """
-        from src.utils.phone import formas_do_numero, normalize_phone
-        phone = normalize_phone(phone)
-        nome = (full_name or "").strip() or None
-
-        # Lookup includes soft-deleted records so we can restore in place
-        # and avoid violating the UNIQUE(clinic_id, phone) constraint.
-        # Casa pelas variantes (com e sem o nono dígito), a mesma régua da
-        # cotação do site e da identificação do bot: casando exato, a Paula
-        # (gravada `553591328559`) ganhou um segundo cadastro quando digitou
-        # o número com o 9 no site, em 21/10/2026. Havendo mais de um, o
-        # exato vence; entre iguais, o ativo vence o apagado.
-        patients = self.db.execute_query(
-            "SELECT * FROM scheduler.patients WHERE clinic_id = %s AND phone = ANY(%s) "
-            "ORDER BY (phone = %s) DESC, (deleted_at IS NULL) DESC, created_at",
-            (clinic_id, formas_do_numero(phone), phone),
-        )
-
-        if patients:
-            existing = patients[0]
-            if existing.get("deleted_at") is None:
-                # Preenche só o que está vazio, e só se veio algo para preencher.
-                # Cadastro sem nome é o rastro do defeito antigo; CPF, nascimento
-                # e e-mail vazios são o paciente que nasceu pelo site antes do
-                # PRD 032. Nada existente é tocado.
-                if _completa_algo(existing, nome, cpf, birth_date, email):
-                    atualizado = self.db.execute_write_returning(
-                        """
-                        UPDATE scheduler.patients
-                           SET name = COALESCE(NULLIF(name, ''), %s),
-                               cpf = COALESCE(NULLIF(cpf, ''), %s),
-                               birth_date = COALESCE(birth_date, %s::date),
-                               email = COALESCE(NULLIF(email, ''), %s),
-                               updated_at = NOW()
-                         WHERE id = %s::uuid
-                        RETURNING *
-                        """,
-                        (nome, cpf, birth_date, email, str(existing["id"])),
-                    )
-                    return atualizado or existing
-                return existing
-
-            # Soft-deleted patient came back — restore in place, completing
-            # what is empty with what came along.
-            restored = self.db.execute_write_returning(
-                """
-                UPDATE scheduler.patients
-                   SET deleted_at = NULL,
-                       name = COALESCE(NULLIF(name, ''), %s),
-                       cpf = COALESCE(NULLIF(cpf, ''), %s),
-                       birth_date = COALESCE(birth_date, %s::date),
-                       email = COALESCE(NULLIF(email, ''), %s),
-                       updated_at = NOW()
-                 WHERE id = %s::uuid
-                RETURNING *
-                """,
-                (nome, cpf, birth_date, email, str(existing["id"])),
-            )
-            logger.info(
-                f"[AppointmentService] Patient restored from soft-delete: id={existing['id']} phone={phone}"
-            )
-            return restored
-
-        result = self.db.execute_write_returning(
-            """
-            INSERT INTO scheduler.patients (clinic_id, phone, name, cpf, birth_date, email, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s::date, %s, NOW(), NOW())
-            RETURNING *
-            """,
-            (clinic_id, phone, nome, cpf, birth_date, email),
-        )
-
-        return result
-
-
-def _completa_algo(existente: Dict[str, Any], nome, cpf, birth_date, email) -> bool:
-    """Veio algum dado para um campo que está vazio no cadastro?"""
-    def vazio(campo):
-        v = existente.get(campo)
-        return v is None or (isinstance(v, str) and not v.strip())
-    return any(novo and vazio(campo) for campo, novo in (
-        ("name", nome), ("cpf", cpf), ("birth_date", birth_date), ("email", email)))
+        from src.services.cadastro_pelo_site import completa_paciente
+        return completa_paciente(self.db, clinic_id, phone, full_name, cpf, birth_date, email)

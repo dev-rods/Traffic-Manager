@@ -1,7 +1,11 @@
 import logging
 
 from src.utils.http import http_response, require_booking_intake_api_key, extract_path_param, parse_body
+from src.services import carrinho
+from src.services.cadastro_pelo_site import primeiro_nome
+from src.services.db.postgres import PostgresService
 from src.utils.booking_verification import SESSAO, TTL_POR_ESCOPO, confirm_code, InvalidCodeError
+from src.utils.phone import normalize_phone
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -14,7 +18,9 @@ def handler(event, context):
 
     Valida o código enviado por WhatsApp e devolve um token de sessão
     assinado que autoriza criar/listar/cancelar agendamentos daquele
-    telefone nesta clínica (15 min). Com `scope: "documentos"` (PRD 048) o
+    telefone nesta clínica (30 min desde o PRD 061; eram 15). No escopo de
+    sessão devolve também `paciente` ({nome, faltam} ou null): o site
+    pergunta "Olá, {nome}, é você?" e pede só o que falta (PRD 061). Com `scope: "documentos"` (PRD 048) o
     token dura 2 h e só serve à ficha e à assinatura no check-in.
     """
     try:
@@ -38,10 +44,25 @@ def handler(event, context):
 
         token = confirm_code(clinic_id, phone, code, scope)
 
-        return http_response(200, {"status": "SUCCESS", "verified": True, "token": token})
+        resposta = {"status": "SUCCESS", "verified": True, "token": token}
+        if scope == SESSAO:
+            # PRD 061: so DEPOIS do codigo o site fica sabendo quem e o dono do
+            # numero (primeiro nome e o que falta no cadastro). Antes dele a
+            # cotacao publica nunca devolve nome. Escopo documentos nao precisa.
+            paciente = carrinho.paciente_do_telefone(PostgresService(), clinic_id, normalize_phone(str(phone)))
+            resposta["paciente"] = _paciente_para_o_site(paciente)
+
+        return http_response(200, resposta)
 
     except InvalidCodeError as e:
         return http_response(400, {"status": "ERROR", "message": str(e)})
     except Exception as e:
         logger.error(f"Erro ao confirmar código de verificação: {str(e)}", exc_info=True)
         return http_response(500, {"status": "ERROR", "message": "Erro interno no servidor", "error": str(e)})
+
+
+def _paciente_para_o_site(paciente):
+    if not paciente:
+        return None
+    return {"nome": primeiro_nome(paciente.get("name")),
+            "faltam": carrinho.cadastro_para_o_site(paciente)["faltam"]}

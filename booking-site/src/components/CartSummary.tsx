@@ -10,6 +10,8 @@ interface CartSummaryProps {
   onRemove?: (serviceId: string) => void
   date?: string | null
   time?: string | null
+  /** Quem agenda, depois de verificado (PRD 061). */
+  customer?: { nome: string; phoneLabel: string } | null
   /** Total/desconto/valor final — vem da cotação do backend (`PriceBreakdown`). */
   price: ReactNode
 }
@@ -26,6 +28,7 @@ export function CartSummary({
   onRemove,
   date,
   time,
+  customer,
   price,
 }: CartSummaryProps) {
   if (items.length === 0) return null
@@ -77,6 +80,12 @@ export function CartSummary({
           )
         })}
       </div>
+
+      {customer ? (
+        <p className="mt-3 border-t border-ink-100 pt-3 text-sm text-ink-700">
+          <span className="font-medium text-ink-900">{customer.nome}</span> · {customer.phoneLabel}
+        </p>
+      ) : null}
 
       {date && time ? (
         <p className="mt-3 inline-flex w-full items-center gap-2 border-t border-ink-100 pt-3 font-medium text-ink-800">

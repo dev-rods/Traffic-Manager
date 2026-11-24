@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { useConfirmOtp, useSendOtp } from '@/hooks/useBooking'
+import type { PacienteVerificado } from '@/types'
 
 interface OtpCodeFormProps {
   clinicId: string
@@ -10,7 +11,8 @@ interface OtpCodeFormProps {
   phone: string
   /** Como mostrar o celular; sem isto, mostra `phone` como está. */
   phoneLabel?: string
-  onVerified: (token: string) => void
+  /** `paciente` (PRD 061): quem é o dono do número, só depois do código. */
+  onVerified: (token: string, paciente: PacienteVerificado) => void
 }
 
 /** Formulário de código de verificação — envia automaticamente ao montar e permite reenvio. */
@@ -30,7 +32,7 @@ export function OtpCodeForm({ clinicId, phone, phoneLabel, onVerified }: OtpCode
 
   function handleConfirm(e: FormEvent) {
     e.preventDefault()
-    confirmOtp.mutate({ phone, code }, { onSuccess: (token) => onVerified(token) })
+    confirmOtp.mutate({ phone, code }, { onSuccess: (r) => onVerified(r.token, r.paciente ?? null) })
   }
 
   return (

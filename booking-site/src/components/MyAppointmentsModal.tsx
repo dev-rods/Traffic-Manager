@@ -10,6 +10,11 @@ import { OtpCodeForm } from './OtpCodeForm'
 import { RescheduleInline } from './RescheduleInline'
 import { useCancelAppointment, useMyAppointments } from '@/hooks/useBooking'
 import {
+  guardaSessaoVerificada,
+  leSessaoVerificada,
+  sessaoValeParaOCelular,
+} from '@/utils/sessaoVerificada'
+import {
   formatCurrencyBRL,
   formatDateLong,
   formatPhoneInput,
@@ -49,10 +54,20 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
 
   function handlePhoneSubmit(e: FormEvent) {
     e.preventDefault()
-    if (isValidPhone(phone)) setStep('otp')
+    if (!isValidPhone(phone)) return
+    // Quem já confirmou o código nesta aba (no agendamento ou aqui) não digita
+    // outro (PRD 061).
+    const guardada = leSessaoVerificada()
+    if (sessaoValeParaOCelular(guardada, toApiPhone(phone))) {
+      setToken(guardada.token)
+      setStep('list')
+      return
+    }
+    setStep('otp')
   }
 
   function handleVerified(newToken: string) {
+    guardaSessaoVerificada(apiPhone, newToken)
     setToken(newToken)
     setStep('list')
   }

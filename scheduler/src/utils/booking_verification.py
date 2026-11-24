@@ -45,7 +45,9 @@ CODE_TTL_SECONDS = 5 * 60
 # (PRD 026): tirar. O que continua protegendo o código é o limite de
 # tentativas ERRADAS por código, abaixo.
 MAX_VERIFY_ATTEMPTS = 5
-TOKEN_TTL_SECONDS = 15 * 60
+# 30 min desde o PRD 061: o token agora cobre a escolha de data, nao so a
+# confirmacao final. Eram 15.
+TOKEN_TTL_SECONDS = 30 * 60
 
 SESSAO = "sessao"
 DOCUMENTOS = "documentos"

@@ -53,6 +53,9 @@ PublicBooking:
         path: public/clinics/{clinicId}/quote
         method: post
     - http:
+        path: public/clinics/{clinicId}/cadastro
+        method: post
+    - http:
         path: public/clinics/{clinicId}/appointments
         method: post
     - http:

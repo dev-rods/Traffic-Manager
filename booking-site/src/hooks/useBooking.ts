@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { bookingService } from '@/services/booking.service'
-import type { CartPayload, CreateAppointmentPayload } from '@/types'
+import type { CadastroPayload, CartPayload, CreateAppointmentPayload } from '@/types'
 
 // Chave estável do carrinho: os mesmos serviços/áreas na mesma ordem dão a
 // mesma consulta (a ordem importa — o primeiro serviço é o principal).
@@ -78,6 +78,12 @@ export function useConfirmOtp(clinicId: string) {
   return useMutation({
     mutationFn: ({ phone, code }: { phone: string; code: string }) =>
       bookingService.confirmOtp(clinicId, phone, code),
+  })
+}
+
+export function useCadastro(clinicId: string) {
+  return useMutation({
+    mutationFn: (payload: CadastroPayload) => bookingService.cadastro(clinicId, payload),
   })
 }
 

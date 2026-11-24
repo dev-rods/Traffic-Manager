@@ -33,9 +33,9 @@ class TestCamposFaltantes(unittest.TestCase):
 
     def test_para_o_site_o_nome_sai_da_lista(self):
         self.assertEqual(carrinho.cadastro_para_o_site(None),
-                         {"completo": False, "faltam": ["birth_date", "cpf", "email"]})
-        self.assertEqual(carrinho.cadastro_para_o_site(PARCIAL), {"completo": False, "faltam": ["email"]})
-        self.assertEqual(carrinho.cadastro_para_o_site(PACIENTE_COMPLETO), {"completo": True, "faltam": []})
+                         {"conhecido": False, "completo": False, "faltam": ["birth_date", "cpf", "email"]})
+        self.assertEqual(carrinho.cadastro_para_o_site(PARCIAL), {"conhecido": True, "completo": False, "faltam": ["email"]})
+        self.assertEqual(carrinho.cadastro_para_o_site(PACIENTE_COMPLETO), {"conhecido": True, "completo": True, "faltam": []})
 
 
 class TestPacienteDoTelefone(unittest.TestCase):
@@ -80,11 +80,11 @@ class TestQuoteDizOQueFalta(_Handler):
 
     def test_paciente_completo(self):
         q = corpo(self.chama({**self.CARRINHO, "phone": FONE}))["quote"]
-        self.assertEqual(q["cadastro"], {"completo": True, "faltam": []})
+        self.assertEqual(q["cadastro"], {"conhecido": True, "completo": True, "faltam": []})
 
     def test_numero_novo_falta_tudo_menos_o_nome(self):
         q = corpo(self.chama({**self.CARRINHO, "phone": FONE}, db=Db(paciente=None)))["quote"]
-        self.assertEqual(q["cadastro"], {"completo": False, "faltam": ["birth_date", "cpf", "email"]})
+        self.assertEqual(q["cadastro"], {"conhecido": False, "completo": False, "faltam": ["birth_date", "cpf", "email"]})
 
     def test_parcial_so_o_que_falta(self):
         q = corpo(self.chama({**self.CARRINHO, "phone": FONE}, db=Db(paciente=PARCIAL)))["quote"]

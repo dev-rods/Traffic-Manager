@@ -3,8 +3,11 @@ import type {
   Appointment,
   AvailabilityResponse,
   BootstrapResponse,
+  CadastroPayload,
   CartPayload,
+  ConfirmOtpResult,
   CreateAppointmentPayload,
+  PacienteVerificado,
   Quote,
   RescheduleAppointmentPayload,
 } from '@/types'
@@ -49,10 +52,19 @@ export const bookingService = {
       .post<{ status: string }>(`/public/clinics/${clinicId}/verify/send`, { phone })
       .then((r) => r.data),
 
+  // Além do token, no escopo de sessão vem `paciente` ({nome, faltam} ou
+  // null): só depois do código o site fica sabendo de quem é o número (PRD 061).
   confirmOtp: (clinicId: string, phone: string, code: string) =>
     api
-      .post<{ token: string }>(`/public/clinics/${clinicId}/verify/confirm`, { phone, code })
-      .then((r) => r.data.token),
+      .post<ConfirmOtpResult>(`/public/clinics/${clinicId}/verify/confirm`, { phone, code })
+      .then((r) => ({ token: r.data.token, paciente: r.data.paciente ?? null })),
+
+  // Cria ou completa a ficha SEM agendamento (PRD 061). Só com phone e token
+  // devolve o estado da ficha sem gravar nada.
+  cadastro: (clinicId: string, payload: CadastroPayload) =>
+    api
+      .post<{ paciente: PacienteVerificado }>(`/public/clinics/${clinicId}/cadastro`, payload)
+      .then((r) => r.data.paciente ?? null),
 
   createAppointment: (clinicId: string, payload: CreateAppointmentPayload) =>
     api

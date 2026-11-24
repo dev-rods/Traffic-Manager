@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
+  useAvailability,
+  useCadastro,
   useClinicBootstrap,
   useCreateAppointment,
-  useAvailability,
   useQuote,
 } from '@/hooks/useBooking'
 import { useClinicId } from '@/hooks/useClinicId'
@@ -21,6 +22,8 @@ import { StickyActionBar } from '@/components/StickyActionBar'
 import { RemarcacaoDialog } from '@/components/RemarcacaoDialog'
 import { SessaoFuturaDialog } from '@/components/SessaoFuturaDialog'
 import { OtpCodeForm } from '@/components/OtpCodeForm'
+import { PhoneStep } from '@/components/PhoneStep'
+import { IdentityConfirm } from '@/components/IdentityConfirm'
 import type { CustomerInfoFormData } from '@/components/CustomerInfoForm'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
@@ -29,34 +32,38 @@ import { IconCheckCircle, IconChevronLeft } from '@/components/ui/icons'
 import { ApiError } from '@/services/api'
 import { formatCurrencyBRL, formatDateLong, formatPhoneDisplay, toApiPhone } from '@/utils/format'
 import { cartHasAreas, cartPendingAreaSelection, toCartPayload } from '@/utils/cartTotals'
-import { brDateToIso, formatCpf, listaDeCampos, onlyDigits } from '@/utils/cadastro'
+import { brDateToIso, listaDeCampos, onlyDigits } from '@/utils/cadastro'
+import {
+  guardaSessaoVerificada,
+  leSessaoVerificada,
+  sessaoValeParaOCelular,
+} from '@/utils/sessaoVerificada'
 import type {
+  CadastroPayload,
   CampoDoCadastro,
   CreateAppointmentPayload,
+  PacienteVerificado,
   SessaoExistente,
   WizardStep,
 } from '@/types'
 
-// A criação responde 409 por dois motivos: horário ocupado (sem code) e
-// sessão no mesmo mês (este code: o número foi verificado, a tela mostra a
-// sessão e pede confirmação da troca, PRD 056).
 const SAME_MONTH_APPOINTMENT = 'SAME_MONTH_APPOINTMENT'
-// Sessão futura em OUTRO mês (PRD 060): não é bloqueio, é a pergunta
-// "remarcar essa sessão ou marcar mais uma?".
 const OTHER_MONTH_APPOINTMENT = 'OTHER_MONTH_APPOINTMENT'
-// O cadastro do paciente faltou ou está errado (PRD 032); o CPF já é de outro.
 const CADASTRO_INCOMPLETO = 'CADASTRO_INCOMPLETO'
 const CPF_EM_USO = 'CPF_EM_USO'
-
-// O pedido montado em "Seus dados", à espera do código do WhatsApp.
-type PedidoSemToken = Omit<CreateAppointmentPayload, 'token'>
+const TODOS_OS_CAMPOS: CampoDoCadastro[] = ['cpf', 'birth_date', 'email']
 
 interface Conflito {
   payload: CreateAppointmentPayload
   existing: SessaoExistente
-  /** `mesmo_mes`: a existente será substituída (PRD 056). `outro_mes`: a pessoa escolhe (PRD 060). */
   tipo: 'mesmo_mes' | 'outro_mes'
 }
+
+// Quem é a pessoa, decidido pela cotação com o celular (PRD 061): paciente
+// confirma o código e a identidade; quem não é se cadastra antes do código.
+type Ramo = 'paciente' | 'novo'
+
+type DadosDeCadastro = Pick<CustomerInfoFormData, 'cpf' | 'birthDate' | 'email'> & { fullName: string }
 
 function prefersReducedMotion(): boolean {
   return (
@@ -65,22 +72,44 @@ function prefersReducedMotion(): boolean {
   )
 }
 
+function cadastroPayload(phone: string, token: string, dados: Partial<DadosDeCadastro>): CadastroPayload {
+  return {
+    phone,
+    token,
+    fullName: dados.fullName?.trim() || undefined,
+    cpf: onlyDigits(dados.cpf ?? '') || undefined,
+    birthDate: dados.birthDate ? (brDateToIso(dados.birthDate) ?? undefined) : undefined,
+    email: dados.email?.trim() || undefined,
+  }
+}
+
 export function Booking() {
   const { clinicId, basePath } = useClinicId()
   const navigate = useNavigate()
   const bootstrap = useClinicBootstrap(clinicId)
   const cart = useCart()
   const createAppointment = useCreateAppointment(clinicId)
+  const cadastro = useCadastro(clinicId)
 
   const [step, setStep] = useState<WizardStep>('cart')
   const [submitError, setSubmitError] = useState<string | null>(null)
   // Telefone usado na cotação: com ele entram primeira sessão e desconto
-  // personalizado, antes de o cliente confirmar.
+  // personalizado. Desde o PRD 061 é digitado logo depois das áreas, então o
+  // preço na lateral já é o da pessoa antes de qualquer data.
   const [quotePhone, setQuotePhone] = useState<string | undefined>(undefined)
-  // Código sempre antes de confirmar (PRD 056). O token vale 15 min para o
-  // mesmo celular: voltar e confirmar de novo não pede outro código.
-  const [pendingPayload, setPendingPayload] = useState<PedidoSemToken | null>(null)
-  const [verified, setVerified] = useState<{ phone: string; token: string } | null>(null)
+  const [phone, setPhone] = useState<string>('')
+  const [ramo, setRamo] = useState<Ramo>('novo')
+  // O celular verificado nesta aba (PRD 061): vale também para o "Meus
+  // agendamentos" e sobrevive a um recarregamento da página.
+  const [verified, setVerified] = useState<{ phone: string; token: string } | null>(() => {
+    const guardada = leSessaoVerificada()
+    return guardada ? { phone: guardada.phone, token: guardada.token } : null
+  })
+  const [paciente, setPaciente] = useState<PacienteVerificado>(null)
+  const [dadosDeCadastro, setDadosDeCadastro] = useState<DadosDeCadastro | null>(null)
+  const [cadastroError, setCadastroError] = useState<string | null>(null)
+  // Pedido que levou 401 (token vencido): o código é refeito e o pedido repetido.
+  const [pendingPayload, setPendingPayload] = useState<Omit<CreateAppointmentPayload, 'token'> | null>(null)
   const [conflito, setConflito] = useState<Conflito | null>(null)
   const [remarcado, setRemarcado] = useState(false)
   const slotsRef = useRef<HTMLDivElement>(null)
@@ -95,16 +124,13 @@ export function Booking() {
   const availability = useAvailability(clinicId, cartPayload, cartReady)
   const quote = useQuote(clinicId, cartPayload, quotePhone, cartReady)
 
-  // O que falta no cadastro do celular digitado (PRD 032). Vem do backend pela
-  // cotação; enquanto a cotação com o celular não volta, o formulário espera,
-  // senão a pessoa finalizaria sem ver os campos e levaria um 400.
-  const camposFaltantes: CampoDoCadastro[] = quotePhone ? (quote.data?.cadastro?.faltam ?? []) : []
+  // Enquanto a cotação com o celular não volta, não dá para saber o ramo.
   const aguardandoCadastro = quotePhone !== undefined && (quote.isFetching || quote.isPlaceholderData)
 
   // Com um único serviço no catálogo não existe outro pra escolher - o
   // carrinho não é uma decisão, é um fato. A etapa de revisão (e o botão
   // "Adicionar outro serviço") não tem o que oferecer, então é pulada: o
-  // fluxo começa direto na próxima etapa de verdade (áreas, ou agendamento).
+  // fluxo começa direto na próxima etapa de verdade (áreas, ou celular).
   const isSingleService = bootstrap.data?.services.length === 1
 
   useEffect(() => {
@@ -125,16 +151,13 @@ export function Booking() {
     })
   }, [cart.date, step])
 
-  // Profissional não é escolhido pelo cliente: o backend atribui (o conflito
-  // de horário é checado na clínica inteira, então a escolha não reservava a
-  // agenda de ninguém).
-  function goToAreasOrSchedule() {
-    setStep(pendingAreas.length > 0 ? 'areas' : 'schedule')
+  function goToAreasOrPhone() {
+    setStep(pendingAreas.length > 0 ? 'areas' : 'phone')
   }
 
   useEffect(() => {
     if (isSingleService && step === 'cart' && cart.items.length > 0) {
-      goToAreasOrSchedule()
+      goToAreasOrPhone()
     }
     // Só no momento em que os dados chegam (ou o carrinho passa a ter o item
     // pré-selecionado) - não a cada render.
@@ -184,7 +207,7 @@ export function Booking() {
   const backLeavesWizard =
     step === 'cart' ||
     step === 'areas' ||
-    (step === 'schedule' && !cartHasAreas(cart.items, serviceAreas))
+    (step === 'phone' && !cartHasAreas(cart.items, serviceAreas))
   const showBack = !(isSingleService && backLeavesWizard)
 
   const selectedAreaCount = cart.items.reduce((sum, item) => sum + item.areaIds.length, 0)
@@ -209,18 +232,25 @@ export function Booking() {
       </>
     )
 
+  const nomeDaPessoa = ramo === 'paciente' ? paciente?.nome ?? '' : dadosDeCadastro?.fullName ?? ''
+
   function goBack() {
+    setSubmitError(null)
+    setCadastroError(null)
     if (step === 'cart') {
       navigate(basePath || '/')
     } else if (step === 'areas') {
       goToCartOrHome()
-    } else if (step === 'schedule') {
+    } else if (step === 'phone') {
       if (cartHasAreas(cart.items, serviceAreas)) setStep('areas')
       else goToCartOrHome()
-    } else if (step === 'customer') {
-      setStep('schedule')
     } else if (step === 'verify') {
-      setStep('customer')
+      setPendingPayload(null)
+      setStep(ramo === 'novo' ? 'register' : 'phone')
+    } else if (step === 'identity' || step === 'register') {
+      setStep('phone')
+    } else if (step === 'schedule') {
+      setStep(ramo === 'paciente' ? 'identity' : 'register')
     }
   }
 
@@ -233,54 +263,156 @@ export function Booking() {
     cart.setItemAreas(serviceId, next)
   }
 
-  function handlePhoneChange(phone: string | null) {
-    setQuotePhone(phone ? toApiPhone(phone) : undefined)
+  function handlePhoneChange(phoneDisplay: string | null) {
+    setQuotePhone(phoneDisplay ? toApiPhone(phoneDisplay) : undefined)
   }
 
-  function handleCustomerSubmit(data: CustomerInfoFormData) {
-    const phone = toApiPhone(data.phone)
-    cart.setCustomer(data.fullName, phone)
+  // A cotação diz se o celular é de um paciente. Backend antigo (sem
+  // `conhecido`) é lido pelo que `faltam` já revelava: quem não falta tudo é
+  // conhecido.
+  function celularConhecido(): boolean {
+    const c = quote.data?.cadastro
+    if (!c) return false
+    if (typeof c.conhecido === 'boolean') return c.conhecido
+    return c.completo || c.faltam.length < TODOS_OS_CAMPOS.length
+  }
+
+  function handlePhoneContinue(phoneDisplay: string) {
+    const apiPhone = toApiPhone(phoneDisplay)
+    setPhone(apiPhone)
     setSubmitError(null)
+    setCadastroError(null)
+    const conhecido = celularConhecido()
+    setRamo(conhecido ? 'paciente' : 'novo')
 
-    if (!cart.date || !cart.time) return
-
-    const payload: PedidoSemToken = {
-      ...cartPayload,
-      phone,
-      fullName: data.fullName,
-      date: cart.date,
-      time: cart.time,
-      cpf: onlyDigits(data.cpf ?? '') || undefined,
-      birthDate: data.birthDate ? (brDateToIso(data.birthDate) ?? undefined) : undefined,
-      email: data.email?.trim() || undefined,
-    }
-    if (verified && verified.phone === phone) {
-      submitAppointment({ ...payload, token: verified.token })
+    if (!conhecido) {
+      setStep('register')
       return
     }
-    setPendingPayload(payload)
+
+    if (verified && sessaoValeParaOCelular({ ...verified, expiraEm: Infinity }, apiPhone)) {
+      // Já confirmou o código nesta aba: só falta saber quem é. Só com phone e
+      // token a rota de cadastro devolve a ficha sem gravar nada.
+      cadastro.mutate(
+        { phone: apiPhone, token: verified.token },
+        {
+          onSuccess: (ficha) => {
+            setPaciente(ficha)
+            setStep(ficha ? 'identity' : 'register')
+          },
+          onError: () => setStep('verify'),
+        }
+      )
+      return
+    }
     setStep('verify')
   }
 
-  // Voltar da etapa do código (ou um erro depois dela) remonta "Seus dados"
-  // com o que a pessoa já digitou; sem isto o formulário voltava vazio.
-  const dadosDigitados: Partial<CustomerInfoFormData> = pendingPayload
-    ? {
-        fullName: pendingPayload.fullName,
-        phone: formatPhoneDisplay(pendingPayload.phone),
-        cpf: pendingPayload.cpf ? formatCpf(pendingPayload.cpf) : undefined,
-        birthDate: pendingPayload.birthDate
-          ? pendingPayload.birthDate.split('-').reverse().join('/')
-          : undefined,
-        email: pendingPayload.email,
-      }
-    : { fullName: cart.customerName }
+  function handleVerified(token: string, ficha: PacienteVerificado) {
+    const sessao = { phone, token }
+    setVerified(sessao)
+    guardaSessaoVerificada(phone, token)
 
-  function handleVerified(token: string) {
-    if (!pendingPayload) return
-    setVerified({ phone: pendingPayload.phone, token })
-    setStep('customer')
-    submitAppointment({ ...pendingPayload, token })
+    // Token vencido no meio da confirmação: refaz o mesmo pedido.
+    if (pendingPayload) {
+      const payload = pendingPayload
+      setPendingPayload(null)
+      setStep('schedule')
+      submitAppointment({ ...payload, token })
+      return
+    }
+
+    if (ramo === 'novo') {
+      if (!dadosDeCadastro) {
+        setStep('register')
+        return
+      }
+      cadastrar(cadastroPayload(phone, token, dadosDeCadastro), () => setStep('schedule'), 'register')
+      return
+    }
+
+    setPaciente(ficha)
+    // A cotação disse "conhecido", mas o cadastro sumiu no meio do caminho (ou
+    // o número casa com duas fichas): pede o cadastro como a quem é novo.
+    setStep(ficha ? 'identity' : 'register')
+  }
+
+  function cadastrar(payload: CadastroPayload, depois: () => void, voltarPara: WizardStep) {
+    setCadastroError(null)
+    cadastro.mutate(payload, {
+      onSuccess: (ficha) => {
+        if (ficha) setPaciente(ficha)
+        depois()
+      },
+      onError: (err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          setStep('verify')
+          return
+        }
+        if (err instanceof ApiError && err.code === CADASTRO_INCOMPLETO && Array.isArray(err.body?.faltam)) {
+          setCadastroError(`Precisamos completar seu cadastro: ${listaDeCampos(err.body.faltam as CampoDoCadastro[])}.`)
+        } else {
+          setCadastroError(err.message)
+        }
+        setStep(voltarPara)
+      },
+    })
+  }
+
+  function handleIdentityConfirm(dados: Partial<DadosDeCadastro>) {
+    if (!verified) {
+      setStep('verify')
+      return
+    }
+    const temAlgo = Boolean(dados.cpf || dados.birthDate || dados.email)
+    if (!temAlgo) {
+      setStep('schedule')
+      return
+    }
+    cadastrar(cadastroPayload(phone, verified.token, dados), () => setStep('schedule'), 'identity')
+  }
+
+  function handleNotMe() {
+    setPaciente(null)
+    setPhone('')
+    setQuotePhone(undefined)
+    setCadastroError(null)
+    setStep('phone')
+  }
+
+  function handleRegisterSubmit(data: CustomerInfoFormData) {
+    const dados: DadosDeCadastro = {
+      fullName: data.fullName ?? '',
+      cpf: data.cpf,
+      birthDate: data.birthDate,
+      email: data.email,
+    }
+    setDadosDeCadastro(dados)
+    cart.setCustomer(dados.fullName, phone)
+    if (verified && verified.phone === phone) {
+      cadastrar(cadastroPayload(phone, verified.token, dados), () => setStep('schedule'), 'register')
+      return
+    }
+    setStep('verify')
+  }
+
+  function handleConfirmAppointment() {
+    if (!cart.date || !cart.time) return
+    setSubmitError(null)
+    const payload: Omit<CreateAppointmentPayload, 'token'> = {
+      ...cartPayload,
+      phone,
+      fullName: nomeDaPessoa,
+      date: cart.date,
+      time: cart.time,
+    }
+    cart.setCustomer(nomeDaPessoa, phone)
+    if (!verified || verified.phone !== phone) {
+      setPendingPayload(payload)
+      setStep('verify')
+      return
+    }
+    submitAppointment({ ...payload, token: verified.token })
   }
 
   function submitAppointment(payload: CreateAppointmentPayload) {
@@ -301,36 +433,27 @@ export function Booking() {
           setConflito({ payload, existing: err.body.existing, tipo: 'outro_mes' })
           return
         }
-        // O token venceu (15 min): pede o código de novo, com o mesmo pedido.
+        // Token vencido: o código é refeito e o pedido repetido.
         if (err instanceof ApiError && err.status === 401) {
-          setVerified(null)
-          const { token: _vencido, ...semToken } = payload
-          void _vencido
-          setPendingPayload(semToken)
+          setPendingPayload({ ...payload, token: undefined } as Omit<CreateAppointmentPayload, 'token'>)
           setStep('verify')
           return
         }
-        // O servidor pediu o cadastro que a tela não mostrou (front em cache,
-        // ou cotação antiga): refaz a cotação para os campos aparecerem.
-        if (err instanceof ApiError && err.code === CADASTRO_INCOMPLETO) {
-          const faltam = (err.body?.faltam ?? []) as CampoDoCadastro[]
+        // O servidor pediu cadastro que a tela não mostrou.
+        if (err instanceof ApiError && err.code === CADASTRO_INCOMPLETO && Array.isArray(err.body?.faltam)) {
           setSubmitError(
-            faltam.length > 0
-              ? `Precisamos completar seu cadastro: ${listaDeCampos(faltam)}.`
-              : err.message
+            `Precisamos completar seu cadastro: ${listaDeCampos(err.body.faltam as CampoDoCadastro[])}.`
           )
-          void quote.refetch()
           return
         }
         if (err instanceof ApiError && err.code === CPF_EM_USO) {
           setSubmitError(err.message)
           return
         }
-        // O horário foi ocupado enquanto o cliente preenchia os dados. A
-        // grade já foi invalidada (useCreateAppointment); volta para ela.
+        // Horário ocupado entre escolher e confirmar. Sem `code`: é o 409 de
+        // conflito de agenda. A grade já foi invalidada (useCreateAppointment).
         if (err instanceof ApiError && err.status === 409) {
           cart.clearSchedule()
-          setStep('schedule')
           setSubmitError('Esse horário acabou de ser ocupado. Escolha outro, por favor.')
           return
         }
@@ -383,6 +506,14 @@ export function Booking() {
       <PriceBreakdown quote={quote.data} isLoading={quote.isLoading} isError={quote.isError} />
     )
 
+  const identificado = step === 'schedule' && phone
+  const errorAlert = (texto: string | null) =>
+    texto ? (
+      <p role="alert" className="rounded-lg bg-danger-100 px-4 py-3 text-sm text-danger-500">
+        {texto}
+      </p>
+    ) : null
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 border-b border-ink-200 pb-6">
@@ -409,8 +540,7 @@ export function Booking() {
           items={cart.items}
           serviceAreas={serviceAreas}
           onRemove={step === 'cart' ? cart.removeItem : undefined}
-          date={step === 'customer' ? cart.date : undefined}
-          time={step === 'customer' ? cart.time : undefined}
+          customer={identificado ? { nome: nomeDaPessoa, phoneLabel: formatPhoneDisplay(phone) } : null}
           price={price}
         />
       </div>
@@ -423,7 +553,7 @@ export function Booking() {
           >
             Adicionar outro serviço
           </Link>
-          <Button onClick={goToAreasOrSchedule}>Continuar</Button>
+          <Button onClick={goToAreasOrPhone}>Continuar</Button>
         </div>
       ) : null}
 
@@ -440,20 +570,73 @@ export function Booking() {
             onToggleArea={handleToggleArea}
           />
           <StickyActionBar summary={areasSummary}>
-            <Button disabled={pendingAreas.length > 0} onClick={() => setStep('schedule')}>
+            <Button disabled={pendingAreas.length > 0} onClick={() => setStep('phone')}>
               Continuar
             </Button>
           </StickyActionBar>
         </div>
       ) : null}
 
+      {step === 'phone' ? (
+        <div>
+          <SectionTitle>Seu celular</SectionTitle>
+          <PhoneStep
+            key={phone || 'novo'}
+            defaultValue={phone ? formatPhoneDisplay(phone) : ''}
+            onPhoneChange={handlePhoneChange}
+            onContinue={handlePhoneContinue}
+            aguardando={aguardandoCadastro || cadastro.isPending}
+          />
+        </div>
+      ) : null}
+
+      {step === 'verify' ? (
+        <div>
+          <SectionTitle>Confirme seu celular</SectionTitle>
+          <OtpCodeForm
+            clinicId={clinicId}
+            phone={phone}
+            phoneLabel={formatPhoneDisplay(phone)}
+            onVerified={handleVerified}
+          />
+        </div>
+      ) : null}
+
+      {step === 'identity' && paciente ? (
+        <div>
+          <SectionTitle>Confirme quem é você</SectionTitle>
+          <IdentityConfirm
+            nome={paciente.nome}
+            faltam={paciente.faltam}
+            onConfirm={handleIdentityConfirm}
+            onNotMe={handleNotMe}
+            submitting={cadastro.isPending}
+            error={cadastroError}
+          />
+        </div>
+      ) : null}
+
+      {step === 'register' ? (
+        <div className="flex flex-col gap-4">
+          <SectionTitle>Seus dados</SectionTitle>
+          <p className="text-sm text-ink-600">
+            Primeira vez aqui? Precisamos do seu cadastro antes de escolher a data.
+          </p>
+          <CustomerInfoForm
+            semCelular
+            defaultValues={dadosDeCadastro ?? { fullName: cart.customerName }}
+            camposFaltantes={TODOS_OS_CAMPOS}
+            onSubmit={handleRegisterSubmit}
+            submitting={cadastro.isPending}
+            submitLabel="Continuar"
+          />
+          {errorAlert(cadastroError)}
+        </div>
+      ) : null}
+
       {step === 'schedule' ? (
         <div className="flex flex-col gap-6">
-          {submitError ? (
-            <p role="alert" className="rounded-lg bg-danger-100 px-4 py-3 text-sm text-danger-500">
-              {submitError}
-            </p>
-          ) : null}
+          {errorAlert(submitError)}
           <div>
             <SectionTitle>Escolha o dia</SectionTitle>
             <DayList
@@ -481,34 +664,12 @@ export function Booking() {
           <div className="flex flex-col">
             <Button
               disabled={!cart.date || !cart.time}
-              onClick={() => {
-                setSubmitError(null)
-                setStep('customer')
-              }}
+              loading={createAppointment.isPending}
+              onClick={handleConfirmAppointment}
             >
-              Continuar
+              Confirmar agendamento
             </Button>
           </div>
-        </div>
-      ) : null}
-
-      {step === 'customer' ? (
-        <div>
-          <SectionTitle>Seus dados</SectionTitle>
-          <CustomerInfoForm
-            defaultValues={dadosDigitados}
-            onSubmit={handleCustomerSubmit}
-            onPhoneChange={handlePhoneChange}
-            submitting={createAppointment.isPending}
-            submitLabel="Confirmar agendamento"
-            camposFaltantes={camposFaltantes}
-            aguardandoCadastro={aguardandoCadastro}
-          />
-          {submitError ? (
-            <p role="alert" className="mt-3 text-sm text-danger-500">
-              {submitError}
-            </p>
-          ) : null}
           <RemarcacaoDialog
             existing={conflito?.tipo === 'mesmo_mes' ? conflito.existing : null}
             date={conflito?.payload.date ?? ''}
@@ -538,18 +699,6 @@ export function Booking() {
               submitAppointment({ ...conflito.payload, maisUma: true })
             }}
             onCancel={() => setConflito(null)}
-          />
-        </div>
-      ) : null}
-
-      {step === 'verify' && pendingPayload ? (
-        <div>
-          <SectionTitle>Confirme seu celular</SectionTitle>
-          <OtpCodeForm
-            clinicId={clinicId}
-            phone={pendingPayload.phone}
-            phoneLabel={formatPhoneDisplay(pendingPayload.phone)}
-            onVerified={handleVerified}
           />
         </div>
       ) : null}

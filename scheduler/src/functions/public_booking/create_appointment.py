@@ -13,6 +13,7 @@ from src.services.template_service import TemplateService
 from src.services.orientacoes_pos_sessao import texto as orientacoes_da_clinica
 from src.services.politica_de_desconto import texto_do_preco
 from src.services import carrinho, janela_do_site, relogio
+from src.services.cadastro_pelo_site import conflito_de_cpf
 from src.utils.cadastro import cpf_valido, normaliza_cpf, normaliza_data_nascimento, normaliza_email
 from src.services.availability_engine import AvailabilityEngine
 from src.services.envio_do_sistema import SITE_AGENDAMENTO, envia_texto
@@ -252,20 +253,11 @@ def handler(event, context):
             return http_response(400, {"status": "ERROR", "code": CADASTRO_INCOMPLETO,
                                        "faltam": faltam, "message": MENSAGEM_CADASTRO})
 
-        if cpf:
-            # O mesmo CPF em dois telefones viraria dois pacientes, e o check-in
-            # cobraria no cadastro errado.
-            proprio = str(paciente["id"]) if paciente else None
-            dono = db.execute_query(
-                "SELECT id FROM scheduler.patients WHERE clinic_id = %s AND cpf = %s "
-                "AND deleted_at IS NULL AND (%s::uuid IS NULL OR id <> %s::uuid) LIMIT 1",
-                (clinic_id, cpf, proprio, proprio),
-            )
-            if dono:
-                return http_response(409, {
-                    "status": "ERROR", "code": CPF_EM_USO,
-                    "message": "Este CPF já está cadastrado com outro celular. Fale com a clínica.",
-                })
+        if conflito_de_cpf(db, clinic_id, cpf, paciente["id"] if paciente else None):
+            return http_response(409, {
+                "status": "ERROR", "code": CPF_EM_USO,
+                "message": "Este CPF já está cadastrado com outro celular. Fale com a clínica.",
+            })
 
         # Combos, duração e desconto pelas mesmas funções do agente. Os pares
         # que seguem para a criação são os de DEPOIS do combo: duração, preço e
