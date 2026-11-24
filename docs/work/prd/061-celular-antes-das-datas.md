@@ -188,7 +188,16 @@ Regras de borda:
 - **Mais códigos enviados.** Hoje o código sai só de quem chegou ao fim; passa
   a sair de todo paciente que digita o celular, inclusive quem só olha preço.
   Em 14 dias foram 112 cotações com telefone para 67 criações; o teto do
-  aumento é dessa ordem. O z-api cobra por mensagem; medir depois de um mês.
+  aumento é dessa ordem. Não é risco de infra (o z-api cobra por instância,
+  não por mensagem, e não há limite de taxa no envio); é custo de jornada:
+  o paciente que só pesquisa preço passa a digitar um código para ver as
+  datas. Métrica a acompanhar: cotações com celular conhecido que não
+  chegam à confirmação do código.
+  **Plano B (decidido em 23/11):** se a desistência na etapa do código
+  subir, o paciente conhecido passa a ver as datas antes do código e o
+  código volta a ser exigido só ao confirmar, mantendo o preço pessoal
+  desde o celular. O ramo novo não muda. Recuo barato: a etapa `verify`
+  volta para antes da criação só no ramo paciente.
 - **Cadastro sem agendamento** cria fichas de quem desistiu. É a decisão 5;
   o painel de pacientes passa a ter fichas sem sessão, e a recepção pode
   aproveitá-las para chamar a pessoa.
