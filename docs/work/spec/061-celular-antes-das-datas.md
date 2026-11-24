@@ -8,13 +8,21 @@
 
 ## 1. Resumo
 
-Backend (`scheduler`): a cotação pública passa a dizer se o celular é de um
-paciente (`cadastro.conhecido`); a confirmação do código devolve o primeiro
-nome e os campos que faltam; nasce a rota `POST /public/clinics/{clinicId}/cadastro`
+> **Revisão de 24/11/2026 (decisão 6 do PRD):** a cotação pública só honra o
+> celular junto com o token de sessão. O site deixa de cotar na etapa do
+> celular; todo mundo confirma o código logo após o celular e o ramo
+> (`identity` x `register`) sai de `paciente` em `/verify/confirm`. Os trechos
+> abaixo marcados "(23/11)" descrevem a versão anterior e ficam como histórico.
+
+Backend (`scheduler`): a cotação pública aplica o preço da pessoa só com
+celular E token (`quote.py`: token ausente ignora o celular; token inválido
+401 `TOKEN_INVALIDO`; com token o motivo do desconto vem); a confirmação do
+código devolve o primeiro nome e os campos que faltam; nasce a rota `POST /public/clinics/{clinicId}/cadastro`
 (com token) que cria ou completa o paciente sem agendamento, pelo mesmo
 preenchimento que a criação usa; o token de sessão passa a durar 30 minutos.
 Site (`booking-site`): a máquina de etapas muda para
-`cart -> areas -> phone -> (verify -> identity | register -> verify) -> schedule -> success`;
+`cart -> areas -> phone -> verify -> (identity | register) -> schedule -> success`
+(23/11: `phone -> (verify -> identity | register -> verify)`);
 a etapa `customer` deixa de existir; o par celular+token verificado fica em
 `sessionStorage` e é compartilhado com o "Meus agendamentos".
 
@@ -112,7 +120,18 @@ Nenhum.
 - `cadastro_para_o_site(paciente)` devolve `{"conhecido": paciente is not None, "completo": ..., "faltam": [...]}`.
   Sem telefone a cotação continua devolvendo `cadastro: null`. Com telefone
   desconhecido: `conhecido: false, faltam: ["cpf", "birth_date", "email"]`.
-  Docstring: `conhecido` é do mesmo tamanho do que `faltam` já revela.
+  Desde 24/11 isso só sai com o token (ver `quote.py`), então `conhecido`
+  não revela mais nada a quem não é dono do número; o site não o usa.
+
+### `scheduler/src/functions/public_booking/quote.py` (modificar, 24/11)
+
+- Body ganha `token`. `phone` sem `token`: `phone = None` (site antigo em
+  cache cota assim e segue vendo a tabela). `phone` com `token` que
+  `verify_token` recusa: 401 `{"code": "TOKEN_INVALIDO", "message": MENSAGEM_TOKEN}`.
+- `discountReason` volta a sair sempre: com token, quem lê é o dono do número.
+- Testes: `TestQuote` e `TestQuoteDizOQueFalta` patcham `verify_token` e
+  mandam `token`; casos novos: celular sem token é cotação cega; token
+  inválido é 401.
 
 ### `scheduler/src/functions/public_booking/confirm_otp.py` (modificar)
 
@@ -179,7 +198,8 @@ Nenhum.
 
 - `confirmOtp` devolve `{ token, paciente }`; `cadastro(clinicId, payload)`.
 - `useConfirmOtp` repassa o objeto; `useCadastro(clinicId)` mutation.
-- `useQuote` sem mudança.
+- `useQuote(clinicId, cart, phone, token, enabled)` (24/11): `token` entra na
+  chave e no corpo; `bookingService.quote(clinicId, cart, phone?, token?)`.
 
 ### `booking-site/src/utils/sessaoVerificada.ts` (criar)
 
@@ -190,11 +210,12 @@ Nenhum.
 
 ### `booking-site/src/components/PhoneStep.tsx` (criar)
 
-- Campo de celular (`formatPhoneInput`, `isValidPhone`), `onPhoneChange`
-  para a cotação, texto "Já é paciente? Seu desconto aparece aqui.",
-  botão "Continuar" habilitado só com número válido e cotação com celular
-  carregada (`aguardando` enquanto `quote.isFetching`).
-- `onContinue(phone, conhecido)`.
+- Campo de celular (`formatPhoneInput`, `isValidPhone`); texto "Vamos enviar
+  um código por WhatsApp para confirmar que é você. Já é paciente? Seu
+  desconto aparece logo depois do código."; botão "Continuar" habilitado só
+  com número válido (`aguardando` enquanto a sessão da aba é conferida).
+- `onContinue(phone)`. (23/11: tinha `onPhoneChange` para cotar ao digitar e
+  `onContinue(phone, conhecido)`; saiu com a decisão 6.)
 
 ### `booking-site/src/components/IdentityConfirm.tsx` (criar)
 
@@ -213,26 +234,33 @@ Nenhum.
 
 - `onVerified(token, paciente)`; o modal de "Meus agendamentos" ignora o
   segundo argumento.
+- (24/11) `useRef` com o celular para o qual o código automático já saiu: o
+  StrictMode roda o efeito de montagem duas vezes em dev e mandava dois
+  códigos.
 
 ### `booking-site/src/pages/Booking.tsx` (modificar)
 
 - Estado: `phone`, `verified` (de `sessaoVerificada.le()` na montagem),
   `paciente`, `ramo: 'paciente' | 'novo'`, `dadosDeCadastro`.
+- (24/11) A cotação leva `phone` e `token` só quando `verified.phone === phone`;
+  antes disso é a de tabela. Erro 401 na cotação: `setVerified(null)`,
+  `limpaSessaoVerificada()` e, passado o celular, volta a `verify`.
 - `areas` -> "Continuar" -> `phone`.
-- `phone`: `onContinue(phone, conhecido)`. Se `verified` vale para esse
-  celular, pula o código: `conhecido` -> `identity` (precisa do `paciente`:
-  chamar `cadastro` só com `phone`+`token` devolve `nome` e `faltam` sem
-  gravar nada; a rota é idempotente) ou `register`. Senão: `conhecido` ->
-  `verify`; não conhecido -> `register`.
-- `verify` (ramo paciente): `onVerified` guarda o token, grava
-  `sessaoVerificada`, guarda `paciente`, vai para `identity`.
+- `phone`: `onContinue(phone)`. Se `verified` vale para esse celular, pula o
+  código: chamar `cadastro` só com `phone`+`token` devolve a ficha sem gravar
+  nada -> `identity` (ficha) ou `register` (null). Senão -> `verify`.
+  (23/11: o ramo saía de `quote.cadastro.conhecido` e o novo ia direto a
+  `register` sem código.)
+- `verify`: `onVerified` guarda o token, grava `sessaoVerificada`, e
+  `paciente` decide: ficha -> `ramo = 'paciente'`, `identity`; null ->
+  `ramo = 'novo'`, `register`. Se `dadosDeCadastro` já existe (token venceu
+  no meio do cadastro), grava e vai a `schedule`.
 - `identity`: "Sou eu" sem faltantes -> `schedule`; com faltantes ->
   `useCadastro` com `phone`, `token` e os campos, depois `schedule`.
   "Não sou eu" -> limpa `phone`, `paciente`, `quotePhone`, volta a `phone`.
-- `register`: formulário completo -> guarda `dadosDeCadastro` -> `verify`.
-- `verify` (ramo novo): `onVerified` -> `useCadastro` com `dadosDeCadastro`
-  + token -> `schedule`. Erro 409 `CPF_EM_USO` volta a `register` com a
-  mensagem no CPF.
+- `register`: formulário completo -> guarda `dadosDeCadastro` -> `useCadastro`
+  com os dados + token -> `schedule`. Erro 409 `CPF_EM_USO` volta a
+  `register` com a mensagem. (23/11: `register` vinha antes do código.)
 - `schedule`: botão "Confirmar agendamento" -> `createAppointment` com
   `{ ...cartPayload, phone, fullName: nome, date, time, token }`. `fullName`
   vem do `paciente.nome` (ramo paciente) ou do formulário (ramo novo).

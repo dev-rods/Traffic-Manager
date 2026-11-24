@@ -12,17 +12,19 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
   no client e restrita aos endpoints públicos — não é segredo, é só um filtro
   básico contra bots (mesmo padrão do `LEADS_INTAKE_API_KEY` da landing page).
 - **A pessoa é identificada antes do preço e das datas** (PRD 061). Etapas:
-  `cart -> areas -> phone -> (verify -> identity | register -> verify) -> schedule -> success`.
-  Em `phone` (`PhoneStep`) a cotação roda com o celular e o preço na lateral
-  vira o da pessoa (primeira sessão, desconto personalizado), sem dizer por
-  quê; `quote.cadastro.conhecido` escolhe o ramo. Paciente: código na hora
-  (`OtpCodeForm`), e a confirmação devolve `paciente` ({nome, faltam}); o
-  `IdentityConfirm` pergunta "Olá, {nome}, é você?" e pede só o que falta.
-  Quem não é paciente preenche o cadastro completo (`CustomerInfoForm` com
-  `semCelular`) e confirma o código; ao confirmar, `POST /cadastro` cria a
-  ficha ANTES das datas (quem abandona fica cadastrado sem agendamento).
-  `schedule` confirma direto com o `token`; 401 refaz o código e repete o
-  pedido. Nome, CPF e e-mail nunca saem da API antes do código confirmado.
+  `cart -> areas -> phone -> verify -> (identity | register) -> schedule -> success`.
+  Em `phone` (`PhoneStep`) só se digita o celular: a lateral segue na tabela,
+  porque a cotação só honra o celular junto com o `token` de sessão (senão
+  qualquer um veria o desconto de outra pessoa pelo número). O código vem
+  logo em seguida (`OtpCodeForm`, um envio por celular) e a confirmação
+  devolve `paciente` ({nome, faltam}) ou null: com ficha, o `IdentityConfirm`
+  pergunta "Olá, {nome}, é você?" e pede só o que falta; sem ficha,
+  `CustomerInfoForm` com `semCelular` pede o cadastro completo e
+  `POST /cadastro` cria a ficha ANTES das datas (quem abandona fica
+  cadastrado sem agendamento). Verificada, a cotação roda com celular e token
+  e a lateral mostra o preço da pessoa com o motivo. `schedule` confirma
+  direto com o `token`; 401 (na criação ou na cotação) refaz o código. Nome,
+  CPF, e-mail e preço pessoal nunca saem da API antes do código confirmado.
 - **Criar agendamento exige o código do WhatsApp** (PRD 056): a criação vai
   com `token`; sem ele a API responde 401. O token vale 30 min para o mesmo
   celular (PRD 061; eram 15). A confirmação chega pelo WhatsApp (template

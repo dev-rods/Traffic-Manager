@@ -70,10 +70,18 @@ class TestNormalizaEmail(unittest.TestCase):
 class TestQuoteDizOQueFalta(_Handler):
     modulo = "src.functions.public_booking.quote"
 
+    def setUp(self):
+        super().setUp()
+        p = mock.patch(f"{self.modulo}.verify_token", return_value=True)
+        p.start()
+        self.addCleanup(p.stop)
+
     def chama(self, body, db=None):
         from src.functions.public_booking.quote import handler
         if db is not None:
             self.db = db
+        if body.get("phone"):
+            body = {"token": "tok", **body}
         return handler(evento(body), None)
 
     CARRINHO = {"serviceIds": [SVC], "serviceAreaPairs": [{"serviceId": SVC, "areaId": AXILAS}]}

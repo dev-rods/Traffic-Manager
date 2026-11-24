@@ -5,6 +5,8 @@ from src.utils.phone import is_valid_br_phone
 from src.services.db.postgres import PostgresService
 from src.services import carrinho
 from src.services.carrinho import CarrinhoInvalido, cota, pares_do_corpo, valida_carrinho
+from src.functions.public_booking.create_appointment import MENSAGEM_TOKEN
+from src.utils.booking_verification import verify_token
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -22,30 +24,32 @@ def handler(event, context):
     {
         "serviceIds": ["uuid", ...],
         "serviceAreaPairs": [{"serviceId": "uuid", "areaId": "uuid"}],  // opcional
-        "phone": "5511999999999"                                         // opcional
+        "phone": "5511999999999",                                        // opcional
+        "token": "<token de sessao de /verify/confirm>"                  // obrigatorio com phone
     }
-
-    Com telefone, `quote.cadastro` diz se o cadastro do paciente está completo
-    e quais campos faltam (`cpf`, `birth_date`, `email`), para o site pedir só
-    o que falta antes de criar (PRD 032). Sem telefone, `cadastro` é null.
 
     O valor que o site mostra antes de confirmar - total pela tabela, desconto
     e valor final -, calculado pelas MESMAS funções que a criação usa para
-    gravar (`carrinho.cota`). Sem telefone, só o desconto por quantidade de
-    áreas; com telefone, também primeira sessão e desconto personalizado.
+    gravar (`carrinho.cota`).
+
+    Sem celular (ou com celular sem token): só a faixa por quantidade de
+    áreas, `cadastro` null. É a cotação cega, a única que a rota pública dá a
+    quem ainda não provou ser dono do número.
+
+    Com celular E token de sessão válido (PRD 061): também primeira sessão e
+    desconto personalizado, com o motivo, e `quote.cadastro` diz o que falta
+    no cadastro (`cpf`, `birth_date`, `email`). Antes do PRD 061 bastava o
+    celular: qualquer pessoa descobria o desconto combinado de outra só
+    digitando o número dela. Agora o preço da pessoa só sai depois do código.
+
+    Celular com token inválido ou vencido: 401, para o site refazer o código
+    em vez de mostrar o preço de tabela como se fosse o da pessoa. Celular
+    sem token nenhum é ignorado (não é erro): o site antigo em cache cota
+    assim na etapa "Seus dados" e segue vendo a tabela até a criação.
 
     POST e não GET: o carrinho pode ter dezenas de pares, e o telefone não deve
-    ir para a URL (nem para log de acesso).
-
-    Não devolve duração (o site não a exibe). Com telefone, `discountReason`
-    vem sempre null: a rota é pública e não pede OTP, e o motivo diria a quem
-    digitasse um número qualquer se ele já foi paciente ("first_session" ou
-    não) e se tem desconto combinado ("personalizado"). Valor original,
-    percentual e valor final continuam vindo - o valor ainda cai -, então o
-    vazamento fica reduzido, não eliminado. Sem telefone o motivo vem, porque
-    só a faixa por quantidade de áreas é possível. A criação grava o motivo
-    normalmente e a confirmação por WhatsApp o mostra: vai para o próprio dono
-    do número.
+    ir para a URL (nem para log de acesso). Não devolve duração (o site não a
+    exibe).
     """
     try:
         api_key, error_response = require_booking_intake_api_key(event)
@@ -64,6 +68,13 @@ def handler(event, context):
         if phone and not is_valid_br_phone(str(phone)):
             return http_response(400, {"status": "ERROR", "message": "Telefone inválido"})
 
+        # O celular só vale com o token de sessão do próprio número (PRD 061).
+        token = body.get("token")
+        if phone and token is None:
+            phone = None
+        elif phone and not verify_token(clinic_id, str(phone), str(token)):
+            return http_response(401, {"status": "ERROR", "code": "TOKEN_INVALIDO", "message": MENSAGEM_TOKEN})
+
         db = PostgresService()
 
         clinics = db.execute_query(
@@ -79,9 +90,7 @@ def handler(event, context):
         cotacao = cota(db, clinic_id, service_ids, pares, phone)
 
         # O que falta no cadastro deste celular, para o site pedir só isso
-        # (PRD 032). Só nomes de campos: "tem cadastro completo" é do mesmo
-        # tamanho do que esta rota já revela com "primeira sessão", e nunca
-        # traz valores.
+        # (PRD 032). Só nomes de campos, nunca valores; e só com o token.
         cadastro = carrinho.cadastro_para_o_site(
             carrinho.paciente_do_telefone(db, clinic_id, phone)) if phone else None
 
@@ -97,7 +106,7 @@ def handler(event, context):
             "quote": {
                 "originalPriceCents": cotacao.original_cents,
                 "discountPct": float(cotacao.desconto.pct or 0),
-                "discountReason": None if phone else cotacao.desconto.razao,
+                "discountReason": cotacao.desconto.razao,
                 "finalPriceCents": cotacao.final_cents,
                 "areaCount": cotacao.qtd_areas,
                 "cadastro": cadastro,

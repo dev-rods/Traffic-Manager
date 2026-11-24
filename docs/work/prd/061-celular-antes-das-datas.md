@@ -6,14 +6,18 @@
 
 ## 1. Objetivo
 
-No site de agendamento, pedir o celular logo depois da escolha das áreas e, a
-partir daí, mostrar o preço da própria pessoa (primeira sessão, desconto
-personalizado) antes de ela ver o resumo e escolher data e horário. Quem já é
-paciente confirma o código do WhatsApp nesse momento, vê o nome preenchido
+No site de agendamento, pedir o celular logo depois da escolha das áreas,
+confirmar o código do WhatsApp em seguida e, a partir daí, mostrar o preço da
+própria pessoa (primeira sessão, desconto personalizado) antes de ela ver o
+resumo e escolher data e horário. Quem já é paciente vê o nome preenchido
 ("Olá, Edna, é você?") e completa só o que falta no cadastro. Quem não é
-paciente preenche o cadastro, confirma o código e já fica cadastrado, mesmo
-que não termine o agendamento. Depois disso, escolher a data e confirmar não
-pede mais nada.
+paciente preenche o cadastro e já fica cadastrado, mesmo que não termine o
+agendamento. Depois disso, escolher a data e confirmar não pede mais nada.
+
+> **Revisão de 24/11/2026 (André):** o preço da pessoa só aparece DEPOIS do
+> código. Na versão de 23/11 a cotação aplicava o desconto da pessoa assim que
+> o celular era digitado, e qualquer um descobriria o desconto combinado de
+> outra só digitando o número dela. Ver decisão 6.
 
 ---
 
@@ -54,45 +58,54 @@ desconto, para quem digita um número qualquer não descobrir quem é paciente.
 
 1. **Momento:** o celular é pedido logo depois das áreas, antes do resumo com
    preço e das datas. É uma etapa na mesma trilha, não página nem pop-up: a
-   lateral de preço fica visível e a pessoa vê o valor mudar ao digitar.
-2. **Nome só depois do código.** A cotação com celular continua sem nome e sem
-   motivo. "Olá, Edna, é você?" só aparece depois de o código ser confirmado.
+   lateral de preço fica visível (tabela até o código; o da pessoa depois,
+   ver decisão 6).
+2. **Nome só depois do código.** "Olá, Edna, é você?" só aparece depois de o
+   código ser confirmado. Antes do código a API não diz nada sobre o número.
 3. **Um código só, movido para esse ponto.** A etapa `verify` sai do fim e vai
    para depois do celular. Depois de verificado, escolher data e confirmar
    não pede nada. Não existe segundo código.
-4. **Código cedo só para quem já é paciente.** Celular conhecido: código na
-   hora, depois a confirmação de identidade e os campos que faltam. Celular
-   desconhecido: cadastro completo primeiro (nome, CPF, nascimento, e-mail),
-   e o código vem em seguida, antes das datas.
-5. **Quem abandona depois do código fica cadastrado** como paciente sem
+4. **Código logo após o celular, para todo mundo** (revisto em 24/11; em
+   23/11 era "só para quem já é paciente", com o novo preenchendo o cadastro
+   antes do código). É a confirmação do código que diz de quem é o número:
+   ficha encontrada leva ao "é você?" e aos campos que faltam; nenhuma ficha
+   leva ao cadastro completo (nome, CPF, nascimento, e-mail), antes das datas.
+   Quem desistia no código não ficava gravado em nenhuma das duas ordens
+   (o cadastro exige o token), então a inversão não perde cadastro.
+5. **Quem abandona depois do cadastro fica cadastrado** como paciente sem
    agendamento. Para isso o cadastro pelo site passa a existir como ação
    própria, com o mesmo preenchimento que a criação faz hoje
    (`_get_or_create_patient`: nunca sobrescreve o que a clínica já tem).
-
-Interpretação registrada: no item 4, "só para quem já é paciente" vale para o
-instante do código (logo após o celular). Quem não é paciente também confirma
-o código antes das datas, mas depois do formulário; é o que torna o item 5
-possível.
+6. **A cotação pública só honra o celular com o token de sessão** (André,
+   24/11, ao rodar o roteiro em dev: "corre o risco de uma pessoa testar o
+   desconto de outra com o contato dela"). Celular sem token é ignorado e a
+   cotação é a de tabela; celular com token inválido ou vencido é 401. Com o
+   token, a cotação pode trazer o motivo do desconto: quem o vê já provou ser
+   o dono do número. `cadastro.conhecido` deixou de ter papel no site (saía
+   antes do código e também dizia "este número é paciente daqui").
 
 ---
 
 ## 4. Jornada proposta
 
 ```
-cart -> areas -> phone -> [paciente] verify -> identity (+ campos que faltam) -> schedule -> success
-                       -> [novo]     register -> verify (cadastra) ---------> schedule -> success
+cart -> areas -> phone -> verify -> [ficha]  identity (+ campos que faltam) -> schedule -> success
+                                 -> [nenhuma] register (cadastra) ---------> schedule -> success
 ```
 
-**phone.** Campo único de celular com o preço na lateral. Ao digitar um número
-válido o site cota com o celular: o valor na lateral passa a ser o da pessoa
-(primeira sessão ou desconto personalizado), sem dizer por quê. A cotação
-devolve `cadastro.conhecido` e o site escolhe o ramo. Texto de apoio: "Já é
-paciente? Seu desconto aparece aqui." Botão "Continuar".
+(Jornada revista em 24/11. Em 23/11 o novo preenchia o cadastro antes do
+código e o preço da pessoa aparecia ao digitar o celular.)
 
-**verify (paciente).** Mesmo `OtpCodeForm` de hoje; o código é enviado ao
-entrar na etapa. A confirmação do código passa a devolver, além do token, o
-primeiro nome e os campos que faltam. Isso só sai depois do código, logo não
-abre nada para quem digitou um número que não é dele.
+**phone.** Campo único de celular com o preço de tabela na lateral. Digitar o
+número não cota nada com ele. Texto de apoio: "Vamos enviar um código por
+WhatsApp para confirmar que é você. Já é paciente? Seu desconto aparece logo
+depois do código." Botão "Continuar".
+
+**verify.** Mesmo `OtpCodeForm` de hoje; o código é enviado ao entrar na
+etapa (uma vez por celular, mesmo com a montagem dupla do StrictMode em dev).
+A confirmação devolve, além do token, `paciente` (primeiro nome e campos que
+faltam) ou null. A partir daqui a cotação roda com celular e token e a
+lateral mostra o preço da pessoa, com o motivo.
 
 **identity.** "Olá, Edna, é você?" com o nome vindo do cadastro. "Sou eu":
 se faltar CPF, nascimento ou e-mail, os campos aparecem aqui (mesmo
@@ -100,11 +113,11 @@ se faltar CPF, nascimento ou e-mail, os campos aparecem aqui (mesmo
 segue direto. "Não sou eu": volta para `phone` e limpa o celular. O nome não
 é editável aqui: quem está no sistema foi conferido pela clínica.
 
-**register (novo).** Formulário completo: nome, CPF, nascimento, e-mail
-(`CustomerInfoForm` sem o campo de celular, com todos os campos de cadastro).
-"Continuar" leva ao código. Ao confirmar o código o site chama a ação de
-cadastro com os dados e o token: a pessoa nasce como paciente ali, antes de
-escolher data. Se abandonar, fica cadastrada sem agendamento (decisão 5).
+**register (nenhuma ficha).** Formulário completo: nome, CPF, nascimento,
+e-mail (`CustomerInfoForm` sem o campo de celular, com todos os campos de
+cadastro). "Continuar" chama a ação de cadastro com os dados e o token já
+obtido: a pessoa nasce como paciente ali, antes de escolher data. Se
+abandonar, fica cadastrada sem agendamento (decisão 5).
 
 **schedule.** Como hoje (dias e horários), já com o preço pessoal na lateral.
 Botão "Confirmar agendamento" cria direto com o token. O `CartSummary` mostra
@@ -129,10 +142,13 @@ Regras de borda:
 - **CPF de outro paciente** no cadastro: 409 `CPF_EM_USO`, mostrado no
   formulário, como a criação já faz.
 - **Mudar as áreas depois de verificado:** o token continua válido (é do
-  celular, não do carrinho); a cotação re-roda com o celular.
-- **Voltar:** de `verify` volta para `phone` (paciente) ou `register` (novo);
-  de `identity` volta para `phone`; de `schedule` volta para `identity` ou
-  `register` conforme o ramo, sem novo código.
+  celular, não do carrinho); a cotação re-roda com celular e token.
+- **Token vencido na cotação** (401 `TOKEN_INVALIDO`): a sessão da aba cai,
+  a lateral volta à tabela e, se a pessoa já passou do celular, o código é
+  refeito.
+- **Voltar:** de `verify`, `identity` e `register` volta para `phone`; de
+  `schedule` volta para `identity` ou `register` conforme o ramo, sem novo
+  código. Seguir de novo com o mesmo celular reaproveita a sessão da aba.
 - **WhatsApp da clínica fora do ar:** o envio do código falha com 502 e a
   etapa mostra o erro e o telefone da clínica, como hoje. Em prod não há
   `devCode`.
@@ -144,7 +160,8 @@ Regras de borda:
 ### Dentro do escopo
 - Nova ordem das etapas do site (`booking-site`), com as etapas `phone`,
   `identity` e `register`; `customer` deixa de existir.
-- Cotação pública devolve `cadastro.conhecido`.
+- Cotação pública só honra o celular com o token de sessão (decisão 6);
+  devolve `cadastro` (com `conhecido`) e o motivo do desconto só com ele.
 - Confirmação do código devolve `paciente` (`nome`, `faltam`) para o escopo
   de sessão.
 - Nova ação pública de cadastro sem agendamento, com token, reaproveitando
@@ -156,7 +173,8 @@ Regras de borda:
 
 ### Fora do escopo
 - Mudar a regra de preço, faixas ou desconto personalizado.
-- Mostrar o motivo do desconto na cotação pública (continua escondido).
+- Mostrar o motivo do desconto a quem não confirmou o código (sem token a
+  cotação é a de tabela e não há motivo pessoal a esconder).
 - Fluxos do bot e do painel.
 - Check-in (`/checkin`), que tem o próprio escopo de token.
 - Login persistente entre abas ou dias (o token continua de curta duração).
@@ -167,7 +185,7 @@ Regras de borda:
 
 | Caminho | Tipo | Descrição |
 |---|---|---|
-| `scheduler/src/functions/public_booking/quote.py` | modificar | `cadastro.conhecido` |
+| `scheduler/src/functions/public_booking/quote.py` | modificar | celular só com token (401 se inválido; ignorado se ausente); motivo com token |
 | `scheduler/src/services/carrinho.py` | modificar | `cadastro_para_o_site` ganha `conhecido` |
 | `scheduler/src/functions/public_booking/confirm_otp.py` | modificar | devolve `paciente` no escopo de sessão |
 | `scheduler/src/functions/public_booking/cadastro.py` | criar | `POST /public/clinics/{clinicId}/cadastro` |
@@ -193,11 +211,12 @@ Regras de borda:
   o paciente que só pesquisa preço passa a digitar um código para ver as
   datas. Métrica a acompanhar: cotações com celular conhecido que não
   chegam à confirmação do código.
-  **Plano B (decidido em 23/11):** se a desistência na etapa do código
-  subir, o paciente conhecido passa a ver as datas antes do código e o
-  código volta a ser exigido só ao confirmar, mantendo o preço pessoal
-  desde o celular. O ramo novo não muda. Recuo barato: a etapa `verify`
-  volta para antes da criação só no ramo paciente.
+  **Plano B (decidido em 23/11, revisto em 24/11):** se a desistência na
+  etapa do código subir, a pessoa passa a ver as datas antes do código e o
+  código volta a ser exigido só ao confirmar. Com a decisão 6 isso implica
+  ver o preço de tabela até o código (o preço pessoal nunca sai sem token),
+  então o plano B troca "preço cedo" por "menos atrito"; a Edna voltaria a
+  ver R$ 238 até confirmar. Recuo barato no site; o backend não muda.
 - **Cadastro sem agendamento** cria fichas de quem desistiu. É a decisão 5;
   o painel de pacientes passa a ter fichas sem sessão, e a recepção pode
   aproveitá-las para chamar a pessoa.
@@ -212,14 +231,17 @@ Regras de borda:
 
 ## 8. Critérios de aceite
 
-- [ ] Paciente com desconto personalizado vê o preço com o desconto assim que
-      digita o celular, antes de qualquer data.
-- [ ] Paciente conhecido: código logo após o celular; "Olá, {nome}, é você?";
+- [x] Paciente com desconto personalizado vê o preço com o desconto logo
+      depois do código, antes de qualquer data (revisto em 24/11: antes do
+      código a lateral mostra a tabela).
+- [x] Digitar o celular de outra pessoa não revela o preço dela nem se ela é
+      paciente: a cotação sem token é a de tabela (decisão 6).
+- [x] Paciente conhecido: código logo após o celular; "Olá, {nome}, é você?";
       só os campos que faltam; data e confirmação sem novo código.
-- [ ] "Não sou eu" volta ao celular sem deixar rastro do nome.
-- [ ] Novo: cadastro completo, código, ficha criada ao confirmar o código;
+- [x] "Não sou eu" volta ao celular sem deixar rastro do nome.
+- [x] Novo: código, cadastro completo, ficha criada ao enviar o cadastro;
       abandono depois disso deixa o paciente cadastrado sem agendamento.
-- [ ] Nome ou dados nunca saem da API antes do código confirmado.
+- [x] Nome ou dados nunca saem da API antes do código confirmado.
 - [ ] Token vencido na confirmação pede o código de novo e conclui o mesmo
       pedido.
 - [ ] "Meus agendamentos" não pede código a quem já verificou na mesma aba.
@@ -243,4 +265,9 @@ Regras de borda:
 - [x] Implementado em: 23/11/2026 (PR #252). Backend em dev (layer 216,
       smoke de API 6/6) e em prod (layer 171, smoke 6/6) no mesmo dia; site pela Vercel após o merge.
       Roteiro no navegador com o celular do André: `tests/integration/061-...md`.
+- [x] Roteiro A em dev em 24/11 (site local com proxy para dev): fluxo inteiro ok, um código,
+      cadastro completado e agendamento com 26%. Expôs a brecha da cotação (decisão 6) e o
+      código duplo do StrictMode em dev.
+- [ ] Revisão de 24/11 (decisão 6): backend e site no mesmo PR #252; deploy dev e prod pendentes
+      de registro abaixo.
 - [x] Registrado em `TASKS_LOG.md`

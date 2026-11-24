@@ -294,8 +294,17 @@ class _Handler(unittest.TestCase):
 class TestQuote(_Handler):
     modulo = "src.functions.public_booking.quote"
 
+    def setUp(self):
+        super().setUp()
+        # O celular só conta com o token de sessão do número (PRD 061).
+        self.token_valido = mock.patch(f"{self.modulo}.verify_token", return_value=True)
+        self.token_valido.start()
+        self.addCleanup(self.token_valido.stop)
+
     def chama(self, body):
         from src.functions.public_booking.quote import handler
+        if body.get("phone"):
+            body = {"token": "tok", **body}
         return handler(evento(body), None)
 
     def test_cotacao_com_combo_e_faixa(self):
@@ -306,7 +315,7 @@ class TestQuote(_Handler):
         q = corpo(r)["quote"]
         self.assertEqual(q["originalPriceCents"], 26000)
         self.assertEqual(q["finalPriceCents"], 23400)
-        self.assertEqual((q["discountPct"], q["discountReason"], q["areaCount"]), (10, None, 2))
+        self.assertEqual((q["discountPct"], q["discountReason"], q["areaCount"]), (10, "tier_2", 2))
         self.assertEqual(q["combos"], [{"from": ["Virilha Completa", "Perianal/ânus"],
                                         "to": "Virilha Completa + ânus", "savingsCents": 7500}])
         self.assertNotIn("duration", json.dumps(q).lower())
@@ -316,12 +325,33 @@ class TestQuote(_Handler):
             {"serviceId": SVC, "areaId": VIRILHA}, {"serviceId": SVC, "areaId": AXILAS}]}))["quote"]
         self.assertEqual((q["discountPct"], q["discountReason"]), (10, "tier_2"))
 
-    def test_com_telefone_o_motivo_nao_vem_mas_o_valor_cai(self):
+    def test_com_telefone_e_token_o_valor_cai_e_o_motivo_vem(self):
         with mock.patch("src.services.politica_de_desconto.e_primeira_visita", return_value=True):
             q = corpo(self.chama({"serviceIds": [SVC], "serviceAreaPairs": [
                 {"serviceId": SVC, "areaId": AXILAS}], "phone": FONE}))["quote"]
         self.assertEqual((q["originalPriceCents"], q["discountPct"], q["finalPriceCents"]), (6500, 50, 3250))
-        self.assertIsNone(q["discountReason"])
+        # O dono do número já confirmou o código: o motivo pode vir.
+        self.assertEqual(q["discountReason"], "first_session")
+
+    def test_telefone_sem_token_e_cotacao_cega(self):
+        """Site antigo em cache manda só o celular: vê a tabela, não o preço da pessoa."""
+        from src.functions.public_booking.quote import handler
+        with mock.patch("src.services.politica_de_desconto.e_primeira_visita", return_value=True):
+            r = handler(evento({"serviceIds": [SVC], "serviceAreaPairs": [
+                {"serviceId": SVC, "areaId": AXILAS}], "phone": FONE}), None)
+        self.assertEqual(r["statusCode"], 200)
+        q = corpo(r)["quote"]
+        self.assertEqual((q["discountPct"], q["finalPriceCents"], q["cadastro"]), (0, 6500, None))
+
+    def test_telefone_com_token_invalido_e_401(self):
+        self.token_valido.stop()
+        try:
+            with mock.patch(f"{self.modulo}.verify_token", return_value=False):
+                r = self.chama({"serviceIds": [SVC], "phone": FONE})
+        finally:
+            self.token_valido.start()
+        self.assertEqual(r["statusCode"], 401)
+        self.assertEqual(corpo(r)["code"], "TOKEN_INVALIDO")
 
     def test_telefone_invalido(self):
         self.assertEqual(self.chama({"serviceIds": [SVC], "phone": "123"})["statusCode"], 400)

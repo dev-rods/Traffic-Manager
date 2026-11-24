@@ -7,23 +7,18 @@ import { formatPhoneInput, isValidPhone } from '@/utils/format'
 interface PhoneStepProps {
   /** Como estava digitado (voltar não apaga). */
   defaultValue?: string
-  /**
-   * Chamado com o celular formatado sempre que ele fica válido (e com `null`
-   * quando deixa de ser): a cotação é refeita com ele e o preço na lateral
-   * vira o da pessoa (PRD 061).
-   */
-  onPhoneChange: (phone: string | null) => void
   onContinue: (phone: string) => void
-  /** A cotação com o celular ainda não voltou: sem ela não dá para saber o ramo. */
+  /** O site ainda está conferindo a sessão já verificada nesta aba. */
   aguardando: boolean
 }
 
 /**
  * A etapa do celular, logo depois das áreas (PRD 061). É a primeira coisa que
- * identifica a pessoa, antes de preço fechado e datas: quem tem desconto
- * personalizado vê o valor cair aqui, não na penúltima tela.
+ * identifica a pessoa, antes de preço fechado e datas. Aqui a lateral ainda
+ * mostra a tabela: o preço da pessoa só aparece depois do código, senão
+ * qualquer um veria o desconto de outra só digitando o número dela.
  */
-export function PhoneStep({ defaultValue = '', onPhoneChange, onContinue, aguardando }: PhoneStepProps) {
+export function PhoneStep({ defaultValue = '', onContinue, aguardando }: PhoneStepProps) {
   const [phone, setPhone] = useState(defaultValue)
   const valido = isValidPhone(phone)
 
@@ -42,15 +37,12 @@ export function PhoneStep({ defaultValue = '', onPhoneChange, onContinue, aguard
         autoComplete="tel"
         value={phone}
         hint="Número de fora do Brasil? Comece com + e o código do país."
-        onChange={(e) => {
-          const formatted = formatPhoneInput(e.target.value)
-          setPhone(formatted)
-          onPhoneChange(isValidPhone(formatted) ? formatted : null)
-        }}
+        onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
       />
       <p className="text-sm text-ink-600">
+        Vamos enviar um código por WhatsApp para confirmar que é você.{' '}
         <span className="font-medium text-ink-800">Já é paciente?</span> Seu desconto aparece
-        aqui assim que o celular estiver completo.
+        logo depois do código.
       </p>
       <Button type="submit" disabled={!valido || aguardando} loading={valido && aguardando}>
         Continuar

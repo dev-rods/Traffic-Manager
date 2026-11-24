@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
@@ -20,9 +20,14 @@ export function OtpCodeForm({ clinicId, phone, phoneLabel, onVerified }: OtpCode
   const [code, setCode] = useState('')
   const sendOtp = useSendOtp(clinicId)
   const confirmOtp = useConfirmOtp(clinicId)
+  // Para qual celular o código automático já saiu. O StrictMode do React roda
+  // o efeito de montagem duas vezes em desenvolvimento e mandava dois códigos
+  // (visto em 24/11); a ref sobrevive à remontagem simulada, o efeito não.
+  const enviadoPara = useRef<string | null>(null)
 
   useEffect(() => {
-    if (phone) {
+    if (phone && enviadoPara.current !== phone) {
+      enviadoPara.current = phone
       setCode('')
       sendOtp.mutate(phone)
     }

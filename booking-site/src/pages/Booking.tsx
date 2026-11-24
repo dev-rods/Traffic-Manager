@@ -36,6 +36,7 @@ import { brDateToIso, listaDeCampos, onlyDigits } from '@/utils/cadastro'
 import {
   guardaSessaoVerificada,
   leSessaoVerificada,
+  limpaSessaoVerificada,
   sessaoValeParaOCelular,
 } from '@/utils/sessaoVerificada'
 import type {
@@ -59,8 +60,9 @@ interface Conflito {
   tipo: 'mesmo_mes' | 'outro_mes'
 }
 
-// Quem é a pessoa, decidido pela cotação com o celular (PRD 061): paciente
-// confirma o código e a identidade; quem não é se cadastra antes do código.
+// Quem é a pessoa, decidido pela confirmação do código (PRD 061): a resposta
+// traz a ficha do dono do número (paciente confirma a identidade) ou nada
+// (quem não é se cadastra). Antes do código a API não diz nada sobre o número.
 type Ramo = 'paciente' | 'novo'
 
 type DadosDeCadastro = Pick<CustomerInfoFormData, 'cpf' | 'birthDate' | 'email'> & { fullName: string }
@@ -93,10 +95,6 @@ export function Booking() {
 
   const [step, setStep] = useState<WizardStep>('cart')
   const [submitError, setSubmitError] = useState<string | null>(null)
-  // Telefone usado na cotação: com ele entram primeira sessão e desconto
-  // personalizado. Desde o PRD 061 é digitado logo depois das áreas, então o
-  // preço na lateral já é o da pessoa antes de qualquer data.
-  const [quotePhone, setQuotePhone] = useState<string | undefined>(undefined)
   const [phone, setPhone] = useState<string>('')
   const [ramo, setRamo] = useState<Ramo>('novo')
   // O celular verificado nesta aba (PRD 061): vale também para o "Meus
@@ -122,10 +120,28 @@ export function Booking() {
   // Quais datas aparecem é decisão do backend (as próximas N com horário, no
   // fuso da clínica); o site só pergunta pelo carrinho e exibe.
   const availability = useAvailability(clinicId, cartPayload, cartReady)
-  const quote = useQuote(clinicId, cartPayload, quotePhone, cartReady)
+  // A cotação só leva o celular junto com o token da sessão dele (PRD 061):
+  // até o código ser confirmado a lateral mostra a tabela, depois o preço da
+  // pessoa (primeira sessão, desconto personalizado), antes de qualquer data.
+  const celularVerificado = verified !== null && verified.phone === phone && phone !== ''
+  const quote = useQuote(
+    clinicId,
+    cartPayload,
+    celularVerificado ? phone : undefined,
+    celularVerificado ? verified.token : undefined,
+    cartReady
+  )
 
-  // Enquanto a cotação com o celular não volta, não dá para saber o ramo.
-  const aguardandoCadastro = quotePhone !== undefined && (quote.isFetching || quote.isPlaceholderData)
+  // Token vencido no meio do caminho: a cotação com ele devolve 401. A sessão
+  // cai e, se a pessoa já passou do celular, o código é refeito.
+  useEffect(() => {
+    if (!(quote.error instanceof ApiError) || quote.error.status !== 401 || !verified) return
+    setVerified(null)
+    limpaSessaoVerificada()
+    if (step === 'identity' || step === 'register' || step === 'schedule') setStep('verify')
+    // Reage só ao erro da cotação, não a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quote.error])
 
   // Com um único serviço no catálogo não existe outro pra escolher - o
   // carrinho não é uma decisão, é um fato. A etapa de revisão (e o botão
@@ -246,7 +262,7 @@ export function Booking() {
       else goToCartOrHome()
     } else if (step === 'verify') {
       setPendingPayload(null)
-      setStep(ramo === 'novo' ? 'register' : 'phone')
+      setStep('phone')
     } else if (step === 'identity' || step === 'register') {
       setStep('phone')
     } else if (step === 'schedule') {
@@ -263,32 +279,20 @@ export function Booking() {
     cart.setItemAreas(serviceId, next)
   }
 
-  function handlePhoneChange(phoneDisplay: string | null) {
-    setQuotePhone(phoneDisplay ? toApiPhone(phoneDisplay) : undefined)
-  }
-
-  // A cotação diz se o celular é de um paciente. Backend antigo (sem
-  // `conhecido`) é lido pelo que `faltam` já revelava: quem não falta tudo é
-  // conhecido.
-  function celularConhecido(): boolean {
-    const c = quote.data?.cadastro
-    if (!c) return false
-    if (typeof c.conhecido === 'boolean') return c.conhecido
-    return c.completo || c.faltam.length < TODOS_OS_CAMPOS.length
+  // Só depois do código a API diz de quem é o número: ficha preenchida leva ao
+  // "é você?" (e aos campos que faltam); nenhuma ficha leva ao cadastro.
+  function entraComoDonoDoNumero(ficha: PacienteVerificado) {
+    setPaciente(ficha)
+    setRamo(ficha ? 'paciente' : 'novo')
+    setStep(ficha ? 'identity' : 'register')
   }
 
   function handlePhoneContinue(phoneDisplay: string) {
     const apiPhone = toApiPhone(phoneDisplay)
+    if (apiPhone !== phone) setDadosDeCadastro(null)
     setPhone(apiPhone)
     setSubmitError(null)
     setCadastroError(null)
-    const conhecido = celularConhecido()
-    setRamo(conhecido ? 'paciente' : 'novo')
-
-    if (!conhecido) {
-      setStep('register')
-      return
-    }
 
     if (verified && sessaoValeParaOCelular({ ...verified, expiraEm: Infinity }, apiPhone)) {
       // Já confirmou o código nesta aba: só falta saber quem é. Só com phone e
@@ -296,10 +300,7 @@ export function Booking() {
       cadastro.mutate(
         { phone: apiPhone, token: verified.token },
         {
-          onSuccess: (ficha) => {
-            setPaciente(ficha)
-            setStep(ficha ? 'identity' : 'register')
-          },
+          onSuccess: entraComoDonoDoNumero,
           onError: () => setStep('verify'),
         }
       )
@@ -322,19 +323,13 @@ export function Booking() {
       return
     }
 
-    if (ramo === 'novo') {
-      if (!dadosDeCadastro) {
-        setStep('register')
-        return
-      }
+    // Token vencido no meio do cadastro: o formulário já foi preenchido, grava e segue.
+    if (dadosDeCadastro) {
       cadastrar(cadastroPayload(phone, token, dadosDeCadastro), () => setStep('schedule'), 'register')
       return
     }
 
-    setPaciente(ficha)
-    // A cotação disse "conhecido", mas o cadastro sumiu no meio do caminho (ou
-    // o número casa com duas fichas): pede o cadastro como a quem é novo.
-    setStep(ficha ? 'identity' : 'register')
+    entraComoDonoDoNumero(ficha)
   }
 
   function cadastrar(payload: CadastroPayload, depois: () => void, voltarPara: WizardStep) {
@@ -375,7 +370,6 @@ export function Booking() {
   function handleNotMe() {
     setPaciente(null)
     setPhone('')
-    setQuotePhone(undefined)
     setCadastroError(null)
     setStep('phone')
   }
@@ -583,9 +577,8 @@ export function Booking() {
           <PhoneStep
             key={phone || 'novo'}
             defaultValue={phone ? formatPhoneDisplay(phone) : ''}
-            onPhoneChange={handlePhoneChange}
             onContinue={handlePhoneContinue}
-            aguardando={aguardandoCadastro || cadastro.isPending}
+            aguardando={cadastro.isPending}
           />
         </div>
       ) : null}

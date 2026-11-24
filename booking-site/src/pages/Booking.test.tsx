@@ -65,17 +65,14 @@ const NO_DISCOUNT: Quote = {
   areaCount: 0,
   combos: [],
 }
-// Celular de paciente com cadastro completo. Com telefone o backend não diz o
-// motivo do desconto (não revela se o número já foi paciente).
+// Cotação de quem já confirmou o código (celular + token): o preço da pessoa,
+// com o motivo, e o estado do cadastro.
 const PACIENTE_COMPLETA: Quote = {
   ...NO_DISCOUNT,
   discountPct: 50,
+  discountReason: 'personalizado',
   finalPriceCents: 7500,
   cadastro: { conhecido: true, completo: true, faltam: [] },
-}
-const PACIENTE_PARCIAL: Quote = {
-  ...NO_DISCOUNT,
-  cadastro: { conhecido: true, completo: false, faltam: ['cpf'] },
 }
 const SEM_CADASTRO: Quote = {
   ...NO_DISCOUNT,
@@ -115,9 +112,10 @@ function renderBooking() {
   )
 }
 
+// O backend só honra o celular junto com o token (PRD 061): sem os dois, tabela.
 function quotePorCelular(comCelular: Quote) {
-  vi.mocked(bookingService.quote).mockImplementation(async (_c, _cart, phone) =>
-    phone ? comCelular : NO_DISCOUNT
+  vi.mocked(bookingService.quote).mockImplementation(async (_c, _cart, phone, token) =>
+    phone && token ? comCelular : NO_DISCOUNT
   )
 }
 
@@ -200,7 +198,7 @@ describe('Booking - serviço único', () => {
     expect(screen.queryByRole('button', { name: 'Voltar' })).not.toBeInTheDocument()
   })
 
-  it('"Continuar" só com celular completo e cotação com o celular carregada', async () => {
+  it('"Continuar" só com celular completo', async () => {
     renderBooking()
     await screen.findByText('Seu celular')
     expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled()
@@ -228,21 +226,43 @@ describe('Booking - paciente conhecida (PRD 061)', () => {
     mockOtp({ nome: 'Maria', faltam: [] })
   })
 
-  it('o desconto dela aparece ao digitar o celular, antes de qualquer data e sem o motivo', async () => {
+  it('o desconto dela aparece só depois do código, antes de qualquer data', async () => {
     renderBooking()
     await screen.findByText('Seu celular')
     expect(screen.queryByText(/Desconto/)).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText(/celular/i), '11987654321')
+    // Digitar o número não revela nada: a cotação continua sem celular.
+    expect(screen.queryByText(/Desconto/)).not.toBeInTheDocument()
+    expect(bookingService.quote).not.toHaveBeenCalledWith('c1', expect.anything(), PHONE, expect.anything())
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    await typeCode()
 
-    expect(await screen.findByText('Desconto (50%)')).toBeInTheDocument()
+    expect(await screen.findByText(/É você\?/)).toBeInTheDocument()
+    // Verificada, a pessoa pode saber o motivo do próprio desconto.
+    expect(await screen.findByText(/Desconto · Desconto especial \(50%\)/)).toBeInTheDocument()
     expect(screen.getByText('Valor final')).toBeInTheDocument()
     expect(screen.queryByText('Escolha o dia')).not.toBeInTheDocument()
     expect(bookingService.quote).toHaveBeenLastCalledWith(
       'c1',
       { serviceIds: ['svc-1'], serviceAreaPairs: [] },
-      PHONE
+      PHONE,
+      'tok-1'
     )
+  })
+
+  it('cotação com token vencido (401) derruba a sessão e refaz o código', async () => {
+    vi.mocked(bookingService.quote).mockImplementation(async (_c, _cart, phone, token) => {
+      if (phone && token) throw new ApiError('Verificação por WhatsApp expirada.', 401, { code: 'TOKEN_INVALIDO' })
+      return NO_DISCOUNT
+    })
+    renderBooking()
+    await typePhone()
+    await typeCode()
+
+    expect(await screen.findByText('Confirme seu celular')).toBeInTheDocument()
+    expect(bookingService.sendOtp).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText(/É você\?/)).not.toBeInTheDocument()
   })
 
   it('código logo após o celular, depois "é você?", depois as datas; confirmar não pede outro código', async () => {
@@ -300,7 +320,6 @@ describe('Booking - paciente conhecida (PRD 061)', () => {
   })
 
   it('cadastro incompleto: "Sou eu" pede só o que falta e grava antes das datas', async () => {
-    quotePorCelular(PACIENTE_PARCIAL)
     mockOtp({ nome: 'Maria', faltam: ['cpf'] })
     renderBooking()
     await typePhone()
@@ -392,20 +411,21 @@ describe('Booking - quem ainda não é paciente (PRD 061)', () => {
     mockOtp(null)
   })
 
-  it('cadastro completo antes do código; a ficha nasce ao confirmar o código, antes das datas', async () => {
+  it('código logo após o celular; sem ficha, cadastro completo; a ficha nasce ao enviá-lo, antes das datas', async () => {
     renderBooking()
     await typePhone()
 
+    expect(await screen.findByText('Confirme seu celular')).toBeInTheDocument()
+    expect(bookingService.sendOtp).toHaveBeenCalledWith('c1', PHONE)
+    await typeCode()
+
     expect(await screen.findByText('Seus dados')).toBeInTheDocument()
-    expect(bookingService.sendOtp).not.toHaveBeenCalled()
+    expect(bookingService.cadastro).not.toHaveBeenCalled()
     // O celular já foi digitado: o campo não repete.
     expect(screen.queryByLabelText(/celular/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/É você\?/)).not.toBeInTheDocument()
 
     await fillCadastro()
-
-    expect(await screen.findByText('Confirme seu celular')).toBeInTheDocument()
-    expect(bookingService.cadastro).not.toHaveBeenCalled()
-    await typeCode()
 
     await waitFor(() => expect(bookingService.cadastro).toHaveBeenCalled())
     expect(vi.mocked(bookingService.cadastro).mock.calls[0][1]).toEqual({
@@ -437,8 +457,9 @@ describe('Booking - quem ainda não é paciente (PRD 061)', () => {
     )
     renderBooking()
     await typePhone()
-    await fillCadastro()
     await typeCode()
+    await screen.findByText('Seus dados')
+    await fillCadastro()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Este CPF já está cadastrado com outro celular')
     expect(screen.getByText('Seus dados')).toBeInTheDocument()
@@ -446,19 +467,18 @@ describe('Booking - quem ainda não é paciente (PRD 061)', () => {
     expect(bookingService.createAppointment).not.toHaveBeenCalled()
   })
 
-  it('"Voltar" no cadastro devolve o celular', async () => {
+  it('"Voltar" no cadastro devolve o celular; seguir com o mesmo número não pede outro código', async () => {
     renderBooking()
     await typePhone()
+    await typeCode()
     await screen.findByText('Seus dados')
     await userEvent.click(screen.getByRole('button', { name: /voltar/i }))
     expect(await screen.findByText('Seu celular')).toBeInTheDocument()
-  })
 
-  it('backend antigo sem `conhecido`: quem falta tudo é novo', async () => {
-    quotePorCelular({ ...NO_DISCOUNT, cadastro: { completo: false, faltam: ['birth_date', 'cpf', 'email'] } })
-    renderBooking()
-    await typePhone()
+    vi.mocked(bookingService.cadastro).mockResolvedValueOnce(null)
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
     expect(await screen.findByText('Seus dados')).toBeInTheDocument()
+    expect(bookingService.sendOtp).toHaveBeenCalledTimes(1)
   })
 })
 

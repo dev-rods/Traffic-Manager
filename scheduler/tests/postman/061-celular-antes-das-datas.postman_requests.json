@@ -1,132 +1,518 @@
 {
   "info": {
     "name": "Clinic Scheduler - 061 Celular antes do preco e das datas",
-    "description": "O site pede o celular logo depois das areas. A cotacao com o celular devolve cadastro.conhecido e o preco da pessoa (sem motivo); /verify/confirm devolve paciente {nome, faltam} so depois do codigo; POST /cadastro cria ou completa a ficha SEM agendamento (token obrigatorio); token de sessao 30 min. O codigo vai pelo WhatsApp de verdade tambem em dev: so usar o celular do Andre.",
+    "description": "O site pede o celular logo depois das areas e o codigo em seguida. A cotacao so honra o celular junto com o token de sessao (24/11): sem token e a de tabela (cadastro null), com token invalido 401, com token valido devolve cadastro.conhecido e o preco da pessoa com o motivo. /verify/confirm devolve paciente {nome, faltam} so depois do codigo; POST /cadastro cria ou completa a ficha SEM agendamento (token obrigatorio); token de sessao 30 min. O codigo vai pelo WhatsApp de verdade tambem em dev: so usar o celular do Andre.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "BASE_URL", "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com", "type": "string" },
-    { "key": "ENVIRONMENT", "value": "dev", "type": "string" },
-    { "key": "BOOKING_API_KEY", "value": "YOUR_BOOKING_API_KEY_HERE", "type": "string" },
-    { "key": "clinicId", "value": "clinicadepilacaopremium-3fbce9", "type": "string" },
-    { "key": "serviceId", "value": "", "type": "string" },
-    { "key": "areaId", "value": "", "type": "string" },
-    { "key": "phone", "value": "5511970522647", "type": "string" },
-    { "key": "code", "value": "", "type": "string" },
-    { "key": "token", "value": "", "type": "string" }
+    {
+      "key": "BASE_URL",
+      "value": "https://YOUR_API_GATEWAY_URL.execute-api.us-east-1.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "ENVIRONMENT",
+      "value": "dev",
+      "type": "string"
+    },
+    {
+      "key": "BOOKING_API_KEY",
+      "value": "YOUR_BOOKING_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "clinicId",
+      "value": "clinicadepilacaopremium-3fbce9",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "areaId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "phone",
+      "value": "5511970522647",
+      "type": "string"
+    },
+    {
+      "key": "code",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
       "name": "Quote sem celular - cadastro null",
-      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
-        "pm.test(\"200\", () => pm.response.to.have.status(200));",
-        "pm.test(\"sem celular nao ha cadastro\", () => pm.expect(pm.response.json().quote.cadastro).to.eql(null));"
-      ] } }],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"sem celular nao ha cadastro\", () => pm.expect(pm.response.json().quote.cadastro).to.eql(null));"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }, { "key": "Content-Type", "value": "application/json" }],
-        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "quote"] },
-        "body": { "mode": "raw", "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{ \"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\" }]\n}" }
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "quote"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{ \"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\" }]\n}"
+        }
       }
     },
     {
-      "name": "Quote com celular - conhecido, preco da pessoa, sem nome",
-      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
-        "pm.test(\"200\", () => pm.response.to.have.status(200));",
-        "const q = pm.response.json().quote;",
-        "pm.test(\"cadastro.conhecido e booleano\", () => pm.expect(q.cadastro.conhecido).to.be.a('boolean'));",
-        "pm.test(\"faltam e lista\", () => pm.expect(q.cadastro.faltam).to.be.an('array'));",
-        "pm.test(\"motivo escondido com celular\", () => pm.expect(q.discountReason).to.eql(null));",
-        "pm.test(\"nenhum nome na cotacao\", () => pm.expect(pm.response.text()).to.not.match(/nome|name/));"
-      ] } }],
+      "name": "Quote com celular SEM token - cotacao cega (site antigo)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "const q = pm.response.json().quote;",
+              "pm.test(\"celular ignorado: cadastro null\", () => pm.expect(q.cadastro).to.eql(null));"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }, { "key": "Content-Type", "value": "application/json" }],
-        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "quote"] },
-        "body": { "mode": "raw", "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{ \"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\" }],\n  \"phone\": \"{{phone}}\"\n}" }
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "quote"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{ \"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\" }],\n  \"phone\": \"{{phone}}\"\n}"
+        },
+        "description": "Revisao de 24/11: sem token o celular nao conta. Antes bastava o celular para ver o desconto de outra pessoa."
+      }
+    },
+    {
+      "name": "Quote com celular e token invalido - 401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"401\", () => pm.response.to.have.status(401));",
+              "pm.test(\"code\", () => pm.expect(pm.response.json().code).to.eql('TOKEN_INVALIDO'));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "quote"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{ \"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\" }],\n  \"phone\": \"{{phone}}\",\n  \"token\": \"x.y.z\"\n}"
+        }
       }
     },
     {
       "name": "Verify send - codigo vai pelo WhatsApp (so o celular do Andre)",
-      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
-        "pm.test(\"200\", () => pm.response.to.have.status(200));"
-      ] } }],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }, { "key": "Content-Type", "value": "application/json" }],
-        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/verify/send", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "verify", "send"] },
-        "body": { "mode": "raw", "raw": "{ \"phone\": \"{{phone}}\" }" }
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/verify/send",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "verify",
+            "send"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"phone\": \"{{phone}}\" }"
+        }
       }
     },
     {
       "name": "Verify confirm - token + paciente (so depois do codigo)",
-      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
-        "pm.test(\"200\", () => pm.response.to.have.status(200));",
-        "const r = pm.response.json();",
-        "pm.test(\"token\", () => pm.expect(r.token).to.be.a('string'));",
-        "pm.test(\"paciente vem (objeto ou null)\", () => pm.expect(r).to.have.property('paciente'));",
-        "if (r.paciente) pm.test(\"so primeiro nome\", () => pm.expect(r.paciente.nome).to.not.match(/\\s/));",
-        "pm.collectionVariables.set(\"token\", r.token);"
-      ] } }],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "const r = pm.response.json();",
+              "pm.test(\"token\", () => pm.expect(r.token).to.be.a('string'));",
+              "pm.test(\"paciente vem (objeto ou null)\", () => pm.expect(r).to.have.property('paciente'));",
+              "if (r.paciente) pm.test(\"so primeiro nome\", () => pm.expect(r.paciente.nome).to.not.match(/\\s/));",
+              "pm.collectionVariables.set(\"token\", r.token);"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }, { "key": "Content-Type", "value": "application/json" }],
-        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/verify/confirm", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "verify", "confirm"] },
-        "body": { "mode": "raw", "raw": "{ \"phone\": \"{{phone}}\", \"code\": \"{{code}}\" }" }
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/verify/confirm",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "verify",
+            "confirm"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"phone\": \"{{phone}}\", \"code\": \"{{code}}\" }"
+        }
+      }
+    },
+    {
+      "name": "Quote com celular e token - conhecido, preco da pessoa com motivo, sem nome",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "const q = pm.response.json().quote;",
+              "pm.test(\"cadastro.conhecido e booleano\", () => pm.expect(q.cadastro.conhecido).to.be.a('boolean'));",
+              "pm.test(\"faltam e lista\", () => pm.expect(q.cadastro.faltam).to.be.an('array'));",
+              "pm.test(\"nenhum nome na cotacao\", () => pm.expect(pm.response.text()).to.not.match(/nome|name/));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/quote",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "quote"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"serviceIds\": [\"{{serviceId}}\"],\n  \"serviceAreaPairs\": [{ \"serviceId\": \"{{serviceId}}\", \"areaId\": \"{{areaId}}\" }],\n  \"phone\": \"{{phone}}\",\n  \"token\": \"{{token}}\"\n}"
+        },
+        "description": "Precisa do token de /verify/confirm (24/11). Com ele o motivo do desconto pode vir: quem le ja provou ser o dono do numero."
       }
     },
     {
       "name": "Cadastro sem token - 401",
-      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
-        "pm.test(\"401\", () => pm.response.to.have.status(401));"
-      ] } }],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"401\", () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }, { "key": "Content-Type", "value": "application/json" }],
-        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/cadastro", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "cadastro"] },
-        "body": { "mode": "raw", "raw": "{ \"phone\": \"{{phone}}\", \"fullName\": \"Teste\" }" }
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/cadastro",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "cadastro"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"phone\": \"{{phone}}\", \"fullName\": \"Teste\" }"
+        }
       }
     },
     {
       "name": "Cadastro so com phone e token - consulta sem gravar",
-      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
-        "pm.test(\"200\", () => pm.response.to.have.status(200));",
-        "pm.test(\"paciente presente\", () => pm.expect(pm.response.json()).to.have.property('paciente'));",
-        "pm.test(\"sem dado sensivel\", () => pm.expect(pm.response.text()).to.not.match(/cpf|email|birth/));"
-      ] } }],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "pm.test(\"paciente presente\", () => pm.expect(pm.response.json()).to.have.property('paciente'));",
+              "pm.test(\"sem dado sensivel\", () => pm.expect(pm.response.text()).to.not.match(/cpf|email|birth/));"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }, { "key": "Content-Type", "value": "application/json" }],
-        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/cadastro", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "cadastro"] },
-        "body": { "mode": "raw", "raw": "{ \"phone\": \"{{phone}}\", \"token\": \"{{token}}\" }" }
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/cadastro",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "cadastro"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"phone\": \"{{phone}}\", \"token\": \"{{token}}\" }"
+        }
       }
     },
     {
       "name": "Cadastro faltando campo - 400 CADASTRO_INCOMPLETO",
-      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
-        "pm.test(\"400\", () => pm.response.to.have.status(400));",
-        "pm.test(\"code\", () => pm.expect(pm.response.json().code).to.eql('CADASTRO_INCOMPLETO'));"
-      ] } }],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"400\", () => pm.response.to.have.status(400));",
+              "pm.test(\"code\", () => pm.expect(pm.response.json().code).to.eql('CADASTRO_INCOMPLETO'));"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }, { "key": "Content-Type", "value": "application/json" }],
-        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/cadastro", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "cadastro"] },
-        "body": { "mode": "raw", "raw": "{ \"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"fullName\": \"Pessoa Nova\", \"cpf\": \"529.982.247-25\" }" },
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/cadastro",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "cadastro"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"fullName\": \"Pessoa Nova\", \"cpf\": \"529.982.247-25\" }"
+        },
         "description": "Vale para celular sem ficha (ou ficha sem nascimento e e-mail)."
       }
     },
     {
       "name": "Cadastro completo - cria ou completa a ficha sem agendamento",
-      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
-        "pm.test(\"200\", () => pm.response.to.have.status(200));",
-        "const p = pm.response.json().paciente;",
-        "pm.test(\"primeiro nome e faltam vazio\", () => { pm.expect(p.nome).to.be.a('string'); pm.expect(p.faltam).to.eql([]); });"
-      ] } }],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200\", () => pm.response.to.have.status(200));",
+              "const p = pm.response.json().paciente;",
+              "pm.test(\"primeiro nome e faltam vazio\", () => { pm.expect(p.nome).to.be.a('string'); pm.expect(p.faltam).to.eql([]); });"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "x-api-key", "value": "{{BOOKING_API_KEY}}" }, { "key": "Content-Type", "value": "application/json" }],
-        "url": { "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/cadastro", "host": ["{{BASE_URL}}"], "path": ["{{ENVIRONMENT}}", "public", "clinics", "{{clinicId}}", "cadastro"] },
-        "body": { "mode": "raw", "raw": "{ \"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"fullName\": \"Pessoa Nova\", \"cpf\": \"529.982.247-25\", \"birthDate\": \"1990-10-31\", \"email\": \"pessoa@exemplo.com\" }" },
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{BOOKING_API_KEY}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{BASE_URL}}/{{ENVIRONMENT}}/public/clinics/{{clinicId}}/cadastro",
+          "host": [
+            "{{BASE_URL}}"
+          ],
+          "path": [
+            "{{ENVIRONMENT}}",
+            "public",
+            "clinics",
+            "{{clinicId}}",
+            "cadastro"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{ \"phone\": \"{{phone}}\", \"token\": \"{{token}}\", \"fullName\": \"Pessoa Nova\", \"cpf\": \"529.982.247-25\", \"birthDate\": \"1990-10-31\", \"email\": \"pessoa@exemplo.com\" }"
+        },
         "description": "Repetir a chamada nao muda nada (COALESCE). Com CPF de outro paciente: 409 CPF_EM_USO."
       }
     }

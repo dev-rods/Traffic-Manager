@@ -40,11 +40,13 @@ export const bookingService = {
       })
       .then((r) => ({ days: r.data.days })),
 
-  // Total, desconto e valor final — com o telefone, também primeira sessão e
-  // desconto personalizado. POST para o telefone não ir na URL.
-  quote: (clinicId: string, cart: CartPayload, phone?: string) =>
+  // Total, desconto e valor final. Com celular E token de sessão, também
+  // primeira sessão e desconto personalizado: o preço da pessoa só sai depois
+  // do código (PRD 061), senão qualquer um veria o desconto de outra pelo
+  // número. POST para o telefone não ir na URL.
+  quote: (clinicId: string, cart: CartPayload, phone?: string, token?: string) =>
     api
-      .post<{ quote: Quote }>(`/public/clinics/${clinicId}/quote`, { ...cart, phone })
+      .post<{ quote: Quote }>(`/public/clinics/${clinicId}/quote`, { ...cart, phone, token })
       .then((r) => r.data.quote),
 
   sendOtp: (clinicId: string, phone: string) =>
