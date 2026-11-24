@@ -760,16 +760,24 @@ def _sem_pdf(row: Dict, provider: SignatureProvider) -> bool:
 
 def _arquiva(db, provider: SignatureProvider, row: Dict) -> Dict:
     """Baixa o PDF assinado (e o zip, se houver), guarda no S3 e grava as
-    chaves. Idempotente. Se o PDF ainda não existir, loga e devolve a linha sem
-    PDF: o próximo `document_closed` ou polling tenta de novo."""
+    chaves. Idempotente. Qualquer falha (PDF ainda inexistente, S3, banco) é
+    logada e devolve a linha sem PDF, nunca propaga: o SIGNED já gravado não
+    fica preso atrás do arquivamento, e o próximo `document_closed` ou polling
+    tenta de novo."""
     if not _sem_pdf(row, provider):
         return row
-    envelope_id, document_id = row["provider_envelope_id"], row["provider_document_id"]
     try:
-        pdf = provider.baixa_pdf(envelope_id, document_id)
+        return _baixa_e_grava(db, provider, row)
     except ErroDoProvedor as e:
         logger.info("[Consentimento] PDF de {} ainda não disponível: {}".format(row["id"], e))
-        return row
+    except Exception:
+        logger.error("[Consentimento] falha ao arquivar PDF de {}".format(row["id"]), exc_info=True)
+    return row
+
+
+def _baixa_e_grava(db, provider: SignatureProvider, row: Dict) -> Dict:
+    envelope_id, document_id = row["provider_envelope_id"], row["provider_document_id"]
+    pdf = provider.baixa_pdf(envelope_id, document_id)
     if not pdf:
         logger.warning("[Consentimento] PDF de {} veio vazio".format(row["id"]))
         return row

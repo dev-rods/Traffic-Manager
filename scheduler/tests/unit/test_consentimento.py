@@ -589,6 +589,17 @@ class TestStatus(Base):
         self.assertEqual(r["status"], ASSINADO)
         self.assertTrue(self.db.termos[c["id"]]["pdf_s3_key"].endswith("tcle-assinado.pdf"))
 
+    def test_s3_falhando_nao_segura_o_assinado(self):
+        c = self.inicia()
+        self.prov.status_remoto["env-1"] = ASSINADO
+        with mock.patch("src.services.documentos_s3.grava", side_effect=RuntimeError("sem bucket")):
+            with self.assertLogs("src.services.consentimento", level="ERROR"):
+                r = consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])["consent"]
+            self.assertEqual(r["status"], ASSINADO)
+            r = consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])["consent"]
+            self.assertEqual(r["status"], ASSINADO)
+        self.assertIsNone(self.db.termos[c["id"]]["pdf_s3_key"])
+
     def test_cancelado_e_expirado_sao_gravados(self):
         c = self.inicia()
         self.prov.status_remoto["env-1"] = EXPIRADO
