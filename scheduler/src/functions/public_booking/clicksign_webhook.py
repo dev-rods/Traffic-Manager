@@ -10,7 +10,9 @@ qualquer um marcar termo como assinado.
 O HMAC é sobre o corpo como chegou, nunca sobre o JSON re-serializado.
 
 Responde 200 assim que o evento é processado e gravado. Erro de
-processamento devolve 500 para a ClickSign reenviar.
+processamento devolve 500 para a ClickSign reenviar; também o
+`document_closed` cujo PDF ainda não baixou (PRD 062: o termo vira SIGNED no
+`sign`, e o PDF é arquivado depois).
 """
 import base64
 import hashlib
@@ -71,6 +73,10 @@ def handler(event, context):
         resultado = consentimento.aplica_evento(PostgresService(), provedor_ativo(), evento, event_id)
         logger.info("[ClicksignWebhook] {}: {}".format(event_id, resultado))
         return http_response(200, {"status": "SUCCESS", "result": resultado})
+    except consentimento.PdfPendente as e:
+        # O termo já está SIGNED (PRD 062); falta só o PDF. 500 = a ClickSign reenvia.
+        logger.warning("[ClicksignWebhook] {}: {}".format(event_id, e))
+        return http_response(500, {"status": "ERROR", "message": "PDF ainda indisponível"})
     except Exception as e:
         logger.error("[ClicksignWebhook] falha em {}: {}".format(event_id, e), exc_info=True)
         return http_response(500, {"status": "ERROR", "message": "Erro interno"})

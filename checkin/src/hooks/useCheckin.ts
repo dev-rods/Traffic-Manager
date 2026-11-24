@@ -123,8 +123,9 @@ export function useConsentStatus(
   clinicId: string,
   session: Session | null,
   consentId: string,
-  // Depois do `signed` do widget, o backend ainda espera o PDF da ClickSign
-  // (uns 20 a 30 s): consulta mais rápido para a tela virar logo.
+  // Depois do `signed` do widget, o webhook `sign` da ClickSign marca o termo
+  // em ~1 s (o PDF é arquivado depois, PRD 062): consulta mais rápido para a
+  // tela virar logo.
   rapido = false
 ) {
   return useQuery({

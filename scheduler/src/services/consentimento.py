@@ -22,6 +22,11 @@ Regras:
   (`guarda_respostas`, status FILLING) e vão para o MESMO documento do termo,
   pelo modelo compilado. `inicia` exige a ficha completa. Mudar uma resposta
   depois de abrir o envelope invalida o envelope.
+- Assinado e arquivado são dois passos (PRD 062): o termo vira SIGNED assim
+  que o provedor confirma a assinatura (webhook `sign`, ou o polling ver o
+  envelope fechado), e o iPad segue para o pagamento. O PDF chega ao S3
+  depois (`_arquiva`), no `document_closed`; sem PDF, esse evento volta 500
+  e a ClickSign reenvia.
 - O provedor nunca recebe `db`; aqui nunca se fala HTTP.
 """
 import json
@@ -59,8 +64,15 @@ NOME_DO_ZIP = "tcle-auditoria.zip"
 
 # Nomes de evento da ClickSign que fecham ou encerram o envelope. O payload do
 # webhook v3 varia de versão para versão; `_ids_do_evento` lê o que vier.
+# `sign` é a assinatura da signatária: o envelope tem uma só e `auto_close`,
+# então ela já É o termo assinado (PRD 062). Chega ~0,3 s depois do toque em
+# "Assinar"; o `auto_close` vem ~10 s depois e o PDF, mais ~5 a 20 s.
+EVENTOS_ASSINADO = ("sign", "signed", "signer.signed")
 EVENTOS_FECHADO = ("auto_close", "close", "closed", "document_closed", "envelope_closed",
                    "envelope.closed", "document.closed")
+# Só depois destes o PDF assinado existe. Sem ele no S3, o webhook responde 500
+# e a ClickSign reenvia: é a garantia de que todo SIGNED ganha o PDF.
+EVENTOS_PDF_PRONTO = ("document_closed", "document.closed")
 EVENTOS_CANCELADO = ("cancel", "canceled", "cancelled", "refusal", "refused", "envelope.canceled",
                      "envelope.cancelled", "document.canceled")
 EVENTOS_EXPIRADO = ("deadline", "expired", "envelope.deadline", "envelope.expired")
@@ -72,6 +84,11 @@ class ConsentimentoInvalido(Exception):
 
 class NaoEncontrado(Exception):
     pass
+
+
+class PdfPendente(Exception):
+    """O provedor disse que o documento fechou, mas o PDF ainda não baixou.
+    No webhook vira 500, para a ClickSign reenviar."""
 
 
 def _agora(tz=None) -> datetime:
@@ -718,20 +735,40 @@ def _por_id(db, consent_id: str) -> Optional[Dict]:
     return rows[0] if rows else None
 
 
-def _fecha(db, provider: SignatureProvider, row: Dict) -> Dict:
-    """Baixa o PDF assinado, guarda no S3 e marca SIGNED. Idempotente. Se o
-    download falhar, loga e NÃO marca: o próximo polling ou webhook tenta."""
-    if row.get("status") != ASSINANDO:
-        return row
-    if row.get("provider") != provider.nome:
-        logger.error("[Consentimento] termo {} é de {}, provedor ativo é {}".format(
-            row["id"], row.get("provider"), provider.nome))
+def _marca_assinado(db, row: Dict) -> Dict:
+    """SIGNING -> SIGNED, sem esperar o PDF (PRD 062). Idempotente: quem chega
+    depois (webhook e polling ao mesmo tempo) recebe a linha como está."""
+    atualizado = db.execute_write_returning(
+        """
+        UPDATE scheduler.patient_consents
+           SET status = 'SIGNED', signed_at = COALESCE(signed_at, NOW()), updated_at = NOW()
+         WHERE id = %s::uuid AND status = 'SIGNING'
+        RETURNING *
+        """,
+        (str(row["id"]),),
+    )
+    if atualizado:
+        logger.info("[Consentimento] assinado {} {}".format(row["id"], row["clinic_id"]))
+    return atualizado or _por_id(db, str(row["id"])) or dict(row, status=ASSINADO)
+
+
+def _sem_pdf(row: Dict, provider: SignatureProvider) -> bool:
+    """SIGNED pelo provedor ativo e ainda sem o PDF no nosso S3."""
+    return (row.get("status") == ASSINADO and not row.get("pdf_s3_key")
+            and row.get("provider") == provider.nome and bool(row.get("provider_envelope_id")))
+
+
+def _arquiva(db, provider: SignatureProvider, row: Dict) -> Dict:
+    """Baixa o PDF assinado (e o zip, se houver), guarda no S3 e grava as
+    chaves. Idempotente. Se o PDF ainda não existir, loga e devolve a linha sem
+    PDF: o próximo `document_closed` ou polling tenta de novo."""
+    if not _sem_pdf(row, provider):
         return row
     envelope_id, document_id = row["provider_envelope_id"], row["provider_document_id"]
     try:
         pdf = provider.baixa_pdf(envelope_id, document_id)
     except ErroDoProvedor as e:
-        logger.warning("[Consentimento] PDF de {} ainda não disponível: {}".format(row["id"], e))
+        logger.info("[Consentimento] PDF de {} ainda não disponível: {}".format(row["id"], e))
         return row
     if not pdf:
         logger.warning("[Consentimento] PDF de {} veio vazio".format(row["id"]))
@@ -750,19 +787,33 @@ def _fecha(db, provider: SignatureProvider, row: Dict) -> Dict:
     atualizado = db.execute_write_returning(
         """
         UPDATE scheduler.patient_consents
-           SET status = 'SIGNED', signed_at = COALESCE(signed_at, NOW()), pdf_s3_key = %s, pdf_sha256 = %s,
-               audit_s3_key = %s, updated_at = NOW()
-         WHERE id = %s::uuid AND status = 'SIGNING'
+           SET pdf_s3_key = %s, pdf_sha256 = %s, audit_s3_key = %s, updated_at = NOW()
+         WHERE id = %s::uuid AND status = 'SIGNED' AND pdf_s3_key IS NULL
         RETURNING *
         """,
         (chave_pdf, sha, chave_zip, str(row["id"])),
     )
-    logger.info("[Consentimento] assinado {} {} sha256={}".format(row["id"], row["clinic_id"], sha[:12]))
-    return atualizado or _por_id(db, str(row["id"])) or dict(row, status=ASSINADO)
+    logger.info("[Consentimento] PDF arquivado {} {} sha256={}".format(row["id"], row["clinic_id"], sha[:12]))
+    return atualizado or _por_id(db, str(row["id"])) or row
+
+
+def _fecha(db, provider: SignatureProvider, row: Dict) -> Dict:
+    """O provedor confirmou a assinatura: marca SIGNED na hora e tenta
+    arquivar o PDF, sem que a falha do PDF segure a paciente no iPad."""
+    if row.get("status") != ASSINANDO:
+        return row
+    if row.get("provider") != provider.nome:
+        logger.error("[Consentimento] termo {} é de {}, provedor ativo é {}".format(
+            row["id"], row.get("provider"), provider.nome))
+        return row
+    return _arquiva(db, provider, _marca_assinado(db, row))
 
 
 def _sincroniza(db, provider: SignatureProvider, row: Dict) -> Dict:
-    """SIGNING pergunta ao provedor e aplica o que ele disser."""
+    """SIGNING pergunta ao provedor e aplica o que ele disser; SIGNED sem PDF
+    tenta arquivar."""
+    if _sem_pdf(row, provider):
+        return _arquiva(db, provider, row)
     if row["status"] != ASSINANDO or row.get("provider") != provider.nome or not row.get("provider_envelope_id"):
         return row
     try:
@@ -886,7 +937,7 @@ def _payload_enxuto(evento: Dict) -> Dict:
 
 
 def _processa_evento(db, provider: SignatureProvider, nome: str, ids: Dict[str, List[str]]) -> str:
-    if nome in EVENTOS_FECHADO:
+    if nome in EVENTOS_ASSINADO or nome in EVENTOS_FECHADO:
         destino = ASSINADO
     elif nome in EVENTOS_CANCELADO:
         destino = CANCELADO
@@ -897,11 +948,17 @@ def _processa_evento(db, provider: SignatureProvider, nome: str, ids: Dict[str, 
     row = _por_provedor(db, provider.nome, ids)
     if not row:
         return "ignorado: termo desconhecido"
+    if destino == ASSINADO and row["status"] in (ASSINANDO, ASSINADO):
+        novo = _fecha(db, provider, row) if row["status"] == ASSINANDO else _arquiva(db, provider, row)
+        if novo.get("status") != ASSINADO:
+            return "ignorado: {}".format(novo.get("status"))
+        if novo.get("pdf_s3_key"):
+            return ASSINADO
+        if nome in EVENTOS_PDF_PRONTO:
+            raise PdfPendente("PDF de {} indisponível após {}".format(row["id"], nome))
+        return "{}: PDF pendente".format(ASSINADO)
     if row["status"] != ASSINANDO:
         return "ignorado: já {}".format(row["status"])
-    if destino == ASSINADO:
-        novo = _fecha(db, provider, row)
-        return novo["status"] if novo.get("status") == ASSINADO else "pendente: PDF indisponível"
     _marca(db, str(row["id"]), destino)
     logger.info("[Consentimento] webhook {} -> {} termo {}".format(nome, destino, row["id"]))
     return destino

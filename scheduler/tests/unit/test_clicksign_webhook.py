@@ -98,6 +98,13 @@ class TestAssinatura(Base):
         r = clicksign_webhook.handler(evento(assinatura=hmac_de(CORPO)), None)
         self.assertEqual(r["statusCode"], 500)
 
+    def test_pdf_pendente_e_500_para_reenvio(self):
+        # PRD 062: termo já SIGNED, falta o PDF; a ClickSign reenvia o evento.
+        from src.services import consentimento
+        self.aplica_mock.side_effect = consentimento.PdfPendente("sem PDF")
+        r = clicksign_webhook.handler(evento(assinatura=hmac_de(CORPO)), None)
+        self.assertEqual(r["statusCode"], 500)
+
     def test_repetido_responde_200(self):
         self.aplica_mock.return_value = "repetido"
         r = clicksign_webhook.handler(evento(assinatura=hmac_de(CORPO)), None)
