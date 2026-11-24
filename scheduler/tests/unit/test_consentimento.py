@@ -259,11 +259,18 @@ class Db:
             self.termos[cid] = row
             return dict(row)
         if "SET status = 'SIGNED'" in sql:
-            pdf, sha, zipk, cid = params
+            (cid,) = params
             t = self.termos[cid]
             if t["status"] != "SIGNING":
                 return None
-            t.update(status="SIGNED", signed_at=AGORA, pdf_s3_key=pdf, pdf_sha256=sha, audit_s3_key=zipk)
+            t.update(status="SIGNED", signed_at=AGORA)
+            return dict(t)
+        if "SET pdf_s3_key = %s" in sql:
+            pdf, sha, zipk, cid = params
+            t = self.termos[cid]
+            if t["status"] != "SIGNED" or t.get("pdf_s3_key"):
+                return None
+            t.update(pdf_s3_key=pdf, pdf_sha256=sha, audit_s3_key=zipk)
             return dict(t)
         if "SET consent_link_sent_at = NOW()" in sql:
             appt, clinic = params
@@ -562,13 +569,36 @@ class TestStatus(Base):
         self.assertTrue(t["audit_s3_key"].endswith("tcle-auditoria.zip"))
         self.assertEqual(self.gravados[t["pdf_s3_key"]], b"%PDF-teste")
 
-    def test_download_falho_nao_marca(self):
+    def test_pdf_ainda_indisponivel_marca_assinado_sem_pdf(self):
+        # PRD 062: a paciente segue para o pagamento sem esperar o PDF.
         c = self.inicia()
         self.prov.status_remoto["env-1"] = ASSINADO
         self.prov.falha_download = True
         r = consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])["consent"]
-        self.assertEqual(r["status"], ASSINANDO)
+        self.assertEqual(r["status"], ASSINADO)
         self.assertEqual(self.gravados, {})
+        self.assertIsNone(self.db.termos[c["id"]]["pdf_s3_key"])
+
+    def test_polling_de_assinado_sem_pdf_arquiva_quando_o_pdf_sai(self):
+        c = self.inicia()
+        self.prov.status_remoto["env-1"] = ASSINADO
+        self.prov.falha_download = True
+        consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])
+        self.prov.falha_download = False
+        r = consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])["consent"]
+        self.assertEqual(r["status"], ASSINADO)
+        self.assertTrue(self.db.termos[c["id"]]["pdf_s3_key"].endswith("tcle-assinado.pdf"))
+
+    def test_s3_falhando_nao_segura_o_assinado(self):
+        c = self.inicia()
+        self.prov.status_remoto["env-1"] = ASSINADO
+        with mock.patch("src.services.documentos_s3.grava", side_effect=RuntimeError("sem bucket")):
+            with self.assertLogs("src.services.consentimento", level="ERROR"):
+                r = consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])["consent"]
+            self.assertEqual(r["status"], ASSINADO)
+            r = consentimento.status(self.db, self.prov, CLINIC, FONE, c["id"])["consent"]
+            self.assertEqual(r["status"], ASSINADO)
+        self.assertIsNone(self.db.termos[c["id"]]["pdf_s3_key"])
 
     def test_cancelado_e_expirado_sao_gravados(self):
         c = self.inicia()
@@ -624,15 +654,56 @@ class TestWebhook(Base):
         self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("deadline"), "e2"),
                          "ignorado: já CANCELLED")
 
-    def test_pdf_indisponivel_nao_grava_como_assinado(self):
-        self.inicia()
+    def test_sign_marca_assinado_na_hora_e_o_document_closed_arquiva(self):
+        # A sequência real de prod (18/11/2026): sign -> auto_close (~10 s,
+        # PDF ainda não existe) -> document_closed (PDF pronto).
+        c = self.inicia()
         self.prov.falha_download = True
-        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("close"), "e1"),
-                         "pendente: PDF indisponível")
+        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("sign"), "e1"),
+                         "SIGNED: PDF pendente")
+        t = self.db.termos[c["id"]]
+        self.assertEqual(t["status"], ASSINADO)
+        self.assertEqual(t["signed_at"], AGORA)
+        self.assertIsNone(t["pdf_s3_key"])
+        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("auto_close"), "e2"),
+                         "SIGNED: PDF pendente")
+        self.prov.falha_download = False
+        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("document_closed"), "e3"),
+                         ASSINADO)
+        self.assertEqual(self.gravados[self.db.termos[c["id"]]["pdf_s3_key"]], b"%PDF-teste")
+        self.assertEqual(len(self.db.eventos), 3)
+
+    def test_document_closed_sem_pdf_falha_para_a_clicksign_reenviar(self):
+        c = self.inicia()
+        self.prov.falha_download = True
+        consentimento.aplica_evento(self.db, self.prov, self.evento("sign"), "e1")
+        with self.assertRaises(consentimento.PdfPendente):
+            consentimento.aplica_evento(self.db, self.prov, self.evento("document_closed"), "e2")
+        # Não gravado: o reenvio não pode parecer repetição.
+        self.assertNotIn("e2", self.db.eventos)
+        self.assertEqual(self.db.termos[c["id"]]["status"], ASSINADO)
+        self.prov.falha_download = False
+        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("document_closed"), "e2"),
+                         ASSINADO)
+        self.assertTrue(self.db.termos[c["id"]]["pdf_s3_key"])
+
+    def test_assinado_com_pdf_nao_baixa_de_novo(self):
+        c = self.inicia()
+        consentimento.aplica_evento(self.db, self.prov, self.evento("document_closed"), "e1")
+        self.prov.pdf = b"%PDF-outro"
+        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("close"), "e2"), ASSINADO)
+        self.assertEqual(self.gravados[self.db.termos[c["id"]]["pdf_s3_key"]], b"%PDF-teste")
+
+    def test_sign_depois_de_cancelado_nao_ressuscita(self):
+        c = self.inicia()
+        consentimento.aplica_evento(self.db, self.prov, self.evento("cancel"), "e1")
+        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("sign"), "e2"),
+                         "ignorado: já CANCELLED")
+        self.assertEqual(self.db.termos[c["id"]]["status"], CANCELADO)
 
     def test_evento_desconhecido_e_ignorado(self):
-        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("sign"), "e1"),
-                         "ignorado: sign")
+        self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("signature_started"), "e1"),
+                         "ignorado: signature_started")
         self.assertEqual(consentimento.aplica_evento(self.db, self.prov, self.evento("close", doc="x"), "e2"),
                          "ignorado: termo desconhecido")
 

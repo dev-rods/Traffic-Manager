@@ -302,7 +302,7 @@
                 }
               ]
             },
-            "description": "SIGNING enquanto assina; SIGNED fecha (baixa o PDF para o S3); CANCELLED/EXPIRED. 404 se o termo não é deste número."
+            "description": "SIGNING enquanto assina; SIGNED assim que a assinatura é confirmada (o PDF chega ao S3 depois, PRD 062); CANCELLED/EXPIRED. 404 se o termo não é deste número."
           },
           "event": [
             {
