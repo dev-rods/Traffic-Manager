@@ -268,6 +268,6 @@ Regras de borda:
 - [x] Roteiro A em dev em 24/11 (site local com proxy para dev): fluxo inteiro ok, um código,
       cadastro completado e agendamento com 26%. Expôs a brecha da cotação (decisão 6) e o
       código duplo do StrictMode em dev.
-- [ ] Revisão de 24/11 (decisão 6): backend e site no mesmo PR #252; deploy dev e prod pendentes
-      de registro abaixo.
+- [x] Revisão de 24/11 (decisão 6): backend e site no mesmo PR #252 (commit a1c2dee). Dev layer 217,
+      smoke de API 6/6. Prod pendente de autorização.
 - [x] Registrado em `TASKS_LOG.md`
