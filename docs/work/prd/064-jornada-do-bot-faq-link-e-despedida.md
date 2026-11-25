@@ -460,6 +460,11 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
 - [x] Frente 5 (retomada responde primeiro a última pergunta) EM PROD em 25/11/2026 (PR #265,
       scheduler layer 177): `pergunta_em_aberto.py` extrai a pergunta dos eventos, bloco no turno
       e no fim do system, trava com uma reescrita, limpeza da fala de bastidor.
-- [ ] Frente 6 (prompt do banco por script: virilha em três opções com valor, P6; aviso de espera
-      na Nobre, P5)
+- [x] Frente 6 EM PROD em 25/11/2026 (PR #268, scheduler layer 178): prompt das duas clínicas
+      reescrito por `corrige_prompt_064.py` (DÚVIDA com o FAQ como fonte; virilha em três opções
+      com valor via list_areas, FAQ só se pedir a explicação; 16.190 -> 16.481 chars), medido antes
+      com o eval dos 4 casos (4/4, virilha com os três valores); `aviso_de_espera.py` manda o aviso
+      caloroso quando só a política LEADS_ONLY cala o bot (uma vez por 24 h, envio de sistema que a
+      retomada ignora). PRD 064 CONCLUÍDO. Acompanhar `[AvisoDeEspera]` e `[Caminho]` na Nobre.
+- [x] Registrado em `TASKS_LOG.md`
 - [x] Registrado em `TASKS_LOG.md`
