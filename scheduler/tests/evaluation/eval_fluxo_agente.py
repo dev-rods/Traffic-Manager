@@ -362,6 +362,10 @@ def avalia_turno(texto, tools_da_rodada, tools_da_conversa, entregue_antes, entr
     # janela mais estrita que a de producao contava violacao onde o agente nao
     # bloquearia - a regua tem que ser a mesma coisa que o codigo faz.
     respaldo = [FIXTURES.get(n, {}) for n in tools_da_conversa[-RESPALDO_GUARDADO:]]
+    # A data de hoje e respaldo no agente (bloco CALENDARIO); sem isto, "hoje e
+    # 25/11" contava como agenda inventada (eval de 25/11/2026).
+    from src.services.calendario import hoje_brt
+    respaldo.append({"calendario": [hoje_brt().isoformat()]})
     sem_origem = fatos_sem_origem(texto, respaldo)
 
     consultou = [t for t in tools_da_rodada if t != SEM_CONSULTA]
@@ -372,7 +376,10 @@ def avalia_turno(texto, tools_da_rodada, tools_da_conversa, entregue_antes, entr
         "I1_agenda_sem_respaldo": sorted(fatos_de_agenda(sem_origem)),
         "I2_fato_sem_consulta": afirmou_fato and not consultou,
         "I3_bloqueio": virou_handoff and HANDOFF_PEDIDO not in tools_da_rodada,
-        "I4_fuga_pela_saida": SEM_CONSULTA in tools_da_rodada and afirmou_fato,
+        # Fuga e usar a saida NO LUGAR da consulta. Com outra tool na mesma
+        # rodada (list_areas e o preco), o fato tem origem; contar isso como
+        # fuga media a co-ocorrencia, nao o defeito (eval de 25/11/2026).
+        "I4_fuga_pela_saida": SEM_CONSULTA in tools_da_rodada and afirmou_fato and not consultou,
         # O corpus e de adultos: qualquer True aqui e uma paciente ouvindo que
         # precisa de responsavel legal sem ninguem ter conferido a idade dela.
         "I5_restricao_de_menor": restricao_sem_respaldo(texto, respaldo),
