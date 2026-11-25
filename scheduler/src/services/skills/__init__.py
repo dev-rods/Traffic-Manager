@@ -138,18 +138,7 @@ def despacha(estado: Optional[str]) -> Skill:
 # site pede cadastro, e o bot ja faz isso melhor na conversa.
 
 def bloco_do_site(link):
-    """O bloco "PRIMEIRA TENTATIVA E O SITE", ou vazio sem link."""
-    if not link:
-        return ""
-    return (
-        "\n═══ PRIMEIRA TENTATIVA É O SITE ═══\n"
-        f"Quem já é paciente agenda pelo site: {link}\n"
-        "Lá ela vê os horários, escolhe e confirma com o mesmo número de WhatsApp.\n"
-        "1. Pedido de agendar, pergunta sobre o link, sobre \"onde marco\" ou sobre o\n"
-        "   link que ela recebeu: responda em uma frase que é por lá, mande o link e\n"
-        "   se coloque à disposição para dúvidas. NÃO pergunte as áreas, NÃO ofereça\n"
-        "   datas, NÃO chame check_availability.\n"
-        "2. Só se ela disser que não consegue, que o link não abre, ou que prefere\n"
-        "   resolver por aqui, conduza o agendamento na conversa, como sempre.\n"
-        "3. Dúvidas (preço, preparo, endereço, áreas) continuam respondidas aqui.\n"
-    )
+    """Compatibilidade: o bloco do site agora e decidido por turno em
+    `caminho_de_agendamento` (PRD 064). Devolve o bloco de LINK_PRIMEIRO."""
+    from src.services import caminho_de_agendamento as _cam
+    return _cam.bloco(_cam.LINK_PRIMEIRO, link)

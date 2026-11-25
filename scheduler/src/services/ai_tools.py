@@ -705,31 +705,20 @@ class ToolExecutor:
         return self.availability_engine
 
     def _recusa_sem_o_link(self, nome_da_tool, phone, ctx):
-        """Em clinica com site, quem JA E PACIENTE agenda pelo link primeiro
-        (PRD 046). check_availability e book_appointment so passam depois de
-        o BOT ter mandado o link nesta conversa (autoatendimento.link_ja_foi).
+        """Ate 25/11/2026 esta tool RECUSAVA check_availability e book_appointment
+        a quem ja e paciente ate o bot mandar o link (PRD 046). A recusa chegava
+        tarde: a pessoa ja tinha dito areas, dia e hora, e ouvia "faca pelo
+        site" no lugar da confirmacao (PRD 064, caso 2).
 
-        Lead nova e clinica sem dominio seguem como sempre. A tool explica e o
-        modelo refaz - o mesmo desenho de full_name_obrigatorio.
+        Quem decide agora e `caminho_de_agendamento.decide`, antes do modelo,
+        e o bloco do prompt conduz. Aqui fica so a assercao: se o caminho era
+        LINK_PRIMEIRO e o modelo chamou a tool mesmo assim, e violacao
+        registrada para o eval, nunca recusa a pessoa. Devolve sempre None.
         """
-        link = (ctx or {}).get("link_de_agendamento")
-        paciente = (ctx or {}).get("paciente") or {}
-        if not link or not paciente.get("encontrado"):
-            return None
-        if link_ja_foi((ctx or {}).get("session")):
-            logger.info(f"[Link] {phone}: segunda tentativa - {nome_da_tool} na conversa")
-            return None
-        logger.info(f"[Link] {phone}: {nome_da_tool} recusado, link ainda não foi")
-        return {
-            "error": "primeiro_o_link",
-            "link": link,
-            "o_que_fazer": (
-                "Esta pessoa já é paciente e esta clínica agenda pelo site. Mande o "
-                f"link ({link}) em uma frase e pergunte se ela consegue por lá. Não "
-                "pergunte as áreas nem ofereça datas. Só se ela disser que não "
-                "consegue, chame esta tool de novo."
-            ),
-        }
+        from src.services import caminho_de_agendamento as _cam
+        if (ctx or {}).get("caminho") == _cam.LINK_PRIMEIRO:
+            logger.warning(f"[Caminho] {phone}: VIOLAÇÃO - {nome_da_tool} com caminho=link_primeiro")
+        return None
 
     def _sessao_futura(self, ctx):
         futuro = ((ctx or {}).get("paciente") or {}).get("agendamento_futuro")
