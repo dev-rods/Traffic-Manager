@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MyAppointmentsModal } from './MyAppointmentsModal'
 import { bookingService } from '@/services/booking.service'
 import type { Appointment, BootstrapResponse } from '@/types'
+import { guardaSessaoVerificada, leSessaoVerificada, limpaSessaoVerificada } from '@/utils/sessaoVerificada'
+import { limpaEnviosRecentes } from '@/utils/enviosDeCodigo'
 
 vi.mock('@/services/booking.service')
 
@@ -28,8 +30,10 @@ function renderModal() {
 
 describe('MyAppointmentsModal', () => {
   beforeEach(() => {
+    limpaEnviosRecentes()
+    limpaSessaoVerificada()
     vi.mocked(bookingService.sendOtp).mockResolvedValue({ status: 'SUCCESS' })
-    vi.mocked(bookingService.confirmOtp).mockResolvedValue('tok')
+    vi.mocked(bookingService.confirmOtp).mockResolvedValue({ token: 'tok', paciente: null })
     vi.mocked(bookingService.myAppointments).mockResolvedValue([APPOINTMENT])
   })
 
@@ -88,5 +92,27 @@ describe('MyAppointmentsModal', () => {
       '5511987654321',
       'tok'
     )
+  })
+
+  // PRD 061: quem já confirmou o código nesta aba (no agendamento ou aqui) não
+  // digita outro.
+  it('reaproveita o código confirmado nesta aba e guarda o que confirmar aqui', async () => {
+    guardaSessaoVerificada('5511987654321', 'tok-guardado')
+    vi.mocked(bookingService.sendOtp).mockClear()
+    renderModal()
+    await userEvent.type(screen.getByLabelText(/celular/i), '11987654321')
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+
+    expect(await screen.findByText('Depilação a Laser')).toBeInTheDocument()
+    expect(bookingService.sendOtp).not.toHaveBeenCalled()
+    expect(bookingService.myAppointments).toHaveBeenCalledWith('c1', '5511987654321', 'tok-guardado')
+  })
+
+  it('outro celular não aproveita a sessão guardada; o código novo passa a valer', async () => {
+    guardaSessaoVerificada('5511900000000', 'tok-outro')
+    await verify()
+    expect(await screen.findByText('Depilação a Laser')).toBeInTheDocument()
+    expect(bookingService.sendOtp).toHaveBeenCalled()
+    expect(leSessaoVerificada()).toMatchObject({ phone: '5511987654321', token: 'tok' })
   })
 })

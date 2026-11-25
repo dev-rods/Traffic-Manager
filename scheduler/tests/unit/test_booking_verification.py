@@ -27,12 +27,12 @@ class TestEscopo(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
 
-    def test_sessao_e_o_padrao_e_dura_15_min(self):
+    def test_sessao_e_o_padrao_e_dura_30_min(self):
         agora = int(time.time())
         token = bv._issue_token(CLINIC, FONE)
         clinic, fone, expira, escopo = bv._abre(token)
         self.assertEqual((clinic, fone, escopo), (CLINIC, FONE, bv.SESSAO))
-        self.assertAlmostEqual(expira - agora, 15 * 60, delta=5)
+        self.assertAlmostEqual(expira - agora, 30 * 60, delta=5)
         self.assertTrue(bv.verify_token(CLINIC, FONE, token))
         self.assertFalse(bv.verify_token(CLINIC, FONE, token, scopes=(bv.DOCUMENTOS,)))
         self.assertEqual(bv.escopo_do_token(token), bv.SESSAO)

@@ -166,7 +166,10 @@ def cadastro_para_o_site(paciente: Optional[Dict]) -> Dict:
     servidor não divergirem (PRD 032).
     """
     faltam = [c for c in campos_faltantes(paciente) if c != "name"]
-    return {"completo": not faltam, "faltam": faltam}
+    # `conhecido` (PRD 061): o site escolhe o ramo (codigo na hora x cadastro
+    # primeiro). Revela o mesmo que `faltam` ja revelava: celular sem ficha
+    # falta tudo.
+    return {"conhecido": paciente is not None, "completo": not faltam, "faltam": faltam}
 
 
 def cota(db, clinic_id: str, service_ids: List[str], service_area_pairs: List[Dict],

@@ -11,6 +11,7 @@ continuam intactos, testáveis e importáveis individualmente.
 import logging
 
 from src.functions.public_booking import (
+    cadastro,
     asaas_webhook,
     availability,
     bootstrap,
@@ -38,6 +39,7 @@ ROUTES = {
     ("POST", "public/clinics/{clinicId}/verify/send"): send_otp.handler,
     ("POST", "public/clinics/{clinicId}/verify/confirm"): confirm_otp.handler,
     ("POST", "public/clinics/{clinicId}/quote"): quote.handler,
+    ("POST", "public/clinics/{clinicId}/cadastro"): cadastro.handler,
     ("POST", "public/clinics/{clinicId}/appointments"): create_appointment.handler,
     ("GET", "public/clinics/{clinicId}/my-appointments"): list_appointments.handler,
     ("POST", "public/clinics/{clinicId}/appointments/{appointmentId}/cancel"): cancel_appointment.handler,

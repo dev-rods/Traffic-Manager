@@ -11,24 +11,36 @@ padrões de código idênticos, ver `../frontend/CLAUDE.md`. Diferenças:
 - **Sem autenticação de usuário.** A `x-api-key` (`VITE_BOOKING_API_KEY`) é fixa
   no client e restrita aos endpoints públicos — não é segredo, é só um filtro
   básico contra bots (mesmo padrão do `LEADS_INTAKE_API_KEY` da landing page).
-- **Criar agendamento exige o código do WhatsApp** (PRD 056): depois de
-  "Seus dados" vem a etapa "Confirme seu celular" (`OtpCodeForm`, o mesmo de
-  "Meus agendamentos") e a criação vai com `token`; sem ele a API responde
-  401. O token vale 15 min para o mesmo celular (voltar e confirmar de novo
-  não pede outro código). A confirmação chega pelo WhatsApp (template
+- **A pessoa é identificada antes do preço e das datas** (PRD 061). Etapas:
+  `cart -> areas -> phone -> verify -> (identity | register) -> schedule -> success`.
+  Em `phone` (`PhoneStep`) só se digita o celular: a lateral segue na tabela,
+  porque a cotação só honra o celular junto com o `token` de sessão (senão
+  qualquer um veria o desconto de outra pessoa pelo número). O código vem
+  logo em seguida (`OtpCodeForm`, um envio por celular) e a confirmação
+  devolve `paciente` ({nome, faltam}) ou null: com ficha, o `IdentityConfirm`
+  pergunta "Olá, {nome}, é você?" e pede só o que falta; sem ficha,
+  `CustomerInfoForm` com `semCelular` pede o cadastro completo e
+  `POST /cadastro` cria a ficha ANTES das datas (quem abandona fica
+  cadastrado sem agendamento). Verificada, a cotação roda com celular e token
+  e a lateral mostra o preço da pessoa com o motivo. `schedule` confirma
+  direto com o `token`; 401 (na criação ou na cotação) refaz o código. Nome,
+  CPF, e-mail e preço pessoal nunca saem da API antes do código confirmado.
+- **Criar agendamento exige o código do WhatsApp** (PRD 056): a criação vai
+  com `token`; sem ele a API responde 401. O token vale 30 min para o mesmo
+  celular (PRD 061; eram 15). A confirmação chega pelo WhatsApp (template
   `BOOKED`, o mesmo do bot - ver `_send_confirmation_whatsapp` em
   `scheduler/src/functions/public_booking/create_appointment.py`).
-- **Quem ainda não é paciente completa o cadastro** (PRD 032): a cotação com
-  o celular devolve `quote.cadastro.faltam`, o `CustomerInfoForm` mostra só
-  esses campos (CPF, nascimento, e-mail) e a criação os exige
-  (`400 CADASTRO_INCOMPLETO`). A régua é a do bot
-  (`identificacao_de_paciente.CAMPOS_DO_CADASTRO`); o site só exibe.
+- **Cadastro pela mesma régua do bot** (PRD 032): `quote.cadastro.faltam`
+  diz o que falta (CPF, nascimento, e-mail); o site exibe, e tanto
+  `/cadastro` quanto a criação exigem (`400 CADASTRO_INCOMPLETO`). A régua
+  é `identificacao_de_paciente.CAMPOS_DO_CADASTRO`.
 - **"Meus agendamentos" continua exigindo verificação** — um código de 6
   dígitos por WhatsApp (não SMS), já que sem isso qualquer pessoa veria/
-  cancelaria agendamento de outra só digitando o telefone dela. Ver
-  `src/components/OtpCodeForm.tsx` (usado só por `MyAppointmentsModal`) e
-  `src/hooks/useBooking.ts`. O token de `/verify/confirm` fica só em estado
-  local do modal, nunca em `localStorage`.
+  cancelaria agendamento de outra só digitando o telefone dela. O par
+  celular+token verificado fica em `sessionStorage` (`utils/sessaoVerificada.ts`,
+  por aba, 29 min) e é compartilhado entre o fluxo de agendamento e o modal:
+  quem confirmou o código num lugar não digita outro no outro. Nunca
+  `localStorage`.
 - **Carrinho = serviços do mesmo atendimento.** Diferente do site de
   referência (onde cada item do carrinho podia ter data/profissional
   próprios), aqui o carrinho define **quais serviços** entram numa única

@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import { Button } from './ui/Button'
 import { Input } from './ui/Input'
 import { useConfirmOtp, useSendOtp } from '@/hooks/useBooking'
+import type { PacienteVerificado } from '@/types'
+import { ESPERA_REENVIO_MS, registraEnvioDeCodigo, segundosAteReenviar } from '@/utils/enviosDeCodigo'
 
 interface OtpCodeFormProps {
   clinicId: string
@@ -10,28 +12,53 @@ interface OtpCodeFormProps {
   phone: string
   /** Como mostrar o celular; sem isto, mostra `phone` como está. */
   phoneLabel?: string
-  onVerified: (token: string) => void
+  /** `paciente` (PRD 061): quem é o dono do número, só depois do código. */
+  onVerified: (token: string, paciente: PacienteVerificado) => void
 }
 
-/** Formulário de código de verificação — envia automaticamente ao montar e permite reenvio. */
+/** Formulário de código de verificação: envia ao montar (se não enviou há pouco) e permite reenvio com espera. */
 export function OtpCodeForm({ clinicId, phone, phoneLabel, onVerified }: OtpCodeFormProps) {
   const [code, setCode] = useState('')
   const sendOtp = useSendOtp(clinicId)
   const confirmOtp = useConfirmOtp(clinicId)
+  const [restantes, setRestantes] = useState(() => segundosAteReenviar(clinicId, phone))
+
+  function envia() {
+    registraEnvioDeCodigo(clinicId, phone)
+    setRestantes(ESPERA_REENVIO_MS / 1000)
+    sendOtp.mutate(phone)
+  }
 
   useEffect(() => {
-    if (phone) {
+    if (!phone) return
+    // Um código saiu há pouco para este celular (ex.: o formulário remontou):
+    // não manda outro, só mostra a espera do reenvio.
+    if (segundosAteReenviar(clinicId, phone) > 0) return
+    // Adiado um tique: o StrictMode monta, desmonta e remonta em dev; disparar
+    // a mutação na primeira passada a deixa sem observador ("Enviando..." para
+    // sempre). Com a limpeza, só a passada que sobrevive envia.
+    const id = window.setTimeout(() => {
       setCode('')
-      sendOtp.mutate(phone)
-    }
-    // Dispara só quando o telefone muda (montagem inclusa) — não a cada re-render.
+      envia()
+    }, 0)
+    return () => window.clearTimeout(id)
+    // Dispara só quando o celular muda (montagem inclusa), não a cada re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone])
+  }, [clinicId, phone])
+
+  // Contagem do "Reenviar código".
+  useEffect(() => {
+    if (restantes === 0) return
+    const id = window.setInterval(() => setRestantes(segundosAteReenviar(clinicId, phone)), 1000)
+    return () => window.clearInterval(id)
+  }, [restantes, clinicId, phone])
 
   function handleConfirm(e: FormEvent) {
     e.preventDefault()
-    confirmOtp.mutate({ phone, code }, { onSuccess: (token) => onVerified(token) })
+    confirmOtp.mutate({ phone, code }, { onSuccess: (r) => onVerified(r.token, r.paciente ?? null) })
   }
+
+  const podeReenviar = restantes === 0 && !sendOtp.isPending
 
   return (
     <div>
@@ -54,11 +81,15 @@ export function OtpCodeForm({ clinicId, phone, phoneLabel, onVerified }: OtpCode
         </Button>
         <button
           type="button"
-          onClick={() => sendOtp.mutate(phone)}
-          disabled={sendOtp.isPending}
+          onClick={envia}
+          disabled={!podeReenviar}
           className="text-sm font-medium text-accent-700 underline underline-offset-2 disabled:opacity-50"
         >
-          {sendOtp.isPending ? 'Enviando...' : 'Reenviar código'}
+          {sendOtp.isPending
+            ? 'Enviando...'
+            : restantes > 0
+              ? `Reenviar código em ${restantes}s`
+              : 'Reenviar código'}
         </button>
         {sendOtp.isError ? (
           <p className="text-sm text-danger-500">{(sendOtp.error as Error).message}</p>

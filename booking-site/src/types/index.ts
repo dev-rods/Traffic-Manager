@@ -133,8 +133,28 @@ export type CampoDoCadastro = 'cpf' | 'birth_date' | 'email'
 
 /** O que falta no cadastro do celular cotado. Só nomes de campos, nunca valores. */
 export interface CadastroDoSite {
+  /** O celular é de um paciente desta clínica (PRD 061). Ausente no backend antigo. */
+  conhecido?: boolean
   completo: boolean
   faltam: CampoDoCadastro[]
+}
+
+/** Quem é o dono do celular, devolvido SÓ depois do código confirmado (PRD 061). */
+export type PacienteVerificado = { nome: string; faltam: CampoDoCadastro[] } | null
+
+export interface ConfirmOtpResult {
+  token: string
+  paciente?: PacienteVerificado
+}
+
+/** Cadastro sem agendamento (PRD 061): a ficha nasce ao confirmar o código. */
+export interface CadastroPayload {
+  phone: string
+  token: string
+  fullName?: string
+  cpf?: string // só dígitos
+  birthDate?: string // YYYY-MM-DD
+  email?: string
 }
 
 export type DiscountReason = 'first_session' | 'tier_2' | 'tier_3' | 'personalizado'
@@ -181,4 +201,15 @@ export interface CartItem {
 }
 
 // `verify`: o código do WhatsApp, sempre, entre os dados e a confirmação (PRD 056).
-export type WizardStep = 'cart' | 'areas' | 'schedule' | 'customer' | 'verify' | 'success'
+// PRD 061: celular logo depois das áreas; paciente confirma o código e a
+// identidade; quem não é paciente se cadastra e confirma o código; só então
+// escolhe data. `customer` deixou de existir.
+export type WizardStep =
+  | 'cart'
+  | 'areas'
+  | 'phone'
+  | 'verify'
+  | 'identity'
+  | 'register'
+  | 'schedule'
+  | 'success'

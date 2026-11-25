@@ -3,8 +3,11 @@ import type {
   Appointment,
   AvailabilityResponse,
   BootstrapResponse,
+  CadastroPayload,
   CartPayload,
+  ConfirmOtpResult,
   CreateAppointmentPayload,
+  PacienteVerificado,
   Quote,
   RescheduleAppointmentPayload,
 } from '@/types'
@@ -37,11 +40,13 @@ export const bookingService = {
       })
       .then((r) => ({ days: r.data.days })),
 
-  // Total, desconto e valor final — com o telefone, também primeira sessão e
-  // desconto personalizado. POST para o telefone não ir na URL.
-  quote: (clinicId: string, cart: CartPayload, phone?: string) =>
+  // Total, desconto e valor final. Com celular E token de sessão, também
+  // primeira sessão e desconto personalizado: o preço da pessoa só sai depois
+  // do código (PRD 061), senão qualquer um veria o desconto de outra pelo
+  // número. POST para o telefone não ir na URL.
+  quote: (clinicId: string, cart: CartPayload, phone?: string, token?: string) =>
     api
-      .post<{ quote: Quote }>(`/public/clinics/${clinicId}/quote`, { ...cart, phone })
+      .post<{ quote: Quote }>(`/public/clinics/${clinicId}/quote`, { ...cart, phone, token })
       .then((r) => r.data.quote),
 
   sendOtp: (clinicId: string, phone: string) =>
@@ -49,10 +54,19 @@ export const bookingService = {
       .post<{ status: string }>(`/public/clinics/${clinicId}/verify/send`, { phone })
       .then((r) => r.data),
 
+  // Além do token, no escopo de sessão vem `paciente` ({nome, faltam} ou
+  // null): só depois do código o site fica sabendo de quem é o número (PRD 061).
   confirmOtp: (clinicId: string, phone: string, code: string) =>
     api
-      .post<{ token: string }>(`/public/clinics/${clinicId}/verify/confirm`, { phone, code })
-      .then((r) => r.data.token),
+      .post<ConfirmOtpResult>(`/public/clinics/${clinicId}/verify/confirm`, { phone, code })
+      .then((r) => ({ token: r.data.token, paciente: r.data.paciente ?? null })),
+
+  // Cria ou completa a ficha SEM agendamento (PRD 061). Só com phone e token
+  // devolve o estado da ficha sem gravar nada.
+  cadastro: (clinicId: string, payload: CadastroPayload) =>
+    api
+      .post<{ paciente: PacienteVerificado }>(`/public/clinics/${clinicId}/cadastro`, payload)
+      .then((r) => r.data.paciente ?? null),
 
   createAppointment: (clinicId: string, payload: CreateAppointmentPayload) =>
     api
