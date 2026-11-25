@@ -301,7 +301,25 @@ pendência P4.
   site), bolhas de FAQ por modo, links enviados e agendamentos pelo site
   em até 24 h após o link, "calei" por fecho social, handoffs por motivo.
 
-### 4.6 Fora do escopo
+### 4.6 Saudação pelo relógio, não pelo eco (pedido do André em 25/11)
+
+Hoje o bot repete a saudação da pessoa: "Olá, boa noite" recebido à noite
+e respondido na manhã seguinte (retomada, política `LEADS_ONLY`) sai como
+"Olá, boa noite". O turno da pessoa já traz o bloco `═══ CALENDÁRIO ═══`
+com a data; falta a hora.
+
+Proposta: o código acrescenta ao bloco a hora local da clínica e o
+período ("Agora: terça, 24/11, 08:12 - manhã"), e o prompt passa a dizer:
+"Cumprimente pelo período de AGORA (bom dia até 12h, boa tarde até 18h,
+boa noite depois), nunca copiando a saudação da pessoa. Em dúvida, só
+'Olá'." Trava determinística: se a resposta contém "bom dia/boa tarde/
+boa noite" de período diferente do atual, troca pelo período certo (ou
+por "Olá") antes de enviar. Custo zero de modelo, e cobre a retomada.
+
+Alternativa (se o relógio der trabalho): só "Olá", sempre, e remover
+"boa noite/bom dia" da saída por regex.
+
+### 4.7 Fora do escopo
 
 - Mudar a política `LEADS_ONLY` da Nobre (é decisão da clínica; ver P5).
 - Reescrever o prompt da Essência (só as etapas tocadas aqui).
@@ -365,6 +383,29 @@ pendência P4.
 
 ## 8. Pendências de negócio (decidir antes da Spec)
 
+Decisões do André em 25/11/2026: P1 proposta; P3 alternativa (tudo em
+modo `fonte`, bolha literal só como fallback da ancoragem); P4 proposta
+(calar); P5 alternativa, com mensagem menos fria; P6 alternativa (listar
+os três tipos com valor e perguntar qual); P7 proposta (calar). P2 ficou
+em aberto, reexplicada abaixo.
+
+Texto proposto para P5 (mensagem imediata na Nobre quando o bot não pode
+atender pela política; não conta como atendimento do bot e não repete na
+mesma conversa em 24 h): "Oi! Que bom ter você por aqui 😊 Já recebi sua
+mensagem e uma especialista da Nobre vai te responder em instantes."
+
+P2, reexplicada. A campanha e o lembrete já levam o link do site no
+texto. Quando a paciente responde a esse texto pedindo para marcar, o bot
+precisa decidir se aquele link "já foi":
+- Conta (proposta): ela viu o link e mesmo assim escreveu; o bot entende
+  que ela prefere resolver na conversa e agenda aqui, sem reenviar nada.
+- Não conta (alternativa): o bot reenvia o link uma vez na primeira
+  resposta, com a oferta "se preferir, eu marco por aqui", e só agenda na
+  conversa se ela disser que prefere.
+Com P1 = proposta, a diferença prática é só esta: depois de uma campanha,
+a primeira resposta do bot a "podemos marcar dia 3?" é "claro, me confirma
+as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
+
 | # | Pergunta | Proposta | Alternativa |
 |---|---|---|---|
 | P1 | Para paciente com cadastro que pede para agendar NA CONVERSA (sem campanha/lembrete), o site continua sendo a primeira tentativa? | Sim, mas decidido no início: uma frase com o link + "se preferir, eu marco agora"; nunca recusar depois de coletar dados | Abandonar "link primeiro": paciente que escreve é atendida na conversa; link só sai proativo (campanha, lembrete, cancelamento) |
@@ -392,7 +433,7 @@ pendência P4.
 
 ## Status (preencher após conclusão)
 
-- [ ] Pendente: decisões P1 a P7
+- [ ] Pendente: decisão P2 (as demais fechadas em 25/11)
 - [ ] Spec gerada: `spec/064-jornada-do-bot-faq-link-e-despedida.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
