@@ -271,5 +271,14 @@ Regras de borda:
       cadastro completado e agendamento com 26%. Expôs a brecha da cotação (decisão 6) e o
       código duplo do StrictMode em dev.
 - [x] Revisão de 24/11 (decisão 6): backend e site no mesmo PR #252 (commit a1c2dee). Dev layer 217,
-      smoke de API 6/6. Prod pendente de autorização.
+      smoke de API 6/6.
+- [x] 24/11 à noite: outro deploy em dev (PRD 062) sobrescreveu a layer 217 e o roteiro A caiu em
+      "Rota não encontrada" (dev é um stack só; conferir `LastModified` da Lambda antes de testar).
+      Redeploy (layer 219), roteiro A revisado ok: tabela até o código, 26% só depois do "É você?",
+      agendamento sem novo código. Ainda assim saíram dois códigos com 33 s de intervalo, sem clique
+      em "Reenviar": a memória do último envio saiu do componente (`utils/enviosDeCodigo.ts`) e o
+      reenvio ganhou espera de 30 s; repetido, chegou um só. Texto da etapa do celular passou a avisar
+      do desconto personalizado.
+- [x] EM PROD em 25/11/2026: scheduler layer 173 (smoke de API 6/6 na Nobre), PR #252 mergeado
+      (1b98fbc), site no ar em agendar.nobrelaser.com.br com a versão nova.
 - [x] Registrado em `TASKS_LOG.md`
