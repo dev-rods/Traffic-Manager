@@ -113,7 +113,10 @@ Dois defeitos, um em cada ponta:
 
 ## Status (preencher após conclusão)
 
-- [ ] Pendente
 - [x] Spec gerada: `spec/063-nao-encontramos-e-trava-do-papel.md`
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 25/11/2026 (PR #256). Dev: `checkin-dev` publicado, caso do número sem
+      sessão conferido no navegador automatizado com o celular do André. Prod: `checkin-prod`
+      publicado (bundle novo em `documentos.draclaradourado.com.br`), painel pela Vercel no merge.
+      Roteiro: `scheduler/tests/integration/063-nao-encontramos-e-trava-do-papel.md`.
+- [x] Registrado em `TASKS_LOG.md`
+- [ ] Operacional: regularizar a paciente do caso (revogar o papel e reenviar o link).
