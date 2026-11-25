@@ -38,6 +38,7 @@ from src.services import fecho_social, saudacao
 from src.services import caminho_de_agendamento
 from src.services import ancoragem_do_faq
 from src.services import pergunta_em_aberto
+from src.services import opcoes_numeradas as _opcoes
 from src.services.autoatendimento import zera_pedidos_de_agendar
 from src.services import relogio as _relogio
 from src.services.busca_no_faq import busca as busca_no_faq
@@ -914,7 +915,9 @@ class ConversationAgent:
                             continue
 
                     # Retomada: a resposta precisa tocar na pergunta em aberto.
+                    # Opcoes oferecidas (datas/horarios) SAO resposta: nao reescrever.
                     if (pergunta_aberta and not ja_refez_retomada and not efeito_cometido
+                            and not pending_buttons
                             and not pergunta_em_aberto.respondeu(texto_provisorio, pergunta_aberta)):
                         ja_refez_retomada = True
                         logger.warning(f"[Retomada] {phone}: respondeu fora da pergunta; refazendo")
@@ -986,13 +989,17 @@ class ConversationAgent:
                     # que atende em cerca de uma data por mes, foi convidada a
                     # escolher um dia que nao existe (09/11/2026). Ver
                     # pergunta_de_data e PRD 044.
-                    if oferece_ver_as_datas(texto_provisorio):
+                    ofereceu_ver = oferece_ver_as_datas(texto_provisorio)
+                    if ofereceu_ver:
                         logger.info(
                             f"[DataSemConsulta] {phone}: ofereceu ver as datas antes de "
                             f"consultar | clinic={clinic_id}"
                         )
+                    # Oferecer ver as datas tambem conta (PRD 064, 25/11/2026):
+                    # a clinica so atende nos dias da agenda, entao o bot mostra.
                     pediu_data = (
-                        pede_data_sem_consulta(texto_provisorio)
+                        (pede_data_sem_consulta(texto_provisorio) or ofereceu_ver)
+                        and not pending_buttons
                         and "check_availability" not in tools_do_turno
                         # Decisao 7.2: so com as areas escolhidas no turno. No
                         # inicio da conversa o prompt manda NAO consultar ainda,
@@ -1647,6 +1654,9 @@ class ConversationAgent:
             "4. Não empurre a pessoa de volta para a lista sem responder o que ela\n"
             "   perguntou. 'Escolha uma data da lista' não é resposta para 'tem\n"
             "   amanhã?' - a resposta é sim ou não, e então as opções.\n"
+            "6. A clínica só atende nos dias da agenda. Depois de confirmar as áreas e\n"
+            "   o valor, chame check_availability e APRESENTE as datas. Nunca pergunte\n"
+            "   'você tem data em mente?' nem 'qual dia prefere?' antes de mostrá-las.\n"
             "5. Cumprimente pelo período de AGORA (linha 'Agora:' do CALENDÁRIO:\n"
             "   bom dia até 12h, boa tarde até 18h, boa noite depois), nunca\n"
             "   copiando a saudação que a pessoa mandou - ela pode ter escrito\n"
@@ -1887,6 +1897,10 @@ class ConversationAgent:
                 # A numeração é a de opcoes_numeradas.resolve: a pessoa
                 # responde "2" e o código devolve a 2ª daqui.
                 numbered = opcoes_numeradas.numerada(options)
+                # O modelo as vezes escreve a lista no proprio texto (25/11/2026,
+                # depois de uma reescrita): tira as linhas dele que sao as opcoes
+                # e deixa a lista canonica, que e a que `resolve` le.
+                display_text = _opcoes.sem_as_opcoes(display_text, options)
                 full_text = f"{display_text}\n\n{numbered}" if display_text else numbered
                 messages.append(OutgoingMessage(
                     message_type="text",

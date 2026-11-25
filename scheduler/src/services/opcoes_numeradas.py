@@ -72,6 +72,30 @@ def resolve(session: Optional[Dict], texto: str) -> Optional[Dict[str, str]]:
     return opcoes[n - 1]
 
 
+def _plano(texto: str) -> str:
+    import unicodedata
+    t = unicodedata.normalize("NFD", (texto or "").lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return re.sub(r"[*_~`]", "", t).strip()
+
+
+def sem_as_opcoes(texto: str, options: List[Dict[str, str]]) -> str:
+    """O texto do modelo sem as linhas que repetem as opcoes ("1. Qui, 3 de
+    dez", "- Qui, 3 de dez", ou o rotulo sozinho). O que sobra e a fala;
+    a lista canonica entra uma vez so, por `numerada`."""
+    rotulos = {_plano(o.get("label", "")) for o in options or [] if o.get("label")}
+    if not texto or not rotulos:
+        return texto or ""
+    linhas = []
+    for linha in texto.split("\n"):
+        corpo = re.sub(r"^\s*(\d+[.)]|[-•*])\s*", "", linha).strip()
+        if corpo and _plano(corpo) in rotulos:
+            continue
+        linhas.append(linha)
+    saida = "\n".join(linhas)
+    return re.sub(r"\n{3,}", "\n\n", saida).strip()
+
+
 def numerada(options: List[Dict[str, str]]) -> str:
     """O texto que vai para a paciente - a MESMA numeração que `resolve` lê."""
     return "\n".join(f"{i + 1}. {opt['label']}" for i, opt in enumerate(options))
