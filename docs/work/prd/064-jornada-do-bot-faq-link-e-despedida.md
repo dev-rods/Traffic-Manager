@@ -454,7 +454,7 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
       segunda falha ou sem fala, e DEPOIS da fala. Acompanhar `[FAQ] ancorada|fora do item|literal`.
 - [x] Eval com o modelo real (25/11, PR #265): `tests/evaluation/eval_064.py` com os quatro casos do
       PRD (virilha, link, despedida, retomada) 4/4; corpus de 39 conversas reais com o FAQ real
-      ligado: 1a rodada I1 3 / I2 0 / I3 5 / I4 5 / I5 0, 18 consultas ao FAQ e 0 bolhas literais; os I1/I4 a mais eram régua do eval (data de hoje e co-ocorrência), corrigida; 2a rodada em andamento. O eval corrigiu dois pontos: LINK_PRIMEIRO virou texto fixo sem
+      ligado: rodada final (frentes 1-5, réguas corrigidas): I1 0 / I2 2 / I3 5 / I4 1 / I5 0 contra 2 / 1 / 5 / 3 / 2 da medição anterior; 19 consultas ao FAQ e 0 bolhas literais; os 2 I2 são o bot repetindo data e valor já consultados em rodadas anteriores da mesma conversa; input +54%, chamadas +12%, US$ 6,41 por rodada. O eval corrigiu dois pontos: LINK_PRIMEIRO virou texto fixo sem
       modelo (o bloco no prompt perdia para o roteiro de áreas) e a ancoragem passou a comparar
       números canônicos (70,00 = 70.00).
 - [x] Frente 5 (retomada responde primeiro a última pergunta) EM PROD em 25/11/2026 (PR #265,
