@@ -34,6 +34,8 @@ from src.services import nivel_de_risco
 from src.services import policy_do_faq
 from src.services import skills
 from src.services import retencao
+from src.services import fecho_social, saudacao
+from src.services import relogio as _relogio
 from src.services.busca_no_faq import busca as busca_no_faq
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
 from src.services.identificacao_de_paciente import sem_passo_de_cadastro
@@ -388,6 +390,17 @@ class ConversationAgent:
             )
             return []
 
+        # 2a. A conversa ja acabou e a pessoa so se despediu de novo? Entao
+        # nada a dizer (PRD 064, P4). Antes de qualquer consulta: custa uma
+        # leitura de eventos e evita um turno inteiro de modelo. Gatilho
+        # sintetico (retomada, inicio) nao passa aqui: quem decide la e
+        # conversation_resume / retomada.
+        if not eh_gatilho_sintetico(incoming.content) and not incoming.button_id:
+            eventos_recentes = self._eventos_recentes(clinic_id, phone)
+            if fecho_social.deve_calar(eventos_recentes, incoming.content or ""):
+                logger.info(f"[FechoSocial] {phone}: despedida depois da despedida; calei")
+                return []
+
         # 2b. Quem e a pessoa. Uma consulta por mensagem, antes de tudo: o
         # prompt, as tools e a trava de cadastro leem daqui. Ver
         # identificacao_de_paciente.
@@ -581,6 +594,11 @@ class ConversationAgent:
         # texto sintetico nao tem referencia de data para ler.
         bloco_calendario, datas_do_calendario = bloco_de_contexto("" if gatilho else user_content)
         respaldo_das_tools.append({"calendario": datas_do_calendario})
+        # A hora local e o periodo entram no mesmo bloco: o modelo cumprimenta
+        # pelo AGORA, nao pelo "boa noite" que a pessoa mandou ontem (PRD 064).
+        agora_local = _relogio.agora_na_clinica(clinic.get("timezone"))
+        periodo_atual = saudacao.periodo(agora_local)
+        bloco_calendario = f"{bloco_calendario}\n{saudacao.linha_do_calendario(agora_local)}"
 
         # As datas da campanha tambem sao respaldo. Elas vem da sessao, gravadas
         # no ato do disparo, e o bloco de campanha as poe no prompt - sao fato
@@ -658,6 +676,9 @@ class ConversationAgent:
         ja_refez_narracao = False
         ja_refez_valor = False
         ja_refez_truncada = False
+        # O modelo declarou (sem_consulta_necessaria) que a mensagem e so
+        # agradecimento ou despedida: responder nada e aceitavel (PRD 064).
+        despedida_declarada = False
         ja_refez_data = False
         em_campanha = campanha_viva(session)
         # O contador do quebra-laço atravessa turnos: cada pergunta da trava é
@@ -763,7 +784,17 @@ class ConversationAgent:
                 # FAQ ja escolhido, opcoes ja apresentadas ou handoff pedido
                 # saem com texto nenhum do modelo, de proposito.
                 turno_ja_tem_saida = bool(pending_buttons or faq_entregues or handoff_requested)
-                vazia = not tool_uses and not texto_da_rodada and not turno_ja_tem_saida
+                vazia = (not tool_uses and not texto_da_rodada and not turno_ja_tem_saida
+                         and not despedida_declarada)
+                if not tool_uses and not texto_da_rodada and despedida_declarada:
+                    # Calou de proposito. O turno de assistente vazio nao pode
+                    # ir ao historico (a API recusa); a fala da pessoa fica so
+                    # no MessageEvents.
+                    logger.info(f"[FechoSocial] {phone}: o modelo calou na despedida")
+                    if history and history[-1].get("role") == "user":
+                        history.pop()
+                    text_parts = []
+                    break
                 if cortada or vazia:
                     logger.error(
                         f"[Truncada] {phone}: stop_reason={stop_reason} | "
@@ -976,6 +1007,9 @@ class ConversationAgent:
                     )
                     respaldo_das_tools.append(result)
                     tools_do_turno.add(tool_use["name"])
+                    if tool_use["name"] == "sem_consulta_necessaria" and fecho_social.motivo_e_despedida(
+                            (tool_use.get("input") or {}).get("motivo")):
+                        despedida_declarada = True
                     # As areas ESCOLHIDAS pela pessoa so existem como argumento
                     # de tool. list_areas nao conta: devolve o catalogo da
                     # clinica, nao a escolha de ninguem.
@@ -1100,6 +1134,12 @@ class ConversationAgent:
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
+        # Saudacao pelo relogio: "boa noite" copiado da pessoa, respondido de
+        # manha, vira "bom dia" (PRD 064). Determinismo em volta do modelo.
+        if saudacao.saudacao_errada(final_text, periodo_atual):
+            corrigido = saudacao.corrige(final_text, periodo_atual)
+            logger.info(f"[Saudacao] {phone}: corrigi a saudacao para o periodo '{periodo_atual}'")
+            final_text = corrigido
         # Modelo no meio, determinismo em volta. O prompt já proíbe afirmar
         # data, preço ou status sem consultar - e em 02/09/2026 o bot disse que
         # um agendamento cancelado estava confirmado mesmo assim, relendo a
@@ -1506,6 +1546,18 @@ class ConversationAgent:
             "4. Não empurre a pessoa de volta para a lista sem responder o que ela\n"
             "   perguntou. 'Escolha uma data da lista' não é resposta para 'tem\n"
             "   amanhã?' - a resposta é sim ou não, e então as opções.\n"
+            "5. Cumprimente pelo período de AGORA (linha 'Agora:' do CALENDÁRIO:\n"
+            "   bom dia até 12h, boa tarde até 18h, boa noite depois), nunca\n"
+            "   copiando a saudação que a pessoa mandou - ela pode ter escrito\n"
+            "   ontem à noite. Em dúvida, só 'Olá'.\n"
+        )
+
+        system_prompt += (
+            "\n═══ DESPEDIDA ═══\n"
+            "Depois de se despedir ou agradecer, não responda a outra despedida ou\n"
+            "agradecimento da pessoa: chame sem_consulta_necessaria com o motivo\n"
+            "'despedida' e não escreva nada. Só volte a falar se houver pergunta\n"
+            "ou informação nova.\n"
         )
 
         system_prompt += (
@@ -1837,6 +1889,20 @@ class ConversationAgent:
         if isinstance(obj, list):
             return [ConversationAgent._convert_decimals(i) for i in obj]
         return obj
+
+    def _eventos_recentes(self, clinic_id, phone, limit=6):
+        """As ultimas mensagens da conversa, para a guarda de fecho social.
+        Sem tracker (testes) ou com erro de leitura, lista vazia: na duvida o
+        bot responde, nunca cala por acidente."""
+        tracker = getattr(self, "message_tracker", None)
+        if tracker is None:
+            return []
+        try:
+            return tracker.get_conversation_messages(
+                clinic_id, phone, limit=limit, desde=retencao.inicio_da_memoria()) or []
+        except Exception as e:
+            logger.warning(f"[FechoSocial] {phone}: nao li os eventos recentes ({e}); sigo")
+            return []
 
     def rebuild_history_from_events(self, clinic_id, phone, limit=20):
         """Reconstrói o histórico do MessageEvents quando a sessão está vazia.

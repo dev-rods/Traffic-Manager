@@ -103,9 +103,9 @@ def ultima_fala(eventos: Sequence[Dict]) -> Optional[Dict]:
 
 
 def e_fecho_social(texto: str) -> bool:
-    plano = _plano(texto)
-    pedacos = [p.strip() for p in re.split(r"[,;]|\se\s", plano) if p.strip()]
-    return bool(pedacos) and all(_SOCIAL.match(p) for p in pedacos)
+    # Regra compartilhada com o fluxo normal e a retomada pelo painel (PRD 064).
+    from src.services import fecho_social
+    return fecho_social.e_fecho_social(texto)
 
 
 def _plano(texto: str) -> str:
