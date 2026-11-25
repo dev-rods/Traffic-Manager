@@ -440,5 +440,9 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
 
 - [x] Decisões P1 a P7 fechadas em 25/11/2026
 - [x] Spec gerada: `spec/064-jornada-do-bot-faq-link-e-despedida.md`
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Frentes 1 e 2 (fecho social, saudação pelo relógio, P7) EM PROD em 25/11/2026 (PR #259,
+      scheduler layer 174; dev 220). E2E em dev não rodou (bot pausado na Essência dev e lock
+      de atendimento humano na Premium dev para o número do André); decisão do André: prod com
+      acompanhamento dos logs `[FechoSocial]` e `[Saudacao]`.
+- [ ] Frentes 3 a 6 (caminho de agendamento, FAQ como fonte, retomada, prompt por script, P5)
+- [x] Registrado em `TASKS_LOG.md`
