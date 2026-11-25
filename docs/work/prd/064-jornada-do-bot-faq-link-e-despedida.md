@@ -448,5 +448,9 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
       dev 221): `caminho_de_agendamento.py`, bloco por cadastro, recusa da tool virou asserção,
       `garante_o_link`. Acompanhar `[Caminho]` nos logs (link_primeiro, conversa_por_insistencia,
       VIOLAÇÃO, "anexei").
-- [ ] Frentes 4 a 6 (FAQ como fonte, retomada, prompt por script, P5)
+- [x] Frente 4 (FAQ como fonte) EM PROD em 25/11/2026 (PR #263, scheduler layer 176; dev 222):
+      `get_faq_answer` devolve o texto ao modelo, `ancoragem_do_faq.py` confere a fala (fatos do
+      item ou das outras tools; horário e data ficam com a proveniência), bolha literal só na
+      segunda falha ou sem fala, e DEPOIS da fala. Acompanhar `[FAQ] ancorada|fora do item|literal`.
+- [ ] Frentes 5 e 6 (retomada responde a última pergunta, prompt por script com P6, aviso P5)
 - [x] Registrado em `TASKS_LOG.md`
