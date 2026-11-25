@@ -38,6 +38,36 @@ CONVERSA = "conversa"
 LINK_PRIMEIRO = "link_primeiro"
 CONVERSA_POR_INSISTENCIA = "conversa_por_insistencia"
 
+# Em LINK_PRIMEIRO o bot nao chama o modelo: a resposta e um texto fixo com o
+# link (template LINK_PRIMEIRO, por clinica). No eval de 25/11 o modelo, com o
+# bloco no prompt, ainda assim perguntou as areas ou pediu esclarecimento - o
+# roteiro de areas do prompt do banco vence qualquer bloco colado no fim.
+# Determinismo onde a regra e de negocio.
+TEMPLATE_DO_LINK = "LINK_PRIMEIRO"
+TEXTO_PADRAO_DO_LINK = (
+    "Oi{{nome}}! O agendamento é pelo nosso site: {{link}} 😊\n"
+    "Qualquer dúvida, é só me chamar por aqui."
+)
+
+
+def mensagem_do_link(template_service, clinic_id: str, link: str, nome: Optional[str]) -> str:
+    """O texto fixo de LINK_PRIMEIRO. `nome` e o primeiro nome, ou vazio."""
+    primeiro = (nome or "").strip().split(" ")[0] if nome else ""
+    variaveis = {"link": link, "nome": f", {primeiro}" if primeiro else ""}
+    try:
+        texto = template_service.get_and_render(clinic_id, TEMPLATE_DO_LINK, variaveis) if template_service else ""
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"[Caminho] template {TEMPLATE_DO_LINK} falhou ({e}); texto padrao")
+        texto = ""
+    if not texto or not texto.strip() or not autoatendimento.link_citado(texto, link):
+        # Template vazio, ausente ou sem o link (um template errado no banco
+        # nao pode mandar a pessoa para lugar nenhum): texto padrao.
+        texto = TEXTO_PADRAO_DO_LINK
+        for k, v in variaveis.items():
+            texto = texto.replace("{{" + k + "}}", v)
+    return texto
+
+
 _PEDE_AGENDAR = re.compile(
     r"\b(agendar|agenda|agendamento|marcar|marca|marcacao|horarios?|vagas?|datas?|"
     r"dia \d{1,2}|remarcar|reagendar|encaixe|disponibilidade|disponivel|proxima sessao|"
@@ -93,16 +123,6 @@ def decide(clinic: Optional[Dict], paciente: Optional[Dict], session: Optional[D
 
 def bloco(caminho: str, link: Optional[str]) -> str:
     """O que vai para o system prompt. CONVERSA: nada (fluxo de sempre)."""
-    if caminho == LINK_PRIMEIRO and link:
-        return (
-            "\n═══ AGENDAMENTO: PELO LINK ═══\n"
-            "Esta pessoa já é paciente e a clínica agenda pelo site. Responda em UMA\n"
-            f"frase que o agendamento é por este link: {link}\n"
-            "e se coloque à disposição para dúvidas. Não pergunte as áreas, não\n"
-            "ofereça datas, não chame check_availability nem book_appointment, e\n"
-            "não ofereça marcar por aqui. Dúvidas (preço, preparo, endereço) você\n"
-            "responde normalmente, na mesma mensagem.\n"
-        )
     if caminho == CONVERSA_POR_INSISTENCIA:
         return (
             "\n═══ AGENDAMENTO: NA CONVERSA ═══\n"

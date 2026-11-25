@@ -40,11 +40,21 @@ def _plano(texto: str) -> str:
 _AGENDA = re.compile(r"(?<!\d)\d{1,2}[:h]\d{2}(?!\d)|(?<!\d)\d{1,2}h(?![a-z\d])|(?<!\d)\d{1,2}/\d{1,2}(?:/\d{2,4})?(?!\d)|dia \d{1,2}(?!\d)")
 
 
+def _canonico(n: str) -> str:
+    """'70,00' -> '70'; '70.50' -> '70.5'; '-3°c' -> '-3°c'. Virgula e ponto sao
+    o mesmo separador aqui (R$ 70,00 no texto, R$ 70.00 na tool)."""
+    m = re.match(r"(-?\d+)(?:[.,](\d+))?(.*)$", n)
+    if not m:
+        return n
+    inteiro, fracao, resto = m.group(1), (m.group(2) or "").rstrip("0"), m.group(3)
+    return f"{inteiro}{'.' + fracao if fracao else ''}{resto}"
+
+
 def fatos(texto: str) -> Set[str]:
     t = _AGENDA.sub(" ", _plano(texto))
     achados = set()
     for m in _NUMERO.finditer(t):
-        n = re.sub(r"\s+", "", m.group(0))
+        n = _canonico(re.sub(r"\s+", "", m.group(0)))
         if n.lstrip("-").replace(",", "").replace(".", "").isdigit() and len(n.lstrip("-")) <= 1 and not re.search(r"[a-z%]", n):
             # Dígito solto ("3 opções", "1 sessão"): contagem de conversa, não fato clínico.
             continue
@@ -71,14 +81,13 @@ def confere(fala_do_modelo: str, itens: Sequence[Dict], respaldo: str = "") -> L
     base = _fatos_do_item(itens) | (fatos(respaldo) if respaldo else set())
     if respaldo:
         for n in re.findall(r"\d+(?:[.,]\d+)?", _plano(respaldo)):
-            base.add(n)
-            base.add(re.split(r"[.,]", n)[0])
-    base_numeros = {re.match(r"-?\d+(?:[.,]\d+)?", b).group(0) for b in base if re.match(r"-?\d", b)}
+            base.add(_canonico(n))
+    base_numeros = {re.match(r"-?\d+(?:\.\d+)?", b).group(0) for b in base if re.match(r"-?\d", b)}
     faltam = []
     for f in sorted(fatos(fala_do_modelo)):
         if f in base:
             continue
-        m = re.match(r"-?\d+(?:[.,]\d+)?", f)
+        m = re.match(r"-?\d+(?:\.\d+)?", f)
         if m and m.group(0) in base_numeros:
             continue
         faltam.append(f)

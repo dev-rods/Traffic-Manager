@@ -449,6 +449,15 @@ class ConversationAgent:
             clinic, paciente, session, incoming.content or "", link)
         if caminho != caminho_de_agendamento.CONVERSA:
             logger.info(f"[Caminho] {phone}: {caminho}")
+        if caminho == caminho_de_agendamento.LINK_PRIMEIRO:
+            # Texto fixo, sem modelo (PRD 064, P1/P2): o link sozinho, sem
+            # oferta de marcar por aqui. O proximo pedido vira conversa.
+            texto = caminho_de_agendamento.mensagem_do_link(
+                getattr(self, "template_service", None), clinic_id, link, paciente.get("nome"))
+            marca_link_enviado(session)
+            self._save_session(clinic_id, phone, session)
+            logger.info(f"[Caminho] {phone}: link enviado sem modelo | [Link] link enviado")
+            return [OutgoingMessage(message_type="text", content=texto)]
 
         # 3. Build system prompt
         system_prompt = self._build_system_prompt(clinic_id, phone, session)
@@ -1173,11 +1182,6 @@ class ConversationAgent:
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
-        # Em LINK_PRIMEIRO a mensagem leva o link, com ou sem o modelo lembrar.
-        com_link = caminho_de_agendamento.garante_o_link(final_text, caminho, link)
-        if com_link != final_text:
-            logger.info(f"[Caminho] {phone}: o modelo nao citou o link; anexei")
-            final_text = com_link
         # Saudacao pelo relogio: "boa noite" copiado da pessoa, respondido de
         # manha, vira "bom dia" (PRD 064). Determinismo em volta do modelo.
         if saudacao.saudacao_errada(final_text, periodo_atual):

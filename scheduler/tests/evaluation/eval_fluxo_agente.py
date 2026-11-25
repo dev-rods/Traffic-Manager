@@ -84,6 +84,13 @@ FIXTURES = {
          "area_name": "Axilas", "price_display": "R$ 65.00", "price_cents": 6500},
         {"service_id": SERVICO, "area_id": "a-virilha", "service_name": "Depilação a Laser",
          "area_name": "Virilha Completa", "price_display": "R$ 120.00", "price_cents": 12000},
+        # As duas clinicas de prod tem os tres tipos (PRD 064, caso 1).
+        {"service_id": SERVICO, "area_id": "a-virilha-simples", "service_name": "Depilação a Laser",
+         "area_name": "Virilha Simples", "price_display": "R$ 70.00", "price_cents": 7000},
+        {"service_id": SERVICO, "area_id": "a-virilha-cavada", "service_name": "Depilação a Laser",
+         "area_name": "Virilha Cavada", "price_display": "R$ 95.00", "price_cents": 9500},
+        {"service_id": SERVICO, "area_id": "a-perianal", "service_name": "Depilação a Laser",
+         "area_name": "Perianal", "price_display": "R$ 60.00", "price_cents": 6000},
         {"service_id": SERVICO, "area_id": "a-buco", "service_name": "Depilação a Laser",
          "area_name": "Buço", "price_display": "R$ 65.00", "price_cents": 6500},
     ]},
@@ -141,11 +148,27 @@ SEM_CONSULTA = "sem_consulta_necessaria"
 
 
 class ToolsMockadas:
-    def __init__(self):
+    """Tudo fixture, menos o FAQ: com `faq` (itens reais da clinica), a tool
+    get_faq_answer roda de verdade (PRD 064: o texto volta ao modelo e a
+    ancoragem do agente e medida). `contextos` guarda o ultimo ctx para o
+    relatorio ler `faq_consultados`."""
+
+    def __init__(self, faq=None):
         self.chamadas = []
+        self.faq = list(faq or [])
+        self.ultimo_contexto = None
+        if self.faq:
+            from src.services.ai_tools import ToolExecutor
+            self._real = object.__new__(ToolExecutor)
+            self._real.db = None
 
     def execute(self, nome, args, context=None):
         self.chamadas.append(nome)
+        self.ultimo_contexto = context
+        if nome == "get_faq_answer" and self.faq:
+            ctx = context if context is not None else {}
+            ctx.setdefault("faq", self.faq)
+            return self._real._tool_get_faq_answer(args, "eval", "5511900000000", ctx)
         return FIXTURES.get(nome, {"error": f"tool sem fixture no eval: {nome}"})
 
 
@@ -218,18 +241,26 @@ class DbFalso:
     esta em producao - e o eval mede um agente que ninguem deploya.
     """
 
-    def __init__(self, prompt):
+    def __init__(self, prompt, faq=None, clinic_extra=None):
         self._prompt = prompt
+        self._faq = list(faq or [])
+        self._clinic_extra = dict(clinic_extra or {})
 
     def execute_query(self, query, params=None):
         q = query.lower()
         if "message_templates" in q:
+            # So o prompt e fixture; os demais templates caem no padrao do
+            # codigo, como numa clinica que nao os customizou.
+            chave = next((p for p in (params or ()) if isinstance(p, str) and p.isupper() and "_" in p), "AI_SYSTEM_PROMPT")
+            if chave != "AI_SYSTEM_PROMPT":
+                return []
             return [{"template_key": "AI_SYSTEM_PROMPT",
                      "content": self._prompt, "buttons": None}]
         if "from scheduler.clinics" in q:
-            return [{"clinic_id": "eval", "name": "Clínica Essência",
-                     "display_name": "Clínica Essência", "phone": "+5511999999999",
-                     "address": "Rua Augusta, 2709", "use_agent": True}]
+            return [dict({"clinic_id": "eval", "name": "Clínica Essência",
+                          "display_name": "Clínica Essência", "phone": "+5511999999999",
+                          "address": "Rua Augusta, 2709", "use_agent": True,
+                          "timezone": "America/Sao_Paulo"}, **self._clinic_extra)]
         if "from scheduler.services" in q:
             return [{"id": SERVICO, "name": "Depilação a Laser"}]
         if "discount_rules" in q:
@@ -238,7 +269,7 @@ class DbFalso:
                      "tier_3_min_areas": 5, "tier_3_discount_pct": 15,
                      "is_active": True}]
         if "faq_items" in q:
-            return []
+            return [dict(i) for i in self._faq]
         return []
 
     def execute_write(self, *a, **k):
@@ -275,23 +306,37 @@ def carrega_prompt(caminho=None):
     return linhas[0]["content"]
 
 
-def monta_agente(anthropic, tools, prompt):
+def carrega_faq(clinic_id="clinicaessenciaestetica-9668a4"):
+    """Os itens ativos do FAQ da clinica em prod (so leitura). Precisa das
+    variaveis RDS_* no ambiente, que carrega_prompt() ja define."""
+    from src.services import policy_do_faq
+    from src.services.db.postgres import PostgresService
+    return policy_do_faq.itens(PostgresService(), clinic_id)
+
+
+def monta_agente(anthropic, tools, prompt, faq=None, paciente=None, clinic_extra=None, eventos=None):
     """ConversationAgent real, sem AWS e sem Postgres.
 
     __init__ abre DynamoDB e o cliente HTTP, entao o objeto e criado direto e
     so o que o fluxo toca e preenchido. A sessao vive em memoria: cada conversa
     do corpus comeca limpa, como uma pessoa nova escrevendo.
+
+    `faq`: itens reais (a tool passa a existir); `paciente`: quem esta falando
+    (padrao: lead desconhecida); `clinic_extra`: colunas a mais da clinica
+    (ex.: custom_domain); `eventos`: o que `_eventos_recentes` devolve (guarda
+    de fecho social, PRD 064).
     """
     agente = object.__new__(ConversationAgent)
-    agente.db = DbFalso(prompt)
+    agente.db = DbFalso(prompt, faq=faq, clinic_extra=clinic_extra)
     agente.tool_executor = tools
     agente.anthropic = anthropic
     agente.sessao = {}
     agente._load_session = lambda c, p: agente.sessao
     agente._save_session = lambda c, p, s: agente.sessao.update(s)
-    agente._identifica_paciente = lambda c, p: FIXTURES["identificar_paciente"]
+    agente._identifica_paciente = lambda c, p: dict(paciente or FIXTURES["identificar_paciente"])
     # Sem MessageEvents: o corpus JA e a conversa, reconstruir duplicaria turnos.
     agente.rebuild_history_from_events = lambda c, p: []
+    agente._eventos_recentes = lambda c, p: list(eventos() if callable(eventos) else (eventos or []))
 
     from src.services.template_service import TemplateService
     agente.template_service = TemplateService(agente.db)
@@ -336,15 +381,16 @@ def avalia_turno(texto, tools_da_rodada, tools_da_conversa, entregue_antes, entr
     }
 
 
-def roda(conversas, verboso, prompt):
+def roda(conversas, verboso, prompt, faq=None):
     achados = []
     tipos = Counter()
     anthropic = AnthropicMedido()
     inicio = time.time()
+    respostas_do_faq = {i["answer"] for i in (faq or [])}
 
     for c in conversas:
-        tools = ToolsMockadas()
-        agente = monta_agente(anthropic, tools, prompt)
+        tools = ToolsMockadas(faq=faq)
+        agente = monta_agente(anthropic, tools, prompt, faq=faq)
         if verboso:
             print(f"\n=== {c['id']} ===")
 
@@ -378,6 +424,12 @@ def roda(conversas, verboso, prompt):
                                     "resposta": resposta[:140]})
             tipos["turnos"] += 1
             tipos["tools_chamadas"] += len(v["tools"])
+            # PRD 064: o FAQ e fonte; bolha literal e a rede, e conta.
+            consultas = tools.chamadas[antes:].count("get_faq_answer")
+            tipos["faq_consultas"] += consultas
+            tipos["faq_literal"] += sum(1 for m in saida if m.content in respostas_do_faq)
+            if consultas and not saida:
+                tipos["faq_sem_resposta"] += 1
 
             if atendimento.aguarda_especialista(agente.sessao):
                 # Em producao o atendente assume aqui e o bot para de responder.
@@ -397,6 +449,10 @@ def roda(conversas, verboso, prompt):
                        "I3_bloqueio", "I4_fuga_pela_saida", "I5_restricao_de_menor")},
         "falhas_execucao": tipos["falha_execucao"],
         "handoff_pedido_pelo_modelo": tipos["handoff_pedido_pelo_modelo"],
+        "faq_consultas": tipos["faq_consultas"],
+        "faq_literal": tipos["faq_literal"],
+        "faq_sem_resposta": tipos["faq_sem_resposta"],
+        "faq_itens": len(faq or []),
         "chamadas_modelo": anthropic.chamadas,
         "tools_chamadas": tipos["tools_chamadas"],
         "tokens_in": anthropic.tokens_in,
@@ -449,6 +505,9 @@ def imprime(nome, r):
         print(f"  {k:<26} {v:>4}  ({100*v/t:.0f}% dos turnos)")
     if r["falhas_execucao"]:
         print(f"  FALHAS DE EXECUCAO         {r['falhas_execucao']:>4}")
+    if r.get("faq_itens"):
+        print(f"FAQ: {r['faq_itens']} itens | consultas {r['faq_consultas']} "
+              f"| bolhas literais {r['faq_literal']} | consultou e calou {r['faq_sem_resposta']}")
 
 
 def nota_valida(r):
@@ -475,6 +534,8 @@ def main():
     ap.add_argument("--verboso", action="store_true")
     ap.add_argument("--comparar", nargs=2, metavar=("A", "B"))
     ap.add_argument("--prompt-arquivo", help="mede este prompt em vez do de producao")
+    ap.add_argument("--sem-faq", action="store_true",
+                    help="nao liga o FAQ real (como antes do PRD 064)")
     args = ap.parse_args()
 
     if args.comparar:
@@ -486,6 +547,9 @@ def main():
         for k in a["violacoes"]:
             d = b["violacoes"][k] - a["violacoes"][k]
             print(f"  {k:<26} {d:+d}  {'PIOROU' if d > 0 else 'ok'}")
+        for k in ("faq_consultas", "faq_literal", "faq_sem_resposta"):
+            if k in a or k in b:
+                print(f"  {k:<26} {a.get(k, 0)} -> {b.get(k, 0)}")
         for k in ("tokens_in", "tokens_out", "chamadas_modelo"):
             if a[k]:
                 print(f"  {k:<26} {100*(b[k]-a[k])/a[k]:+.0f}%")
@@ -498,7 +562,9 @@ def main():
     prompt = carrega_prompt(args.prompt_arquivo)
     print(f"[eval] prompt sob teste: {len(prompt)} chars "
           f"({args.prompt_arquivo or 'producao'})")
-    r = roda(conversas, args.verboso, prompt)
+    faq = [] if args.sem_faq else carrega_faq()
+    print(f"[eval] FAQ real: {len(faq)} itens")
+    r = roda(conversas, args.verboso, prompt, faq=faq)
     imprime(args.nome, r)
 
     valida, motivo = nota_valida(r)

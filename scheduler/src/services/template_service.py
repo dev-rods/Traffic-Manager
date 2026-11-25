@@ -7,6 +7,9 @@ from src.services.db.postgres import PostgresService
 logger = logging.getLogger(__name__)
 
 DEFAULT_TEMPLATES = {
+    # PRD 064: paciente com cadastro pediu para agendar e a clinica tem site.
+    # Texto fixo, sem modelo; {{nome}} ja vem com a virgula (", Maria") ou vazio.
+    "LINK_PRIMEIRO": "Oi{{nome}}! O agendamento é pelo nosso site: {{link}} 😊\nQualquer dúvida, é só me chamar por aqui.",
     "WELCOME_NEW": "Olá! Seja {{bem_vindx}} à *{{clinic_name}}*!\n\nComo posso te ajudar hoje?",
     "WELCOME_RETURNING": "Olá, {{patient_name}}! {{Bem_vindx}} de volta à *{{clinic_name}}*!\n\nComo posso te ajudar?",
     "MAIN_MENU": "Escolha uma opção:",
