@@ -119,3 +119,5 @@ Exemplos: 01:59:52 → 02:00:17 (25 s), 10:25:57 → 10:26:21 (24 s),
 - [x] Spec gerada: `docs/work/spec/062-assinatura-libera-pagamento-na-hora.md` (24/11/2026)
 - [x] Implementado em dev: 24/11/2026 (scheduler layer 218). Roteiro e
   resultado: `scheduler/tests/integration/062-assinatura-libera-pagamento-na-hora.md`
+- [x] Em prod: 24/11/2026 (PR #253, scheduler layer 172). Smoke: webhook `sign`
+  assinado com o HMAC de prod processado (200).
