@@ -62,6 +62,33 @@ def link_citado(texto: Optional[str], link: Optional[str]) -> bool:
     return bool(d) and d in (texto or "").lower()
 
 
+# Quantas vezes a paciente pediu para agendar neste atendimento antes de o
+# bot ter mandado o link (PRD 064): o primeiro pedido recebe o link; o
+# segundo e conversa ate o fim. Zera quando o agendamento sai.
+CAMPO_PEDIDOS = "pedidos_de_agendar_na_conversa"
+
+
+def pedidos_de_agendar(session: Optional[Dict]) -> int:
+    try:
+        return int((session or {}).get(CAMPO_PEDIDOS) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def registra_pedido_de_agendar(session: Optional[Dict], agora: Optional[int] = None) -> Dict:
+    s = session if session is not None else {}
+    s[CAMPO_PEDIDOS] = pedidos_de_agendar(s) + 1
+    return s
+
+
+def zera_pedidos_de_agendar(session: Optional[Dict]) -> Dict:
+    s = session if session is not None else {}
+    # Zero gravado, nao campo removido: o salvamento da sessao e por merge
+    # em alguns caminhos, e um pop nao chegaria ao banco.
+    s[CAMPO_PEDIDOS] = 0
+    return s
+
+
 def marca_link_enviado(session: Optional[Dict], agora: Optional[int] = None) -> Dict:
     s = session if session is not None else {}
     s[CAMPO_LINK_ENVIADO] = int(agora if agora is not None else time.time())

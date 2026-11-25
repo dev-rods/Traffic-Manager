@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Para quem já é paciente, o link é o primeiro caminho (PRD 046).
+"""Para quem já é paciente, o link é o primeiro caminho (PRD 046), decidido
+antes do modelo (PRD 064).
 
 Essência, 09/11/2026: o disparo mandou o link; ela perguntou "para influencer
 também é por esse link?"; o bot respondeu "pode ser por aqui mesmo, quais
-áreas?". A clínica escolheu o site e o bot puxou para a conversa. Aqui se mede
-o ambiente que o modelo recebe, a recusa que segura a tool, e o que libera a
-segunda tentativa: o BOT ter mandado o link.
+áreas?". Nobre, 24/11/2026: paciente com cadastro e sem sessão feita foi
+conduzida até "Confirmo?" e só então ouviu "faça pelo site" (a recusa ficava
+na tool). Aqui se mede o ambiente que o modelo recebe por caminho, que a tool
+não recusa mais ninguém, que o link sai mesmo se o modelo esquecer, e o que
+vira conversa: a insistência.
 """
 import os
 import unittest
@@ -13,10 +16,11 @@ from unittest import mock
 
 os.environ.setdefault("CONVERSATION_SESSIONS_TABLE", "test-sessions")
 
-from src.services import skills
+from src.services import caminho_de_agendamento as cam
 from src.services.ai_tools import ToolExecutor
 from src.services.autoatendimento import (
     CAMPO_LINK_ENVIADO,
+    CAMPO_PEDIDOS,
     link_citado,
     link_ja_foi,
     marca_link_enviado,
@@ -40,6 +44,9 @@ SEM_SITE = {"clinic_id": CLINIC, "custom_domain": None}
 PACIENTE = {"encontrado": True, "nome": "Fulana", "cadastro_completo": True,
             "sessoes_feitas": 2, "ultima_sessao": "2026-09-24", "agendamento_futuro": None}
 COM_SESSAO = dict(PACIENTE, agendamento_futuro={"id": "ap-1", "data": "2026-11-25", "hora": "16:30"})
+# Cadastro feito (site ou painel), nenhuma sessão: estado NEW_LEAD, skill de
+# lead. Era quem caía fora do bloco e dentro da recusa (caso 2 do PRD 064).
+CADASTRADA_SEM_SESSAO = dict(PACIENTE, sessoes_feitas=0, ultima_sessao=None)
 LEAD = {"encontrado": False}
 
 AREAS = {"service_area_pairs": [{"service_id": "s1", "area_id": "a1"}]}
@@ -67,21 +74,9 @@ class TestLinkJaFoi(unittest.TestCase):
         self.assertFalse(link_ja_foi(s, agora=1_000_000 + 8 * 86400))
 
 
-# -- O bloco no prompt -------------------------------------------------------
+# -- O agente ----------------------------------------------------------------
 
-class TestBlocoDoSite(unittest.TestCase):
-    def test_sem_link_nao_ha_bloco(self):
-        self.assertEqual(skills.bloco_do_site(None), "")
-        self.assertEqual(skills.bloco_do_site(""), "")
-
-    def test_com_link_manda_o_link_e_segura_a_consulta(self):
-        b = skills.bloco_do_site(LINK)
-        self.assertIn(LINK, b)
-        self.assertIn("NÃO chame check_availability", b)
-        self.assertIn("não consegue", b)
-
-
-def _roda(paciente, clinic, roteiro=None, sessao=None, texto="oi, quero agendar"):
+def _roda(paciente, clinic, roteiro=None, sessao=None, texto="oi, quero agendar", executor=None):
     vistas = {}
     anthropic = AnthropicRoteiro(roteiro or [texto_do_modelo("Oi!")])
     original = anthropic.create_message
@@ -93,7 +88,7 @@ def _roda(paciente, clinic, roteiro=None, sessao=None, texto="oi, quero agendar"
 
     anthropic.create_message = create_message
     agente = monta_agente(anthropic=anthropic, paciente=paciente,
-                          tool_executor=ToolExecutorFalso({"ok": True}))
+                          tool_executor=executor or ToolExecutorFalso({"ok": True}))
     agente._clinica = lambda c: dict(clinic)
     if sessao:
         agente.sessao_salva.update(sessao)
@@ -102,26 +97,94 @@ def _roda(paciente, clinic, roteiro=None, sessao=None, texto="oi, quero agendar"
 
 
 class TestOBlocoNoAgente(unittest.TestCase):
-    def test_paciente_sem_proxima_com_site_ve_o_bloco(self):
+    def test_paciente_que_pede_agendar_ve_o_bloco_do_link(self):
         _, _, v = _roda(PACIENTE, COM_SITE)
-        self.assertIn("PRIMEIRA TENTATIVA É O SITE", v["system"])
+        self.assertIn("AGENDAMENTO: PELO LINK", v["system"])
         self.assertIn(LINK, v["system"])
+        self.assertIn("não ofereça marcar por aqui", v["system"])
 
     def test_paciente_com_horario_tambem(self):
-        """§7.3 A: segunda sessão também começa pelo link."""
         _, _, v = _roda(COM_SESSAO, COM_SITE)
-        self.assertIn("PRIMEIRA TENTATIVA É O SITE", v["system"])
+        self.assertIn("AGENDAMENTO: PELO LINK", v["system"])
+
+    def test_cadastrada_sem_sessao_tambem_e_o_caso_2(self):
+        """Antes: skill de lead, sem bloco, e recusa na última tool."""
+        _, _, v = _roda(CADASTRADA_SEM_SESSAO, COM_SITE, texto="Podemos marcar dia 3/12 as 15:30?")
+        self.assertIn("AGENDAMENTO: PELO LINK", v["system"])
+
+    def test_duvida_de_paciente_nao_ve_bloco(self):
+        _, _, v = _roda(PACIENTE, COM_SITE, texto="quanto custa a axila?")
+        self.assertNotIn("AGENDAMENTO:", v["system"])
 
     def test_lead_nova_nao_ve(self):
         _, _, v = _roda(LEAD, COM_SITE)
-        self.assertNotIn("PRIMEIRA TENTATIVA É O SITE", v["system"])
+        self.assertNotIn("AGENDAMENTO:", v["system"])
 
     def test_sem_site_ninguem_ve(self):
         _, _, v = _roda(PACIENTE, SEM_SITE)
-        self.assertNotIn("PRIMEIRA TENTATIVA É O SITE", v["system"])
+        self.assertNotIn("AGENDAMENTO:", v["system"])
+
+    def test_segundo_pedido_ve_o_bloco_da_conversa(self):
+        _, _, v = _roda(PACIENTE, COM_SITE, sessao={CAMPO_PEDIDOS: 1}, texto="pode ser dia 3 às 15h?")
+        self.assertIn("AGENDAMENTO: NA CONVERSA", v["system"])
+        self.assertIn("Nunca mande\no link de novo", v["system"])
 
 
-# -- A recusa nas tools ------------------------------------------------------
+class TestOLinkSai(unittest.TestCase):
+    def test_texto_do_bot_com_o_link_grava_o_campo(self):
+        agente, saida, _ = _roda(PACIENTE, COM_SITE, [
+            texto_do_modelo(f"É por lá mesmo 😊 {LINK}agendar - qualquer dúvida, me chama."),
+        ])
+        self.assertIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
+        self.assertTrue(any("agendar.clinica-teste" in m.content for m in saida))
+
+    def test_modelo_esqueceu_o_link_e_o_codigo_anexa(self):
+        agente, saida, _ = _roda(PACIENTE, COM_SITE, [texto_do_modelo("Claro! Quais áreas você quer?")])
+        self.assertEqual(len(saida), 1)
+        self.assertIn("agendar.clinica-teste", saida[0].content)
+        self.assertIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
+
+    def test_duvida_sem_pedido_nao_ganha_link(self):
+        agente, saida, _ = _roda(PACIENTE, COM_SITE, [texto_do_modelo("A axila é R$ 60.")],
+                                 texto="quanto custa a axila?")
+        self.assertNotIn("agendar.clinica-teste", saida[0].content)
+        self.assertNotIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
+
+    def test_o_caso_real_o_link_sai_e_as_areas_nao(self):
+        """Essência 09/11: o modelo seguiu o bloco e mandou o link."""
+        anthropic_resposta = texto_do_modelo(
+            f"É por esse link sim, para todas as pacientes: {LINK} Qualquer dificuldade, me chama 😊")
+        agente, saida, _ = _roda(PACIENTE, COM_SITE, [anthropic_resposta],
+                                 texto="Para influencer também é por esse link? quero agendar")
+        enviados = " ".join(m.content for m in saida)
+        self.assertIn("agendar.clinica-teste", enviados)
+        self.assertNotIn("quais áreas", enviados.lower())
+        self.assertIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
+
+
+class TestInsistenciaAgendaNaConversa(unittest.TestCase):
+    def test_depois_do_link_o_bot_agenda_e_nao_manda_link_no_fim(self):
+        """Caso 2 do PRD 064 corrigido: pediu de novo, agenda até o fim."""
+        chamadas = []
+
+        class Executor(ToolExecutorFalso):
+            def execute(self, nome, args, context=None):
+                chamadas.append((nome, (context or {}).get("caminho")))
+                if nome == "book_appointment":
+                    return {"success": True, "appointment_id": "ap-novo"}
+                return {"ok": True}
+
+        sessao = marca_link_enviado({CAMPO_PEDIDOS: 1})
+        roteiro = [usa_tool("book_appointment", dict(AREAS, date="2026-12-03", time="15:40")),
+                   texto_do_modelo("Pronto, está agendado! Te esperamos 😊")]
+        agente, saida, v = _roda(PACIENTE, COM_SITE, roteiro, sessao=sessao,
+                                 texto="Isso, pode confirmar", executor=Executor())
+        self.assertIn(("book_appointment", cam.CONVERSA), chamadas)
+        self.assertFalse(any("agendar.clinica-teste" in m.content for m in saida))
+        self.assertEqual(agente.sessao_salva.get(CAMPO_PEDIDOS), 0)
+
+
+# -- A tool não recusa mais --------------------------------------------------
 
 def executor():
     ex = object.__new__(ToolExecutor)
@@ -136,107 +199,33 @@ def executor():
     return ex
 
 
-def ctx(paciente, link=LINK, sessao=None):
+def ctx(paciente, link=LINK, sessao=None, caminho=cam.CONVERSA):
     return {"paciente": paciente, "link_de_agendamento": link,
-            "session": sessao if sessao is not None else {},
+            "session": sessao if sessao is not None else {}, "caminho": caminho,
             "turnos": [{"role": "user", "content": "quero fazer axilas"}]}
 
 
-class TestRecusa(unittest.TestCase):
-    def test_check_availability_e_recusada_antes_do_link(self):
+class TestATollNaoRecusa(unittest.TestCase):
+    def test_check_availability_passa_para_paciente_sem_link(self):
         ex = executor()
-        r = ex._tool_check_availability(dict(AREAS), CLINIC, PHONE, ctx(PACIENTE))
-        self.assertEqual(r["error"], "primeiro_o_link")
-        self.assertEqual(r["link"], LINK)
-        self.assertIn("Não pergunte as áreas", r["o_que_fazer"])
-        ex.availability_engine.get_available_days_multi.assert_not_called()
+        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=10):
+            r = ex._tool_check_availability(dict(AREAS), CLINIC, PHONE, ctx(PACIENTE))
+        self.assertNotIn("error", r)
+        ex.availability_engine.get_available_days_multi.assert_called_once()
 
-    def test_book_appointment_e_recusado_antes_do_link_e_nada_e_gravado(self):
+    def test_em_link_primeiro_a_chamada_e_violacao_registrada_nao_recusa(self):
         ex = executor()
-        r = ex._tool_book_appointment(dict(AREAS, date="2026-11-25", time="16:30"), CLINIC, PHONE, ctx(PACIENTE))
-        self.assertEqual(r["error"], "primeiro_o_link")
-        ex.appointment_service.create_appointment.assert_not_called()
-
-    def test_a_recusa_vem_antes_da_do_mesmo_mes(self):
-        """Quem tem sessão futura e quer outra: primeiro o link (§7.3 A)."""
-        ex = executor()
-        r = ex._tool_book_appointment(dict(AREAS, date="2026-11-25", time="18:00"), CLINIC, PHONE, ctx(COM_SESSAO))
-        self.assertEqual(r["error"], "primeiro_o_link")
+        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=10), \
+             self.assertLogs("src.services.ai_tools", level="WARNING") as logs:
+            r = ex._tool_check_availability(dict(AREAS), CLINIC, PHONE, ctx(PACIENTE, caminho=cam.LINK_PRIMEIRO))
+        self.assertNotIn("error", r)
+        self.assertTrue(any("VIOLAÇÃO" in l for l in logs.output))
 
     def test_alterar_agendamento_nao_e_afetada(self):
-        """Alterar a sessão que existe continua pela conversa (PRD 045)."""
         ex = executor()
         ex._agendamento_confirmado = lambda a, c: None
         r = ex._tool_alterar_agendamento({"appointment_id": "ap-1", "new_time": "17:00"}, CLINIC, PHONE, ctx(COM_SESSAO))
         self.assertNotEqual(r.get("error"), "primeiro_o_link")
-
-
-class TestLiberacao(unittest.TestCase):
-    def test_depois_do_link_as_tools_passam(self):
-        ex = executor()
-        sessao = marca_link_enviado({})
-        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=10):
-            r = ex._tool_check_availability(dict(AREAS), CLINIC, PHONE, ctx(PACIENTE, sessao=sessao))
-        self.assertNotIn("error", r)
-        ex.availability_engine.get_available_days_multi.assert_called_once()
-
-    def test_link_velho_nao_libera(self):
-        ex = executor()
-        sessao = marca_link_enviado({}, agora=1)   # há muito tempo
-        r = ex._tool_check_availability(dict(AREAS), CLINIC, PHONE, ctx(PACIENTE, sessao=sessao))
-        self.assertEqual(r["error"], "primeiro_o_link")
-
-    def test_lead_nova_passa_sempre(self):
-        ex = executor()
-        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=10):
-            r = ex._tool_check_availability(dict(AREAS), CLINIC, PHONE, ctx(LEAD))
-        self.assertNotIn("error", r)
-
-    def test_sem_site_passa_sempre(self):
-        ex = executor()
-        with mock.patch("src.services.ai_tools.calcula_duracao", return_value=10):
-            r = ex._tool_check_availability(dict(AREAS), CLINIC, PHONE, ctx(PACIENTE, link=None))
-        self.assertNotIn("error", r)
-
-
-# -- O campo da sessão: só mensagem do bot conta -----------------------------
-
-class TestOLinkSaiu(unittest.TestCase):
-    def test_texto_do_bot_com_o_link_grava_o_campo(self):
-        agente, saida, _ = _roda(PACIENTE, COM_SITE, [
-            texto_do_modelo(f"É por lá mesmo 😊 {LINK}agendar - qualquer dúvida, me chama."),
-        ])
-        self.assertIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
-        self.assertTrue(any("agendar.clinica-teste" in m.content for m in saida))
-
-    def test_texto_sem_o_link_nao_grava(self):
-        agente, _, _ = _roda(PACIENTE, COM_SITE, [texto_do_modelo("Oi! Tudo bem?")])
-        self.assertNotIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
-
-    def test_o_caso_real_o_link_sai_e_as_areas_nao(self):
-        """O roteiro do modelo tenta consultar; a recusa o manda ao link; a
-        mensagem que sai leva o link e não pergunta áreas."""
-        chamadas = []
-
-        class Executor(ToolExecutorFalso):
-            def execute(self, nome, args, context=None):
-                chamadas.append(nome)
-                if nome == "check_availability":
-                    return {"error": "primeiro_o_link", "link": LINK,
-                            "o_que_fazer": "Mande o link e pergunte se ela consegue por lá."}
-                return {"ok": True}
-
-        anthropic = AnthropicRoteiro([
-            usa_tool("check_availability", AREAS),
-            texto_do_modelo(f"É por esse link sim, para todas as pacientes: {LINK} Qualquer dificuldade, me chama 😊"),
-        ])
-        agente = monta_agente(anthropic=anthropic, paciente=PACIENTE, tool_executor=Executor())
-        agente._clinica = lambda c: dict(COM_SITE)
-        saida = agente.process_message(CLINIC, mensagem("Para influencer também é por esse link?"))
-        enviados = " ".join(m.content for m in saida)
-        self.assertIn("agendar.clinica-teste", enviados)
-        self.assertNotIn("quais áreas", enviados.lower())
-        self.assertIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
 
 
 # -- Campanha ----------------------------------------------------------------
@@ -259,8 +248,6 @@ class TestCampanha(unittest.TestCase):
         self.assertNotIn("1. LINK", p)
 
     def _bloco(self, link):
-        """`_build_system_prompt` e dublado no agente de teste; o bloco de
-        campanha e montado em codigo e e conferido direto."""
         import time
         from src.services.conversation_agent import ConversationAgent
         agente = object.__new__(ConversationAgent)

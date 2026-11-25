@@ -35,6 +35,8 @@ from src.services import policy_do_faq
 from src.services import skills
 from src.services import retencao
 from src.services import fecho_social, saudacao
+from src.services import caminho_de_agendamento
+from src.services.autoatendimento import zera_pedidos_de_agendar
 from src.services import relogio as _relogio
 from src.services.busca_no_faq import busca as busca_no_faq
 from src.services.identificacao_de_paciente import identificar as identificar_paciente
@@ -435,15 +437,19 @@ class ConversationAgent:
         # PRIMEIRA tentativa de agendar (PRD 046). Vai no prompt (bloco do
         # site) e no ctx das tools (recusa ate o link ter saido).
         link = link_de_agendamento(clinic)
+        # Link ou conversa, decidido AQUI, antes do modelo (PRD 064): pelo
+        # cadastro e pelo que a pessoa pediu, nao pela skill. A tool nao recusa
+        # mais; o bloco e o que conduz, e `garante_o_link` fecha a saida.
+        caminho = caminho_de_agendamento.decide(
+            clinic, paciente, session, incoming.content or "", link)
+        if caminho != caminho_de_agendamento.CONVERSA:
+            logger.info(f"[Caminho] {phone}: {caminho}")
 
         # 3. Build system prompt
         system_prompt = self._build_system_prompt(clinic_id, phone, session)
         if not campanha_viva(session):
             system_prompt += skill.bloco
-            # Lead nova fica de fora: o site pede cadastro, e o bot ja faz
-            # isso melhor na conversa. Ver skills.bloco_do_site.
-            if skill is not skills.PRIMEIRO_AGENDAMENTO:
-                system_prompt += skills.bloco_do_site(link)
+        system_prompt += caminho_de_agendamento.bloco(caminho, link)
         # Sobreposicao de lembrete (PRD 027): bloco por cima de qualquer skill,
         # como a campanha. Gravada na entrega do lembrete, nunca inferida.
         system_prompt += lembrete.bloco_de_prompt(session, clinic)
@@ -570,6 +576,7 @@ class ConversationAgent:
                                  "faq_entregues": faq_entregues,
                                  "session": session,
                                  "link_de_agendamento": link,
+                                 "caminho": caminho,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     dados_consultados.append((nome_tool, resultado))
@@ -1003,6 +1010,7 @@ class ConversationAgent:
                                  "faq_entregues": faq_entregues,
                                  "session": session,
                                  "link_de_agendamento": link,
+                                 "caminho": caminho,
                                  "turnos": _turnos_para_trava(history)},
                     )
                     respaldo_das_tools.append(result)
@@ -1134,6 +1142,11 @@ class ConversationAgent:
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
+        # Em LINK_PRIMEIRO a mensagem leva o link, com ou sem o modelo lembrar.
+        com_link = caminho_de_agendamento.garante_o_link(final_text, caminho, link)
+        if com_link != final_text:
+            logger.info(f"[Caminho] {phone}: o modelo nao citou o link; anexei")
+            final_text = com_link
         # Saudacao pelo relogio: "boa noite" copiado da pessoa, respondido de
         # manha, vira "bom dia" (PRD 064). Determinismo em volta do modelo.
         if saudacao.saudacao_errada(final_text, periodo_atual):
@@ -1330,6 +1343,9 @@ class ConversationAgent:
         if link and any(link_citado(getattr(m, "content", ""), link) for m in outgoing):
             marca_link_enviado(session)
             logger.info(f"[Link] {phone}: link enviado")
+        # Agendou: o proximo pedido comeca do zero (PRD 064).
+        if efeito_cometido in ("book_appointment", "alterar_agendamento"):
+            zera_pedidos_de_agendar(session)
 
         # 8. Save history (truncated)
         session["agent_history"] = self._truncate_history(
