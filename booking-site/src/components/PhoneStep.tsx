@@ -40,9 +40,9 @@ export function PhoneStep({ defaultValue = '', onContinue, aguardando }: PhoneSt
         onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
       />
       <p className="text-sm text-ink-600">
-        Vamos enviar um código por WhatsApp para confirmar que é você e conferir se há{' '}
-        <span className="font-medium text-ink-800">desconto personalizado</span> no seu número.
-        Se houver, ele aparece logo depois do código.
+        Você recebe um código por WhatsApp e, se tiver{' '}
+        <span className="font-medium text-ink-800">desconto personalizado</span>, ele aparece em
+        seguida.
       </p>
       <Button type="submit" disabled={!valido || aguardando} loading={valido && aguardando}>
         Continuar

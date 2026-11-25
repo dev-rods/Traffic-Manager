@@ -97,9 +97,9 @@ cart -> areas -> phone -> verify -> [ficha]  identity (+ campos que faltam) -> s
 código e o preço da pessoa aparecia ao digitar o celular.)
 
 **phone.** Campo único de celular com o preço de tabela na lateral. Digitar o
-número não cota nada com ele. Texto de apoio: "Vamos enviar um código por
-WhatsApp para confirmar que é você e conferir se há desconto personalizado no
-seu número. Se houver, ele aparece logo depois do código." (ajuste de 24/11:
+número não cota nada com ele. Texto de apoio: "Você recebe um código por
+WhatsApp e, se tiver desconto personalizado, ele aparece em seguida." (ajuste
+de 24/11:
 a lateral mostra a tabela nesta etapa, e sem o aviso a paciente com desconto
 combinado estranharia a ausência dele). Botão "Continuar".
 

@@ -31,6 +31,5 @@ describe('PhoneStep (PRD 061)', () => {
     render(<PhoneStep onContinue={vi.fn()} aguardando={false} />)
     expect(screen.getByText(/código por WhatsApp/)).toBeInTheDocument()
     expect(screen.getByText('desconto personalizado')).toBeInTheDocument()
-    expect(screen.getByText(/logo depois do código/)).toBeInTheDocument()
   })
 })
