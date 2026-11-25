@@ -75,12 +75,12 @@ def definicao_da_tool(lista: Sequence[Dict]) -> Optional[Dict]:
         "function": {
             "name": NOME_DA_TOOL,
             "description": (
-                "Answer a patient question with the clinic's own FAQ text. Choose the ONE "
-                "item that answers the question; the item's text is sent to the patient "
-                "automatically, word for word, as its own message - you must NOT repeat, "
-                "summarize or paraphrase it in your reply. If no item answers the question, "
-                "do NOT call this tool: say you will confirm with the team and call "
-                "request_human_handoff. Items available:\n" + catalogo
+                "Get the clinic's own answer text for ONE question. Use it as the only "
+                "source for your reply: answer just what the patient asked, briefly, in "
+                "your words but with the facts of the text; never add facts that are not "
+                "in it. If no item answers the question, do NOT call this tool: say you "
+                "will confirm with the team and call request_human_handoff. Items "
+                "available:\n" + catalogo
             ),
             "parameters": {
                 "type": "object",

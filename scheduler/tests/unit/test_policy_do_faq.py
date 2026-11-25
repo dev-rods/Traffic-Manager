@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""O FAQ entregue palavra por palavra (PRD 020 §4.3, fase 5).
+"""O FAQ como fonte (PRD 064), com a bolha literal como rede (PRD 020 §4.3).
 
-Decisão do André (10/10/2026): se a clínica escreveu a resposta, ela vai como
-está. O modelo escolhe o item numa lista fechada; o texto vai em bolha
-própria; a fala do modelo que repete o item é descartada.
+Decisão do André (10/10/2026): se a clínica escreveu a resposta, ela vale.
+Decisão de 25/11/2026 (P3): o modelo lê o item e responde só o que foi
+perguntado, com as palavras dele; se acrescentar fato de fora duas vezes,
+ou não escrever nada, o item vai literal em bolha própria, DEPOIS da fala.
 """
 import os
 import unittest
@@ -57,7 +58,8 @@ class TestDefinicaoDaTool(unittest.TestCase):
         self.assertEqual(schema["required"], ["question_key"])
         self.assertNotIn("question", schema["properties"], "não há texto livre")
         self.assertIn("Posso fazer menstruada?", d["function"]["description"])
-        self.assertIn("NOT repeat", d["function"]["description"])
+        self.assertIn("only", d["function"]["description"])
+        self.assertIn("never add facts", d["function"]["description"])
 
     def test_sem_itens_a_tool_nao_existe(self):
         self.assertIsNone(pf.definicao_da_tool([]))
@@ -124,14 +126,14 @@ class TestExecutor(unittest.TestCase):
         ex.db.execute_query.return_value = []
         return ex
 
-    def test_entrega_o_item_e_manda_nao_repetir(self):
+    def test_devolve_o_item_como_fonte(self):
         ex = self._executor()
-        ctx = {"faq": FAQ, "faq_entregues": []}
+        ctx = {"faq": FAQ, "faq_entregues": [], "faq_consultados": []}
         r = ex._tool_get_faq_answer({"question_key": "MENSTRUATION"}, CLINIC, "55", ctx)
-        self.assertTrue(r["delivered"])
-        self.assertIn("Do NOT repeat", r["instruction"])
-        self.assertNotIn(MENSTRUACAO, str(r), "o texto nao volta ao modelo")
-        self.assertEqual(ctx["faq_entregues"][0]["question_key"], "MENSTRUATION")
+        self.assertEqual(r["answer"], MENSTRUACAO)
+        self.assertIn("ONLY source", r["instruction"])
+        self.assertEqual(ctx["faq_consultados"][0]["question_key"], "MENSTRUATION")
+        self.assertEqual(ctx["faq_entregues"], [], "literal so no fallback")
 
     def test_chave_inventada_e_erro_sem_entregar(self):
         ex = self._executor()
@@ -140,6 +142,7 @@ class TestExecutor(unittest.TestCase):
         self.assertIn("error", r)
         self.assertIn(MOTIVO_SEM_RESPOSTA, r["error"])
         self.assertEqual(ctx["faq_entregues"], [])
+        self.assertNotIn("faq_consultados", ctx)
 
     def test_texto_livre_do_formato_antigo_e_erro(self):
         ex = self._executor()
@@ -150,7 +153,7 @@ class TestExecutor(unittest.TestCase):
         ex = self._executor()
         ex.db.execute_query.return_value = [FAQ[2]]
         r = ex._tool_get_faq_answer({"question_key": "PAIN"}, CLINIC, "55", {"faq_entregues": []})
-        self.assertTrue(r["delivered"])
+        self.assertEqual(r["answer"], FAQ[2]["answer"])
 
 
 class ExecutorComFaq(ToolExecutorFalso):
@@ -204,35 +207,52 @@ class TestNoAgente(unittest.TestCase):
         faq = next(t for t in vistas[0] if t["name"] == "get_faq_answer")
         self.assertEqual(faq["input_schema"]["properties"]["question_key"]["enum"][0], "MENSTRUATION")
 
-    def test_o_texto_da_clinica_sai_em_bolha_propria_byte_a_byte(self):
-        saida, anthropic, _ = self._roda([usa_faq("MENSTRUATION"), texto_do_modelo("")])
+    def test_resposta_ancorada_sai_na_fala_do_modelo_sem_bolha(self):
+        saida, anthropic, _ = self._roda([usa_faq("MENSTRUATION"),
+                                          texto_do_modelo("Pode sim! Só use absorvente interno ou coletor no dia 😊")])
+        self.assertEqual(len(saida), 1)
+        self.assertIn("absorvente interno", saida[0].content)
+        self.assertNotEqual(saida[0].content, MENSTRUACAO)
+        # O modelo recebeu o texto do item como fonte.
+        resultado = anthropic.conversas[-1][-1]["content"][0]["content"]
+        self.assertIn("absorvente interno ou coletor", resultado)
+
+    def test_sem_fala_do_modelo_o_item_vai_literal(self):
+        saida, _, _ = self._roda([usa_faq("MENSTRUATION"), texto_do_modelo("")])
         self.assertEqual([m.content for m in saida], [MENSTRUACAO])
-        self.assertEqual(saida[0].message_type, "text")
 
-    def test_fala_do_modelo_que_repete_o_item_e_descartada(self):
-        saida, _, _ = self._roda([usa_faq("MENSTRUATION"), texto_do_modelo(
-            "Sim, pode fazer menstruada! A única recomendação é usar absorvente interno ou "
-            "coletor no dia da sessão, para o conforto durante o procedimento na virilha. 😊")])
-        self.assertEqual([m.content for m in saida], [MENSTRUACAO], "a bolha literal basta")
+    def test_fato_fora_do_item_e_reescrito_uma_vez(self):
+        saida, anthropic, _ = self._roda([
+            usa_faq("SESSION_INTERVAL"),
+            texto_do_modelo("O intervalo é de 45 dias."),
+            texto_do_modelo("O intervalo é de aproximadamente 30 dias 😊"),
+        ], texto="qual o intervalo?")
+        self.assertEqual(len(saida), 1)
+        self.assertIn("30 dias", saida[0].content)
+        self.assertEqual(anthropic.chamadas, 3)
+        self.assertTrue(any("45dias" in c for c in anthropic.correcoes) or anthropic.chamadas == 3)
 
-    def test_duas_perguntas_duas_bolhas_e_a_fala_propria_depois(self):
-        """'qual o intervalo e tem horário dia 21?': o item numa bolha, os
-        horários (consultados) em outra, nunca juntos."""
+    def test_fato_fora_do_item_duas_vezes_cai_para_a_bolha_literal_depois_da_fala(self):
+        saida, _, _ = self._roda([
+            usa_faq("SESSION_INTERVAL"),
+            texto_do_modelo("O intervalo é de 45 dias."),
+            texto_do_modelo("São 45 dias entre sessões. Quer marcar?"),
+        ], texto="qual o intervalo?")
+        # A fala insistiu no fato de fora: sai o item literal; a fala do modelo
+        # fica so se nao repetir o item (aqui nao repete, entao as duas saem,
+        # fala primeiro, item depois).
+        self.assertEqual(saida[-1].content, INTERVALO)
+
+    def test_duas_perguntas_horarios_na_fala_e_item_como_fonte(self):
         saida, _, _ = self._roda(
             [usa_faq("SESSION_INTERVAL"),
              {"content": [{"type": "tool_use", "id": "t2", "name": "get_time_slots", "input": {}}],
               "stop_reason": "tool_use"},
-             texto_do_modelo("E para o dia 21 tenho 16:25. Fica bom?")],
+             texto_do_modelo("O intervalo é de aproximadamente 30 dias. E para o dia 21 tenho 16:25. Fica bom?")],
             texto="qual o intervalo entre as sessões e tem horário dia 21?")
-        self.assertEqual(len(saida), 2)
-        self.assertEqual(saida[0].content, INTERVALO)
-        self.assertIn("16:25", saida[1].content)
-        self.assertNotIn(INTERVALO, saida[1].content)
-
-    def test_dois_itens_cada_um_em_sua_bolha(self):
-        saida, _, _ = self._roda([usa_duas("MENSTRUATION", "PAIN"), texto_do_modelo("")],
-                                 texto="posso menstruada? e dói?")
-        self.assertEqual([m.content for m in saida], [MENSTRUACAO, "Incomoda pouco, é bem tolerável."])
+        self.assertEqual(len(saida), 1)
+        self.assertIn("30 dias", saida[0].content)
+        self.assertIn("16:25", saida[0].content)
 
     def test_tres_itens_e_pergunta_confusa_vai_a_pessoa(self):
         saida, _, agente = self._roda(
@@ -252,22 +272,22 @@ class TestNoAgente(unittest.TestCase):
         ultimo_resultado = anthropic.conversas[-1][-1]["content"][0]["content"]
         self.assertIn("error", ultimo_resultado)
 
-    def test_o_historico_salvo_nao_carrega_o_texto_do_item(self):
-        """O item nao volta ao modelo (nem no tool_result): o que ele le e o
-        aviso de que foi entregue. O texto da clinica nao vira contexto que
-        o modelo possa reformular numa mensagem seguinte."""
-        _, _, agente = self._roda([usa_faq("MENSTRUATION"), texto_do_modelo("")])
-        self.assertNotIn(MENSTRUACAO, str(agente.sessao_salva.get("agent_history")))
+    def test_o_historico_salvo_carrega_o_texto_do_item_como_fonte(self):
+        """Desde o PRD 064 o item volta ao modelo no tool_result: e a fonte da
+        resposta, e fica no historico como qualquer resultado de tool."""
+        _, _, agente = self._roda([usa_faq("MENSTRUATION"), texto_do_modelo("Pode sim 😊")])
+        self.assertIn("absorvente interno", str(agente.sessao_salva.get("agent_history")))
 
 
 class TestPrompt(unittest.TestCase):
 
-    def test_o_bloco_de_duvidas_manda_nao_repetir(self):
+    def test_o_bloco_de_duvidas_manda_responder_so_o_perguntado(self):
         from src.services.conversation_agent import ConversationAgent
         import inspect
         fonte = inspect.getsource(ConversationAgent._build_system_prompt)
-        self.assertIn("NÃO o repita, NÃO o resuma", fonte)
-        self.assertNotIn("Pode resumir e adaptar o tom", fonte)
+        self.assertIn("ÚNICA fonte", fonte)
+        self.assertIn("cole o texto inteiro", fonte)
+        self.assertNotIn("NÃO o repita, NÃO o resuma", fonte)
 
 
 if __name__ == "__main__":
