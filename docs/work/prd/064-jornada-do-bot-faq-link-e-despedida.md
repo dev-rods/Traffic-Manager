@@ -466,5 +466,12 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
       com o eval dos 4 casos (4/4, virilha com os três valores); `aviso_de_espera.py` manda o aviso
       caloroso quando só a política LEADS_ONLY cala o bot (uma vez por 24 h, envio de sistema que a
       retomada ignora). PRD 064 CONCLUÍDO. Acompanhar `[AvisoDeEspera]` e `[Caminho]` na Nobre.
+- [x] Correção de 25/11 à noite (PR #270, mergeado; dev layer 226; prod pendente do deploy pelo André):
+      dois casos da Nobre apontados pelo André. (a) "tem data em mente?" após áreas e valor: brecha do
+      detector do PRD 044, não das frentes de hoje; "data em mente"/"prefere algum dia" entram, e oferecer
+      ver as datas passa a exigir a consulta (revê §7.3 do 044); regra 6 no bloco DATAS. (b) lista de
+      datas duplicada: efeito da frente 5 (a trava da retomada reescreveu uma resposta que já oferecia
+      datas); opções oferecidas contam como resposta, datas/horários são o mesmo assunto, e
+      `opcoes_numeradas.sem_as_opcoes` tira do texto do modelo as linhas que repetem a lista.
 - [x] Registrado em `TASKS_LOG.md`
 - [x] Registrado em `TASKS_LOG.md`
