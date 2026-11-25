@@ -14,6 +14,7 @@ import type { PatientConsent } from '@/types'
 
 interface TermoDeConsentimentoProps {
   patientId: string
+  patientName?: string | null
 }
 
 const SITUACAO: Record<PatientConsent['status'], { label: string; cor: string }> = {
@@ -43,7 +44,7 @@ function dataDe(iso: string | null): string {
  * se registra aqui é o papel (PRD 047): quem já assinou na recepção não
  * precisa de uma sessão na agenda para ser regularizada.
  */
-export function TermoDeConsentimento({ patientId }: TermoDeConsentimentoProps) {
+export function TermoDeConsentimento({ patientId, patientName }: TermoDeConsentimentoProps) {
   const { data, isLoading, isError, refetch } = useConsentsDoPaciente(patientId)
   const abrir = useAbrirDocumentoDoTermo()
   const renovar = useRenovarTermo()
@@ -69,6 +70,7 @@ export function TermoDeConsentimento({ patientId }: TermoDeConsentimentoProps) {
     <RegistrarPapelModal
       open={papelAberto}
       patientId={patientId}
+      patientName={patientName}
       onClose={() => setPapelAberto(false)}
     />
   )
