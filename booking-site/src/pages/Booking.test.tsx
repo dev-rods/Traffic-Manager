@@ -12,6 +12,7 @@ import { bookingService } from '@/services/booking.service'
 import { ApiError } from '@/services/api'
 import { toISODate } from '@/utils/dates'
 import { guardaSessaoVerificada, limpaSessaoVerificada } from '@/utils/sessaoVerificada'
+import { limpaEnviosRecentes } from '@/utils/enviosDeCodigo'
 import type { Appointment, AvailabilityResponse, BootstrapResponse, Quote, Service } from '@/types'
 
 vi.mock('@/services/booking.service')
@@ -165,6 +166,7 @@ async function fillCadastro() {
 
 beforeEach(() => {
   limpaSessaoVerificada()
+  limpaEnviosRecentes()
 })
 
 describe('Booking - serviço único', () => {
@@ -261,7 +263,9 @@ describe('Booking - paciente conhecida (PRD 061)', () => {
     await typeCode()
 
     expect(await screen.findByText('Confirme seu celular')).toBeInTheDocument()
-    expect(bookingService.sendOtp).toHaveBeenCalledTimes(2)
+    // O código anterior saiu há segundos: não manda outro, oferece o reenvio com espera.
+    expect(bookingService.sendOtp).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: /Reenviar código em \d+s/ })).toBeDisabled()
     expect(screen.queryByText(/É você\?/)).not.toBeInTheDocument()
   })
 

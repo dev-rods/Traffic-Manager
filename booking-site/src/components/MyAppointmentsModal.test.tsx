@@ -6,6 +6,7 @@ import { MyAppointmentsModal } from './MyAppointmentsModal'
 import { bookingService } from '@/services/booking.service'
 import type { Appointment, BootstrapResponse } from '@/types'
 import { guardaSessaoVerificada, leSessaoVerificada, limpaSessaoVerificada } from '@/utils/sessaoVerificada'
+import { limpaEnviosRecentes } from '@/utils/enviosDeCodigo'
 
 vi.mock('@/services/booking.service')
 
@@ -29,6 +30,7 @@ function renderModal() {
 
 describe('MyAppointmentsModal', () => {
   beforeEach(() => {
+    limpaEnviosRecentes()
     limpaSessaoVerificada()
     vi.mocked(bookingService.sendOtp).mockResolvedValue({ status: 'SUCCESS' })
     vi.mocked(bookingService.confirmOtp).mockResolvedValue({ token: 'tok', paciente: null })
