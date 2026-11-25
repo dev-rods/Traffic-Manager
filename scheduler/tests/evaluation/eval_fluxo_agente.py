@@ -286,17 +286,9 @@ def carrega_prompt(caminho=None):
         with open(caminho, encoding="utf-8") as f:
             return f.read()
 
-    import boto3
     from src.services.db.postgres import PostgresService
 
-    sessao = boto3.Session(profile_name="dev-andre", region_name="us-east-1")
-    ssm = sessao.client("ssm")
-    for env, param in [("RDS_HOST", "SUPABASE_DB_HOST"), ("RDS_PORT", "SUPABASE_DB_PORT"),
-                       ("RDS_DATABASE", "SUPABASE_DB_NAME"), ("RDS_USERNAME", "SUPABASE_DB_USER"),
-                       ("RDS_PASSWORD", "SUPABASE_DB_PASSWORD")]:
-        os.environ[env] = ssm.get_parameter(
-            Name=f"/prod/{param}", WithDecryption=True)["Parameter"]["Value"]
-
+    _env_do_banco_de_prod()
     linhas = PostgresService().execute_query(
         "SELECT content FROM scheduler.message_templates "
         "WHERE clinic_id=%s AND template_key='AI_SYSTEM_PROMPT'",
@@ -306,11 +298,25 @@ def carrega_prompt(caminho=None):
     return linhas[0]["content"]
 
 
+def _env_do_banco_de_prod():
+    """RDS_* do SSM (so leitura em prod). Idempotente: com --prompt-arquivo o
+    prompt nao vem do banco, mas o FAQ vem."""
+    if os.environ.get("RDS_HOST") and "localhost" not in os.environ.get("RDS_HOST", ""):
+        return
+    import boto3
+    ssm = boto3.Session(profile_name="dev-andre", region_name="us-east-1").client("ssm")
+    for env, param in [("RDS_HOST", "SUPABASE_DB_HOST"), ("RDS_PORT", "SUPABASE_DB_PORT"),
+                       ("RDS_DATABASE", "SUPABASE_DB_NAME"), ("RDS_USERNAME", "SUPABASE_DB_USER"),
+                       ("RDS_PASSWORD", "SUPABASE_DB_PASSWORD")]:
+        os.environ[env] = ssm.get_parameter(
+            Name=f"/prod/{param}", WithDecryption=True)["Parameter"]["Value"]
+
+
 def carrega_faq(clinic_id="clinicaessenciaestetica-9668a4"):
-    """Os itens ativos do FAQ da clinica em prod (so leitura). Precisa das
-    variaveis RDS_* no ambiente, que carrega_prompt() ja define."""
+    """Os itens ativos do FAQ da clinica em prod (so leitura)."""
     from src.services import policy_do_faq
     from src.services.db.postgres import PostgresService
+    _env_do_banco_de_prod()
     return policy_do_faq.itens(PostgresService(), clinic_id)
 
 

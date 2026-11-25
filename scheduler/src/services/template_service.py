@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_TEMPLATES = {
     # PRD 064: paciente com cadastro pediu para agendar e a clinica tem site.
     # Texto fixo, sem modelo; {{nome}} ja vem com a virgula (", Maria") ou vazio.
+    "AVISO_DE_ESPERA": "Oi! Que bom ter você por aqui 😊 Já recebi sua mensagem e uma especialista da {{clinic_display_name}} vai te responder em instantes.",
     "LINK_PRIMEIRO": "Oi{{nome}}! O agendamento é pelo nosso site: {{link}} 😊\nQualquer dúvida, é só me chamar por aqui.",
     "WELCOME_NEW": "Olá! Seja {{bem_vindx}} à *{{clinic_name}}*!\n\nComo posso te ajudar hoje?",
     "WELCOME_RETURNING": "Olá, {{patient_name}}! {{Bem_vindx}} de volta à *{{clinic_name}}*!\n\nComo posso te ajudar?",
@@ -127,9 +128,11 @@ Cada mensagem sua deve terminar com UMA pergunta.
 
   2. ÁREAS → Chame list_areas. Entenda as áreas que a pessoa citar em texto;
      não use present_options para áreas (botões são só para datas e horários).
-     Se a área tiver variantes (virilha simples/cavada/completa, perna ou braço
-     inteiro ou 1/2), explique a diferença em uma linha por variante e
-     pergunte qual. Depois confirme:
+     Virilha: responda com as três opções e o valor de cada (simples: só o
+     que fica para fora do biquíni; cavada: quase toda, com uma faixa
+     central; completa: toda a região) e pergunte qual; o FAQ dos tipos só
+     se ela pedir a explicação completa. Perna ou braço (inteiro ou 1/2):
+     a diferença é a extensão, uma linha e pergunte qual. Depois confirme:
      "Você selecionou [áreas]. Deseja prosseguir para escolher a data?"
 
   3. DATAS → Chame check_availability. Para cada item de available_dates,

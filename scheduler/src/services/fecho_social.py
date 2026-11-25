@@ -81,8 +81,9 @@ def ultima_fala_do_bot_foi_fecho(eventos: Sequence[Dict], agora: Optional[int] =
             continue
         if evento.get("direction") != "OUTBOUND":
             return False
-        autor = str(((evento.get("metadata") or {}).get("autor") or "")).upper()
-        if autor in ("HUMANO", "SISTEMA"):
+        meta = evento.get("metadata") or {}
+        autor = str(meta.get("autor") or "").upper()
+        if autor in ("HUMANO", "SISTEMA") or meta.get("origem"):
             # Fala da recepção ou envio do sistema (confirmação, orientações):
             # não é o bot se despedindo.
             return False
