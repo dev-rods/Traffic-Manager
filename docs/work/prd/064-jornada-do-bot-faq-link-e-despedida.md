@@ -225,8 +225,8 @@ session, intencao)`, decidida ANTES do modelo, com três saídas:
 | Saída | Quando | O que o bot faz |
 |---|---|---|
 | `conversa` | lead sem cadastro; OU clínica sem domínio; OU a pessoa já está no meio de um agendamento na conversa (áreas ou data ditas neste atendimento); OU o link já foi (7 dias) | agenda na conversa, como sempre |
-| `link_primeiro` | paciente com cadastro, intenção de agendar na primeira mensagem do atendimento, link ainda não enviado pelo bot | responde em uma frase com o link E oferece fechar por aqui: "Se preferir, me diz as áreas e o dia que eu marco agora" |
-| `link_so_ofertado` | campanha/lembrete vivo (o texto já trazia o link) | NÃO reenvia link; se ela escreveu, é porque quer resolver aqui: agenda na conversa |
+| `link_primeiro` | paciente com cadastro, primeiro pedido de agendar neste atendimento, link ainda não enviado PELO BOT (campanha e lembrete não contam) | responde em uma frase com o link, sem oferta de marcar por aqui, e se coloca à disposição para dúvidas |
+| `conversa_por_insistencia` | ela pede de novo para marcar pela conversa depois do link (segundo pedido, ou "não consigo", "prefiro aqui") | agenda na conversa até o fim; nenhuma guarda devolve link no fechamento |
 
 Regras:
 
@@ -234,9 +234,9 @@ Regras:
   como asserção de consistência (log) para o eval: se o caminho decidido
   foi `link_primeiro` e o modelo chamou `book_appointment` sem ter
   mandado o link, é violação medida, não recusa à cliente.
-- "Link mandado pela campanha conta" (reverte a decisão de 10/11 nesse
-  ponto, só para a campanha e o lembrete, que são textos nossos com o
-  link dentro). Ver pendência P2.
+- Link da campanha e do lembrete NÃO contam (mantém a decisão de 10/11):
+  a primeira resposta do bot a um pedido de agendar é o link, sozinho.
+  Decisão P2 de 25/11.
 - Estado `NEW_LEAD` com cadastro recebe o mesmo bloco das skills de
   paciente (fecha o item 2 do §2.4).
 - O resumo de confirmação ("Então ficou assim... Confirmo?") passa a ser
@@ -386,8 +386,13 @@ Alternativa (se o relógio der trabalho): só "Olá", sempre, e remover
 Decisões do André em 25/11/2026: P1 proposta; P3 alternativa (tudo em
 modo `fonte`, bolha literal só como fallback da ancoragem); P4 proposta
 (calar); P5 alternativa, com mensagem menos fria; P6 alternativa (listar
-os três tipos com valor e perguntar qual); P7 proposta (calar). P2 ficou
-em aberto, reexplicada abaixo.
+os três tipos com valor e perguntar qual); P7 proposta (calar).
+P2 (25/11, depois da reexplicação): alternativa, SEM a oferta "se preferir
+eu marco agora". O link vai sozinho na primeira resposta. Se ela insistir
+mais uma vez em marcar pela conversa, o bot conduz o agendamento até o
+fim e nunca manda link no fechamento. A mesma regra vale para a P1 (a
+oferta sai de lá também): primeira resposta é só o link; insistência é
+conversa até o fim.
 
 Texto proposto para P5 (mensagem imediata na Nobre quando o bot não pode
 atender pela política; não conta como atendimento do bot e não repete na
@@ -433,7 +438,7 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
 
 ## Status (preencher após conclusão)
 
-- [ ] Pendente: decisão P2 (as demais fechadas em 25/11)
-- [ ] Spec gerada: `spec/064-jornada-do-bot-faq-link-e-despedida.md`
+- [x] Decisões P1 a P7 fechadas em 25/11/2026
+- [x] Spec gerada: `spec/064-jornada-do-bot-faq-link-e-despedida.md`
 - [ ] Implementado em: (data)
 - [ ] Registrado em `TASKS_LOG.md`
