@@ -49,10 +49,17 @@ def ha_pergunta_em_aberto(eventos, entregue_em=None):
     """
     from src.services.retomada import _instante
 
+    from src.services import fecho_social
+
     for evento in reversed(eventos or []):
-        if not (evento.get("content") or "").strip():
+        texto = (evento.get("content") or "").strip()
+        if not texto:
             continue
         if evento.get("direction") == "INBOUND":
+            # "Obrigada" como ultima fala nao e pergunta em aberto (PRD 064,
+            # P7): retomar o bot aqui so produziria mais uma despedida.
+            if fecho_social.e_fecho_social(texto) and not fecho_social.tem_conteudo_novo(texto):
+                return False
             return True
         if _foi_de_pessoa_da_clinica(evento):
             return False
