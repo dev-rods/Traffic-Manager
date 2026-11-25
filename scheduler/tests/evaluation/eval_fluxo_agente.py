@@ -336,7 +336,7 @@ def monta_agente(anthropic, tools, prompt, faq=None, paciente=None, clinic_extra
     agente._identifica_paciente = lambda c, p: dict(paciente or FIXTURES["identificar_paciente"])
     # Sem MessageEvents: o corpus JA e a conversa, reconstruir duplicaria turnos.
     agente.rebuild_history_from_events = lambda c, p: []
-    agente._eventos_recentes = lambda c, p: list(eventos() if callable(eventos) else (eventos or []))
+    agente._eventos_recentes = lambda c, p, limit=None: list(eventos() if callable(eventos) else (eventos or []))
 
     from src.services.template_service import TemplateService
     agente.template_service = TemplateService(agente.db)

@@ -19,6 +19,8 @@ Casos
       (check_availability/get_time_slots) e nenhuma resposta traz o link
  3  depois de "Agendamento confirmado" do sistema: "Muito obrigada" -> uma
     despedida; "Ate" -> nenhuma mensagem
+ 4  retomada pelo painel com "Quanto e a depilacao na virilha?" em aberto:
+    responde o preco (ou de que depende) antes de qualquer etapa de areas
 """
 import argparse
 import json
@@ -147,6 +149,35 @@ def caso_3(anthropic, prompt, faq, verboso):
     return falhas
 
 
+def caso_4(anthropic, prompt, faq, verboso):
+    """Retomada pelo painel com 'Quanto é a depilação na virilha?' em aberto."""
+    tools = ToolsMockadas(faq=faq)
+    eventos = [_evento("INBOUND", "Ola", 2700), _evento("INBOUND", "Tudo bem?", 2690),
+               _evento("INBOUND", "Quanto é a depilação na virilha? Obrigada", 2680)]
+    agente = monta_agente(anthropic, tools, prompt, faq=faq, eventos=eventos)
+    agente.rebuild_history_from_events = lambda c, p: [{"role": "user", "content": "Ola\nTudo bem?\nQuanto é a depilação na virilha? Obrigada"}]
+    falhas = []
+    s1 = agente.process_message("eval", _msg("__RETOMAR_CONVERSA__", 1))
+    t1 = " ".join(m.content for m in s1).lower()
+    if verboso:
+        print("  [4a]", t1[:400].replace("\n", " / "), "| tools:", tools.chamadas)
+    if not s1:
+        falhas.append("retomada sem resposta")
+    respostas_do_faq = {i["answer"] for i in faq}
+    if any(m.content in respostas_do_faq for m in s1):
+        falhas.append("saiu bolha literal do FAQ")
+    if "virilha" not in t1:
+        falhas.append("nao falou da virilha")
+    if not (("simples" in t1 and "completa" in t1) or "depende" in t1 or "r$" in t1):
+        falhas.append("nao respondeu o preco nem disse de que depende")
+    primeira = t1.split("?")[0] if "?" in t1 else t1
+    if "quais áreas" in primeira or "quais areas" in primeira:
+        falhas.append("comecou pela etapa de areas")
+    if "reformular" in t1 or "desculpas" in t1.split(".")[0]:
+        falhas.append("fala de bastidor chegou a pessoa")
+    return falhas
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--verboso", action="store_true")
@@ -159,7 +190,8 @@ def main():
     anthropic = AnthropicMedido()
     inicio = time.time()
     resultado = {}
-    for nome, fn in (("caso_1_virilha", caso_1), ("caso_2_link", caso_2), ("caso_3_despedida", caso_3)):
+    for nome, fn in (("caso_1_virilha", caso_1), ("caso_2_link", caso_2), ("caso_3_despedida", caso_3),
+                     ("caso_4_retomada", caso_4)):
         print(f"\n== {nome}")
         try:
             falhas = fn(anthropic, prompt, faq, args.verboso)

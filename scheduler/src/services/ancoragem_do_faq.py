@@ -23,7 +23,7 @@ _NUMERO = re.compile(r"-?\d+(?:[.,]\d+)?\s*(?:°c|ºc|%|dias?|semanas?|meses|mes
 # Termos que mudam a conduta da paciente; um deles fora do item é invenção.
 _TERMOS = re.compile(
     r"\b(isotretinoina|roacutan|antibiotico|anticoagulante|gestante|gravida|lactante|amamentand\w*|"
-    r"peeling|acido|retinoico|cera|pinca|laser|protetor|fps|bronze\w*|tatuagem|queloide|diabetes|"
+    r"peeling|acido|retinoico|cera|pinca|protetor|fps|bronze\w*|tatuagem|queloide|diabetes|"
     r"epilepsia|autoimune|silicone|cerave|cetaphil|cicaplast|bepantol|soprano|safira|alexandrite|diodo)\b"
 )
 

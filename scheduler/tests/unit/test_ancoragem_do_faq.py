@@ -61,6 +61,9 @@ class TestConfere(unittest.TestCase):
         self.assertEqual(anc.confere("A simples sai por R$ 70. Qual prefere?", [VIRILHA], respaldo=resp), [])
         self.assertEqual(anc.confere("A simples sai por R$ 75,00.", [VIRILHA], respaldo=resp), ["75"])
 
+    def test_laser_e_nome_do_servico_nao_fato(self):
+        self.assertEqual(anc.confere("A depilação a laser aqui é com sessão avulsa. O intervalo é de 30 dias.", [INTERVALO]), [])
+
     def test_sem_fala_ou_sem_item_nada_a_conferir(self):
         self.assertEqual(anc.confere("", [INTERVALO]), [])
         self.assertEqual(anc.confere("qualquer coisa com 99 dias", []), [])

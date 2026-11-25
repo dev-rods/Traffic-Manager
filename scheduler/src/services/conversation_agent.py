@@ -37,6 +37,7 @@ from src.services import retencao
 from src.services import fecho_social, saudacao
 from src.services import caminho_de_agendamento
 from src.services import ancoragem_do_faq
+from src.services import pergunta_em_aberto
 from src.services.autoatendimento import zera_pedidos_de_agendar
 from src.services import relogio as _relogio
 from src.services.busca_no_faq import busca as busca_no_faq
@@ -518,6 +519,15 @@ class ConversationAgent:
         contexto_de_retomada = (session.get("atendimento") or {}).get("retomada_contexto")
         if gatilho and contexto_de_retomada:
             user_content = f"{contexto_de_retomada}\n═══ GATILHO ═══\n{user_content}"
+        # Retomada pelo painel (PRD 064): a ultima pergunta da pessoa, extraida
+        # pelo codigo, vai no turno e o bloco de prioridade vai no FIM do system.
+        pergunta_aberta = None
+        if (incoming.content or "").strip() == "__RETOMAR_CONVERSA__":
+            pergunta_aberta = pergunta_em_aberto.ultima_pergunta(self._eventos_recentes(clinic_id, phone, limit=10))
+            if pergunta_aberta:
+                logger.info(f"[Retomada] {phone}: pergunta em aberto {pergunta_aberta[:80]!r}")
+                user_content = pergunta_em_aberto.bloco_do_turno(pergunta_aberta) + user_content
+                system_prompt += pergunta_em_aberto.bloco_do_system()
         # A pessoa respondeu "1" à lista numerada que o bot acabou de mandar.
         # O modelo nunca viu os números; o dígito vira o rótulo aqui, como o
         # toque no botão já vira. Ver opcoes_numeradas.
@@ -699,6 +709,7 @@ class ConversationAgent:
         ja_refez_valor = False
         ja_refez_truncada = False
         ja_refez_ancoragem = False
+        ja_refez_retomada = False
         # O modelo declarou (sem_consulta_necessaria) que a mensagem e so
         # agradecimento ou despedida: responder nada e aceitavel (PRD 064).
         despedida_declarada = False
@@ -901,6 +912,20 @@ class ConversationAgent:
                             )})
                             text_parts = []
                             continue
+
+                    # Retomada: a resposta precisa tocar na pergunta em aberto.
+                    if (pergunta_aberta and not ja_refez_retomada and not efeito_cometido
+                            and not pergunta_em_aberto.respondeu(texto_provisorio, pergunta_aberta)):
+                        ja_refez_retomada = True
+                        logger.warning(f"[Retomada] {phone}: respondeu fora da pergunta; refazendo")
+                        history.append({"role": "assistant", "content": content_blocks})
+                        history.append({"role": "user", "content": (
+                            f"PARE. Responda primeiro a pergunta dela: \"{pergunta_aberta[:200]}\". "
+                            "Se depende de algo, diga do que depende e pergunte isso. Só depois conduza. "
+                            "Escreva só a mensagem para ela: não peça desculpas nem diga que vai reformular."
+                        )})
+                        text_parts = []
+                        continue
 
                     narrado = narra_a_pessoa(texto_provisorio)
                     if narrado and not ja_refez_narracao and not efeito_cometido:
@@ -1182,6 +1207,11 @@ class ConversationAgent:
 
         # 7. Build outgoing messages
         final_text = self._fix_whatsapp_bold("\n".join(text_parts).strip())
+        # Fala de bastidor ("peço desculpas, vou reformular") nao vai a pessoa.
+        sem_meta = pergunta_em_aberto.limpa_meta(final_text)
+        if sem_meta != final_text:
+            logger.info(f"[Retomada] {phone}: tirei a fala de bastidor do inicio da resposta")
+            final_text = sem_meta
         # Saudacao pelo relogio: "boa noite" copiado da pessoa, respondido de
         # manha, vira "bom dia" (PRD 064). Determinismo em volta do modelo.
         if saudacao.saudacao_errada(final_text, periodo_atual):
