@@ -108,14 +108,18 @@ class TestNaoBarraOQueEstaCerto(unittest.TestCase):
         self.assertEqual(agente.anthropic.correcoes, [])
         self.assertIn("qual data", " ".join(textos(saida)).lower())
 
-    def test_a_variante_branda_nao_barra(self):
-        """§7.3: "quer ver as datas?" é medido, não bloqueado."""
+    def test_a_variante_branda_tambem_vira_consulta(self):
+        """Até 25/11/2026 (§7.3) "quer ver as datas?" era só medido. PRD 064: a
+        clínica só atende nos dias da agenda, então o bot consulta e mostra."""
         agente, saida = roda([
             usa_tool("calculate_discount", AREAS),
             texto_do_modelo("Quer ver as datas disponíveis?"),
+            usa_tool("check_availability", AREAS),
+            texto_do_modelo("As próximas datas são quarta, 23/09 e quarta, 30/09. Qual fica melhor?"),
         ])
-        self.assertEqual(agente.anthropic.correcoes, [])
-        self.assertIn("datas", " ".join(textos(saida)).lower())
+        self.assertTrue(agente.anthropic.correcoes)
+        self.assertIn("check_availability", agente.anthropic.correcoes[0])
+        self.assertIn("check_availability", agente.tool_executor.chamadas)
 
 
 if __name__ == "__main__":

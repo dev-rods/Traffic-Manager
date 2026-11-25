@@ -31,10 +31,17 @@ PEDE_ESCOLHA = re.compile(
     r"|(?:data|dia)\s+(?:fica|seria|e)\s+melhor"
     r"|que\s+dia\s+(?:fica|seria|voce|vc|te|melhor|prefere)"
     r"|quando\s+(?:voce|vc)?\s*(?:fica|seria|prefere|poderia|pode|consegue)"
+    # 25/11/2026 (Nobre): "você tem data em mente ou posso te mostrar as
+    # próximas disponíveis?" - pergunta aberta disfarçada de oferta.
+    r"|(?:data|dia)\s+em\s+mente"
+    r"|(?:tem|teria)\s+(?:alguma\s+|uma\s+)?preferencia\s+de\s+(?:data|dia)"
+    r"|(?:prefere|preferiria)\s+(?:algum|alguma|que|qual)\s+(?:dia|data)"
 )
 
-# Decisão §7.3 do PRD: oferecer ver as datas antes de consultar custa um turno,
-# mas não inventa dia nenhum. Só é medido.
+# Até 25/11/2026 (decisão §7.3 do PRD 044) oferecer ver as datas era só medido.
+# O André decidiu no PRD 064: a clínica só atende nos dias da agenda, então
+# depois das áreas o bot MOSTRA as datas; perguntar "quer que eu veja?" é um
+# turno a mais e passou a ser tratado como pedir data sem consultar.
 OFERECE_VER = re.compile(
     r"quer\s+(?:que\s+eu\s+)?(?:ver|veja|te\s+mostre|mostrar)[^?]{0,40}(?:datas|dias|agenda|horarios)"
     r"|posso\s+(?:ver|consultar|checar)[^?]{0,40}(?:datas|dias|agenda|horarios)"
@@ -75,7 +82,8 @@ def pede_data_sem_consulta(texto):
 def oferece_ver_as_datas(texto):
     """A variante branda: "quer ver as datas disponíveis?" antes de consultar.
 
-    Não bloqueia nada (PRD §7.3). Existe para o log medir quanto ela acontece.
+    Desde 25/11/2026 (PRD 064) conta como pedir data sem consultar, quando as
+    áreas já estão definidas e a agenda não foi consultada no turno.
     """
     if not (texto or "").strip():
         return False

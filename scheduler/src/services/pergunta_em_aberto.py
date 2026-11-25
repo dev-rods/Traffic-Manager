@@ -66,6 +66,11 @@ def _termos(texto: str):
     return {p[:_RAIZ] for p in _plano(texto).replace("?", " ").split() if len(p) >= 4 and p not in _STOP}
 
 
+# Perguntar horario e ouvir "qual data?" e o mesmo assunto: o horario depende
+# da data. Sem isto a trava mandava reescrever uma resposta certa (25/11/2026).
+_AGENDA = re.compile(r"horari|hora\b|datas?\b|dias?\b|agenda|vaga|disponi")
+
+
 def respondeu(resposta: str, pergunta: str) -> bool:
     """A resposta toca no assunto da pergunta? Raízes de palavras em comum, ou
     número/valor quando a pergunta era de preço/quantidade. Permissivo de
@@ -83,6 +88,8 @@ def respondeu(resposta: str, pergunta: str) -> bool:
     if re.search(r"quanto|valor|preco|custa|sai por", p) and re.search(r"\d|r\$|depende", r):
         return True
     if re.search(r"quando|data|dia|horario|hora", p) and re.search(r"\d|segunda|terca|quarta|quinta|sexta|sabado", r):
+        return True
+    if _AGENDA.search(p) and _AGENDA.search(r):
         return True
     return False
 
