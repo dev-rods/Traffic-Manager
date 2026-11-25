@@ -452,5 +452,14 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
       `get_faq_answer` devolve o texto ao modelo, `ancoragem_do_faq.py` confere a fala (fatos do
       item ou das outras tools; horário e data ficam com a proveniência), bolha literal só na
       segunda falha ou sem fala, e DEPOIS da fala. Acompanhar `[FAQ] ancorada|fora do item|literal`.
-- [ ] Frentes 5 e 6 (retomada responde a última pergunta, prompt por script com P6, aviso P5)
+- [x] Eval com o modelo real (25/11, PR #265): `tests/evaluation/eval_064.py` com os quatro casos do
+      PRD (virilha, link, despedida, retomada) 4/4; corpus de 39 conversas reais com o FAQ real
+      ligado: 1a rodada I1 3 / I2 0 / I3 5 / I4 5 / I5 0, 18 consultas ao FAQ e 0 bolhas literais; os I1/I4 a mais eram régua do eval (data de hoje e co-ocorrência), corrigida; 2a rodada em andamento. O eval corrigiu dois pontos: LINK_PRIMEIRO virou texto fixo sem
+      modelo (o bloco no prompt perdia para o roteiro de áreas) e a ancoragem passou a comparar
+      números canônicos (70,00 = 70.00).
+- [x] Frente 5 (retomada responde primeiro a última pergunta) EM PROD em 25/11/2026 (PR #265,
+      scheduler layer 177): `pergunta_em_aberto.py` extrai a pergunta dos eventos, bloco no turno
+      e no fim do system, trava com uma reescrita, limpeza da fala de bastidor.
+- [ ] Frente 6 (prompt do banco por script: virilha em três opções com valor, P6; aviso de espera
+      na Nobre, P5)
 - [x] Registrado em `TASKS_LOG.md`
