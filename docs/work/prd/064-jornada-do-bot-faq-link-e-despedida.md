@@ -444,5 +444,9 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
       scheduler layer 174; dev 220). E2E em dev não rodou (bot pausado na Essência dev e lock
       de atendimento humano na Premium dev para o número do André); decisão do André: prod com
       acompanhamento dos logs `[FechoSocial]` e `[Saudacao]`.
-- [ ] Frentes 3 a 6 (caminho de agendamento, FAQ como fonte, retomada, prompt por script, P5)
+- [x] Frente 3 (caminho de agendamento) EM PROD em 25/11/2026 (PR #261, scheduler layer 175;
+      dev 221): `caminho_de_agendamento.py`, bloco por cadastro, recusa da tool virou asserção,
+      `garante_o_link`. Acompanhar `[Caminho]` nos logs (link_primeiro, conversa_por_insistencia,
+      VIOLAÇÃO, "anexei").
+- [ ] Frentes 4 a 6 (FAQ como fonte, retomada, prompt por script, P5)
 - [x] Registrado em `TASKS_LOG.md`
