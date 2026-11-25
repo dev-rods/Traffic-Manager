@@ -240,6 +240,7 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
         <RegistrarPapelModal
           open={modal === 'papel'}
           patientId={a.patient_id}
+          patientName={a.patient_name}
           onClose={fechar}
           onRegistrado={() => setEmPapel(true)}
         />

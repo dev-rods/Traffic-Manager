@@ -124,7 +124,7 @@ export function DocumentosPage() {
             agendamentoDeOrigem={agendamentoDeOrigem}
           />
         ) : (
-          <TermoDeConsentimento patientId={patientId} />
+          <TermoDeConsentimento patientId={patientId} patientName={paciente.name} />
         )}
       </section>
     </div>

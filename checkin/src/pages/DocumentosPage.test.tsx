@@ -169,6 +169,19 @@ describe('Documentos pelo celular (PRD 048)', () => {
     expect(screen.queryByRole('button', { name: 'Começar' })).not.toBeInTheDocument()
   })
 
+  it('número sem sessão: "não encontramos", nunca "tudo certo" (PRD 063)', async () => {
+    vi.mocked(checkinService.appointments).mockResolvedValue([])
+    renderPage()
+    await login()
+    await screen.findByText('Não encontramos sessão para este número')
+    expect(screen.getByText(/Confira o celular digitado/)).toBeInTheDocument()
+    expect(screen.queryByText(/Tudo certo/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Entrar de novo' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Tentar outro número' }))
+    expect(await screen.findByLabelText('Celular (WhatsApp)')).toBeInTheDocument()
+  })
+
   it('token vencido volta ao telefone com o aviso', async () => {
     vi.mocked(checkinService.appointments).mockRejectedValue(
       new ApiError('Sua sessão expirou. Confirme o código de novo.', 401)

@@ -75,6 +75,7 @@ describe('TermoDeConsentimento', () => {
     expect(screen.getByText(/ficha no check-in do iPad/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Assinado em papel' }))
+    await userEvent.click(screen.getByLabelText(/Confirmo que a paciente/))
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }))
     expect(registrarPapel).toHaveBeenCalledWith(
       { patientId: 'p1', signedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },

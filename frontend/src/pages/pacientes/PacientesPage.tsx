@@ -310,6 +310,7 @@ export function PacientesPage() {
         <RegistrarPapelModal
           open
           patientId={papelPatient.id}
+          patientName={papelPatient.name}
           onClose={() => setPapelPatient(null)}
         />
       )}

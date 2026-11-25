@@ -137,6 +137,7 @@ describe('TermoDoAgendamento', () => {
     const data = screen.getByLabelText('Assinado em')
     await userEvent.clear(data)
     await userEvent.type(data, '2026-11-01')
+    await userEvent.click(screen.getByLabelText(/Confirmo que a paciente/))
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }))
     expect(registrarPapel).toHaveBeenCalledWith(
       { patientId: 'p1', signedAt: '2026-11-01' },

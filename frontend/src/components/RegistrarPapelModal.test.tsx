@@ -34,6 +34,28 @@ describe('RegistrarPapelModal', () => {
     expect(data.max).toBe(todayStr())
   })
 
+  it('só registra depois de afirmar que o papel foi assinado; o nome vai no título (PRD 063)', async () => {
+    render(<RegistrarPapelModal open patientId="p1" patientName="Maria Teste" onClose={vi.fn()} />)
+    expect(screen.getByText('Termo assinado em papel - Maria Teste')).toBeInTheDocument()
+    const registrar = screen.getByRole('button', { name: 'Registrar' })
+    expect(registrar).toBeDisabled()
+    await userEvent.click(registrar)
+    expect(registrarPapel).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByLabelText(/Confirmo que a paciente assinou o termo impresso/))
+    expect(registrar).toBeEnabled()
+  })
+
+  it('cancelar desmarca a afirmação para a próxima abertura', async () => {
+    const onClose = vi.fn()
+    const { rerender } = render(<RegistrarPapelModal open patientId="p1" onClose={onClose} />)
+    await userEvent.click(screen.getByLabelText(/Confirmo que a paciente/))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+    rerender(<RegistrarPapelModal open patientId="p1" onClose={onClose} />)
+    expect(screen.getByLabelText(/Confirmo que a paciente/)).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Registrar' })).toBeDisabled()
+  })
+
   it('registra com a data, avisa, fecha e chama onRegistrado', async () => {
     const onClose = vi.fn()
     const onRegistrado = vi.fn()
@@ -43,6 +65,7 @@ describe('RegistrarPapelModal', () => {
     const data = screen.getByLabelText('Assinado em')
     await userEvent.clear(data)
     await userEvent.type(data, '2026-11-01')
+    await userEvent.click(screen.getByLabelText(/Confirmo que a paciente/))
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }))
 
     expect(registrarPapel).toHaveBeenCalledWith({ patientId: 'p1', signedAt: '2026-11-01' }, expect.any(Object))
@@ -57,6 +80,7 @@ describe('RegistrarPapelModal', () => {
       o.onError?.({ response: { data: { message: 'Sem permissão para escrever na agenda' } } })
     )
     render(<RegistrarPapelModal open patientId="p1" onClose={onClose} />)
+    await userEvent.click(screen.getByLabelText(/Confirmo que a paciente/))
     await userEvent.click(screen.getByRole('button', { name: 'Registrar' }))
 
     expect(showToast).toHaveBeenCalledWith({

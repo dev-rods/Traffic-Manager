@@ -8,6 +8,7 @@ import { PhoneStep } from '@/steps/PhoneStep'
 import { CodeStep } from '@/steps/CodeStep'
 import { WelcomeStep } from '@/steps/WelcomeStep'
 import { NothingToDoStep } from '@/steps/NothingToDoStep'
+import { NotFoundStep } from '@/steps/NotFoundStep'
 import { AnamneseStep } from '@/steps/AnamneseStep'
 import { ConsentDataStep } from '@/steps/ConsentDataStep'
 import { ConsentStartStep } from '@/steps/ConsentStartStep'
@@ -32,6 +33,7 @@ type State =
   | { step: 'code'; phone: string; devCode: string | null }
   | { step: 'loading'; session: Session }
   | { step: 'nothing'; firstName: string | null }
+  | { step: 'not-found' }
   | ({ step: 'welcome' } & Doc)
   | ({ step: 'consent-data' } & Doc)
   | ({
@@ -91,13 +93,16 @@ export function DocumentosPage() {
     [queryClient, go]
   )
 
-  // Depois do código: a sessão com documento pendente, ou "nada a fazer".
+  // Depois do código: a sessão com documento pendente, "nada a fazer", ou
+  // número sem sessão. Lista vazia NUNCA é "tudo certo" (PRD 063): foi o que
+  // fez a recepção registrar um termo em papel que não existia.
   const lista = useAppointments(clinicId, state.step === 'loading' ? state.session : null)
   useEffect(() => {
     if (state.step !== 'loading') return
     if (lista.data) {
       const pendente = lista.data.find((a) => a.consentRequired)
-      if (pendente) go({ step: 'welcome', session: state.session, appointment: pendente })
+      if (lista.data.length === 0) go({ step: 'not-found' })
+      else if (pendente) go({ step: 'welcome', session: state.session, appointment: pendente })
       else go({ step: 'nothing', firstName: firstNameOf(lista.data[0]) })
     } else if (lista.error instanceof ApiError && lista.error.status === 401) {
       entrarDeNovo(SESSAO_VENCIDA)
@@ -129,7 +134,7 @@ export function DocumentosPage() {
               {clinicName}
             </span>
           </span>
-          {comSessao && state.step !== 'nothing' ? (
+          {comSessao && state.step !== 'nothing' && state.step !== 'not-found' ? (
             <button
               type="button"
               onClick={() => entrarDeNovo(null)}
@@ -185,6 +190,7 @@ export function DocumentosPage() {
         ) : null}
 
         {state.step === 'nothing' ? <NothingToDoStep firstName={state.firstName} /> : null}
+        {state.step === 'not-found' ? <NotFoundStep onRestart={() => entrarDeNovo(null)} /> : null}
 
         {state.step === 'welcome' ? (
           <WelcomeStep
