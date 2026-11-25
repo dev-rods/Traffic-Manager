@@ -36,6 +36,7 @@ from src.services import skills
 from src.services import retencao
 from src.services import fecho_social, saudacao
 from src.services import caminho_de_agendamento
+from src.services import ancoragem_do_faq
 from src.services.autoatendimento import zera_pedidos_de_agendar
 from src.services import relogio as _relogio
 from src.services.busca_no_faq import busca as busca_no_faq
@@ -418,6 +419,10 @@ class ConversationAgent:
         # escolher neste turno vao para `faq_entregues`, e viram bolhas
         # proprias na saida (policy_do_faq).
         itens_do_faq = policy_do_faq.itens(getattr(self, "db", None), clinic_id)
+        # `faq_consultados`: o que o modelo leu como fonte neste turno (PRD 064).
+        # `faq_entregues`: so o que vai literal, em bolha - hoje, o fallback de
+        # quando a fala do modelo nao se ancora no item.
+        faq_consultados = []
         faq_entregues = []
         logger.info(
             f"[EstadoComercial] {phone}: {estado} | identificacao em "
@@ -574,6 +579,7 @@ class ConversationAgent:
                                  "estado_comercial": estado,
                                  "faq": itens_do_faq,
                                  "faq_entregues": faq_entregues,
+                                 "faq_consultados": faq_consultados,
                                  "session": session,
                                  "link_de_agendamento": link,
                                  "caminho": caminho,
@@ -683,6 +689,7 @@ class ConversationAgent:
         ja_refez_narracao = False
         ja_refez_valor = False
         ja_refez_truncada = False
+        ja_refez_ancoragem = False
         # O modelo declarou (sem_consulta_necessaria) que a mensagem e so
         # agradecimento ou despedida: responder nada e aceitavel (PRD 064).
         despedida_declarada = False
@@ -790,7 +797,8 @@ class ConversationAgent:
                 # Vazio so e vazio se o turno nao tem mais nada a entregar:
                 # FAQ ja escolhido, opcoes ja apresentadas ou handoff pedido
                 # saem com texto nenhum do modelo, de proposito.
-                turno_ja_tem_saida = bool(pending_buttons or faq_entregues or handoff_requested)
+                turno_ja_tem_saida = bool(pending_buttons or faq_entregues or faq_consultados
+                                          or handoff_requested)
                 vazia = (not tool_uses and not texto_da_rodada and not turno_ja_tem_saida
                          and not despedida_declarada)
                 if not tool_uses and not texto_da_rodada and despedida_declarada:
@@ -863,6 +871,28 @@ class ConversationAgent:
                     # uma vez na conversa de alguem. Mandar reescrever falando
                     # COM ela; se insistir, segue (nao e erro de fato, e de
                     # forma) e fica no log.
+                    # FAQ como fonte (PRD 064): a fala so pode trazer os fatos do
+                    # item. Prazo, quantidade ou produto de fora: reescreve uma vez;
+                    # na segunda, o item vai literal (ver pos-laco).
+                    if faq_consultados and not ja_refez_ancoragem and not efeito_cometido:
+                        faltantes = ancoragem_do_faq.confere(
+                            texto_provisorio, faq_consultados,
+                            json.dumps(self._convert_decimals(respaldo_das_tools), ensure_ascii=False, default=str))
+                        if faltantes:
+                            ja_refez_ancoragem = True
+                            logger.warning(
+                                f"[FAQ] {phone}: fala fora do item ({faltantes}); refazendo"
+                            )
+                            history.append({"role": "assistant", "content": content_blocks})
+                            history.append({"role": "user", "content": (
+                                "PARE. Você acrescentou algo que NÃO está no texto da clínica: "
+                                f"{', '.join(faltantes)}. Reescreva usando só o que o item do FAQ "
+                                "diz, curto, respondendo o que a pessoa perguntou. Não invente "
+                                "prazos, quantidades, produtos ou cuidados."
+                            )})
+                            text_parts = []
+                            continue
+
                     narrado = narra_a_pessoa(texto_provisorio)
                     if narrado and not ja_refez_narracao and not efeito_cometido:
                         ja_refez_narracao = True
@@ -1008,6 +1038,7 @@ class ConversationAgent:
                                  "estado_comercial": estado,
                                  "faq": itens_do_faq,
                                  "faq_entregues": faq_entregues,
+                                 "faq_consultados": faq_consultados,
                                  "session": session,
                                  "link_de_agendamento": link,
                                  "caminho": caminho,
@@ -1123,7 +1154,7 @@ class ConversationAgent:
         # Fase 6: intencao resolvida zera o contador de esclarecimento; a
         # pergunta sai com o texto fixo, sem a fala do modelo por cima; e
         # esgotar as tentativas e handoff com um texto que diz o que vem.
-        if efeito_cometido or faq_entregues:
+        if efeito_cometido or faq_entregues or faq_consultados:
             desambiguacao.zera(session)
         if esclarecimento_pedido:
             if "\n".join(text_parts).strip():
@@ -1269,13 +1300,15 @@ class ConversationAgent:
             # resposta segue como estava, que é o comportamento de antes dela.
             logger.error(f"[Proveniencia] Falha ao conferir resposta de {phone}: {e}")
 
-        # O FAQ escolhido vai em bolha propria, byte a byte; a fala do modelo,
-        # se repete o item, cai. Mais de dois itens num turno e pergunta
-        # confusa: pessoa, sem o modelo desempatar (PRD 020 §4.3).
-        if len(faq_entregues) > policy_do_faq.MAX_ITENS_POR_TURNO:
+        # FAQ como fonte (PRD 064): o modelo leu o item e respondeu com ele. Se
+        # a fala ainda traz fato de fora depois da reescrita, ou se nao veio
+        # fala nenhuma, o item vai literal em bolha propria (o desenho antigo,
+        # agora so como rede). Mais de dois itens num turno e pergunta confusa:
+        # pessoa, sem o modelo desempatar (PRD 020 §4.3).
+        if len(faq_consultados) > policy_do_faq.MAX_ITENS_POR_TURNO:
             logger.warning(
-                f"[FAQ] {phone}: {len(faq_entregues)} itens num turno "
-                f"({[i['question_key'] for i in faq_entregues]}); pergunta confusa, vai a pessoa"
+                f"[FAQ] {phone}: {len(faq_consultados)} itens num turno "
+                f"({[i['question_key'] for i in faq_consultados]}); pergunta confusa, vai a pessoa"
             )
             faq_entregues = []
             final_text = (
@@ -1285,6 +1318,22 @@ class ConversationAgent:
             pending_buttons = None
             handoff_requested = True
             entrega_a_humano(session, MOTIVO_SEM_RESPOSTA)
+        elif faq_consultados and not handoff_requested:
+            faltantes = ancoragem_do_faq.confere(
+                final_text, faq_consultados,
+                json.dumps(self._convert_decimals(respaldo_das_tools), ensure_ascii=False, default=str)) if final_text else []
+            if faltantes or not final_text.strip():
+                motivo = f"fora do item 2x ({faltantes})" if faltantes else "sem fala do modelo"
+                logger.warning(
+                    f"[FAQ] {phone}: {motivo}; o item vai literal "
+                    f"({[i['question_key'] for i in faq_consultados]})"
+                )
+                faq_entregues = list(faq_consultados)
+                final_text = policy_do_faq.fala_sem_o_item(final_text, faq_entregues, phone)
+            else:
+                logger.info(
+                    f"[FAQ] {phone}: ancorada ({[i['question_key'] for i in faq_consultados]})"
+                )
         elif faq_entregues:
             final_text = policy_do_faq.fala_sem_o_item(final_text, faq_entregues, phone)
 
@@ -1502,10 +1551,12 @@ class ConversationAgent:
             "1. Toda dúvida sobre o procedimento é respondida por get_faq_answer. Você não\n"
             "   tem a base de conhecimento na memória: ela está na lista de itens da tool,\n"
             "   e só lá. Escolha o item que responde a dúvida.\n"
-            "2. O texto do item vai para a pessoa AUTOMATICAMENTE, como mensagem própria,\n"
-            "   exatamente como a clínica escreveu. NÃO o repita, NÃO o resuma, NÃO o\n"
-            "   reformule na sua resposta. Se ela perguntou outra coisa na mesma mensagem,\n"
-            "   responda só essa outra coisa; se não, não escreva nada.\n"
+            "2. A tool devolve o texto da clínica. Ele é a sua ÚNICA fonte: responda só o\n"
+            "   que foi perguntado, curto, com as palavras e os fatos do item. Não\n"
+            "   acrescente prazo, quantidade, produto ou cuidado que não esteja nele. Não\n"
+            "   cole o texto inteiro: explicação completa só se a pessoa pedir. Se ela\n"
+            "   só citou um assunto sem perguntar (\"quero fazer virilha\"), não explique\n"
+            "   nada: siga a conversa.\n"
             "3. Se nenhum item da lista responde a dúvida, você NÃO SABE. Não complete com\n"
             "   conhecimento geral sobre depilação a laser, por mais seguro que pareça:\n"
             "   diga que vai confirmar com uma especialista e chame request_human_handoff.\n"
@@ -1776,13 +1827,13 @@ class ConversationAgent:
     def _build_outgoing(self, text, pending_buttons, faq_entregues=None):
         """Convert agent output into OutgoingMessage list.
 
-        `faq_entregues`: itens do FAQ escolhidos neste turno. Cada um vira
-        uma mensagem propria, com o texto da clinica byte a byte, ANTES da
-        fala do modelo - nunca na mesma bolha (policy_do_faq).
+        `faq_entregues`: itens do FAQ que vao literais neste turno (fallback da
+        ancoragem, PRD 064). Cada um vira uma mensagem propria, com o texto
+        da clinica byte a byte, DEPOIS da fala do modelo - nunca na mesma
+        bolha (policy_do_faq). Ate 25/11/2026 saiam antes, e o texto do FAQ
+        chegava antes do "oi".
         """
         messages = []
-        for item in faq_entregues or []:
-            messages.append(OutgoingMessage(message_type="text", content=item["answer"]))
 
         if pending_buttons:
             options = pending_buttons.get("options", [])
@@ -1812,6 +1863,9 @@ class ConversationAgent:
                 message_type="text",
                 content=text,
             ))
+
+        for item in faq_entregues or []:
+            messages.append(OutgoingMessage(message_type="text", content=item["answer"]))
 
         return messages
 

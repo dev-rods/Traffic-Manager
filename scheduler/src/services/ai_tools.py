@@ -1006,18 +1006,22 @@ class ToolExecutor:
                     f'reason="{MOTIVO_SEM_RESPOSTA}".'
                 ),
             }
-        entregues = ctx.get("faq_entregues")
-        if isinstance(entregues, list):
-            entregues.append(item)
-        logger.info(f"[FAQ] {phone}: entregue {chave} ({item['question_label'][:50]!r})")
+        # PRD 064 (P3): o texto volta ao modelo como FONTE. O agente confere a
+        # ancoragem da fala e so cai para a bolha literal se o modelo inventar.
+        consultados = ctx.get("faq_consultados")
+        if isinstance(consultados, list):
+            consultados.append(item)
+        else:
+            ctx["faq_consultados"] = [item]
+        logger.info(f"[FAQ] {phone}: consultado {chave} ({item['question_label'][:50]!r})")
         return {
-            "delivered": True,
             "question": item["question_label"],
+            "answer": item["answer"],
             "instruction": (
-                "The full text of this FAQ item is being sent to the patient as its own "
-                "message, exactly as the clinic wrote it. Do NOT repeat, summarize or "
-                "paraphrase it. If the patient asked something else in the same message, "
-                "answer only that part; otherwise reply with nothing."
+                "This is the clinic's own answer. Use it as your ONLY source: reply briefly "
+                "to exactly what the patient asked, in your words but with the facts of this "
+                "text. Do not add numbers, deadlines, products or advice that are not in it. "
+                "Do not paste the whole text unless the patient asked for the full explanation."
             ),
         }
 
