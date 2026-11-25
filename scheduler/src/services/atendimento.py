@@ -236,6 +236,30 @@ def pode_responder(clinic: Optional[Dict], session: Optional[Dict], phone: str,
     return _politica_permite(clinic, session, phone, agora)
 
 
+RECUSA_SILENCIADO = "silenciado"
+RECUSA_PAUSADO = "pausado"
+RECUSA_COM_PESSOA = "com_pessoa"
+RECUSA_POLITICA = "politica"
+
+
+def motivo_da_recusa(clinic: Optional[Dict], session: Optional[Dict], phone: str,
+                     agora: Optional[int] = None, *, silenciado: bool = False) -> Optional[str]:
+    """A primeira porta fechada, na mesma ordem de `pode_responder`; None se
+    o bot pode responder. O webhook usa para saber se foi SO a politica que
+    calou o bot (aviso de espera, PRD 064)."""
+    clinic = clinic or {}
+    session = session or {}
+    if silenciado:
+        return RECUSA_SILENCIADO
+    if clinic.get("bot_paused"):
+        return RECUSA_PAUSADO
+    if esta_com_pessoa(session, agora):
+        return RECUSA_COM_PESSOA
+    if not _politica_permite(clinic, session, phone, agora):
+        return RECUSA_POLITICA
+    return None
+
+
 # Por que o bot NÃO responde, no vocabulário que o painel exibe (PRD 031).
 PAUSA_ATENDENTE = "attendant"
 PAUSA_CLINICA = "clinic_paused"
