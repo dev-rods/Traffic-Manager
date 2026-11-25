@@ -211,8 +211,9 @@ Nenhum.
 ### `booking-site/src/components/PhoneStep.tsx` (criar)
 
 - Campo de celular (`formatPhoneInput`, `isValidPhone`); texto "Vamos enviar
-  um código por WhatsApp para confirmar que é você. Já é paciente? Seu
-  desconto aparece logo depois do código."; botão "Continuar" habilitado só
+  um código por WhatsApp para confirmar que é você e conferir se há desconto
+  personalizado no seu número. Se houver, ele aparece logo depois do
+  código."; botão "Continuar" habilitado só
   com número válido (`aguardando` enquanto a sessão da aba é conferida).
 - `onContinue(phone)`. (23/11: tinha `onPhoneChange` para cotar ao digitar e
   `onContinue(phone, conhecido)`; saiu com a decisão 6.)
