@@ -54,6 +54,16 @@ class TestConfere(unittest.TestCase):
                                      respaldo='{"total_minutes": 45, "price_display": "R$ 120,00"}'), [])
         self.assertEqual(anc.confere("A sessão dura 45 min.", [PREPARO], respaldo="{}"), ["45min"])
 
+    def test_valor_com_virgula_casa_com_o_valor_da_tool_com_ponto(self):
+        """Eval de 25/11: 'r$ 70,00' na fala, 'R$ 70.00' em list_areas; acusava invencao."""
+        resp = '[{"area_name": "Virilha Simples", "price_display": "R$ 70.00", "price_cents": 7000}]'
+        self.assertEqual(anc.confere("A simples sai por *R$ 70,00*. Qual prefere?", [VIRILHA], respaldo=resp), [])
+        self.assertEqual(anc.confere("A simples sai por R$ 70. Qual prefere?", [VIRILHA], respaldo=resp), [])
+        self.assertEqual(anc.confere("A simples sai por R$ 75,00.", [VIRILHA], respaldo=resp), ["75"])
+
+    def test_laser_e_nome_do_servico_nao_fato(self):
+        self.assertEqual(anc.confere("A depilação a laser aqui é com sessão avulsa. O intervalo é de 30 dias.", [INTERVALO]), [])
+
     def test_sem_fala_ou_sem_item_nada_a_conferir(self):
         self.assertEqual(anc.confere("", [INTERVALO]), [])
         self.assertEqual(anc.confere("qualquer coisa com 99 dias", []), [])

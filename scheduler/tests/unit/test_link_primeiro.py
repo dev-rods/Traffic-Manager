@@ -96,66 +96,52 @@ def _roda(paciente, clinic, roteiro=None, sessao=None, texto="oi, quero agendar"
     return agente, saida, vistas
 
 
-class TestOBlocoNoAgente(unittest.TestCase):
-    def test_paciente_que_pede_agendar_ve_o_bloco_do_link(self):
-        _, _, v = _roda(PACIENTE, COM_SITE)
-        self.assertIn("AGENDAMENTO: PELO LINK", v["system"])
-        self.assertIn(LINK, v["system"])
-        self.assertIn("não ofereça marcar por aqui", v["system"])
-
-    def test_paciente_com_horario_tambem(self):
-        _, _, v = _roda(COM_SESSAO, COM_SITE)
-        self.assertIn("AGENDAMENTO: PELO LINK", v["system"])
+class TestLinkPrimeiroSemModelo(unittest.TestCase):
+    def test_paciente_que_pede_agendar_recebe_o_link_sem_chamar_o_modelo(self):
+        agente, saida, v = _roda(PACIENTE, COM_SITE)
+        self.assertEqual(len(saida), 1)
+        self.assertIn(LINK, saida[0].content)
+        self.assertIn("Fulana", saida[0].content)
+        self.assertNotIn("marco", saida[0].content.lower())
+        self.assertEqual(v, {}, "o modelo nao foi chamado")
+        self.assertIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
+        self.assertEqual(agente.sessao_salva.get(CAMPO_PEDIDOS), 1)
 
     def test_cadastrada_sem_sessao_tambem_e_o_caso_2(self):
         """Antes: skill de lead, sem bloco, e recusa na última tool."""
-        _, _, v = _roda(CADASTRADA_SEM_SESSAO, COM_SITE, texto="Podemos marcar dia 3/12 as 15:30?")
-        self.assertIn("AGENDAMENTO: PELO LINK", v["system"])
+        _, saida, v = _roda(CADASTRADA_SEM_SESSAO, COM_SITE, texto="Podemos marcar dia 3/12 as 15:30?")
+        self.assertIn(LINK, saida[0].content)
+        self.assertEqual(v, {})
 
-    def test_duvida_de_paciente_nao_ve_bloco(self):
-        _, _, v = _roda(PACIENTE, COM_SITE, texto="quanto custa a axila?")
+    def test_paciente_com_horario_tambem(self):
+        _, saida, _ = _roda(COM_SESSAO, COM_SITE)
+        self.assertIn(LINK, saida[0].content)
+
+    def test_duvida_de_paciente_vai_ao_modelo_sem_link(self):
+        agente, saida, v = _roda(PACIENTE, COM_SITE, [texto_do_modelo("A axila é R$ 60.")], texto="quanto custa a axila?")
         self.assertNotIn("AGENDAMENTO:", v["system"])
+        self.assertNotIn("agendar.clinica-teste", saida[0].content)
+        self.assertNotIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
 
-    def test_lead_nova_nao_ve(self):
+    def test_lead_nova_nao_recebe_link(self):
         _, _, v = _roda(LEAD, COM_SITE)
+        self.assertIn("system", v)
         self.assertNotIn("AGENDAMENTO:", v["system"])
 
-    def test_sem_site_ninguem_ve(self):
+    def test_sem_site_ninguem_recebe(self):
         _, _, v = _roda(PACIENTE, SEM_SITE)
-        self.assertNotIn("AGENDAMENTO:", v["system"])
+        self.assertIn("system", v)
 
-    def test_segundo_pedido_ve_o_bloco_da_conversa(self):
+    def test_segundo_pedido_vai_ao_modelo_com_o_bloco_da_conversa(self):
         _, _, v = _roda(PACIENTE, COM_SITE, sessao={CAMPO_PEDIDOS: 1}, texto="pode ser dia 3 às 15h?")
         self.assertIn("AGENDAMENTO: NA CONVERSA", v["system"])
         self.assertIn("Nunca mande\no link de novo", v["system"])
 
 
 class TestOLinkSai(unittest.TestCase):
-    def test_texto_do_bot_com_o_link_grava_o_campo(self):
-        agente, saida, _ = _roda(PACIENTE, COM_SITE, [
-            texto_do_modelo(f"É por lá mesmo 😊 {LINK}agendar - qualquer dúvida, me chama."),
-        ])
-        self.assertIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
-        self.assertTrue(any("agendar.clinica-teste" in m.content for m in saida))
-
-    def test_modelo_esqueceu_o_link_e_o_codigo_anexa(self):
-        agente, saida, _ = _roda(PACIENTE, COM_SITE, [texto_do_modelo("Claro! Quais áreas você quer?")])
-        self.assertEqual(len(saida), 1)
-        self.assertIn("agendar.clinica-teste", saida[0].content)
-        self.assertIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
-
-    def test_duvida_sem_pedido_nao_ganha_link(self):
-        agente, saida, _ = _roda(PACIENTE, COM_SITE, [texto_do_modelo("A axila é R$ 60.")],
-                                 texto="quanto custa a axila?")
-        self.assertNotIn("agendar.clinica-teste", saida[0].content)
-        self.assertNotIn(CAMPO_LINK_ENVIADO, agente.sessao_salva)
-
     def test_o_caso_real_o_link_sai_e_as_areas_nao(self):
-        """Essência 09/11: o modelo seguiu o bloco e mandou o link."""
-        anthropic_resposta = texto_do_modelo(
-            f"É por esse link sim, para todas as pacientes: {LINK} Qualquer dificuldade, me chama 😊")
-        agente, saida, _ = _roda(PACIENTE, COM_SITE, [anthropic_resposta],
-                                 texto="Para influencer também é por esse link? quero agendar")
+        """Essência 09/11: pergunta sobre o link + pedido de agendar."""
+        agente, saida, _ = _roda(PACIENTE, COM_SITE, texto="Para influencer também é por esse link? quero agendar")
         enviados = " ".join(m.content for m in saida)
         self.assertIn("agendar.clinica-teste", enviados)
         self.assertNotIn("quais áreas", enviados.lower())

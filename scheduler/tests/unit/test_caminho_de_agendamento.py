@@ -87,11 +87,23 @@ class TestDecide(unittest.TestCase):
 
 
 class TestBlocoEGarantia(unittest.TestCase):
-    def test_bloco_do_link_sem_oferta(self):
-        b = cam.bloco(cam.LINK_PRIMEIRO, LINK)
-        self.assertIn(LINK, b)
-        self.assertIn("não ofereça marcar por aqui", b)
-        self.assertIn("não chame check_availability", b)
+    def test_mensagem_do_link_sem_oferta(self):
+        m = cam.mensagem_do_link(None, "c1", LINK, "Maria Teste")
+        self.assertIn(LINK, m)
+        self.assertIn("Oi, Maria!", m)
+        self.assertNotIn("marco", m.lower())
+        self.assertIn("Oi! O agendamento", cam.mensagem_do_link(None, "c1", LINK, None))
+
+    def test_template_sem_o_link_cai_no_padrao(self):
+        class T:
+            def get_and_render(self, c, k, v):
+                return "texto qualquer sem link"
+        m = cam.mensagem_do_link(T(), "c1", LINK, "Ana")
+        self.assertIn(LINK, m)
+        self.assertIn("Oi, Ana!", m)
+
+    def test_link_primeiro_nao_tem_bloco_de_prompt(self):
+        self.assertEqual(cam.bloco(cam.LINK_PRIMEIRO, LINK), "")
 
     def test_bloco_da_insistencia_proibe_o_link(self):
         b = cam.bloco(cam.CONVERSA_POR_INSISTENCIA, LINK)
