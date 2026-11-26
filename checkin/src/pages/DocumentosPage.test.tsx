@@ -182,6 +182,17 @@ describe('Documentos pelo celular (PRD 048)', () => {
     expect(await screen.findByLabelText('Celular (WhatsApp)')).toBeInTheDocument()
   })
 
+  it('número de fora do Brasil, com + e código do país, pede o código (25/11/2026)', async () => {
+    renderPage()
+    const campo = await screen.findByLabelText('Celular (WhatsApp)')
+    await userEvent.type(campo, '+1 818 472 2644')
+    expect(campo).toHaveValue('+18184722644')
+    expect(screen.getByText(/Número de fora do Brasil/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Receber código' }))
+    expect(checkinService.sendCode).toHaveBeenCalledWith('c1', '+18184722644')
+    expect(await screen.findByText('Digite o código')).toBeInTheDocument()
+  })
+
   it('token vencido volta ao telefone com o aviso', async () => {
     vi.mocked(checkinService.appointments).mockRejectedValue(
       new ApiError('Sua sessão expirou. Confirme o código de novo.', 401)

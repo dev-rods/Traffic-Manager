@@ -4,7 +4,7 @@ import { Keypad } from '@/components/ui/Keypad'
 import { TextField } from '@/components/ui/TextField'
 import { ErrorMessage, StepHeader } from '@/components/StepHeader'
 import { useSendCode } from '@/hooks/useCheckin'
-import { formatPhone, isValidMobile, onlyDigits, toApiPhone } from '@/utils/format'
+import { formatPhone, formatPhoneInput, isValidMobile, isValidPhoneInput, onlyDigits, toApiPhone } from '@/utils/format'
 
 export type Teclado = 'keypad' | 'nativo'
 
@@ -20,13 +20,20 @@ export function PhoneStep({
   teclado?: Teclado
   descricao?: string
 }) {
+  // No keypad do iPad so entram digitos brasileiros. No teclado do aparelho
+  // (link de documentos) a pessoa pode comecar com "+" e o codigo do pais.
   const [digits, setDigits] = useState('')
   const sendCode = useSendCode(clinicId)
-  const valid = isValidMobile(digits)
+  const valid = teclado === 'keypad' ? isValidMobile(digits) : isValidPhoneInput(digits)
 
   function submit() {
     const phone = toApiPhone(digits)
     sendCode.mutate(phone, { onSuccess: (devCode) => onSent(phone, devCode) })
+  }
+
+  function digitaNoAparelho(v: string) {
+    if (v.trim().startsWith('+')) setDigits(`+${onlyDigits(v).slice(0, 15)}`)
+    else setDigits(onlyDigits(v).slice(0, 11))
   }
 
   return (
@@ -52,13 +59,14 @@ export function PhoneStep({
         >
           <TextField
             label="Celular (WhatsApp)"
-            value={formatPhone(digits)}
-            onChange={(v) => setDigits(onlyDigits(v).slice(0, 11))}
+            value={formatPhoneInput(digits)}
+            onChange={digitaNoAparelho}
             inputMode="tel"
-            autoComplete="tel-national"
+            autoComplete="tel"
             placeholder="(00) 00000-0000"
             disabled={sendCode.isPending}
           />
+          <p className="mt-2 text-sm text-ink-500">Número de fora do Brasil? Comece com + e o código do país.</p>
         </form>
       )}
       {sendCode.isError ? <ErrorMessage>{sendCode.error.message}</ErrorMessage> : null}

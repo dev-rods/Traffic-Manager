@@ -6,6 +6,9 @@ import {
   isToday,
   isValidCpf,
   isValidMobile,
+  isValidPhoneInput,
+  formatPhoneInput,
+  toApiPhone,
 } from './format'
 
 describe('format', () => {
@@ -44,5 +47,31 @@ describe('termo de consentimento', () => {
     const { isMinorAt } = await import('./format')
     expect(isMinorAt('2008-11-05', '2026-11-04')).toBe(true)
     expect(isMinorAt('2008-11-04', '2026-11-04')).toBe(false)
+  })
+})
+
+describe('número de fora do Brasil no teclado do aparelho (25/11/2026)', () => {
+  it('aceita + e código do país, e manda com o + para a API', () => {
+    expect(isValidPhoneInput('+18184722644')).toBe(true)
+    expect(isValidPhoneInput('+1 (818) 472-2644')).toBe(true)
+    expect(toApiPhone('+18184722644')).toBe('+18184722644')
+    expect(formatPhoneInput('+1 818 472 2644')).toBe('+18184722644')
+  })
+
+  it('sem o + continua sendo celular brasileiro', () => {
+    expect(isValidPhoneInput('18184722644')).toBe(false)
+    expect(isValidPhoneInput('11999990000')).toBe(true)
+    expect(toApiPhone('11999990000')).toBe('5511999990000')
+  })
+
+  it('+55 é brasileiro com a regra do nono dígito', () => {
+    expect(isValidPhoneInput('+5511999990000')).toBe(true)
+    expect(isValidPhoneInput('+551133334444')).toBe(false)
+    expect(toApiPhone('+5511999990000')).toBe('5511999990000')
+  })
+
+  it('curto ou longo demais não vale', () => {
+    expect(isValidPhoneInput('+1234567')).toBe(false)
+    expect(isValidPhoneInput('+1234567890123456')).toBe(false)
   })
 })
