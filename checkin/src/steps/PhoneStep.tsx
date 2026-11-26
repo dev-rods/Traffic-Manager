@@ -4,6 +4,9 @@ import { Keypad } from '@/components/ui/Keypad'
 import { TextField } from '@/components/ui/TextField'
 import { ErrorMessage, StepHeader } from '@/components/StepHeader'
 import { useSendCode } from '@/hooks/useCheckin'
+import {
+  BRASIL, OUTRO, PAISES, formataNumero, limiteDeDigitos, montaTelefone, numeroValido, placeholderDoNumero,
+} from '@/utils/ddi'
 import { formatPhone, isValidMobile, onlyDigits, toApiPhone } from '@/utils/format'
 
 export type Teclado = 'keypad' | 'nativo'
@@ -21,12 +24,22 @@ export function PhoneStep({
   descricao?: string
 }) {
   const [digits, setDigits] = useState('')
+  // Só no teclado do aparelho (link de documentos): o país do número, Brasil
+  // por padrão. No keypad do iPad continua só o celular brasileiro.
+  const [pais, setPais] = useState<string>(BRASIL)
+  const [ddiLivre, setDdiLivre] = useState('')
+  const ddi = pais === OUTRO ? onlyDigits(ddiLivre) : pais
   const sendCode = useSendCode(clinicId)
-  const valid = isValidMobile(digits)
+  const valid = teclado === 'keypad' ? isValidMobile(digits) : numeroValido(ddi, digits)
 
   function submit() {
-    const phone = toApiPhone(digits)
+    const phone = teclado === 'keypad' ? toApiPhone(digits) : montaTelefone(ddi, digits)
     sendCode.mutate(phone, { onSuccess: (devCode) => onSent(phone, devCode) })
+  }
+
+  function trocaPais(novo: string) {
+    setPais(novo)
+    setDigits((d) => onlyDigits(d).slice(0, limiteDeDigitos(novo === OUTRO ? '' : novo)))
   }
 
   return (
@@ -44,19 +57,49 @@ export function PhoneStep({
         </>
       ) : (
         <form
-          className="mx-auto w-full max-w-sm"
+          className="mx-auto flex w-full max-w-sm flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault()
             if (valid) submit()
           }}
         >
+          <div className="flex flex-col gap-2">
+            <label htmlFor="pais-do-celular" className="font-display text-lg font-semibold text-ink-800">
+              País
+            </label>
+            <select
+              id="pais-do-celular"
+              value={pais}
+              onChange={(e) => trocaPais(e.target.value)}
+              disabled={sendCode.isPending}
+              className="min-h-16 w-full rounded-2xl border-2 border-ink-200 bg-surface px-4 text-xl text-ink-900 outline-none focus:border-accent-400"
+            >
+              {PAISES.map((p) => (
+                <option key={p.ddi} value={p.ddi}>
+                  {p.bandeira} {p.nome} (+{p.ddi})
+                </option>
+              ))}
+              <option value={OUTRO}>🌐 Outro país</option>
+            </select>
+          </div>
+          {pais === OUTRO ? (
+            <TextField
+              label="Código do país"
+              value={ddiLivre}
+              onChange={(v) => setDdiLivre(onlyDigits(v).slice(0, 3))}
+              inputMode="numeric"
+              placeholder="Ex.: 1, 44, 351"
+              disabled={sendCode.isPending}
+            />
+          ) : null}
           <TextField
             label="Celular (WhatsApp)"
-            value={formatPhone(digits)}
-            onChange={(v) => setDigits(onlyDigits(v).slice(0, 11))}
+            value={formataNumero(ddi, digits)}
+            onChange={(v) => setDigits(onlyDigits(v).slice(0, limiteDeDigitos(ddi)))}
             inputMode="tel"
-            autoComplete="tel-national"
-            placeholder="(00) 00000-0000"
+            autoComplete={ddi === BRASIL ? 'tel-national' : 'tel'}
+            placeholder={placeholderDoNumero(ddi)}
+            hint={ddi === BRASIL ? 'Número de fora do Brasil? Escolha o país acima.' : 'Sem o código do país: ele já está escolhido acima.'}
             disabled={sendCode.isPending}
           />
         </form>

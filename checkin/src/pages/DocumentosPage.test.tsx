@@ -182,6 +182,34 @@ describe('Documentos pelo celular (PRD 048)', () => {
     expect(await screen.findByLabelText('Celular (WhatsApp)')).toBeInTheDocument()
   })
 
+  it('número de fora do Brasil: escolhe o país e pede o código (25/11/2026)', async () => {
+    renderPage()
+    const pais = await screen.findByLabelText('País')
+    expect(pais).toHaveValue('55')
+    await userEvent.selectOptions(pais, '1')
+    const campo = screen.getByLabelText('Celular (WhatsApp)')
+    await userEvent.type(campo, '(818) 472-2644')
+    expect(campo).toHaveValue('8184722644')
+    await userEvent.click(screen.getByRole('button', { name: 'Receber código' }))
+    expect(checkinService.sendCode).toHaveBeenCalledWith('c1', '+18184722644')
+    expect(await screen.findByText('Digite o código')).toBeInTheDocument()
+  })
+
+  it('"Outro país" pede o código do país à mão', async () => {
+    renderPage()
+    await userEvent.selectOptions(await screen.findByLabelText('País'), 'outro')
+    await userEvent.type(screen.getByLabelText('Código do país'), '45')
+    await userEvent.type(screen.getByLabelText('Celular (WhatsApp)'), '12345678')
+    await userEvent.click(screen.getByRole('button', { name: 'Receber código' }))
+    expect(checkinService.sendCode).toHaveBeenCalledWith('c1', '+4512345678')
+  })
+
+  it('Brasil continua exigindo celular com nono dígito', async () => {
+    renderPage()
+    await userEvent.type(await screen.findByLabelText('Celular (WhatsApp)'), '1133334444')
+    expect(screen.getByRole('button', { name: 'Receber código' })).toBeDisabled()
+  })
+
   it('token vencido volta ao telefone com o aviso', async () => {
     vi.mocked(checkinService.appointments).mockRejectedValue(
       new ApiError('Sua sessão expirou. Confirme o código de novo.', 401)
