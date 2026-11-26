@@ -53,33 +53,8 @@ export function isValidMobile(digits: string): boolean {
   return d.length === 11 && d[2] === '9'
 }
 
-/**
- * Número de fora do Brasil, digitado com "+" e o código do país (PRD 033 no
- * site; aqui desde 25/11/2026, quando uma paciente com número dos EUA não
- * conseguiu passar da etapa do celular no link de documentos). "+55" continua
- * sendo celular brasileiro, com a mesma regra do nono dígito.
- */
-export function isForeignPhone(value: string): boolean {
-  return value.trim().startsWith('+') && !onlyDigits(value).startsWith('55')
-}
-
-export function isValidPhoneInput(value: string): boolean {
-  const d = onlyDigits(value)
-  if (isForeignPhone(value)) return d.length >= 8 && d.length <= 15
-  if (value.trim().startsWith('+')) return isValidMobile(d.slice(2))
-  return isValidMobile(d)
-}
-
-/** Como o campo mostra o que foi digitado: máscara brasileira, ou "+" e dígitos. */
-export function formatPhoneInput(value: string): string {
-  if (value.trim().startsWith('+')) return `+${onlyDigits(value).slice(0, 15)}`
-  return formatPhone(value)
-}
-
-export function toApiPhone(value: string): string {
-  const d = onlyDigits(value)
-  if (isForeignPhone(value)) return `+${d}`
-  if (value.trim().startsWith('+')) return d
+export function toApiPhone(digits: string): string {
+  const d = onlyDigits(digits)
   return d.startsWith('55') ? d : `55${d}`
 }
 
