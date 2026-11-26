@@ -76,10 +76,10 @@ export function PhoneStep({
             >
               {PAISES.map((p) => (
                 <option key={p.ddi} value={p.ddi}>
-                  {p.bandeira} {p.nome} (+{p.ddi})
+                  {p.nome} (+{p.ddi})
                 </option>
               ))}
-              <option value={OUTRO}>🌐 Outro país</option>
+              <option value={OUTRO}>Outro país</option>
             </select>
           </div>
           {pais === OUTRO ? (

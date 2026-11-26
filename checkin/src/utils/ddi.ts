@@ -12,29 +12,28 @@ import { formatPhone, isValidMobile, onlyDigits } from './format'
 export interface Pais {
   ddi: string
   nome: string
-  bandeira: string
 }
 
 export const BRASIL = '55'
 export const OUTRO = 'outro'
 
 export const PAISES: Pais[] = [
-  { ddi: '55', nome: 'Brasil', bandeira: '🇧🇷' },
-  { ddi: '1', nome: 'EUA / Canadá', bandeira: '🇺🇸' },
-  { ddi: '351', nome: 'Portugal', bandeira: '🇵🇹' },
-  { ddi: '54', nome: 'Argentina', bandeira: '🇦🇷' },
-  { ddi: '598', nome: 'Uruguai', bandeira: '🇺🇾' },
-  { ddi: '595', nome: 'Paraguai', bandeira: '🇵🇾' },
-  { ddi: '56', nome: 'Chile', bandeira: '🇨🇱' },
-  { ddi: '57', nome: 'Colômbia', bandeira: '🇨🇴' },
-  { ddi: '51', nome: 'Peru', bandeira: '🇵🇪' },
-  { ddi: '52', nome: 'México', bandeira: '🇲🇽' },
-  { ddi: '34', nome: 'Espanha', bandeira: '🇪🇸' },
-  { ddi: '39', nome: 'Itália', bandeira: '🇮🇹' },
-  { ddi: '33', nome: 'França', bandeira: '🇫🇷' },
-  { ddi: '49', nome: 'Alemanha', bandeira: '🇩🇪' },
-  { ddi: '44', nome: 'Reino Unido', bandeira: '🇬🇧' },
-  { ddi: '81', nome: 'Japão', bandeira: '🇯🇵' },
+  { ddi: '55', nome: 'Brasil' },
+  { ddi: '1', nome: 'EUA / Canadá' },
+  { ddi: '351', nome: 'Portugal' },
+  { ddi: '54', nome: 'Argentina' },
+  { ddi: '598', nome: 'Uruguai' },
+  { ddi: '595', nome: 'Paraguai' },
+  { ddi: '56', nome: 'Chile' },
+  { ddi: '57', nome: 'Colômbia' },
+  { ddi: '51', nome: 'Peru' },
+  { ddi: '52', nome: 'México' },
+  { ddi: '34', nome: 'Espanha' },
+  { ddi: '39', nome: 'Itália' },
+  { ddi: '33', nome: 'França' },
+  { ddi: '49', nome: 'Alemanha' },
+  { ddi: '44', nome: 'Reino Unido' },
+  { ddi: '81', nome: 'Japão' },
 ]
 
 export function ddiValido(ddi: string): boolean {
