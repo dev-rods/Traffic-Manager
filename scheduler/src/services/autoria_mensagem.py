@@ -52,11 +52,12 @@ def origem_do_sistema(evento):
     return _metadata(evento).get("origem") or None
 
 
-def e_aviso_de_espera(evento):
-    """O aviso "uma especialista vai te responder" (PRD 064): envio do sistema
-    que nao responde nada; quem decide pendencia o ignora."""
-    from src.services.envio_do_sistema import AVISO_DE_ESPERA
-    return origem_do_sistema(evento) == AVISO_DE_ESPERA
+def e_envio_do_sistema_sem_resposta(evento):
+    """Envio do sistema que nao responde a pessoa (hoje: nenhum; o aviso de
+    espera do PRD 064 foi desfeito em 25/11/2026). Quem decide pendencia
+    ignora o que estiver aqui, e os eventos ja gravados com origem
+    AVISO_DE_ESPERA continuam ignorados."""
+    return origem_do_sistema(evento) == "AVISO_DE_ESPERA"
 
 
 def foi_de_pessoa_da_clinica(evento):

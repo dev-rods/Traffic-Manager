@@ -97,9 +97,9 @@ def _instante(evento: Dict) -> Optional[int]:
 def ultima_fala(eventos: Sequence[Dict]) -> Optional[Dict]:
     """O último evento com texto, ou None. O aviso de espera (PRD 064) não é
     fala: a pergunta da pessoa continua em aberto atrás dele."""
-    from src.services.autoria_mensagem import e_aviso_de_espera
+    from src.services.autoria_mensagem import e_envio_do_sistema_sem_resposta
     for evento in reversed(eventos or []):
-        if (evento.get("content") or "").strip() and not e_aviso_de_espera(evento):
+        if (evento.get("content") or "").strip() and not e_envio_do_sistema_sem_resposta(evento):
             return evento
     return None
 

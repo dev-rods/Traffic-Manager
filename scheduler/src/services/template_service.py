@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_TEMPLATES = {
     # PRD 064: paciente com cadastro pediu para agendar e a clinica tem site.
     # Texto fixo, sem modelo; {{nome}} ja vem com a virgula (", Maria") ou vazio.
-    "AVISO_DE_ESPERA": "Oi! Que bom ter você por aqui 😊 Já recebi sua mensagem e uma especialista da {{clinic_display_name}} vai te responder em instantes.",
     "LINK_PRIMEIRO": "Oi{{nome}}! O agendamento é pelo nosso site: {{link}} 😊\nQualquer dúvida, é só me chamar por aqui.",
     "WELCOME_NEW": "Olá! Seja {{bem_vindx}} à *{{clinic_name}}*!\n\nComo posso te ajudar hoje?",
     "WELCOME_RETURNING": "Olá, {{patient_name}}! {{Bem_vindx}} de volta à *{{clinic_name}}*!\n\nComo posso te ajudar?",

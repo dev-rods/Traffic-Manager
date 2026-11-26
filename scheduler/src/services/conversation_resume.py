@@ -51,11 +51,11 @@ def ha_pergunta_em_aberto(eventos, entregue_em=None):
 
     from src.services import fecho_social
 
-    from src.services.autoria_mensagem import e_aviso_de_espera
+    from src.services.autoria_mensagem import e_envio_do_sistema_sem_resposta
 
     for evento in reversed(eventos or []):
         texto = (evento.get("content") or "").strip()
-        if not texto or e_aviso_de_espera(evento):
+        if not texto or e_envio_do_sistema_sem_resposta(evento):
             continue
         if evento.get("direction") == "INBOUND":
             # "Obrigada" como ultima fala nao e pergunta em aberto (PRD 064,
