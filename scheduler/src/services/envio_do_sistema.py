@@ -28,9 +28,7 @@ SITE_AGENDAMENTO = "SITE_AGENDAMENTO"
 CHECKIN = "CHECKIN"
 # Link dos documentos (termo e ficha) antes da sessão, pelo painel (PRD 048).
 DOCUMENTOS = "DOCUMENTOS"
-# PRD 064 (P5): aviso imediato quando a politica cala o bot. Nao e fala do bot.
-AVISO_DE_ESPERA = "AVISO_DE_ESPERA"
-ORIGENS = {SITE_OTP, SITE_AGENDAMENTO, CHECKIN, DOCUMENTOS, AVISO_DE_ESPERA}
+ORIGENS = {SITE_OTP, SITE_AGENDAMENTO, CHECKIN, DOCUMENTOS}
 
 
 def _tracker():

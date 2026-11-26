@@ -24,7 +24,6 @@ from src.services.agregador_de_mensagens import (
 from src.services import atendimento
 from src.services import retencao
 from src.services import silencio
-from src.services import aviso_de_espera
 from src.services.session_store import grava_atendimento, mark_conversation_eligible
 from src.services.autoria_mensagem import foi_enviada_pelo_bot
 from src.services.identidade_whatsapp import chat_lid, deve_vincular_lid, telefone_da_conversa
@@ -436,12 +435,10 @@ def handler(event, context):
                 f"paused={clinic.get('bot_paused', False)}, "
                 f"policy={clinic.get('bot_autoreply_policy') or 'ALL'})"
             )
-            # So a politica calou o bot (PRD 064, P5): a pessoa ouve na hora que
-            # uma especialista vai responder. Uma vez por 24 h; nao e fala do bot.
-            if aviso_de_espera.deve_enviar(clinic, session, incoming.phone, silenciado=silenciado):
-                if aviso_de_espera.envia(clinic, incoming.phone, TemplateService(db), session, tracker=tracker):
-                    grava_atendimento(_get_sessions_table(), clinic_id, incoming.phone, session,
-                                      extras={aviso_de_espera.CAMPO: session[aviso_de_espera.CAMPO]})
+            # O aviso de espera (PRD 064, P5) viveu aqui por ~4 h em 25/11/2026 e
+            # foi desfeito: disparou na Essencia (tambem LEADS_ONLY) para
+            # pacientes, leads do site e numeros novos, e foi lido como
+            # "redirecionou para especialista". Ver PRD 064 §8.
             return http_response(200, {"status": "OK"})
 
         # Em COOLDOWN o cliente escreveu: a conversa volta ao bot. Materializa,
