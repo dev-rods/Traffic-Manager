@@ -473,5 +473,10 @@ as áreas" (conta) ou "é pelo link, mas se preferir eu marco" (não conta).
       datas duplicada: efeito da frente 5 (a trava da retomada reescreveu uma resposta que já oferecia
       datas); opções oferecidas contam como resposta, datas/horários são o mesmo assunto, e
       `opcoes_numeradas.sem_as_opcoes` tira do texto do modelo as linhas que repetem a lista.
+- [x] P5 DESFEITA em 25/11 à noite (PR do revert): o aviso de espera saiu na Essência, que também está em
+      `LEADS_ONLY`, para pacientes avisando desmarcação, para quem acabou de se cadastrar no site e para
+      números novos (seis conversas em 4 h; numa delas duas vezes em 10 s), e foi lido como "redirecionou
+      para especialista". Lição: a decisão era sobre a Nobre, a implementação foi por política, e a
+      política é das duas clínicas. Se voltar, é por flag por clínica e só para contatos sem ficha.
 - [x] Registrado em `TASKS_LOG.md`
 - [x] Registrado em `TASKS_LOG.md`
