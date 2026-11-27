@@ -251,6 +251,17 @@ dentro da folga.
 ## Status (preencher após conclusão)
 
 - [x] Pendente
-- [ ] Spec gerada: `spec/068-conta-principal-e-reserva-da-anthropic.md`
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Spec gerada: `spec/068-conta-principal-e-reserva-da-anthropic.md`
+- [x] Implementado em: 2026-11-27, EM PROD (PR #285, merge `3971f46`; scheduler dev layer 230, prod layer 184). Antes, redeploy de prod a partir da main (layer 183) para a chave nova valer.
+- [x] Registrado em `TASKS_LOG.md`
+
+Verificação:
+- Local, contra a API real: a principal inventada recebeu 401, a reserva atendeu, e saíram a métrica EMF e o `[Consumo]` com `conta=reserva`.
+- Em dev, os alarmes foram disparados por `put-metric-data`: os dois foram para ALARM e publicaram no SNS.
+- Não houve teste do EMF dentro de uma Lambda. Nenhuma rota chama o modelo sem poder enviar WhatsApp: a `ClassificaLeads` com `dryRun` não precisou do modelo.
+
+Pendências:
+- O André confirmar as duas assinaturas de e-mail (dev e prod).
+- Conferir a primeira chamada real com `conta=principal`.
+- `/dev/ANTHROPIC_API_KEY` ainda é a chave antiga (D3).
+- A chave antiga respondeu 200 em 27/11: a conta tinha saldo nesse dia.
