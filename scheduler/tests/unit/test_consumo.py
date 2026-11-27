@@ -136,13 +136,25 @@ class TestOQueVaiParaOLog(unittest.TestCase):
 
 class TestLigadoNoServico(unittest.TestCase):
     def test_toda_resposta_de_200_registra_consumo(self):
-        """Sem isto o log volta a dizer só que a chamada aconteceu."""
-        import inspect
+        """Sem isto o log volta a dizer só que a chamada aconteceu.
+
+        Pelo comportamento, não pelo fonte: procurar o nome da função no texto
+        de `create_message` quebrou quando o envio foi para `_envia` (PRD 068),
+        e passaria com a chamada comentada.
+        """
+        from unittest import mock
 
         from src.services import anthropic_service
 
-        fonte = inspect.getsource(anthropic_service.AnthropicService.create_message)
-        self.assertIn("registra_consumo", fonte)
+        ok = mock.Mock(status_code=200, headers={})
+        ok.json.return_value = RESPOSTA
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "chave-de-teste"}),                 mock.patch("requests.post", return_value=ok),                 self.assertLogs("src.services.consumo", level="INFO") as logs:
+            anthropic_service.AnthropicService().create_message(
+                system="s", messages=[{"role": "user", "content": "oi"}])
+
+        (linha,) = [l for l in logs.output if "[Consumo]" in l]
+        self.assertIn("in=1200", linha)
+        self.assertIn("conta=principal", linha)
 
 
 if __name__ == "__main__":

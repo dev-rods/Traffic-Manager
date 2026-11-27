@@ -87,8 +87,11 @@ def _linha(uso: dict, modelo: str) -> str:
     return " ".join(partes)
 
 
-def registra_chamada(resposta, modelo: str, iteracao=None) -> dict:
+def registra_chamada(resposta, modelo: str, iteracao=None, conta=None) -> dict:
     """Loga o consumo de UMA chamada ao modelo e devolve o `usage` lido.
+
+    `conta` diz qual conta da Anthropic pagou (PRD 068): "quanto a reserva
+    pagou este mês" vira uma consulta no Insights.
 
     Nunca levanta: uma falha ao contabilizar não pode derrubar o atendimento -
     seria trocar a resposta da paciente por uma linha de log.
@@ -96,7 +99,8 @@ def registra_chamada(resposta, modelo: str, iteracao=None) -> dict:
     try:
         uso = do_retorno(resposta)
         marca = f"iteracao={iteracao} " if iteracao is not None else ""
-        logger.info(f"[Consumo] {marca}{_linha(uso, modelo)}")
+        pagou = f" conta={conta}" if conta else ""
+        logger.info(f"[Consumo] {marca}{_linha(uso, modelo)}{pagou}")
         return uso
     except Exception as e:
         logger.error(f"[Consumo] Falha ao registrar o consumo da chamada: {e}")
