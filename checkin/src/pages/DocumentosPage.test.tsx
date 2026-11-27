@@ -124,10 +124,11 @@ describe('Documentos pelo celular (PRD 048)', () => {
     expect(screen.getByText(/Quinta, 3 de dezembro/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Começar' }))
 
-    // Dados conferidos (já preenchidos): segue.
+    // Dados conferidos (já preenchidos): segue. Etapa visível (PRD 065).
     expect(
       await screen.findByRole('heading', { name: 'Termo de consentimento' })
     ).toBeInTheDocument()
+    expect(screen.getByText('Etapa 1 de 3 - Seus dados')).toBeInTheDocument()
     expect(screen.getByLabelText('Nome completo')).toHaveValue('Ana Souza')
     await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
     await userEvent.click(
@@ -136,6 +137,11 @@ describe('Documentos pelo celular (PRD 048)', () => {
 
     // A ficha abre com a resposta que já estava gravada.
     expect(await screen.findByRole('heading', { name: 'Ficha de anamnese' })).toBeInTheDocument()
+    expect(screen.getByText('Etapa 2 de 3 - Ficha de saúde')).toBeInTheDocument()
+    // Última tela da ficha: avisa que falta a assinatura (PRD 065).
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Falta só a assinatura. Sem ela, a ficha e o termo não valem.'
+    )
     const gestante = screen.getByRole('radiogroup', { name: 'Está gestante?' })
     expect(within(gestante).getByRole('radio', { name: 'Sim' })).toHaveAttribute(
       'aria-checked',
@@ -150,8 +156,10 @@ describe('Documentos pelo celular (PRD 048)', () => {
       { gestante: true }
     )
 
-    // Preparar e assinar (provedor simulado).
+    // Preparar e assinar (provedor simulado). Última etapa, com o "não feche".
     expect(await screen.findByRole('heading', { name: 'Assine o termo' })).toBeInTheDocument()
+    expect(screen.getByText('Etapa 3 de 3 - Assinatura')).toBeInTheDocument()
+    expect(screen.getByText(/Última etapa\. .*Não feche antes de ver 'Documento assinado'/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Simular assinatura (teste)' }))
     await screen.findByText('Tudo certo, Ana!')
     expect(screen.getByText(/Documento assinado/)).toBeInTheDocument()

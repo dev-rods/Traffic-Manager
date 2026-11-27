@@ -132,7 +132,7 @@ describe('TermoDeConsentimento', () => {
     }
     render(<TermoDeConsentimento patientId="p1" />)
     expect(screen.getAllByText('VIGENTE')).toHaveLength(2)
-    expect(screen.getByText('EM PAPEL')).toBeInTheDocument()
+    expect(screen.getByText('ASSINADO EM PAPEL')).toBeInTheDocument()
     expect(screen.getByText('Joana')).toBeInTheDocument()
     expect(screen.getByText('10/01/2026')).toBeInTheDocument()
     expect(screen.getByText('responsável legal')).toBeInTheDocument()

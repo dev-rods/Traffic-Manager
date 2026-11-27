@@ -243,6 +243,8 @@ async function ateADadosConfirmados() {
   await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
   await userEvent.click(screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' }))
   await screen.findByRole('heading', { name: 'Ficha de anamnese' })
+  expect(screen.queryByText(/Etapa \d de 3/)).toBeNull()
+  expect(screen.queryByRole('status')).toBeNull()
 }
 
 describe('Check-in', () => {
@@ -539,6 +541,9 @@ describe('Check-in', () => {
     )
 
     expect(await screen.findByRole('heading', { name: 'Assine o termo' })).toBeInTheDocument()
+    // No iPad não há etapas nem o aviso do link de documentos (PRD 065).
+    expect(screen.queryByText(/Etapa \d de 3/)).toBeNull()
+    expect(screen.queryByText(/Não feche antes/)).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Simular assinatura (teste)' }))
     expect(checkinService.simulateConsent).toHaveBeenCalledWith('c1', expect.anything(), 'cons-1')
     // Depois de assinar, a conferência do agendamento; só então o pagamento.

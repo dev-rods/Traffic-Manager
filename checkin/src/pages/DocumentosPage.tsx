@@ -58,6 +58,9 @@ function firstNameOf(appointment: CheckinAppointment | undefined): string | null
   return appointment?.fullName?.trim().split(/\s+/)[0] || null
 }
 
+// PRD 065: a pessoa vê onde está e que a assinatura é a última etapa.
+const ETAPAS = { dados: 'Etapa 1 de 3 - Seus dados', ficha: 'Etapa 2 de 3 - Ficha de saúde' }
+
 function doc(state: Doc): Doc {
   return { session: state.session, appointment: state.appointment }
 }
@@ -202,6 +205,7 @@ export function DocumentosPage() {
         {state.step === 'consent-data' ? (
           <ConsentDataStep
             appointment={state.appointment}
+            etapa={ETAPAS.dados}
             onContinue={(dados) =>
               anamnese
                 ? go({
@@ -221,6 +225,8 @@ export function DocumentosPage() {
         {state.step === 'anamnese' && anamnese ? (
           <AnamneseStep
             key={state.tela}
+            etapa={ETAPAS.ficha}
+            avisoFinal
             clinicId={clinicId}
             session={state.session}
             appointment={state.appointment}
@@ -259,6 +265,7 @@ export function DocumentosPage() {
             clinicId={clinicId}
             session={state.session}
             consent={state.consent}
+            remoto
             onSigned={() => go({ step: 'done', firstName: firstNameOf(state.appointment) })}
             onRestart={() => entrarDeNovo(null)}
           />

@@ -64,11 +64,11 @@ export function TermoDoAgendamento({ appointment: a }: TermoDoAgendamentoProps) 
   // O popover guarda o agendamento de quando foi aberto; depois da ação, o
   // estado novo vem da própria resposta, sem esperar a agenda recarregar.
   const situacao = emPapel
-    ? { label: 'Em papel', tom: 'ok' as const, pendente: false }
+    ? { label: 'Assinado em papel', tom: 'ok' as const, pendente: false, semNada: false }
     : dispensar.isSuccess
-      ? { label: 'Dispensado nesta sessão', tom: 'atencao' as const, pendente: false }
+      ? { label: 'Dispensado nesta sessão', tom: 'atencao' as const, pendente: false, semNada: false }
       : renovar.isSuccess
-        ? { label: 'Nova assinatura pedida', tom: 'pendente' as const, pendente: false }
+        ? { label: 'Nova assinatura pedida', tom: 'pendente' as const, pendente: false, semNada: false }
         : situacaoDoTermo(a)
   const vigente = documentos.data?.consents.find(
     (c) =>

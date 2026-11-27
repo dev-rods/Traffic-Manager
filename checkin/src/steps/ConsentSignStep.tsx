@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Spinner } from '@/components/ui/Spinner'
-import { ErrorMessage } from '@/components/StepHeader'
+import { ErrorMessage, ETAPA_CLASS } from '@/components/StepHeader'
 import { useConsentStatus, useSimulateConsent } from '@/hooks/useCheckin'
 import { loadClicksign, mountClicksign } from '@/lib/clicksignWidget'
 import type { Consent, Session } from '@/types'
@@ -12,6 +12,8 @@ interface ConsentSignStepProps {
   consent: Consent
   onSigned: (consent: Consent) => void
   onRestart: () => void
+  /** Link de documentos (PRD 065): linha de etapa e "não feche". */
+  remoto?: boolean
 }
 
 const CONTAINER_ID = 'clicksign-widget'
@@ -29,6 +31,7 @@ export function ConsentSignStep({
   consent: created,
   onSigned,
   onRestart,
+  remoto = false,
 }: ConsentSignStepProps) {
   const consentId = created.id ?? ''
   const [assinou, setAssinou] = useState(false)
@@ -121,13 +124,16 @@ export function ConsentSignStep({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
+          {remoto ? <p className={ETAPA_CLASS}>Etapa 3 de 3 - Assinatura</p> : null}
           <h1 className="font-display text-2xl font-bold text-ink-900">Assine o termo</h1>
           <p className="text-base text-ink-600" aria-live="polite">
             {assinou
               ? 'Assinatura recebida. Estamos registrando o documento…'
-              : useWidget && widget === 'ready'
-                ? 'Leia, digite o código do WhatsApp e assine na tela. Aguardando a assinatura…'
-                : 'Leia o termo, digite o código que chegou no seu WhatsApp e assine na tela.'}
+              : remoto
+                ? "Última etapa. Digite o código que chega no WhatsApp e assine na tela. Não feche antes de ver 'Documento assinado'."
+                : useWidget && widget === 'ready'
+                  ? 'Leia, digite o código do WhatsApp e assine na tela. Aguardando a assinatura…'
+                  : 'Leia o termo, digite o código que chegou no seu WhatsApp e assine na tela.'}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-3">

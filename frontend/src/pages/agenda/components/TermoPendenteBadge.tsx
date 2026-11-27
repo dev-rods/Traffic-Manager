@@ -12,7 +12,7 @@ export function TermoPendenteBadge({ appointment: a, compacto = false }: { appoi
   if (!situacao.pendente) return null
   return (
     <span
-      title={situacao.label === 'Pendente' ? 'Termo e anamnese pendentes' : situacao.label}
+      title={situacao.semNada ? 'Termo e anamnese pendentes' : situacao.label}
       className={[
         'inline-block rounded px-1 font-bold align-middle bg-amber-100 text-amber-700',
         compacto ? 'text-[10px] mr-0.5' : 'px-1.5 py-0.5 text-[10px]',

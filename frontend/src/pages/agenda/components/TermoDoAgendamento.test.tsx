@@ -103,7 +103,7 @@ describe('TermoDoAgendamento', () => {
 
   it('em papel e dispensado também não oferecem ação', () => {
     const { rerender } = render(<TermoDoAgendamento appointment={agendamento({ consent_status: 'PAPER' })} />)
-    expect(screen.getByText('Em papel')).toBeInTheDocument()
+    expect(screen.getByText('Assinado em papel')).toBeInTheDocument()
     rerender(
       <TermoDoAgendamento
         appointment={agendamento({
@@ -119,7 +119,7 @@ describe('TermoDoAgendamento', () => {
 
   it('pendente: dispensar pede o motivo e chama o serviço', async () => {
     render(<TermoDoAgendamento appointment={agendamento()} />)
-    expect(screen.getByText('Pendente')).toBeInTheDocument()
+    expect(screen.getByText('Falta o termo')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Dispensar nesta sessão' }))
     await userEvent.selectOptions(screen.getByLabelText('Motivo'), 'OUTRO')
     expect(screen.getByRole('button', { name: 'Dispensar' })).toBeDisabled()
@@ -147,7 +147,7 @@ describe('TermoDoAgendamento', () => {
 
   it('assinando: ainda pendente para a recepção', () => {
     render(<TermoDoAgendamento appointment={agendamento({ consent_status: 'SIGNING' })} />)
-    expect(screen.getByText('Assinando')).toBeInTheDocument()
+    expect(screen.getByText('Falta assinar (abriu o link)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Dispensar nesta sessão' })).toBeInTheDocument()
   })
 
@@ -157,7 +157,7 @@ describe('TermoDoAgendamento', () => {
         appointment={agendamento({ consent_status: 'FILLING', consent_link_sent_at: '2026-11-16T10:00:00Z' })}
       />
     )
-    expect(screen.getByText('Preenchendo pelo link')).toBeInTheDocument()
+    expect(screen.getByText('Falta a ficha (abriu o link)')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Reenviar link dos documentos' })).toBeInTheDocument()
     expect(screen.getByText(/Link enviado em/)).toBeInTheDocument()
   })

@@ -24,6 +24,9 @@ interface AnamneseStepProps {
   onBack: () => void
   // Chamado depois de o backend gravar a tela; na última, é o fim da ficha.
   onNext: (respostas: AnamneseRespostas) => void
+  etapa?: string
+  /** PRD 065: na última tela, avisa que ainda falta a assinatura. Só no link. */
+  avisoFinal?: boolean
 }
 
 const TAMANHO_DO_TEXTO = 300
@@ -78,6 +81,8 @@ export function AnamneseStep({
   respostas,
   onBack,
   onNext,
+  etapa,
+  avisoFinal = false,
 }: AnamneseStepProps) {
   const save = useSaveAnamnesis(clinicId, session)
   const [local, setLocal] = useState<AnamneseRespostas>(respostas)
@@ -121,7 +126,7 @@ export function AnamneseStep({
 
   return (
     <div className="flex flex-col gap-6">
-      <StepHeader title="Ficha de anamnese">
+      <StepHeader title="Ficha de anamnese" etapa={etapa}>
         Tela {tela} de {catalogo.screens.length}. Responda com atenção: as respostas vão impressas
         no documento que você assina.
       </StepHeader>
@@ -178,6 +183,16 @@ export function AnamneseStep({
       ))}
 
       {save.isError && !campoDoServidor ? <ErrorMessage>{save.error.message}</ErrorMessage> : null}
+
+      {ultima && avisoFinal ? (
+        // Destaque, não erro: nada deu errado, só falta o passo que vale.
+        <p
+          role="status"
+          className="mx-auto w-full max-w-md rounded-2xl border-2 border-accent-200 bg-accent-50 px-5 py-4 text-center text-base text-ink-800"
+        >
+          Falta só a assinatura. Sem ela, a ficha e o termo não valem.
+        </p>
+      ) : null}
 
       <div className="mx-auto flex w-full max-w-md flex-col gap-3">
         <Button loading={save.isPending} disabled={touched && !valida} onClick={continuar}>
