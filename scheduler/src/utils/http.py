@@ -84,6 +84,8 @@ def http_response(status_code: int, body: Any, headers: Optional[Dict[str, str]]
     # Gateway de outra origem - painel, site e checkin chegam por rewrite da
     # Vercel no proprio dominio (e pelo proxy do Vite em dev local). Um
     # cliente novo de outra origem passa pelo mesmo rewrite, nao ganha CORS.
+    # Unica excecao: POST /leads (PRD 066), que acrescenta o cabecalho no
+    # proprio handler (src/functions/lead/create.py).
     default_headers = {'Content-Type': 'application/json'}
 
     if headers:

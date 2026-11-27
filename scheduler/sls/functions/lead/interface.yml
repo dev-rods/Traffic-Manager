@@ -20,6 +20,12 @@ CreateLead:
     - http:
         path: leads
         method: post
+        # PRD 066: a LP da Essencia (draclaradourado.com.br, Lovable estatico)
+        # grava do navegador, de outra origem, com x-api-key: o browser faz
+        # preflight. Unica excecao ao PRD 055 (registrada em
+        # CHAMADAS_DE_FORA_DA_VERCEL, test_limite_de_recursos.py). Sai quando a
+        # LP gravar pelo servidor, como a da Nobre.
+        cors: true
 
 ListLeads:
   handler: src.functions.lead.list.handler
