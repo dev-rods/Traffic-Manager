@@ -19,6 +19,35 @@ describe('PhoneStep (PRD 061)', () => {
     expect(onContinue).toHaveBeenCalledWith('(11) 98765-4321')
   })
 
+  it('número de fora do Brasil: escolhe o país, sem precisar do + (PRD 067)', async () => {
+    const onContinue = vi.fn()
+    render(<PhoneStep onContinue={onContinue} aguardando={false} />)
+    expect(screen.queryByText(/Comece com \+/)).toBeNull()
+    expect(screen.getByLabelText('País')).toHaveValue('55')
+    await userEvent.selectOptions(screen.getByLabelText('País'), '1')
+    await userEvent.type(screen.getByLabelText(/celular/i), '(202) 555-0147')
+    expect(screen.getByLabelText(/celular/i)).toHaveValue('2025550147')
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(onContinue).toHaveBeenCalledWith('+12025550147')
+  })
+
+  it('"Outro país" pede o código; sem ele não segue', async () => {
+    const onContinue = vi.fn()
+    render(<PhoneStep onContinue={onContinue} aguardando={false} />)
+    await userEvent.selectOptions(screen.getByLabelText('País'), 'outro')
+    await userEvent.type(screen.getByLabelText(/celular/i), '12345678')
+    expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Código do país'), '45')
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(onContinue).toHaveBeenCalledWith('+4512345678')
+  })
+
+  it('voltar à etapa reabre o número estrangeiro no país certo', () => {
+    render(<PhoneStep defaultValue="+12025550147" onContinue={vi.fn()} aguardando={false} />)
+    expect(screen.getByLabelText('País')).toHaveValue('1')
+    expect(screen.getByLabelText(/celular/i)).toHaveValue('2025550147')
+  })
+
   it('enquanto a sessão desta aba é conferida, não deixa seguir', async () => {
     const onContinue = vi.fn()
     render(<PhoneStep defaultValue="(11) 98765-4321" onContinue={onContinue} aguardando />)

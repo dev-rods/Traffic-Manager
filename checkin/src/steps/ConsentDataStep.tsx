@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { TextField } from '@/components/ui/TextField'
+import { PaisDoCelular } from '@/components/PaisDoCelular'
 import { ErrorMessage, StepHeader } from '@/components/StepHeader'
 import type { CheckinAppointment, ConsentPrefill, ConsentStartPayload } from '@/types'
 import { cx } from '@/utils/cx'
@@ -8,15 +9,15 @@ import {
   digitsToIsoDate,
   formatCpf,
   formatDateDigits,
-  formatPhone,
   isMinorAt,
   isValidCpf,
   isValidEmail,
-  isValidMobile,
   isoDateToDigits,
   onlyDigits,
-  toApiPhone,
 } from '@/utils/format'
+import {
+  BRASIL, OUTRO, formataNumero, limiteDeDigitos, montaTelefone, numeroValido, paisDoNumero, placeholderDoNumero,
+} from '@/utils/ddi'
 
 interface ConsentDataStepProps {
   appointment: CheckinAppointment
@@ -52,7 +53,7 @@ function guardianFromPrefill(p: ConsentPrefill | null): Person {
     cpf: '',
     birth: isoDateToDigits(g?.birthDate ?? null),
     email: g?.email ?? '',
-    phone: g?.phone ? onlyDigits(g.phone).replace(/^55/, '') : '',
+    phone: paisDoNumero(g?.phone).digits,
   }
 }
 
@@ -70,6 +71,11 @@ export function ConsentDataStep({ appointment, onContinue, onRestart, etapa }: C
   const prefill = appointment.consentPrefill
   const [patient, setPatient] = useState<Person>(() => fromPrefill(prefill))
   const [guardian, setGuardian] = useState<Person>(() => guardianFromPrefill(prefill))
+  // País do celular do responsável (PRD 067): responsável estrangeiro também
+  // assina o termo de menor.
+  const [guardianPais, setGuardianPais] = useState(() => paisDoNumero(prefill?.guardian?.phone).pais)
+  const [guardianDdiLivre, setGuardianDdiLivre] = useState('')
+  const guardianDdi = guardianPais === OUTRO ? onlyDigits(guardianDdiLivre) : guardianPais
   const [useKnownCpf, setUseKnownCpf] = useState(prefill?.cpfKnown ?? false)
   const [image, setImage] = useState<boolean | null>(null)
   const [touched, setTouched] = useState(false)
@@ -110,7 +116,12 @@ export function ConsentDataStep({ appointment, onContinue, onRestart, etapa }: C
           : 'Informe o CPF.'
         : null,
     guardianBirth: minor && !guardianBirthIso ? 'Informe a data de nascimento.' : null,
-    guardianPhone: minor && !isValidMobile(guardian.phone) ? 'Informe o celular com DDD.' : null,
+    guardianPhone:
+      minor && !numeroValido(guardianDdi, guardian.phone)
+        ? guardianDdi === BRASIL
+          ? 'Informe o celular com DDD.'
+          : 'Informe o número sem o código do país.'
+        : null,
     guardianEmail: minor && !isValidEmail(guardian.email) ? 'Informe um e-mail válido.' : null,
   }
   const valid = Object.values(errors).every((e) => e === null)
@@ -131,7 +142,7 @@ export function ConsentDataStep({ appointment, onContinue, onRestart, etapa }: C
               name: guardian.name.trim(),
               cpf: guardian.cpf,
               birthDate: guardianBirthIso,
-              phone: toApiPhone(guardian.phone),
+              phone: montaTelefone(guardianDdi, guardian.phone),
               email: guardian.email.trim(),
             }
           : null,
@@ -250,13 +261,24 @@ export function ConsentDataStep({ appointment, onContinue, onRestart, etapa }: C
             placeholder="dd/mm/aaaa"
             error={show('guardianBirth')}
           />
+          <PaisDoCelular
+            id="pais-do-responsavel"
+            label="País do celular do responsável"
+            pais={guardianPais}
+            ddiLivre={guardianDdiLivre}
+            onPais={(novo) => {
+              setGuardianPais(novo)
+              setGuardian({ ...guardian, phone: guardian.phone.slice(0, limiteDeDigitos(novo === OUTRO ? '' : novo)) })
+            }}
+            onDdiLivre={setGuardianDdiLivre}
+          />
           <TextField
             label="Celular do responsável"
-            value={formatPhone(guardian.phone)}
-            onChange={(v) => setGuardian({ ...guardian, phone: onlyDigits(v).slice(0, 11) })}
+            value={formataNumero(guardianDdi, guardian.phone)}
+            onChange={(v) => setGuardian({ ...guardian, phone: onlyDigits(v).slice(0, limiteDeDigitos(guardianDdi)) })}
             inputMode="tel"
             autoComplete="off"
-            placeholder="(11) 99999-9999"
+            placeholder={guardianDdi === BRASIL ? '(11) 99999-9999' : placeholderDoNumero(guardianDdi)}
             hint="O código de assinatura chega neste WhatsApp."
             error={show('guardianPhone')}
           />

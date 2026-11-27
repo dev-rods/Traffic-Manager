@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Input } from './ui/Input'
 import { Button } from './ui/Button'
-import { formatPhoneInput, isValidPhone } from '@/utils/format'
+import { CelularComPais } from './CelularComPais'
+import { isValidPhone } from '@/utils/format'
 
 interface PhoneStepProps {
   /** Como estava digitado (voltar não apaga). */
@@ -29,16 +29,7 @@ export function PhoneStep({ defaultValue = '', onContinue, aguardando }: PhoneSt
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <Input
-        id="phone"
-        label="Celular (WhatsApp)"
-        placeholder="Digite seu celular"
-        inputMode="tel"
-        autoComplete="tel"
-        value={phone}
-        hint="Número de fora do Brasil? Comece com + e o código do país."
-        onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-      />
+      <CelularComPais id="phone" defaultValue={defaultValue} onChange={setPhone} />
       <p className="text-sm text-ink-600">
         Você recebe um código por WhatsApp e, se tiver{' '}
         <span className="font-medium text-ink-800">desconto personalizado</span>, ele aparece em

@@ -196,10 +196,10 @@ describe('Documentos pelo celular (PRD 048)', () => {
     expect(pais).toHaveValue('55')
     await userEvent.selectOptions(pais, '1')
     const campo = screen.getByLabelText('Celular (WhatsApp)')
-    await userEvent.type(campo, '(818) 472-2644')
-    expect(campo).toHaveValue('8184722644')
+    await userEvent.type(campo, '(202) 555-0147')
+    expect(campo).toHaveValue('2025550147')
     await userEvent.click(screen.getByRole('button', { name: 'Receber código' }))
-    expect(checkinService.sendCode).toHaveBeenCalledWith('c1', '+18184722644')
+    expect(checkinService.sendCode).toHaveBeenCalledWith('c1', '+12025550147')
     expect(await screen.findByText('Digite o código')).toBeInTheDocument()
   })
 

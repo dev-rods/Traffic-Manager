@@ -469,6 +469,25 @@ describe('Check-in', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('iPad: número de fora do Brasil escolhe o país e pede o código (PRD 067)', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Fazer check-in' }))
+    const pais = screen.getByLabelText('País')
+    expect(pais).toHaveValue('55')
+    await userEvent.selectOptions(pais, '1')
+    await typeDigits('2025550147')
+    expect(screen.getByLabelText('Celular digitado')).toHaveTextContent('2025550147')
+    await userEvent.click(screen.getByRole('button', { name: 'Receber código' }))
+    expect(checkinService.sendCode).toHaveBeenCalledWith('c1', '+12025550147')
+  })
+
+  it('iPad: Brasil continua exigindo o celular com nono dígito', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Fazer check-in' }))
+    await typeDigits('1133334444')
+    expect(screen.getByRole('button', { name: 'Receber código' })).toBeDisabled()
+  })
+
   it('número sem agendamento', async () => {
     vi.mocked(checkinService.appointments).mockResolvedValue([])
     renderPage()
@@ -618,6 +637,29 @@ describe('Check-in', () => {
           email: 'carla@exemplo.com',
         },
       })
+    )
+  })
+
+  it('termo: responsável com celular de fora do Brasil (PRD 067)', async () => {
+    withConsent({ name: 'Bia Souza', birthDate: '2010-06-01', isMinor: true })
+    renderPage()
+    await login()
+    await screen.findByRole('heading', { name: 'Responsável legal' })
+    await userEvent.click(screen.getByRole('radio', { name: 'Autorizo' }))
+    await userEvent.type(screen.getByLabelText('Nome completo do responsável'), 'Carla Souza')
+    await userEvent.type(screen.getByLabelText('CPF do responsável'), '11144477735')
+    await userEvent.type(screen.getByLabelText('Nascimento do responsável'), '01011980')
+    await userEvent.selectOptions(screen.getByLabelText('País do celular do responsável'), '351')
+    await userEvent.type(screen.getByLabelText('Celular do responsável'), '912345678')
+    await userEvent.type(screen.getByLabelText('E-mail do responsável'), 'carla@exemplo.com')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Continuar para a ficha de anamnese' })
+    )
+    expect(checkinService.startConsent).toHaveBeenLastCalledWith(
+      'c1',
+      expect.anything(),
+      'ap-ana',
+      expect.objectContaining({ guardian: expect.objectContaining({ phone: '+351912345678' }) })
     )
   })
 

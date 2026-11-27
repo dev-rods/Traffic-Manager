@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CancelAppointmentModal } from './CancelAppointmentModal'
@@ -84,7 +84,16 @@ describe('desfecho pela antecedência (PRD 054)', () => {
   })
 
   it('a abertura da agenda do dia é a referência, não a hora da sessão', () => {
-    // Sessão amanhã às 23h, agenda abre às 08h: agora já faltam menos de 24 h para a abertura.
+    // Sessão amanhã às 23h, agenda abre às 08h: ao meio-dia de hoje faltam 20 h
+    // para a abertura (e 35 h para a sessão). O relógio é fixado ao meio-dia:
+    // rodando de madrugada a abertura ficava a mais de 24 h e o teste falhava.
+    const meioDia = new Date()
+    meioDia.setHours(12, 0, 0, 0)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(meioDia)
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
     const regras = [{ id: 'r', clinic_id: 'c', day_of_week: new Date(`${daqui(1)}T12:00:00`).getDay(), rule_date: null, start_time: '08:00:00', end_time: '20:00:00', professional_id: null, active: true }]
     render(
       <CancelAppointmentModal

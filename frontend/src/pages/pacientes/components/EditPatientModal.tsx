@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
+import { CelularComPais } from '@/components/CelularComPais'
 import { CadastroFields } from './CadastroFields'
 import { cadastroSchema, descontoParaApi } from '@/lib/cadastroPaciente'
 import { useUpdatePatient } from '@/hooks/usePatients'
@@ -12,7 +13,7 @@ import type { PatientWithStats } from '@/types'
 
 const schema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
-  phone: z.string().min(10, 'Telefone invalido').max(20, 'Telefone invalido'),
+  phone: z.string().min(1, 'Telefone inválido'),
   gender: z.enum(['M', 'F']).optional(),
   ...cadastroSchema,
 })
@@ -69,7 +70,12 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
         patientId: patient.id,
         data: {
           name: data.name,
-          phone: normalizePhone(data.phone),
+          // So muda se a recepcao mexeu no campo (PRD 067): um numero antigo
+          // fora do padrao nao e reescrito so por abrir e salvar.
+          phone:
+            normalizePhone(data.phone) === normalizePhone(patient.phone)
+              ? patient.phone
+              : normalizePhone(data.phone),
           gender: data.gender as 'M' | 'F',
           // Campo apagado na tela vira string vazia, que o backend grava como
           // NULL. E o jeito de a atendente limpar um dado errado.
@@ -114,11 +120,12 @@ export function EditPatientModal({ patient, onClose }: EditPatientModalProps) {
           {...register('name')}
         />
 
-        <Input
+        <CelularComPais
+          key={patient?.id}
           label="WhatsApp"
-          placeholder="+5511999999999"
+          defaultValue={patient?.phone}
           error={errors.phone?.message}
-          {...register('phone')}
+          onChange={(v) => setValue('phone', v, { shouldValidate: Boolean(errors.phone) })}
         />
 
         <div>

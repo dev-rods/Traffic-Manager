@@ -20,6 +20,7 @@ import { useAvailableSlots } from '@/hooks/useAvailabilityRules'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useAuth } from '@/hooks/useAuth'
 import { formatPhone } from '@/utils/formatPhone'
+import { CelularComPais } from '@/components/CelularComPais'
 import { ConflitoDoMes } from './ConflitoDoMes'
 import type { CreateAppointmentPayload, PatientWithStats, SessaoExistente } from '@/types'
 import {
@@ -436,17 +437,15 @@ export function CreateAppointmentModal({ open, initialDate, initialTime, onClose
                 Cancelar
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            {/* Nome em cima e telefone com país embaixo (PRD 067): o seletor
+                de país não cabe em meia coluna. */}
+            <div className="flex flex-col gap-3">
               <Input
                 placeholder="Nome"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
               />
-              <Input
-                placeholder="Telefone"
-                value={newPhone}
-                onChange={(e) => setNewPhone(e.target.value)}
-              />
+              <CelularComPais onChange={setNewPhone} />
             </div>
             <div className="flex items-center gap-4">
               <span className="text-xs text-gray-500">Genero</span>
