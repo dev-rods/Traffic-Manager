@@ -162,5 +162,5 @@ estrangeiro, não sabemos se a ClickSign aceita nem se o código chega.
 
 - [x] Pendente
 - [x] Spec gerada: `spec/067-seletor-de-pais-nos-campos-de-celular.md`
-- [x] Implementado em: 2026-11-27, em DEV (PR #283: previews do site e do painel, `checkin-dev`). Prod aguarda o André.
+- [x] Implementado em: 2026-11-27, em DEV (PR #283: previews do site e do painel, `checkin-dev`). Em PROD no mesmo dia: PR #283 mergeado (`f579a90`), site e painel pela Vercel, `checkin-prod` pela CLI. Pendente: verificar a ClickSign com signatária estrangeira.
 - [x] Registrado em `TASKS_LOG.md`
