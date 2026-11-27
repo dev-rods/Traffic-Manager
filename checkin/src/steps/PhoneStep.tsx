@@ -45,6 +45,7 @@ export function PhoneStep({
 
   const seletor = (
     <PaisDoCelular
+      compacto={teclado === 'keypad'}
       pais={pais}
       ddiLivre={ddiLivre}
       onPais={trocaPais}
@@ -54,10 +55,10 @@ export function PhoneStep({
   )
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className={teclado === 'keypad' ? 'flex flex-col gap-6' : 'flex flex-col gap-8'}>
       <StepHeader title="Qual é o seu celular?">{descricao}</StepHeader>
       {teclado === 'keypad' ? (
-        <div className="mx-auto flex w-full max-w-sm flex-col gap-4">
+        <div className="mx-auto flex w-full max-w-sm flex-col gap-3">
           {seletor}
           <output
             aria-label="Celular digitado"

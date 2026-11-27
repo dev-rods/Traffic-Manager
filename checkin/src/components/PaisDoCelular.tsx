@@ -15,6 +15,7 @@ export function PaisDoCelular({
   onPais,
   onDdiLivre,
   disabled,
+  compacto = false,
 }: {
   id?: string
   label?: string
@@ -23,11 +24,13 @@ export function PaisDoCelular({
   onPais: (pais: string) => void
   onDdiLivre: (ddi: string) => void
   disabled?: boolean
+  /** Keypad do iPad deitado: o rótulo vira só para leitor de tela (o seletor já diz "Brasil (+55)"), senão o botão sai da tela. */
+  compacto?: boolean
 }) {
   return (
     <>
       <div className="flex flex-col gap-2">
-        <label htmlFor={id} className="font-display text-lg font-semibold text-ink-800">
+        <label htmlFor={id} className={compacto ? 'sr-only' : 'font-display text-lg font-semibold text-ink-800'}>
           {label}
         </label>
         <select
