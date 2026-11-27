@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
+import { CelularComPais } from '@/components/CelularComPais'
 import { CadastroFields } from './CadastroFields'
 import { cadastroSchema, descontoParaApi } from '@/lib/cadastroPaciente'
 import { useCreatePatient } from '@/hooks/usePatients'
@@ -11,7 +12,7 @@ import { useState } from 'react'
 
 const schema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
-  phone: z.string().min(10, 'Telefone invalido').max(20, 'Telefone invalido'),
+  phone: z.string().min(1, 'Telefone inválido'),
   gender: z.enum(['M', 'F']).optional(),
   ...cadastroSchema,
 })
@@ -86,11 +87,10 @@ export function CreatePatientModal({ open, onClose, onSuccess }: CreatePatientMo
           {...register('name')}
         />
 
-        <Input
+        <CelularComPais
           label="WhatsApp"
-          placeholder="+5511999999999"
           error={errors.phone?.message}
-          {...register('phone')}
+          onChange={(v) => setValue('phone', v, { shouldValidate: Boolean(errors.phone) })}
         />
 
         <div>

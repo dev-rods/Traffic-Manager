@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Input } from './ui/Input'
 import { Button } from './ui/Button'
 import { CadastroFields } from './CadastroFields'
-import { formatPhoneInput, isValidPhone } from '@/utils/format'
+import { CelularComPais } from './CelularComPais'
+import { isValidPhone } from '@/utils/format'
 import { isValidBirthDate, isValidCpf, isValidEmail } from '@/utils/cadastro'
 import type { CampoDoCadastro } from '@/types'
 
@@ -68,7 +69,6 @@ export function CustomerInfoForm({
 }: CustomerInfoFormProps) {
   // Campo de telefone é controlado localmente (não via watch()) — react-hook-form's
   // watch() não é memoizável e quebra o React Compiler nesse componente.
-  const [phoneDisplay, setPhoneDisplay] = useState(defaultValues?.phone ?? '')
   const schema = useMemo(
     () => schemaPara(camposFaltantes, semNome, semCelular),
     [camposFaltantes, semNome, semCelular]
@@ -94,19 +94,13 @@ export function CustomerInfoForm({
         />
       )}
       {semCelular ? null : (
-      <Input
+      <CelularComPais
         id="phone"
-        label="Celular (WhatsApp)"
-        placeholder="Digite seu celular"
-        inputMode="tel"
-        value={phoneDisplay}
+        defaultValue={defaultValues?.phone ?? ''}
         error={errors.phone?.message}
-        hint="Número de fora do Brasil? Comece com + e o código do país."
-        onChange={(e) => {
-          const formatted = formatPhoneInput(e.target.value)
-          setPhoneDisplay(formatted)
-          setValue('phone', formatted, { shouldValidate: true })
-          onPhoneChange?.(isValidPhone(formatted) ? formatted : null)
+        onChange={(valor) => {
+          setValue('phone', valor, { shouldValidate: true })
+          onPhoneChange?.(isValidPhone(valor) ? valor : null)
         }}
       />
       )}

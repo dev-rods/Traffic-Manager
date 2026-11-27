@@ -47,11 +47,12 @@ export function isValidBrPhone(value: string): boolean {
   return digits.length === 10 || digits.length === 11
 }
 
-/** Brasileiro com DDD, ou internacional com `+` e 8 a 15 dígitos (E.164). */
+/** Brasileiro com DDD, ou internacional com `+`: DDI de 1 a 3 dígitos mais
+ * número de 6 a 14 (PRD 067, a mesma faixa do seletor de país). */
 export function isValidPhone(value: string): boolean {
   if (isInternationalPhone(value)) {
     const digits = normalizePhoneDigits(value)
-    return digits.length >= 8 && digits.length <= 15
+    return digits.length >= 7 && digits.length <= 17
   }
   return isValidBrPhone(value)
 }

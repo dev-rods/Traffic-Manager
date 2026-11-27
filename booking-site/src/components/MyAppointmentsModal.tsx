@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Modal } from './ui/Modal'
-import { Input } from './ui/Input'
+import { CelularComPais } from './CelularComPais'
 import { Button } from './ui/Button'
 import { EmptyState } from './ui/EmptyState'
 import { ErrorState } from './ui/ErrorState'
@@ -17,7 +17,6 @@ import {
 import {
   formatCurrencyBRL,
   formatDateLong,
-  formatPhoneInput,
   isValidPhone,
   toApiPhone,
 } from '@/utils/format'
@@ -85,14 +84,7 @@ export function MyAppointmentsModal({ open, clinicId, onClose }: MyAppointmentsM
       {step === 'phone' ? (
         <form onSubmit={handlePhoneSubmit} className="flex flex-col gap-4">
           <p className="text-sm text-ink-600">Digite o celular usado para agendar o serviço.</p>
-          <Input
-            label="Celular (WhatsApp)"
-            placeholder="Digite seu celular"
-            inputMode="tel"
-            value={phone}
-            hint="Número de fora do Brasil? Comece com + e o código do país."
-            onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
-          />
+          <CelularComPais id="meus-phone" defaultValue={phone} onChange={setPhone} />
           <Button type="submit" disabled={!isValidPhone(phone)}>
             Continuar
           </Button>

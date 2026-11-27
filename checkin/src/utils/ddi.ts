@@ -8,6 +8,10 @@ import { formatPhone, isValidMobile, onlyDigits } from './format'
  *
  * Lista fixa de propósito (decisão do André): os países prováveis, mais
  * "Outro" com o código digitado à mão para não travar ninguém.
+ *
+ * PRD 067: a mesma lista e as mesmas funções existem em
+ * booking-site/src/utils/ddi.ts e frontend/src/utils/ddi.ts (apps separados,
+ * sem pacote comum). Mudar aqui é mudar lá; os testes usam os mesmos vetores.
  */
 export interface Pais {
   ddi: string
@@ -71,4 +75,32 @@ export function montaTelefone(ddi: string, digits: string): string {
 
 export function placeholderDoNumero(ddi: string): string {
   return onlyDigits(ddi) === BRASIL ? '(00) 00000-0000' : 'Só os números, sem o código do país'
+}
+
+/**
+ * O país de um número já gravado (PRD 067), para abrir o campo certo: o
+ * backend grava só dígitos, `55` + DDD + número no Brasil e o DDI na frente
+ * fora. Sem casamento na lista, "Outro país" com o número inteiro, para a
+ * pessoa completar o código.
+ */
+export function paisDoNumero(gravado: string | null | undefined): { pais: string; ddiLivre: string; digits: string } {
+  const bruto = (gravado ?? '').trim()
+  const d = onlyDigits(bruto)
+  if (!d) return { pais: BRASIL, ddiLivre: '', digits: '' }
+  if (d.startsWith(BRASIL) && (d.length === 12 || d.length === 13)) {
+    return { pais: BRASIL, ddiLivre: '', digits: d.slice(2) }
+  }
+  // Sem DDI: celular brasileiro (11 dígitos, 9 depois do DDD) ou fixo (10).
+  // Um 11 dígitos sem o 9 é estrangeiro gravado sem +, como 1 202 555 0147.
+  if (!bruto.startsWith('+') && (d.length === 10 || (d.length === 11 && d[2] === '9'))) {
+    return { pais: BRASIL, ddiLivre: '', digits: d }
+  }
+  const candidatos = PAISES.filter((p) => p.ddi !== BRASIL).sort((a, b) => b.ddi.length - a.ddi.length)
+  for (const p of candidatos) {
+    const resto = d.slice(p.ddi.length)
+    if (d.startsWith(p.ddi) && resto.length >= 6 && resto.length <= 14) {
+      return { pais: p.ddi, ddiLivre: '', digits: resto }
+    }
+  }
+  return { pais: OUTRO, ddiLivre: '', digits: d.slice(0, 14) }
 }

@@ -5,6 +5,12 @@
 export function normalizePhone(phone: string): string {
   let digits = phone.replace(/\D/g, '')
 
+  // Com `+` o código do país já está no número (PRD 033 no backend; aqui
+  // desde o PRD 067): `+1 202 555 0147` virava `551202...`.
+  if (phone.trim().startsWith('+')) {
+    return digits
+  }
+
   // Remove leading 0 (ex: 011999990000)
   if (digits.startsWith('0')) {
     digits = digits.slice(1)
