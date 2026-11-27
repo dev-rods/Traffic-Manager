@@ -24,6 +24,7 @@ interface ConsentDataStepProps {
   // backend (PRD 038): esta tela não chama a API.
   onContinue: (payload: ConsentStartPayload) => void
   onRestart: () => void
+  etapa?: string
 }
 
 interface Person {
@@ -65,7 +66,7 @@ function hasTwoNames(name: string): boolean {
  * idade na data da sessão informa o responsável legal, que é quem assina.
  * Não há "pular": sem termo, só a recepção libera (dispensa pelo painel).
  */
-export function ConsentDataStep({ appointment, onContinue, onRestart }: ConsentDataStepProps) {
+export function ConsentDataStep({ appointment, onContinue, onRestart, etapa }: ConsentDataStepProps) {
   const prefill = appointment.consentPrefill
   const [patient, setPatient] = useState<Person>(() => fromPrefill(prefill))
   const [guardian, setGuardian] = useState<Person>(() => guardianFromPrefill(prefill))
@@ -139,7 +140,7 @@ export function ConsentDataStep({ appointment, onContinue, onRestart }: ConsentD
 
   return (
     <div className="flex flex-col gap-8">
-      <StepHeader title="Termo de consentimento">
+      <StepHeader title="Termo de consentimento" etapa={etapa}>
         Confira seus dados: eles vão impressos no termo que você assina a seguir.
       </StepHeader>
 

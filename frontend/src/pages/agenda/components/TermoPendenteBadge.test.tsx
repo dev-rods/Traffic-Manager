@@ -22,9 +22,14 @@ describe('TermoPendenteBadge', () => {
     expect(screen.getByText('DOCS')).toHaveAttribute('title', 'Termo e anamnese pendentes')
   })
 
-  it('assinando no iPad continua pendente', () => {
+  it('abriu o link e parou na assinatura: DOCS diz o que falta (PRD 065)', () => {
     render(<TermoPendenteBadge appointment={agendamento({ consent_status: 'SIGNING' })} />)
-    expect(screen.getByText('DOCS')).toBeInTheDocument()
+    expect(screen.getByText('DOCS')).toHaveAttribute('title', 'Falta assinar (abriu o link)')
+  })
+
+  it('parou na ficha: DOCS diz que falta a ficha', () => {
+    render(<TermoPendenteBadge appointment={agendamento({ consent_status: 'FILLING' })} />)
+    expect(screen.getByText('DOCS')).toHaveAttribute('title', 'Falta a ficha (abriu o link)')
   })
 
   it.each([

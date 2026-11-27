@@ -17,11 +17,13 @@ interface TermoDeConsentimentoProps {
   patientName?: string | null
 }
 
+// Mesmos textos de `situacaoDoTermo` (utils/termo.ts, PRD 065): pendente
+// começa com "Falta". Aqui é por linha do histórico, por isso o mapa próprio.
 const SITUACAO: Record<PatientConsent['status'], { label: string; cor: string }> = {
-  FILLING: { label: 'Respondendo', cor: 'bg-amber-100 text-amber-700' },
+  FILLING: { label: 'Falta a ficha (abriu o link)', cor: 'bg-amber-100 text-amber-700' },
   SIGNED: { label: 'Assinado', cor: 'bg-emerald-100 text-emerald-700' },
-  PAPER: { label: 'Em papel', cor: 'bg-emerald-100 text-emerald-700' },
-  SIGNING: { label: 'Assinando', cor: 'bg-amber-100 text-amber-700' },
+  PAPER: { label: 'Assinado em papel', cor: 'bg-emerald-100 text-emerald-700' },
+  SIGNING: { label: 'Falta assinar (abriu o link)', cor: 'bg-amber-100 text-amber-700' },
   CANCELLED: { label: 'Cancelado', cor: 'bg-gray-100 text-gray-600' },
   EXPIRED: { label: 'Expirado', cor: 'bg-gray-100 text-gray-600' },
   REVOKED: { label: 'Nova assinatura pedida', cor: 'bg-gray-100 text-gray-600' },
