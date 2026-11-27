@@ -168,7 +168,7 @@ que falta. Decidido pelo André em 26/11, com o parêntese.
 
 ## Status (preencher após conclusão)
 
-- [x] Pendente
+- [ ] Pendente
 - [x] Spec gerada: `spec/065-falta-a-assinatura.md` (26/11/2026)
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Implementado em: 2026-11-26 (PR #280; checkin-prod e checkin-dev pela CLI, painel pela Vercel)
+- [x] Registrado em `TASKS_LOG.md`
