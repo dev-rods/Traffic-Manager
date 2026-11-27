@@ -161,6 +161,6 @@ estrangeiro, não sabemos se a ClickSign aceita nem se o código chega.
 ## Status (preencher após conclusão)
 
 - [x] Pendente
-- [ ] Spec gerada: `spec/067-seletor-de-pais-nos-campos-de-celular.md`
-- [ ] Implementado em: (data)
-- [ ] Registrado em `TASKS_LOG.md`
+- [x] Spec gerada: `spec/067-seletor-de-pais-nos-campos-de-celular.md`
+- [x] Implementado em: 2026-11-27, em DEV (PR #283: previews do site e do painel, `checkin-dev`). Prod aguarda o André.
+- [x] Registrado em `TASKS_LOG.md`
