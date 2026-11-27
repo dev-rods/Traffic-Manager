@@ -14,6 +14,15 @@ Consentimento:
         - s3:GetObject
       Resource:
         - "arn:aws:s3:::${self:custom.resourcePrefix}-documentos/clinics/*"
+    # PRD 048: o link de documentos enviado pelo painel sai daqui como envio
+    # do sistema e precisa ficar no MessageEvents. Sem este PutItem o
+    # MessageTracker engole o AccessDenied, o eco do z-api parece atendente
+    # no webhook e o bot é pausado por 24h para a paciente (visto em 26/11).
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+      Resource:
+        - "arn:aws:dynamodb:${self:provider.region}:${self:custom.accountId}:table/${self:custom.resourcePrefix}-message-events"
     - Effect: Allow
       Action:
         - logs:CreateLogGroup
