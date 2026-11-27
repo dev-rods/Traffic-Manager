@@ -173,10 +173,11 @@ class ToolsMockadas:
 
 
 def garante_chave():
-    """Busca ANTHROPIC_API_KEY no SSM quando nao esta no ambiente.
+    """Busca as chaves da Anthropic no SSM quando nao estao no ambiente.
 
     Sem isso o eval roda inteiro contra 401 e so descobre no fim. Erra cedo e
-    com a causa nomeada em vez de tarde e com nota invalida.
+    com a causa nomeada em vez de tarde e com nota invalida. Le a principal e
+    a reserva, como as Lambdas (PRD 068): o gasto do eval vai para a principal.
     """
     if os.environ.get("ANTHROPIC_API_KEY"):
         return
@@ -192,6 +193,13 @@ def garante_chave():
             f"ANTHROPIC_API_KEY ausente e o SSM falhou: {e}\n"
             "Exporte a chave ou confira o perfil AWS antes de rodar o eval."
         )
+    try:
+        os.environ["ANTHROPIC_API_KEY_RESERVA"] = ssm.get_parameter(
+            Name="/prod/ANTHROPIC_API_KEY_RESERVA", WithDecryption=True
+        )["Parameter"]["Value"]
+        print("[eval] reserva lida do SSM (/prod/ANTHROPIC_API_KEY_RESERVA)")
+    except Exception as e:
+        print(f"[eval] sem reserva ({type(e).__name__}): so a principal")
 
 
 class AnthropicMedido:

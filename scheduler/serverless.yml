@@ -121,6 +121,9 @@ provider:
     ZAPI_CLIENT_TOKEN: ${ssm:/${self:custom.stage}/ZAPI_CLIENT_TOKEN}
     ALLOWED_PHONES: ${ssm:/${self:custom.stage}/ALLOWED_PHONES}
     ANTHROPIC_API_KEY: ${ssm:/${self:custom.stage}/ANTHROPIC_API_KEY}
+    # Conta reserva (PRD 068): só atende quando a principal é recusada (saldo,
+    # teto de gasto, chave inválida). Vazia, o bot usa só a principal.
+    ANTHROPIC_API_KEY_RESERVA: ${ssm:/${self:custom.stage}/ANTHROPIC_API_KEY_RESERVA, ''}
 
 functions:
   - ${file(sls/functions/webhook/interface.yml)}
@@ -161,6 +164,7 @@ resources:
   - ${file(sls/resources/s3/clinic-assets-bucket.yml)}
   - ${file(sls/resources/dynamodb/outbound-queue-table.yml)}
   - ${file(sls/resources/s3/documentos-bucket.yml)}
+  - ${file(sls/resources/alarmes/anthropic.yml)}
 
 plugins:
   - serverless-python-requirements

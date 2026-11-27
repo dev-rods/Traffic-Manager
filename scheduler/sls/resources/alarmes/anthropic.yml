@@ -1,0 +1,65 @@
+# Aviso por e-mail das contas da Anthropic (PRD 068). As métricas saem do
+# próprio código em formato EMF (anthropic_service._metrica): sem filtro de
+# métrica por log group e sem permissão de IAM. O e-mail mora no SSM, fora do
+# repositório; a assinatura só passa a valer depois do clique de confirmação.
+Resources:
+  AlertaAnthropicTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: ${self:custom.resourcePrefix}-alerta-anthropic
+
+  AlertaAnthropicEmail:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlertaAnthropicTopic
+      Protocol: email
+      Endpoint: ${ssm:/${self:custom.stage}/ALERTA_EMAIL}
+
+  ReservaEmUsoAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ${self:custom.resourcePrefix}-anthropic-reserva-em-uso
+      AlarmDescription: >-
+        A conta principal da Anthropic recusou chamadas e a reserva está pagando.
+        Confira saldo, limite de gasto e validade da chave principal no Console.
+        Para voltar na hora depois de recarregar, faça redeploy do scheduler.
+        OK = uma hora sem uso da reserva (volta da principal ou só falta de conversa).
+      Namespace: ClinicScheduler/Anthropic
+      MetricName: ChamadaPelaReserva
+      Dimensions:
+        - Name: Stage
+          Value: ${self:custom.stage}
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertaAnthropicTopic
+      OKActions:
+        - !Ref AlertaAnthropicTopic
+
+  BotSemRespostaAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ${self:custom.resourcePrefix}-anthropic-bot-sem-resposta
+      AlarmDescription: >-
+        Chamada à Anthropic falhou de vez: o bot calou e a conversa foi para uma pessoa.
+        Se for recusa das duas contas, recarregue a principal. Se for instabilidade da
+        Anthropic, as pessoas na fila precisam de resposta manual.
+      Namespace: ClinicScheduler/Anthropic
+      MetricName: ChamadaFalhou
+      Dimensions:
+        - Name: Stage
+          Value: ${self:custom.stage}
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertaAnthropicTopic
+      OKActions:
+        - !Ref AlertaAnthropicTopic
