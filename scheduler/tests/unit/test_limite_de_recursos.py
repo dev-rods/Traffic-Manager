@@ -14,6 +14,8 @@ import re
 import unittest
 from pathlib import Path
 
+import yaml
+
 SERVERLESS = Path(__file__).resolve().parents[2] / "serverless.yml"
 
 
@@ -65,6 +67,9 @@ class TestNumeroDeFuncoes(unittest.TestCase):
     # metodo): 82 livres / 4 = 20, menos folga de ~2 funcoes. Subir isto exige
     # medir de novo:
     #   aws cloudformation list-stack-resources --stack-name clinic-scheduler-infra-prod
+    # 26/11/2026 (PRD 066): +1 OPTIONS (/leads, LP da Essencia). Prod MEDIDO
+    # em 430 de 500 depois do deploy (o resto do crescimento desde 21/11 veio
+    # dos PRDs 057 a 062).
     LIMITE_DE_FUNCOES = 104
 
     def test_cabe_no_stack(self):
@@ -83,24 +88,69 @@ class TestNumeroDeFuncoes(unittest.TestCase):
         )
 
 
-class TestSemCors(unittest.TestCase):
-    """Nenhuma rota declara `cors: true` (PRD 055).
+class TestCorsSoOndeChamamDeFora(unittest.TestCase):
+    """CORS exatamente nas rotas chamadas de fora da Vercel (PRD 055 e 066).
 
-    Cada `cors: true` custava um metodo OPTIONS no stack: eram 76 dos 494
-    recursos de prod em 21/11/2026. O browser nao precisa mais de CORS porque
-    painel, site e checkin chegam ao API Gateway por rewrite da Vercel no
-    proprio dominio. Voltar a declarar cors numa rota recoloca o OPTIONS e
-    reabre o caminho para o limite de 500.
+    Painel, site e checkin chegam ao API Gateway por rewrite da Vercel no
+    proprio dominio: sem origem cruzada, sem preflight, e cada `cors: true`
+    so custaria um metodo OPTIONS no stack (eram 76 de 494).
+
+    Quem chama do navegador em OUTRO dominio precisa do preflight. Sem ele o
+    browser barra o POST antes de sair e o erro e silencioso: a LP da Essencia
+    perdeu todos os leads de 21/11 a 26/11/2026 assim. Por isso a lista abaixo
+    diz quem e cada excecao, e o teste confere nos dois sentidos.
     """
 
-    def test_nenhuma_rota_com_cors(self):
-        pasta = SERVERLESS.parent / "sls" / "functions"
+    CHAMADAS_DE_FORA_DA_VERCEL = {
+        "sls/functions/lead/interface.yml": {
+            "CreateLead": "LP da Essencia (draclaradourado.com.br, Lovable estatico) grava do "
+                          "browser; sai quando gravar pelo servidor (PRD 066)",
+        },
+    }
+
+    @staticmethod
+    def _cors_por_funcao():
+        """{(arquivo, funcao): [cors de cada evento http]} de todos os interface.yml."""
+        raiz = SERVERLESS.parent
+        achado = {}
+        for arq in sorted((raiz / "sls" / "functions").glob("*/interface.yml")):
+            doc = yaml.safe_load(arq.read_text(encoding="utf-8")) or {}
+            rel = arq.relative_to(raiz).as_posix()
+            for nome, funcao in doc.items():
+                if not isinstance(funcao, dict):
+                    continue
+                eventos = [e["http"] for e in funcao.get("events") or []
+                           if isinstance(e, dict) and isinstance(e.get("http"), dict)]
+                if eventos:
+                    achado[(rel, nome)] = [e.get("cors") for e in eventos]
+        return achado
+
+    def test_o_leitor_acha_as_rotas(self):
+        self.assertGreater(len(self._cors_por_funcao()), 50, "o leitor parou de achar rota")
+
+    def test_rota_chamada_de_fora_tem_cors(self):
+        rotas = self._cors_por_funcao()
+        for arquivo, funcoes in self.CHAMADAS_DE_FORA_DA_VERCEL.items():
+            for nome in funcoes:
+                with self.subTest(funcao=nome):
+                    self.assertIn((arquivo, nome), rotas, f"{nome} sumiu de {arquivo}: atualize a lista")
+                    self.assertTrue(
+                        all(rotas[(arquivo, nome)]),
+                        f"{nome} e chamada de fora da Vercel e esta sem cors: o browser barra "
+                        f"no preflight e o erro e silencioso (PRD 066)",
+                    )
+
+    def test_nenhuma_outra_rota_tem_cors(self):
+        permitidas = {(a, n) for a, fs in self.CHAMADAS_DE_FORA_DA_VERCEL.items() for n in fs}
         com_cors = sorted(
-            str(arq.relative_to(SERVERLESS.parent))
-            for arq in pasta.glob("*/interface.yml")
-            if re.search(r"^\s*cors:", arq.read_text(encoding="utf-8"), re.M)
+            f"{a}:{n}" for (a, n), cors in self._cors_por_funcao().items()
+            if any(cors) and (a, n) not in permitidas
         )
-        self.assertEqual(com_cors, [], "rota com cors: o browser chega por rewrite da Vercel, nao por CORS")
+        self.assertEqual(
+            com_cors, [],
+            "cors em rota que chega pela Vercel: custa um OPTIONS no stack (PRD 055). "
+            "Se alguem de outro dominio chama do navegador, registre em CHAMADAS_DE_FORA_DA_VERCEL.",
+        )
 
 
 if __name__ == "__main__":

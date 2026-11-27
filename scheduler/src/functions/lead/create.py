@@ -105,7 +105,21 @@ def _log_pg_error(prefix, exc):
 # qualquer reprocessamento ou backfill dispare mensagem para lead antigo: mesmo
 
 
+# PRD 066: rota chamada de outra origem (LP da Essencia). Sem o cabecalho na
+# resposta, o POST grava mas o fetch do navegador recebe erro de CORS ao ler, e
+# a LP loga falha de um lead salvo. Vale para TODA resposta, inclusive o 401
+# que sai pronto de require_intake_api_key. O preflight (OPTIONS) e o mock do
+# API Gateway, pelo `cors: true` no interface.yml.
+CORS = {"Access-Control-Allow-Origin": "*"}
+
+
 def handler(event, context):
+    resposta = _handler(event, context)
+    resposta["headers"] = {**(resposta.get("headers") or {}), **CORS}
+    return resposta
+
+
+def _handler(event, context):
     request_id = getattr(context, "aws_request_id", "local")
     log_prefix = f"[CreateLead][req:{request_id}]"
     started_at = time.time()

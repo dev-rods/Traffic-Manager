@@ -259,3 +259,13 @@ reverter o `vercel.json` (deploy da Vercel, ~2 min). Nenhum dado é tocado.
 - [x] Implementado em dev: 21/11/2026 (PR #236; dev 494 -> 418, OPTIONS 0; roteiro `tests/integration/055-api-pelo-rewrite.md`)
 - [x] Implementado em prod: 21/11/2026 (prod 494 -> 418, OPTIONS 0, layer 162; `VITE_API_BASE_URL` apagada na Vercel)
 - [x] Registrado em `TASKS_LOG.md`
+
+---
+
+## Nota posterior (26/11/2026, PRD 066)
+
+A LP da Essência (`draclaradourado.com.br`, Lovable estático) chamava
+`POST /leads` direto do navegador e não foi varrida aqui: perdeu todos os
+leads de 21/11 a 26/11 em silêncio (preflight 403). `cors: true` voltou só
+nessa rota, e o teste de guarda virou a lista `CHAMADAS_DE_FORA_DA_VERCEL`,
+conferida nos dois sentidos. Ver `prd/066-cors-na-rota-de-leads.md`.
