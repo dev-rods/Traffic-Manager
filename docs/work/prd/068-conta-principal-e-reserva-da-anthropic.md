@@ -116,12 +116,16 @@ chave do SSM e fazer redeploy. Este PRD é a solução, não o paliativo.
 
    A spec confere na documentação da API o texto e o tipo exatos dos erros de
    saldo e de limite de gasto, e os fixa como vetores de teste.
-3. **Memória curta da recusa.** Depois que a principal é recusada, o mesmo
-   contêiner da Lambda vai direto à reserva por 10 minutos e então tenta a
-   principal de novo. Assim:
-   - não se paga meio segundo de recusa em cada uma das 2 a 4 chamadas de
-     uma mensagem;
-   - o bot volta sozinho para a principal até 10 minutos depois da recarga.
+3. **Memória da recusa (D4: 24 h).** Depois que a principal é recusada, o
+   mesmo contêiner da Lambda vai direto à reserva por 24 horas e então tenta a
+   principal de novo. Não se paga meio segundo de recusa em cada uma das 2 a
+   4 chamadas de uma mensagem.
+
+   A memória vive no contêiner, e a AWS recicla contêineres em horas. Na
+   prática, cada contêiner novo tenta a principal uma vez e volta a ela se já
+   houver saldo. Para voltar na hora depois de recarregar, basta um redeploy
+   do scheduler, que zera todos os contêineres. O aviso de volta da principal
+   (item 4) chega assim que ela atender a primeira chamada.
 4. **Aviso de reserva em uso.** Cada chamada atendida pela reserva grava uma
    linha estruturada no log. Um alarme do CloudWatch transforma essa linha em
    um aviso por episódio, não um por chamada. Outro aviso sai quando a
@@ -151,14 +155,15 @@ chave do SSM e fazer redeploy. Este PRD é a solução, não o paliativo.
 
 | Caminho | Tipo | Descrição |
 |---------|------|-----------|
-| `scheduler/src/services/anthropic_service.py` | modificar | ordem principal → reserva, classificação da recusa, memória de 10 min, linha de log por conta |
+| `scheduler/src/services/anthropic_service.py` | modificar | ordem principal → reserva, classificação da recusa, memória de 24 h, linha de log por conta |
 | `scheduler/src/services/consumo.py` | modificar | `conta=` na linha `[Consumo]` |
 | `scheduler/serverless.yml` | modificar | `ANTHROPIC_API_KEY_RESERVA` vindo do SSM |
 | `scheduler/sls/resources/` (novo arquivo) | criar | tópico SNS, assinatura do aviso, 2 filtros de métrica e 2 alarmes |
 | `scheduler/tests/unit/test_anthropic_reserva.py` | criar | vetores de recusa e de falha passageira, ordem, memória, sem reserva |
 | `scheduler/tests/unit/test_anthropic_retentativa.py` | conferir | retentativa continua só na mesma conta |
 | `scheduler/tests/evaluation/eval_fluxo_agente.py` | modificar | lê as duas chaves |
-| SSM `/{dev,prod}/ANTHROPIC_API_KEY_RESERVA` | criar | cópia da chave de hoje, gravada antes do deploy |
+| SSM `/{dev,prod}/ANTHROPIC_API_KEY_RESERVA` | criar | **feito em 27/11**: cópia da chave de hoje |
+| SSM `/{dev,prod}/ALERTA_EMAIL` | criar | e-mail do André para o aviso (D2), fora do repositório |
 | SSM `/{dev,prod}/ANTHROPIC_API_KEY` | atualizar | chave do André. **Quem grava é o André**: a chave não passa por esta sessão |
 
 Os recursos novos de CloudFormation são 6 por stage (tópico, assinatura, 2
@@ -227,29 +232,19 @@ dentro da folga.
 
 ---
 
-## Decisões (para o André)
+## Decisões (André, 27/11/2026)
 
-- **D1. Canal do aviso.**
-  - **Proposta:** e-mail pelo SNS, disparado por alarme do CloudWatch. Não
-    precisa de código para evitar aviso repetido, porque o alarme só muda de
-    estado uma vez. Também avisa quando a principal volta. Não depende do
-    WhatsApp nem do bot, que é justamente o que pode estar com problema.
-  - **Alternativa:** WhatsApp para o celular do André, enviado pelo número
-    de uma clínica no z-api. Chega mais rápido aos olhos, mas:
-    - sai do número da clínica;
-    - precisa de código e tabela para não repetir;
-    - em dev envia de verdade.
-- **D2. Para quem vai o aviso.**
-  - **Proposta:** só o André (e-mail dele).
-  - **Alternativa:** André e Rodrigo, se a conta reserva for do Rodrigo.
-- **D3. Dev.**
-  - **Proposta:** dev igual a prod: a chave do André como principal e a de
-    hoje como reserva. Dev gasta cerca de US$ 1 por mês.
-  - **Alternativa:** dev só com a chave de hoje, sem reserva.
-- **D4. Tempo da memória da recusa.**
-  - **Proposta:** 10 minutos.
-  - **Alternativa:** 1 minuto (volta mais rápido, mais recusas pagas em
-    latência) ou 1 hora.
+- **D1. Canal do aviso:** e-mail pelo SNS, disparado por alarme do
+  CloudWatch. Não precisa de código para evitar aviso repetido, porque o
+  alarme só muda de estado uma vez, e também avisa quando a principal volta.
+  Não depende do WhatsApp nem do bot. Descartado: WhatsApp pelo número de uma
+  clínica.
+- **D2. Para quem:** só o André. O e-mail fica fora do repositório, no SSM
+  `/${stage}/ALERTA_EMAIL`, lido no deploy.
+- **D3. Dev:** igual a prod, com a chave do André como principal e a de hoje
+  como reserva. As reservas `/{dev,prod}/ANTHROPIC_API_KEY_RESERVA` já foram
+  copiadas da chave atual em 27/11 (conferido por hash).
+- **D4. Memória da recusa:** 24 horas (ver item 3 do escopo).
 
 ---
 
